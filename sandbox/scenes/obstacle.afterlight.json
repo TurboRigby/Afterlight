@@ -1,0 +1,1935 @@
+{
+  "format": "afterlight.scene",
+  "version": 7,
+  "next_id": "22",
+  "objects": [
+    {
+      "id": "1",
+      "parent": "0",
+      "name": "Ground",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        -0.5,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        12.307692307692307,
+        0.7692307692307692,
+        24.615384615384613
+      ],
+      "material": {
+        "base_color": [
+          0.28,
+          0.34,
+          0.4,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.28,
+          0.34,
+          0.4
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "2",
+      "parent": "0",
+      "name": "Walkable ramp",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        0.8,
+        1
+      ],
+      "rotation": [
+        0.3490658503988659,
+        0,
+        0
+      ],
+      "scale": [
+        3.0769230769230766,
+        0.3076923076923077,
+        4.615384615384615
+      ],
+      "material": {
+        "base_color": [
+          0.25,
+          0.55,
+          0.62,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.25,
+          0.55,
+          0.62
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "3",
+      "parent": "0",
+      "name": "Raised landing",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        1.4,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        3.0769230769230766,
+        0.3846153846153846,
+        1.5384615384615383
+      ],
+      "material": {
+        "base_color": [
+          0.3,
+          0.8,
+          0.5,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.3,
+          0.65,
+          0.66
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "4",
+      "parent": "0",
+      "name": "Jump platform",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        1.8,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        2.3076923076923075,
+        0.3846153846153846,
+        1.5384615384615383
+      ],
+      "material": {
+        "base_color": [
+          0.3,
+          0.65,
+          0.9,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.9,
+          0.6,
+          0.25
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "5",
+      "parent": "0",
+      "name": "Moving platform",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        2,
+        -9
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        2.3076923076923075,
+        0.3076923076923077,
+        1.5384615384615383
+      ],
+      "material": {
+        "base_color": [
+          0.75,
+          0.43,
+          0.7,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.75,
+          0.43,
+          0.7
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "platform",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "6",
+      "parent": "0",
+      "name": "Finish platform",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        1.8,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        3.846153846153846,
+        0.4615384615384615,
+        2.3076923076923075
+      ],
+      "material": {
+        "base_color": [
+          0.28,
+          0.65,
+          0.4,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.28,
+          0.65,
+          0.4
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "7",
+      "parent": "0",
+      "name": "Goal left",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        -1.5,
+        3.3,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.1923076923076923,
+        1.846153846153846,
+        0.23076923076923075
+      ],
+      "material": {
+        "base_color": [
+          0.25,
+          0.9,
+          0.45,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.25,
+          0.9,
+          0.45
+        ],
+        "emission_strength": 0.35,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "8",
+      "parent": "0",
+      "name": "Goal right",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        1.5,
+        3.3,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.1923076923076923,
+        1.846153846153846,
+        0.23076923076923075
+      ],
+      "material": {
+        "base_color": [
+          0.25,
+          0.9,
+          0.45,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.25,
+          0.9,
+          0.45
+        ],
+        "emission_strength": 0.35,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "9",
+      "parent": "0",
+      "name": "Goal top",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        4.5,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        2.5,
+        0.1923076923076923,
+        0.23076923076923075
+      ],
+      "material": {
+        "base_color": [
+          0.25,
+          0.9,
+          0.45,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.25,
+          0.9,
+          0.45
+        ],
+        "emission_strength": 0.35,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "10",
+      "parent": "0",
+      "name": "Goal trigger",
+      "mesh": "cube",
+      "visible": false,
+      "position": [
+        0,
+        3.3,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        2.0,
+        1.846153846153846,
+        0.7692307692307692
+      ],
+      "material": {
+        "base_color": [
+          0.2,
+          1,
+          0.3,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.2,
+          1,
+          0.3
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": true,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 2
+      },
+      "gameplay": {
+        "role": "goal",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "11",
+      "parent": "0",
+      "name": "Restart trigger",
+      "mesh": "cube",
+      "visible": false,
+      "position": [
+        0,
+        -4,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        76.92307692307692,
+        0.3846153846153846,
+        76.92307692307692
+      ],
+      "material": {
+        "base_color": [
+          1,
+          0.2,
+          0.3,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          1,
+          0.2,
+          0.3
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": true,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 2
+      },
+      "gameplay": {
+        "role": "restart",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "12",
+      "parent": "0",
+      "name": "Spawn",
+      "mesh": "cube",
+      "visible": false,
+      "position": [
+        0,
+        0.902,
+        7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          1,
+          1,
+          1
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "spawn",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "13",
+      "parent": "0",
+      "name": "Player",
+      "mesh": "cube",
+      "visible": false,
+      "position": [
+        0,
+        0.902,
+        7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          1,
+          1,
+          1
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "capsule",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": true,
+          "spawn": "12",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": true,
+          "primary": true,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "14",
+      "parent": "0",
+      "name": "Slide wall",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        -3,
+        1.25,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.23076923076923075,
+        1.923076923076923,
+        4.615384615384615
+      ],
+      "material": {
+        "base_color": [
+          0.65,
+          0.42,
+          0.28,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.65,
+          0.42,
+          0.28
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "15",
+      "parent": "0",
+      "name": "Steep slope",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        5,
+        1.5,
+        -1
+      ],
+      "rotation": [
+        1.1344640137963142,
+        0,
+        0
+      ],
+      "scale": [
+        2.3076923076923075,
+        0.3076923076923077,
+        3.0769230769230766
+      ],
+      "material": {
+        "base_color": [
+          0.75,
+          0.3,
+          0.35,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.75,
+          0.3,
+          0.35
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "16",
+      "parent": "0",
+      "name": "Low hurdle",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        4,
+        0.25,
+        5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1.5384615384615383,
+        0.3846153846153846,
+        0.7692307692307692
+      ],
+      "material": {
+        "base_color": [
+          0.65,
+          0.53,
+          0.28,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.65,
+          0.53,
+          0.28
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "17",
+      "parent": "0",
+      "name": "Sphere collider obstacle",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        -5,
+        0.7,
+        -2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1.0769230769230769,
+        1.0769230769230769,
+        1.0769230769230769
+      ],
+      "material": {
+        "base_color": [
+          0.48,
+          0.46,
+          0.75,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.48,
+          0.46,
+          0.75
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "sphere",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.65,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "18",
+      "parent": "0",
+      "name": "Capsule collider obstacle",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        -5,
+        1.3,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.6153846153846154,
+        1.3846153846153846,
+        0.6153846153846154
+      ],
+      "material": {
+        "base_color": [
+          0.35,
+          0.6,
+          0.8,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.35,
+          0.6,
+          0.8
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "capsule",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.65,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "19",
+      "parent": "0",
+      "name": "Checkpoint 1",
+      "mesh": "cube",
+      "visible": false,
+      "position": [
+        0,
+        2.552,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          1,
+          1,
+          1
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": true,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          1.5,
+          0.45,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "checkpoint",
+        "checkpoint_order": 1,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "20",
+      "parent": "0",
+      "name": "Checkpoint 2",
+      "mesh": "cube",
+      "visible": false,
+      "position": [
+        0,
+        2.952,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          1,
+          1,
+          1
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": true,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          1.5,
+          0.45,
+          0.65
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "checkpoint",
+        "checkpoint_order": 2,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    },
+    {
+      "id": "21",
+      "parent": "0",
+      "name": "glTF beacon",
+      "mesh": "beacon",
+      "visible": true,
+      "position": [
+        4,
+        0,
+        -5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.7,
+        "metallic": 0,
+        "emission": [
+          0.28,
+          0.34,
+          0.4
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          1.575,
+          0
+        ],
+        "half_extents": [
+          0.9,
+          1.575,
+          0.9
+        ],
+        "radius": 0.35,
+        "half_height": 0.55,
+        "layer": 1
+      },
+      "gameplay": {
+        "role": "none",
+        "checkpoint_order": 0,
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.35,
+          "half_height": 0.55,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981633974483,
+          "skin": 0.002,
+          "ground_snap": 0.15,
+          "mouse_sensitivity": 0.0025
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975511965976,
+          "near_clip": 0.08,
+          "far_clip": 160
+        }
+      }
+    }
+  ],
+  "assets": [
+    {
+      "name": "jump",
+      "kind": "audio",
+      "path": "../assets/jump.wav"
+    },
+    {
+      "name": "land",
+      "kind": "audio",
+      "path": "../assets/land.wav"
+    },
+    {
+      "name": "checkpoint",
+      "kind": "audio",
+      "path": "../assets/checkpoint.wav"
+    },
+    {
+      "name": "finish",
+      "kind": "audio",
+      "path": "../assets/finish.wav"
+    },
+    {
+      "name": "beacon",
+      "kind": "mesh",
+      "path": "../assets/beacon.glb"
+    }
+  ],
+  "light": {
+    "direction": [
+      -0.4,
+      -1,
+      0.2
+    ],
+    "color": [
+      1,
+      0.95,
+      0.86
+    ],
+    "intensity": 2,
+    "ambient": 0.22
+  },
+  "shadows": {
+    "enabled": true,
+    "mode": "cascaded",
+    "resolution": 2048,
+    "distance": 65,
+    "constant_bias": 1.25,
+    "slope_bias": 1.75,
+    "normal_bias": 0.015,
+    "filter_radius": 1,
+    "split_lambda": 0.65,
+    "blend_fraction": 0.1,
+    "debug_cascades": false
+  },
+  "render": {
+    "exposure": 0.3,
+    "tone_mapping": true
+  },
+  "local_lights": []
+}

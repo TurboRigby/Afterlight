@@ -1,0 +1,40 @@
+Afterlight
+
+Afterlight's original source files, build scripts, documentation, sample scenes
+and procedural sample/test assets are made available under the Mozilla Public
+License, v. 2.0 (SPDX: MPL-2.0). See LICENSE for the unmodified license text.
+
+This Source Code Form is subject to the terms of the Mozilla Public License,
+v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain
+one at https://mozilla.org/MPL/2.0/.
+
+This notice also covers original files that cannot contain comments, including
+CMakePresets.json, scene JSON, and the sample/test binary assets. Original asset
+generators are in scripts/generate_sample_assets.py. Per-file notices and the
+third-party exceptions below take precedence over this general scope.
+
+Third-party code and assets retain their existing licenses and notices:
+  third_party/cgltf/       MIT
+  third_party/cjson/       MIT
+  third_party/nuklear/     MIT option of the upstream dual license
+  third_party/stb/         MIT option of the upstream dual license
+  editor/assets/FiraSans-Regular.ttf and OFL.txt    SIL Open Font License 1.1
+See THIRD_PARTY_NOTICES.md and the license files in those directories.
+
+Binary source availability
+
+Runnable CMake builds include source/afterlight-source.zip alongside this
+notice (inside Contents/Resources on macOS). Extract it to obtain the covered
+Afterlight source, including build scripts, shaders, sample game modules and
+local modifications present when the binary was built. The source is available
+under MPL-2.0, except for the identified third-party material under its own terms.
+Build instructions are in the archive's README.md. No additional charge applies.
+
+Exports preserve that archive and these notices. Generated starter modules also
+include source/game-source.zip with their marked MPL source and modifications.
+Independent game files can have their own license; copying or modifying an MPL
+template creates covered source. Additional custom covered modules must be
+accompanied by their corresponding source; see docs/licensing.md.
+
+Keep the corresponding source and notices available with binary distributions.
+Any additional binary/game terms must preserve recipients' MPL source rights.

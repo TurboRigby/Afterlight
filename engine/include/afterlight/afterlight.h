@@ -1,0 +1,172 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+#ifndef AFTERLIGHT_H
+#define AFTERLIGHT_H
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <afterlight/math.h>
+#include <afterlight/camera.h>
+#include <afterlight/mesh.h>
+#include <afterlight/scene.h>
+#include <afterlight/overlay.h>
+#include <afterlight/simulation.h>
+#include <afterlight/character.h>
+#include <afterlight/audio.h>
+
+/* All engine/window operations run on the main thread. One engine at a time. */
+typedef struct af_engine af_engine;
+
+typedef struct af_engine_config {
+    const char *title;
+    int width;
+    int height;
+    bool enable_validation;
+    bool show_fps; /* Append FPS and average frame time to the window title. */
+} af_engine_config;
+
+typedef enum af_key {
+    AF_KEY_ESCAPE,
+    AF_KEY_SPACE,
+    AF_KEY_R,
+    AF_KEY_W, AF_KEY_A, AF_KEY_S, AF_KEY_D,
+    AF_KEY_Q, AF_KEY_E, AF_KEY_LEFT_SHIFT,
+    AF_KEY_LEFT_CONTROL, AF_KEY_LEFT_SUPER, AF_KEY_ENTER, AF_KEY_TAB,
+    AF_KEY_BACKSPACE, AF_KEY_DELETE, AF_KEY_LEFT, AF_KEY_RIGHT, AF_KEY_UP, AF_KEY_DOWN,
+    AF_KEY_HOME, AF_KEY_END, AF_KEY_Z, AF_KEY_Y, AF_KEY_C, AF_KEY_V, AF_KEY_X,
+    AF_KEY_N, AF_KEY_O, AF_KEY_F, AF_KEY_F5, AF_KEY_F6,
+    AF_KEY_COUNT
+} af_key;
+
+typedef enum af_mouse_button {
+    AF_MOUSE_LEFT, AF_MOUSE_RIGHT, AF_MOUSE_MIDDLE, AF_MOUSE_BUTTON_COUNT
+} af_mouse_button;
+
+typedef struct af_engine_stats {
+    uint64_t rendered_frames;
+    uint64_t swapchain_rebuilds;
+    size_t loaded_meshes;
+    size_t loaded_textures;
+    uint64_t texture_bytes; /* Loaded scene textures, excluding UI/shadow maps. */
+    uint32_t texture_mip_levels;
+    float texture_anisotropy;
+    size_t shadow_draw_calls;
+    uint32_t shadow_cascades,shadow_resolution;
+    size_t missing_textures;
+    size_t draw_calls; /* Visible objects actually drawn in the last submitted frame. */
+    size_t missing_meshes; /* Visible objects skipped for unresolved mesh names. */
+    /* Successful presentation submissions / real elapsed time, sampled each
+       second. Zero before the first sample. Includes pacing/vsync, not GPU time. */
+    double frames_per_second;
+    double average_frame_ms;
+    double cpu_events_ms,cpu_update_ms,cpu_render_ms; /* Last completed CPU iteration; render includes waits/present. */
+    double gpu_frame_ms,gpu_shadow_ms,gpu_scene_ms,gpu_overlay_ms;
+    bool gpu_timing_supported,gpu_timing_valid; /* Delayed completed-frame sample; excludes presentation. */
+    uint64_t simulation_ticks;
+    unsigned simulation_steps;
+    double simulation_alpha,simulation_dropped_seconds;
+    bool simulation_paused;
+    uint32_t validation_errors;
+    bool validation_enabled;
+} af_engine_stats;
+
+typedef struct af_game {
+    /* Optional callbacks. shutdown also runs when init returns false, so it
+       must tolerate partially initialized game state. user_data is borrowed. */
+    bool (*init)(af_engine *engine, void *user_data);
+    void (*update)(af_engine *engine, double delta_seconds, void *user_data);
+    void (*shutdown)(af_engine *engine, void *user_data);
+    void *user_data;
+    /* Optional close veto, used for unsaved editor documents. Explicit
+       af_engine_request_quit bypasses this callback. */
+    bool (*should_close)(af_engine *engine, void *user_data);
+    /* Optional 60 Hz simulation, after update and before rendering. */
+    void (*fixed_update)(af_engine *engine,double fixed_delta,void *user_data);
+} af_game;
+
+af_engine_config af_engine_config_default(void);
+/* NULL config uses defaults. Window stays hidden until game initialization
+   succeeds in run. Returns NULL on failure; details go to stderr. */
+af_engine *af_engine_create(const af_engine_config *config);
+/* Runs once per engine. Delta is capped at 0.1s; updates continue minimized.
+   Returns 0 on normal exit, nonzero on initialization/render/validation error. */
+int af_engine_run(af_engine *engine, const af_game *game);
+void af_engine_destroy(af_engine *engine);
+void af_engine_request_quit(af_engine *engine);
+/* Borrowed UTF-8 data directory with a trailing separator (bundle Resources
+   on macOS). Valid while the engine lives; NULL on failure. Not a save path. */
+const char *af_engine_get_base_path(const af_engine *engine);
+void af_engine_set_clear_color(af_engine *engine, af_color color);
+/* Upload/replace a named mesh, shared by scene objects. Names are copied and
+   must fit AF_MESH_NAME_CAPACITY. Invalid input/failure preserves old assets.
+   Upload/remove wait for GPU work; changing object transforms does not. */
+bool af_engine_upload_mesh(af_engine *engine, const char *name, const af_mesh_data *mesh);
+bool af_engine_upload_texture(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
+bool af_engine_remove_texture(af_engine *engine,const char *name);
+bool af_engine_load_texture(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+bool af_engine_load_mesh(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+bool af_engine_load_asset(af_engine *engine,const af_scene_asset *asset,af_asset_error *error);
+/* Atomically replace all GPU mesh/image entries originating in one source. */
+bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const char *source,af_asset_error *error);
+bool af_engine_load_scene_assets(af_engine *engine,const af_scene *scene,af_asset_error *error);
+bool af_engine_remove_mesh(af_engine *engine, const char *name);
+/* Borrowed, CPU-only scene. Detach with NULL before destroying it, or keep it
+   alive until engine destruction. Scene mutations appear on the next frame.
+   Visible objects with missing assets are skipped and reported in stats. */
+void af_engine_set_scene(af_engine *engine, const af_scene *scene);
+/* Copies a valid camera. Projection aspect follows the scene viewport. */
+bool af_engine_set_camera(af_engine *engine, const af_camera *camera);
+af_camera af_engine_get_camera(const af_engine *engine);
+bool af_engine_set_title(af_engine *engine, const char *title);
+void af_engine_get_window_size(const af_engine *engine, int *width, int *height);
+/* NULL resets to full window. Rectangles use logical window coordinates. */
+void af_engine_set_viewport(af_engine *engine, const af_rect *viewport);
+/* One atlas for 2D overlays; copied into owned GPU memory. Overlay packets
+   borrow arrays through rendering after the current update returns.
+   Set a packet each update, or NULL to clear; packets do not persist. */
+bool af_engine_upload_overlay_atlas(af_engine *engine, const unsigned char *rgba, uint32_t width, uint32_t height);
+bool af_engine_set_overlay(af_engine *engine, const af_overlay_frame *frame);
+/* Absolute position in logical window units; wheel/text reset each update. */
+af_vec2 af_engine_mouse_position(const af_engine *engine);
+af_vec2 af_engine_mouse_scroll(const af_engine *engine);
+bool af_engine_mouse_down(const af_engine *engine, af_mouse_button button);
+bool af_engine_set_text_input(af_engine *engine, bool enabled);
+const char *af_engine_text_input(const af_engine *engine);
+bool af_engine_set_clipboard_text(af_engine *engine, const char *text);
+/* Borrowed until the next clipboard read or engine destruction. */
+const char *af_engine_get_clipboard_text(af_engine *engine);
+/* Closest transformed mesh bounding box under a logical viewport position. */
+af_object_id af_engine_pick_object(af_engine *engine, af_vec2 point);
+void af_engine_highlight_object(af_engine *engine, af_object_id id);
+bool af_engine_set_window_size(af_engine *engine, int width, int height);
+bool af_engine_key_down(const af_engine *engine, af_key key);
+/* Pressed means at least one non-repeat down event this update, even if a
+   release arrived in the same frame. Held/pressed state clears on focus loss. */
+bool af_engine_key_pressed(const af_engine *engine, af_key key);
+/* OS key-repeat events this update; distinct from the initial press. */
+bool af_engine_key_repeated(const af_engine *engine,af_key key);
+bool af_engine_mouse_pressed(const af_engine *engine, af_mouse_button button);
+af_vec2 af_engine_mouse_delta(const af_engine *engine);
+bool af_engine_set_mouse_capture(af_engine *engine, bool enabled);
+bool af_engine_mouse_captured(const af_engine *engine);
+af_engine_stats af_engine_get_stats(const af_engine *engine);
+
+bool af_engine_texture_info(const af_engine *engine,const char *name,af_texture_info *out);
+bool af_engine_upload_normal_map(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
+bool af_engine_load_normal_map(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+bool af_engine_load_sound(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+bool af_engine_play_sound(af_engine *engine,const char *name,float gain);
+void af_engine_stop_sounds(af_engine *engine);
+af_audio_stats af_engine_audio_stats(const af_engine *engine);
+af_gameplay_status af_engine_gameplay_status(const af_engine *engine);
+void af_engine_set_gameplay_status(af_engine *engine,af_gameplay_status status);
+bool af_engine_mouse_in_viewport(const af_engine *engine);
+void af_engine_set_simulation_paused(af_engine *engine,bool paused);
+bool af_engine_step_simulation(af_engine *engine);
+/* Call after teleporting. Scene changes reset interpolation automatically. */
+void af_engine_reset_interpolation(af_engine *engine);
+#endif

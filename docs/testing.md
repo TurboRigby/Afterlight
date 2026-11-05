@@ -1,0 +1,115 @@
+# Verification
+
+```sh
+cmake --preset debug
+cmake --build --preset debug
+AFTERLIGHT_REQUIRE_VALIDATION=1 ctest --preset debug
+cmake --preset release
+cmake --build --preset release
+```
+
+The 35-test Debug suite passes on the tested Apple M4/MoltenVK system, including
+Vulkan synchronization validation, actual pixel comparisons, fixed simulation,
+collisions, the controller and obstacle-course gameplay. Graphics tests require
+a desktop and Vulkan driver. The macOS-only module-unload regression accounts
+for one of these tests; other platforms currently have 34 and remain untested.
+
+`afterlight.editor_playground` opens the actual obstacle course and its C module.
+It also injects a real jump and verifies its audio cue/timer, checks loaded audio/GLB resources and F6 maximize/restore.
+`afterlight.editor_project` runs the same regression using `--project`, verifying
+that the correct module is selected without a playground launch flag.
+The scripted tests wait for native window focus and restart their sequence if
+the OS takes focus away; they keep a bounded frame budget. The engine still
+releases capture/input on focus loss. The test checks that Play starts in the player camera with mouse capture, right mouse
+temporarily gives the editor camera control, Escape releases capture, clicking
+recaptures, paused stepping works, and Stop restores the clean edit scene/camera.
+
+## Address/undefined sanitizers
+
+```sh
+cmake -S . -B build/asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+  -DCMAKE_C_FLAGS='-fsanitize=address,undefined' \
+  -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' \
+  -DCMAKE_SHARED_LINKER_FLAGS='-fsanitize=address,undefined' \
+  -DCMAKE_MODULE_LINKER_FLAGS='-fsanitize=address,undefined'
+cmake --build build/asan
+ctest --test-dir build/asan --output-on-failure
+```
+
+## macOS module-unload fix
+
+The previous sanitizer failure is fixed in 0.5. On the tested Apple Clang 21 / macOS
+27 system, unloading a sanitized C game module did not execute Clang's generated
+Mach-O ASan destructor. Global redzones stayed poisoned after the image unmapped.
+When macOS reused that address for a window backing store or metadata, ASan
+reported a global-buffer-overflow in CoreGraphics/CoreSpotlight and aborted. The
+crash report from editor PID 48575 came from that CTest sanitizer run.
+
+A standalone load/unload probe reproduced this without Afterlight, SDL or Vulkan.
+The fix uses `engine/src/module_sanitizer.c` as the **first linked object** in each
+macOS Clang module. Its ordinary C destructor registers via the working atexit
+path and calls compiler-rt's image-global unregistration entry point. Linking it
+first registers this cleanup before user destructors, making cleanup execute
+last. The original compiler-generated ASan destructor is replaced with the
+[Clang destructor-kind option](https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-fsanitize-address-destructor)
+to prevent duplicate unregistration. CMake passes that option to the frontend;
+it has no effect in builds without AddressSanitizer.
+
+Heap, stack, global and undefined-behavior instrumentation remain enabled. There
+are no ASan suppressions, manual shadow-memory unpoisoning, retained module images,
+or skipped editor tests. Normal Debug/Release behavior is unchanged.
+
+`afterlight.module_unload` performs sixteen load/unload cycles. It verifies that
+global redzones are still protected while module code and user destructors run,
+then confirms the former redzone is unpoisoned after unload. The formerly failing
+editor smoke test also passes repeatedly. Run the targeted checks with:
+
+```sh
+ctest --test-dir build/asan -R 'afterlight.module_unload|afterlight.editor_smoke|afterlight.hot_reload' --output-on-failure
+```
+
+Custom module targets need the same first-object cleanup and frontend option as
+the game targets in CMakeLists.txt. Keep the cleanup object first when adding
+translation units. A compiler without the required option cannot use this
+workaround; CMake detects support before applying it.
+
+## Project, component, course, audio and glTF coverage
+
+`afterlight.project` covers project-relative references, atomic save preservation,
+strict JSON/version/NUL rejection, player/camera edits and undo, component
+serialization and spawn-ID remapping within duplicated subtrees. The course test
+renames all objects to prove component-based discovery, then exercises walking,
+jumping, platforms, ordered checkpoints, respawn, locked finish, frozen finish
+time and a clean new run. Audio tests use SDL's dummy driver to decode the actual
+bundled WAVs, open playback streams, mix clips, set gain, stop/replay and preserve
+old clips after failed replacement. They do not assess speaker output by ear.
+
+`afterlight.gltf` loads analytic fixtures as external-buffer glTF, embedded data
+URI glTF and GLB. It checks parent transforms, mirrored winding, normals, UV0,
+normalized colors and base-color factors, then loads the real beacon. Malformed
+buffers, oversized declarations, singular transforms and truncated GLB are
+rejected. Playground graphics tests upload/render the beacon and show the shared
+HUD with Vulkan synchronization validation. The model importer is static-only;
+see assets.md for its explicit material/animation limits.
+
+## 0.7 engine/tooling checks
+
+`afterlight.player` launches a project through the generic C player. Model tests
+cover a two-material hierarchy, mirrored/local transforms, external and embedded
+base/normal/surface maps, selector reload, scene format 7 persistence and undo.
+The rendering regression samples real pixels to verify packed metallic/roughness
+maps in linear space. `afterlight.asset_reload` watches a glTF image dependency,
+observes a GPU pixel change, corrupts another map and checks last-good retention,
+then repairs it and verifies recovery with unchanged resource counts.
+
+`afterlight.project_tools` creates a starter using the actual wizard CLI,
+compiles/runs its C module, adds a rich model, exports, checks overwrite/failure
+isolation, deletes source data, relocates the export and launches it. On macOS it
+also checks bundled loader/driver paths. In sanitizer builds it exercises starter
+build/play/import and confirms sanitizer runtimes are rejected for distribution;
+the normal build covers runnable export. No graphics test is suppressed.
+The finished-game milestone is not part of these changes.
+
+`afterlight.editor_wizard` invokes the bundled tool through the real editor UI
+process-launch path and validates the generated project while preserving the
+open document/history state. It uses a unique test destination per run.

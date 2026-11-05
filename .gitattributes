@@ -1,0 +1,5 @@
+# Preserve upstream source/license bytes and their recorded checksums.
+third_party/cjson/* -whitespace
+third_party/nuklear/* -whitespace
+editor/assets/OFL.txt -whitespace
+third_party/stb/* -whitespace

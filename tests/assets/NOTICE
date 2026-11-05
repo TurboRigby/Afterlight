@@ -1,0 +1,11 @@
+Afterlight original sample/test data
+
+This Source Code Form is subject to the terms of the Mozilla Public License,
+v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain
+one at https://mozilla.org/MPL/2.0/.
+
+SPDX-License-Identifier: MPL-2.0
+
+This notice applies to the original scene JSON, meshes, images, buffers and
+procedural sounds in this directory. See the repository LICENSE and NOTICE.
+Procedural glTF/GLB and audio generators are in scripts/generate_sample_assets.py.

@@ -1,0 +1,11 @@
+# Convex quad, negative indices, UVs and explicit normal.
+v -1 -1 0
+v 1 -1 0
+v 1 1 0
+v -1 1 0
+vt 0 0
+vt 1 0
+vt 1 1
+vt 0 1
+vn 0 0 1
+f -4/1/1 -3/2/1 -2/3/1 -1/4/1
