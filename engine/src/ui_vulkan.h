@@ -15,6 +15,8 @@
 typedef struct af_vk_ui af_vk_ui;
 af_vk_ui *af_vk_ui_create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
     const unsigned char *rgba, uint32_t width, uint32_t height);
+bool af_vk_ui_upload_texture(af_vk_ui *ui,VkQueue queue,uint32_t family,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height);
+bool af_vk_ui_remove_texture(af_vk_ui *ui,uint32_t id);
 void af_vk_ui_destroy(af_vk_ui *ui);
 void af_vk_ui_release_pipeline(af_vk_ui *ui);
 bool af_vk_ui_create_pipeline(af_vk_ui *ui, VkRenderPass pass);

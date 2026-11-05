@@ -28,6 +28,8 @@ struct af_vk_ui {
     VkPhysicalDevice physical;
     VkDevice device;
     af_vk_texture *texture;
+    struct {uint32_t id;af_vk_texture *texture;} images[128];
+    size_t image_count;
     VkPipelineLayout layout;
     VkPipeline pipeline;
     ui_frame frames[UI_FRAME_COUNT];
@@ -105,6 +107,7 @@ void af_vk_ui_destroy(af_vk_ui *ui)
         free_buffer(ui, &ui->frames[i].indices);
     }
     if (ui->layout) vkDestroyPipelineLayout(ui->device, ui->layout, NULL);
+    for(size_t i=0;i<ui->image_count;++i)af_vk_texture_destroy(ui->images[i].texture);
     af_vk_texture_destroy(ui->texture);
     free(ui);
 }
@@ -217,7 +220,22 @@ void af_vk_ui_draw(af_vk_ui *ui, VkCommandBuffer command, uint32_t frame_index,
         float y1 = fmaxf(y0, fminf((float)extent.height, (draw->clip.y + draw->clip.height) * sy));
         VkRect2D scissor = {.offset = {(int32_t)x0,(int32_t)y0}, .extent = {(uint32_t)(x1-x0),(uint32_t)(y1-y0)}};
         if (!scissor.extent.width || !scissor.extent.height || !draw->index_count) continue;
+        af_vk_texture *texture=ui->texture;
+        if(draw->texture>=2)for(size_t t=0;t<ui->image_count;++t)if(ui->images[t].id==draw->texture){texture=ui->images[t].texture;break;}
+        VkDescriptorSet next=af_vk_texture_descriptor(texture);
+        if(next!=descriptor){vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,ui->layout,0,1,&next,0,NULL);descriptor=next;}
         vkCmdSetScissor(command, 0, 1, &scissor);
         vkCmdDrawIndexed(command, draw->index_count, 1, draw->first_index, 0, 0);
     }
+}
+
+bool af_vk_ui_upload_texture(af_vk_ui *ui,VkQueue queue,uint32_t family,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height){
+    if(!ui||id<2)return false;size_t index=0;while(index<ui->image_count&&ui->images[index].id!=id)++index;
+    if(index==ui->image_count&&index==128)return false;
+    af_vk_texture *texture=af_vk_texture_create(ui->physical,ui->device,queue,family,rgba,width,height,false,false,1);if(!texture)return false;
+    if(index<ui->image_count)af_vk_texture_destroy(ui->images[index].texture);else ++ui->image_count;
+    ui->images[index].id=id;ui->images[index].texture=texture;return true;
+}
+bool af_vk_ui_remove_texture(af_vk_ui *ui,uint32_t id){
+    if(!ui||id<2)return false;for(size_t i=0;i<ui->image_count;++i)if(ui->images[i].id==id){af_vk_texture_destroy(ui->images[i].texture);ui->images[i]=ui->images[--ui->image_count];return true;}return false;
 }

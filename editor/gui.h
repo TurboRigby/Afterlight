@@ -16,6 +16,7 @@ typedef struct ed_gui {
     struct nk_buffer commands, vertices, indices;
     af_overlay_command *draws;
     size_t draw_capacity;
+    uint32_t draw_count;
     bool initialized;
     bool text_input;
 } ed_gui;

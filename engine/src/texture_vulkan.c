@@ -9,6 +9,7 @@
 #include "mipmap.h"
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 typedef struct ui_buffer {
     VkBuffer buffer;
     VkDeviceMemory memory;
@@ -98,18 +99,34 @@ void af_vk_texture_destroy(af_vk_texture *ui){
 }
 VkDescriptorSetLayout af_vk_texture_layout(const af_vk_texture *ui){return ui->descriptor_layout;}
 VkDescriptorSet af_vk_texture_descriptor(const af_vk_texture *ui){return ui->descriptor;}
-af_vk_texture *af_vk_texture_create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
-    const unsigned char *rgba, uint32_t width, uint32_t height,bool srgb,bool repeat,float anisotropy)
+static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+    const void *rgba, uint32_t width, uint32_t height,bool srgb,bool repeat,float anisotropy,uint32_t hdr_levels)
 {
     if(!rgba||!width||!height||width>8192||height>8192)return NULL;
-    VkFormat format=srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM;
+    VkFormat format=hdr_levels?VK_FORMAT_R16G16B16A16_SFLOAT:srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM;
+    VkFormatProperties features;vkGetPhysicalDeviceFormatProperties(physical,format,&features);
+    if(!(features.optimalTilingFeatures&VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))return NULL;
     af_vk_texture *ui = calloc(1, sizeof(*ui));
     if (!ui) return NULL;
     ui->device = device; ui->physical = physical;
     ui_buffer staging = {0};
     VkCommandPool pool = VK_NULL_HANDLE;
-    af_mip_chain mips;
-    if(!af_mip_chain_build(rgba,width,height,srgb,repeat,&mips)){free(ui);return NULL;}
+    af_mip_chain mips={0};
+    if(hdr_levels){
+        if(hdr_levels>AF_MAX_MIPS){free(ui);return NULL;}mips.count=hdr_levels;
+        uint32_t w=width,h=height;
+        for(uint32_t i=0;i<hdr_levels;++i){mips.widths[i]=w;mips.heights[i]=h;mips.offsets[i]=mips.bytes;mips.bytes+=(size_t)w*h*8;w=w>1?w/2:1;h=h>1?h/2:1;}
+        mips.pixels=malloc(mips.bytes);if(!mips.pixels){free(ui);return NULL;}
+        const float *values=rgba;uint16_t *half=(uint16_t*)mips.pixels;
+        for(size_t i=0;i<mips.bytes/2;++i){float value=values[i];
+            if(!isfinite(value)||value<0||value>65504){free(mips.pixels);free(ui);return NULL;}
+            if(value==0){half[i]=0;continue;}
+            int exponent=0;float fraction=frexpf(value,&exponent);unsigned mantissa;
+            if(exponent< -13)mantissa=(unsigned)lrintf(ldexpf(value,24));
+            else{unsigned significand=(unsigned)lrintf((fraction*2-1)*1024);mantissa=((unsigned)(exponent+14)<<10)+significand;}
+            half[i]=(uint16_t)mantissa;
+        }
+    }else if(!af_mip_chain_build(rgba,width,height,srgb,repeat,&mips)){free(ui);return NULL;}
     VkDeviceSize bytes = mips.bytes;
     if (!reserve_buffer(ui, &staging, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT)) goto fail;
     memcpy(staging.mapped, mips.pixels, (size_t)bytes);
@@ -166,7 +183,7 @@ af_vk_texture *af_vk_texture_create(VkPhysicalDevice physical, VkDevice device, 
         .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR,
         .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .maxLod=(float)(mips.count-1),
         .anisotropyEnable=repeat&&anisotropy>1, .maxAnisotropy=repeat?anisotropy:1, .addressModeU = (repeat?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE),
-        .addressModeV = (repeat?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE), .addressModeW = (repeat?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)};
+        .addressModeV = (repeat&&!hdr_levels?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE), .addressModeW = (repeat?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)};
     if (!ok(vkCreateSampler(device, &sampler, NULL, &ui->sampler), "atlas sampler")) goto fail;
     VkDescriptorSetLayoutBinding binding = {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
@@ -193,3 +210,11 @@ fail:
 }
 
 af_texture_info af_vk_texture_info(const af_vk_texture *texture){return texture->info;}
+
+af_vk_texture *af_vk_texture_create(VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,const unsigned char *rgba,uint32_t width,uint32_t height,bool srgb,bool repeat,float anisotropy){
+    return create_texture(physical,device,queue,family,rgba,width,height,srgb,repeat,anisotropy,0);
+}
+af_vk_texture *af_vk_texture_create_hdr(VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,const float *rgba,uint32_t width,uint32_t height,uint32_t levels,bool wrap_u){
+    return create_texture(physical,device,queue,family,rgba,width,height,false,wrap_u,1,levels);
+}
+VkDescriptorImageInfo af_vk_texture_image(const af_vk_texture *texture){return (VkDescriptorImageInfo){texture->sampler,texture->view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};}

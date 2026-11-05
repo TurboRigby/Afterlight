@@ -12,11 +12,11 @@ from pathlib import Path
 import zipfile
 
 SOURCE_DIRS = ('engine', 'editor', 'game', 'player', 'playground', 'sandbox',
-               'scripts', 'tests', 'docs', 'cmake', 'third_party')
+               'scripts', 'tests', 'docs', 'cmake', 'third_party', '.github')
 ROOT_FILES = ('CMakeLists.txt', 'CMakePresets.json', 'README.md', 'LICENSE',
               'NOTICE', 'THIRD_PARTY_NOTICES.md', '.gitignore', '.gitattributes')
 SUFFIXES = {'.c', '.h', '.vert', '.frag', '.py', '.cmake', '.md', '.json',
-            '.obj', '.tga', '.glb', '.gltf', '.png', '.bin', '.wav', '.ttf', '.txt'}
+            '.yml', '.yaml', '.obj', '.tga', '.glb', '.gltf', '.png', '.bin', '.wav', '.ttf', '.txt'}
 
 
 def source_files(root: Path, project: bool = False):
@@ -27,8 +27,8 @@ def source_files(root: Path, project: bool = False):
     for folder in folders:
         for path in (root / folder).rglob('*'):
             relative = path.relative_to(root)
-            if any(part in {'__pycache__', '.git', 'build', '.cache'} or part.startswith('.')
-                   for part in relative.parts):
+            parts=relative.parts[1:] if folder=='.github' else relative.parts
+            if any(part in {'__pycache__', '.git', 'build', '.cache'} or part.startswith('.') for part in parts):
                 continue
             if path.is_symlink():
                 raise ValueError(f'Source archive does not follow symlinks: {relative}')

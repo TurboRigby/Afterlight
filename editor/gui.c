@@ -143,9 +143,10 @@ bool ed_gui_render(ed_gui *gui, af_engine *engine, float width, float height)
     }
     uint32_t first=0, index=0;
     nk_draw_foreach(command,&gui->context,&gui->commands) {
-        gui->draws[index++]=(af_overlay_command){{command->clip_rect.x,command->clip_rect.y,command->clip_rect.w,command->clip_rect.h},first,command->elem_count};
+        gui->draws[index++]=(af_overlay_command){{command->clip_rect.x,command->clip_rect.y,command->clip_rect.w,command->clip_rect.h},first,command->elem_count,(uint32_t)command->texture.id};
         first+=command->elem_count;
     }
+    gui->draw_count=index;
     af_overlay_frame frame={
         .vertices=nk_buffer_memory_const(&gui->vertices),.indices=nk_buffer_memory_const(&gui->indices),.commands=gui->draws,
         .vertex_count=(uint32_t)(gui->vertices.allocated/sizeof(af_overlay_vertex)),

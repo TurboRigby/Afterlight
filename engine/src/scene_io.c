@@ -181,7 +181,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -311,23 +311,30 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         if(!af_scene_set_shadows(scene,settings)){set_error(error,AF_SCENE_ERROR_FORMAT,"Shadow settings outside supported ranges.");goto fail;}
     }
     if(version->valuedouble>=4){
-        static const char *const render_fields[]={"exposure","tone_mapping"};const cJSON *render=cJSON_GetObjectItemCaseSensitive(root,"render"),*tone=cJSON_GetObjectItemCaseSensitive(render,"tone_mapping");
+        static const char *const render_fields[]={"exposure","tone_mapping","bloom","bloom_strength","bloom_threshold","bloom_radius","environment_enabled","environment_profile","environment_intensity","environment_rotation","local_shadow_resolution"};const cJSON *render=cJSON_GetObjectItemCaseSensitive(root,"render"),*tone=cJSON_GetObjectItemCaseSensitive(render,"tone_mapping");
         af_render_settings settings=af_render_settings_default();
-        if(!exact_fields(render,render_fields,2)||!read_float_field(render,"exposure",&settings.exposure)||!cJSON_IsBool(tone)){
+        if(!exact_fields(render,render_fields,version->valuedouble>=8?11:2)||!read_float_field(render,"exposure",&settings.exposure)||!cJSON_IsBool(tone)){
             set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid exposure/tone mapping settings.");goto fail;}
+        if(version->valuedouble>=8){float profile,resolution;const cJSON *bloom=cJSON_GetObjectItemCaseSensitive(render,"bloom"),*environment=cJSON_GetObjectItemCaseSensitive(render,"environment_enabled");
+            if(!cJSON_IsBool(bloom)||!cJSON_IsBool(environment)||!read_float_field(render,"bloom_strength",&settings.bloom_strength)||!read_float_field(render,"bloom_threshold",&settings.bloom_threshold)||!read_float_field(render,"bloom_radius",&settings.bloom_radius)||
+               !read_float_field(render,"environment_profile",&profile)||profile<0||profile>2||floorf(profile)!=profile||!read_float_field(render,"environment_intensity",&settings.environment_intensity)||!read_float_field(render,"environment_rotation",&settings.environment_rotation)||
+               !read_float_field(render,"local_shadow_resolution",&resolution)||(resolution!=256&&resolution!=512&&resolution!=1024)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid HDR/environment/local shadow settings.");goto fail;}
+            settings.environment_enabled=cJSON_IsTrue(environment)!=0;settings.bloom=cJSON_IsTrue(bloom)!=0;settings.environment_profile=(uint32_t)profile;settings.local_shadow_resolution=(uint32_t)resolution;
+        }
         settings.tone_mapping=cJSON_IsTrue(tone)!=0;if(!af_scene_set_render_settings(scene,settings)){set_error(error,AF_SCENE_ERROR_FORMAT,"Exposure outside supported range.");goto fail;}
         const cJSON *lights=cJSON_GetObjectItemCaseSensitive(root,"local_lights");
         if(!cJSON_IsArray(lights)||cJSON_GetArraySize(lights)>AF_SCENE_MAX_LOCAL_LIGHTS){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid local light array.");goto fail;}
-        static const char *const light_fields[]={"name","type","enabled","position","color","intensity","range","direction","inner_angle","outer_angle"};
+        static const char *const light_fields[]={"name","type","enabled","position","color","intensity","range","direction","inner_angle","outer_angle","cast_shadows","shadow_bias"};
         const cJSON *local;cJSON_ArrayForEach(local,lights){af_local_light value=af_local_light_default(AF_LIGHT_POINT);
             const cJSON *type=cJSON_GetObjectItemCaseSensitive(local,"type"),*enabled=cJSON_GetObjectItemCaseSensitive(local,"enabled");
-            if(!exact_fields(local,light_fields,10)||!cJSON_IsString(type)||!cJSON_IsBool(enabled)||!read_name(cJSON_GetObjectItemCaseSensitive(local,"name"),value.name,sizeof(value.name))||
+            if(!exact_fields(local,light_fields,version->valuedouble>=8?12:10)||!cJSON_IsString(type)||!cJSON_IsBool(enabled)||!read_name(cJSON_GetObjectItemCaseSensitive(local,"name"),value.name,sizeof(value.name))||
                 !read_vector(cJSON_GetObjectItemCaseSensitive(local,"position"),&value.position)||!read_vector(cJSON_GetObjectItemCaseSensitive(local,"color"),&value.color)||
                 !read_vector(cJSON_GetObjectItemCaseSensitive(local,"direction"),&value.direction)||!read_float_field(local,"intensity",&value.intensity)||!read_float_field(local,"range",&value.range)||
                 !read_float_field(local,"inner_angle",&value.inner_angle)||!read_float_field(local,"outer_angle",&value.outer_angle)){
                 set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid local light fields.");goto fail;}
             if(!strcmp(type->valuestring,"point"))value.type=AF_LIGHT_POINT;else if(!strcmp(type->valuestring,"spot"))value.type=AF_LIGHT_SPOT;
             else{set_error(error,AF_SCENE_ERROR_FORMAT,"Unknown local light type.");goto fail;}
+            if(version->valuedouble>=8){const cJSON *cast=cJSON_GetObjectItemCaseSensitive(local,"cast_shadows");if(!cJSON_IsBool(cast)||!read_float_field(local,"shadow_bias",&value.shadow_bias)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid local shadow fields.");goto fail;}value.cast_shadows=cJSON_IsTrue(cast)!=0;}
             value.enabled=cJSON_IsTrue(enabled)!=0;if(!af_scene_add_local_light(scene,value)){set_error(error,AF_SCENE_ERROR_FORMAT,"Local light values outside supported ranges.");goto fail;}
         }
     }
@@ -422,13 +429,16 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
         !cJSON_AddNumberToObject(root, "version", AF_SCENE_FILE_VERSION) || !add_id(root, "next_id", scene->next_id)) goto fail;
     cJSON *render=cJSON_AddObjectToObject(root,"render");
     if(!render||!cJSON_AddNumberToObject(render,"exposure",scene->render_settings.exposure)||!cJSON_AddBoolToObject(render,"tone_mapping",scene->render_settings.tone_mapping))goto fail;
+    const af_render_settings *rs=&scene->render_settings;
+    if(!cJSON_AddBoolToObject(render,"bloom",rs->bloom)||!cJSON_AddNumberToObject(render,"bloom_strength",rs->bloom_strength)||!cJSON_AddNumberToObject(render,"bloom_threshold",rs->bloom_threshold)||!cJSON_AddNumberToObject(render,"bloom_radius",rs->bloom_radius)||
+       !cJSON_AddBoolToObject(render,"environment_enabled",rs->environment_enabled)||!cJSON_AddNumberToObject(render,"environment_profile",rs->environment_profile)||!cJSON_AddNumberToObject(render,"environment_intensity",rs->environment_intensity)||!cJSON_AddNumberToObject(render,"environment_rotation",rs->environment_rotation)||!cJSON_AddNumberToObject(render,"local_shadow_resolution",rs->local_shadow_resolution))goto fail;
     cJSON *locals=cJSON_AddArrayToObject(root,"local_lights");if(!locals)goto fail;
     for(size_t i=0;i<scene->local_light_count;++i){const af_local_light *value=&scene->local_lights[i];cJSON *local=cJSON_CreateObject();if(!local)goto fail;
         if(!cJSON_AddItemToArray(locals,local)){cJSON_Delete(local);goto fail;}
         if(!cJSON_AddStringToObject(local,"name",value->name)||!cJSON_AddStringToObject(local,"type",value->type==AF_LIGHT_POINT?"point":"spot")||!cJSON_AddBoolToObject(local,"enabled",value->enabled)||
             !add_vector(local,"position",value->position)||!add_vector(local,"color",value->color)||!add_vector(local,"direction",value->direction)||
             !cJSON_AddNumberToObject(local,"intensity",value->intensity)||!cJSON_AddNumberToObject(local,"range",value->range)||
-            !cJSON_AddNumberToObject(local,"inner_angle",value->inner_angle)||!cJSON_AddNumberToObject(local,"outer_angle",value->outer_angle))goto fail;
+            !cJSON_AddNumberToObject(local,"inner_angle",value->inner_angle)||!cJSON_AddNumberToObject(local,"outer_angle",value->outer_angle)||!cJSON_AddBoolToObject(local,"cast_shadows",value->cast_shadows)||!cJSON_AddNumberToObject(local,"shadow_bias",value->shadow_bias))goto fail;
     }
     cJSON *sh=cJSON_AddObjectToObject(root,"shadows");af_shadow_settings settings=scene->shadows;
     if(!sh||!cJSON_AddBoolToObject(sh,"enabled",settings.enabled)||!cJSON_AddStringToObject(sh,"mode",settings.mode==AF_SHADOW_SINGLE?"single":"cascaded")||

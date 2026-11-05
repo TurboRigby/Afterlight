@@ -10,7 +10,7 @@ file(GLOB_RECURSE afterlight_source_inputs CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/playground/*" "${PROJECT_SOURCE_DIR}/sandbox/*"
     "${PROJECT_SOURCE_DIR}/scripts/*" "${PROJECT_SOURCE_DIR}/tests/*"
     "${PROJECT_SOURCE_DIR}/docs/*" "${PROJECT_SOURCE_DIR}/cmake/*"
-    "${PROJECT_SOURCE_DIR}/third_party/*")
+    "${PROJECT_SOURCE_DIR}/third_party/*" "${PROJECT_SOURCE_DIR}/.github/*")
 list(FILTER afterlight_source_inputs EXCLUDE REGEX "/(__pycache__|build|[.]git|[.]cache)/")
 set(afterlight_source_archive "${PROJECT_BINARY_DIR}/source/afterlight-source.zip")
 add_custom_command(OUTPUT "${afterlight_source_archive}"

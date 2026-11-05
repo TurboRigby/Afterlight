@@ -9,6 +9,7 @@
 #include <afterlight/asset_watch.h>
 #include "document.h"
 #include "asset_browser.h"
+#include "thumbnail.h"
 #include "gizmo.h"
 #include "collider_view.h"
 #include "runtime.h"
@@ -30,6 +31,7 @@ typedef enum ed_action { ED_NONE, ED_NEW, ED_OPEN, ED_OPEN_PROJECT, ED_CLOSE } e
 typedef struct editor {
     ed_document document;
     ed_gui gui;
+    ed_thumbnails thumbnails;
     ed_gizmo gizmo;
     ed_runtime runtime;
     af_asset_watch *asset_watch;
@@ -37,7 +39,7 @@ typedef struct editor {
     af_project project;
     SDL_Process *tool_process;
     int tool_action;
-    bool wizard_test,tool_success;
+    bool wizard_test,tool_success,thumbnail_test;
     char wizard_name[128],wizard_folder[AF_ASSET_PATH_CAPACITY],tool_project[AF_ASSET_PATH_CAPACITY];
     char project_path[AF_ASSET_PATH_CAPACITY];
     const char *initial_project;
@@ -431,6 +433,8 @@ static void local_light_controls(editor *app)
         if(inner!=before.inner_angle*180/AF_PI)local.inner_angle=inner*AF_PI/180;
         if(outer!=before.outer_angle*180/AF_PI)local.outer_angle=outer*AF_PI/180;
     }
+    nk_layout_row_dynamic(ctx,26,1);nk_bool cast=local.cast_shadows;nk_checkbox_label(ctx,"Cast local shadows",&cast);local.cast_shadows=cast!=0;
+    if(local.cast_shadows){nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Shadow depth bias",0,&local.shadow_bias,.1f,.0001f,.00001f);label(ctx,"First 4 enabled shadow lights share the budget.",24);}
     if(memcmp(&local,&before,sizeof(local)))ed_document_local_light(&app->document,app->selected_light,local);
     nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Delete light"))ed_document_remove_light(&app->document,app->selected_light);
 }
@@ -490,6 +494,23 @@ static void gameplay_controls(editor *app,af_scene_object object)
     if(g.role==AF_ROLE_CHECKPOINT){int order=(int)g.checkpoint_order;nk_layout_row_dynamic(ctx,30,1);if(nk_property_int(ctx,"Checkpoint order",1,&order,1024,1,1)){g.checkpoint_order=(unsigned)order;changed=true;}}
     if(changed)ed_document_gameplay(&app->document,g);
 }
+static void thumbnail_widget(editor *app,const af_scene_asset *asset,const af_material *material){
+    struct nk_context *ctx=&app->gui.context;struct nk_rect bounds;
+    enum nk_widget_layout_states visibility=nk_widget(&bounds,ctx);if(visibility==NK_WIDGET_INVALID)return;
+    float side=fminf(bounds.w,bounds.h);bounds.x+=(bounds.w-side)*.5f;bounds.w=side;bounds.h=side;
+    uint32_t texture=ed_thumbnails_get(&app->thumbnails,app->engine,app->document.scene,asset,material);
+    struct nk_command_buffer *canvas=nk_window_get_canvas(ctx);
+    if(texture){struct nk_image image=nk_image_id((int)texture);nk_draw_image(canvas,bounds,&image,nk_rgba(255,255,255,255));}
+    else nk_fill_rect(canvas,bounds,4,nk_rgb(48,45,57));
+    nk_stroke_rect(canvas,bounds,3,1,nk_rgb(82,75,91));
+    if(asset&&visibility==NK_WIDGET_VALID&&nk_input_is_mouse_hovering_rect(&ctx->input,bounds)&&nk_input_is_mouse_pressed(&ctx->input,NK_BUTTON_LEFT))snprintf(app->selected_asset,sizeof(app->selected_asset),"%s",asset->name);
+}
+static void asset_entry(editor *app,const af_scene_asset *asset){
+    struct nk_context *ctx=&app->gui.context;char title[128];
+    snprintf(title,sizeof(title),"%s  /  %s",asset->name,asset->kind==AF_ASSET_METALLIC_ROUGHNESS?"metal/rough":asset->kind==AF_ASSET_AUDIO?"audio":asset->kind==AF_ASSET_MESH?"mesh":asset->kind==AF_ASSET_NORMAL_MAP?"normal map":"color texture");
+    nk_layout_row_begin(ctx,NK_DYNAMIC,64,2);nk_layout_row_push(ctx,.17f);thumbnail_widget(app,asset,NULL);
+    nk_layout_row_push(ctx,.83f);if(nk_select_label(ctx,title,NK_TEXT_LEFT,!strcmp(app->selected_asset,asset->name)))snprintf(app->selected_asset,sizeof(app->selected_asset),"%s",asset->name);nk_layout_row_end(ctx);
+}
 static void inspector(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
@@ -536,6 +557,7 @@ static void inspector(editor *app,float width,float height)
             collider_controls(app,object);
             gameplay_controls(app,object);
             label(context,"Material",30);af_material material=object.material;
+            nk_layout_row_dynamic(context,80,1);thumbnail_widget(app,NULL,&material);
             label(context,"Metallic/roughness texture asset",22);nk_layout_row_dynamic(context,30,1);
             char surface[AF_MESH_NAME_CAPACITY];snprintf(surface,sizeof(surface),"%s",material.metallic_roughness_map);
             nk_edit_string_zero_terminated(context,NK_EDIT_FIELD,surface,sizeof(surface),nk_filter_default);
@@ -582,6 +604,26 @@ static void inspector(editor *app,float width,float height)
         nk_layout_row_dynamic(context,30,1);bool render_changed=nk_property_float(context,"Exposure (stops)",-10,&render.exposure,10,0.25f,0.025f)!=0;
         nk_layout_row_dynamic(context,26,1);nk_bool tone=render.tone_mapping;
         if(nk_checkbox_label(context,"Tone mapping",&tone)){render.tone_mapping=tone!=0;render_changed=true;}
+        label(context,"Environment lighting",30);nk_layout_row_dynamic(context,26,1);nk_bool environment=render.environment_enabled;
+        if(nk_checkbox_label(context,"Image-based lighting",&environment)){render.environment_enabled=environment!=0;render_changed=true;}
+        if(render.environment_enabled){
+            static const char *profiles[]={"Studio softboxes","Sunset sky","Overcast sky"};nk_layout_row_dynamic(context,30,1);
+            int profile=nk_combo(context,profiles,3,(int)render.environment_profile,26,nk_vec2(290,120));if((uint32_t)profile!=render.environment_profile){render.environment_profile=(uint32_t)profile;render_changed=true;}
+            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Environment intensity",0,&render.environment_intensity,100,.1f,.01f)!=0;
+            float degrees=render.environment_rotation*180/AF_PI;nk_layout_row_dynamic(context,30,1);
+            if(nk_property_float(context,"Environment rotation",-360,&degrees,360,5,.5f)){render.environment_rotation=degrees*AF_PI/180;render_changed=true;}
+        }
+        label(context,"Bloom",30);nk_layout_row_dynamic(context,26,1);nk_bool bloom=render.bloom;
+        if(nk_checkbox_label(context,"Bloom enabled",&bloom)){render.bloom=bloom!=0;render_changed=true;}
+        if(render.bloom){
+            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Bloom strength",0,&render.bloom_strength,5,.05f,.005f)!=0;
+            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Bloom threshold",0,&render.bloom_threshold,100,.1f,.01f)!=0;
+            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Bloom radius",0,&render.bloom_radius,4,.1f,.01f)!=0;
+        }
+        label(context,"Local shadow quality",28);static const char *local_resolutions[]={"256 px / face","512 px / face","1024 px / face"};
+        int local_quality=render.local_shadow_resolution==256?0:render.local_shadow_resolution==1024?2:1;
+        nk_layout_row_dynamic(context,30,1);int next_quality=nk_combo(context,local_resolutions,3,local_quality,26,nk_vec2(290,120));
+        if(next_quality!=local_quality){render.local_shadow_resolution=256u<<(unsigned)next_quality;render_changed=true;}
         if(render_changed)ed_document_render_settings(&app->document,render);
         label(context,"Shadows",30);af_shadow_settings shadows=af_scene_get_shadows(app->document.scene);
         nk_layout_row_dynamic(context,26,1);nk_bool enabled=shadows.enabled;bool shadow_changed=nk_checkbox_label(context,"Enabled",&enabled)!=0;shadows.enabled=enabled!=0;
@@ -654,6 +696,8 @@ static void performance_panel(editor *app,float width,float height)
         snprintf(text,sizeof(text),"Textures %zu / %.2f MiB / %u mip levels",stats.loaded_textures,(double)stats.texture_bytes/1048576,stats.texture_mip_levels);label(ctx,text,24);
         snprintf(text,sizeof(text),"Anisotropy %.0fx / Shadow %u x %u",stats.texture_anisotropy,stats.shadow_resolution,stats.shadow_cascades);label(ctx,text,24);
         snprintf(text,sizeof(text),"Missing meshes %zu / textures %zu",stats.missing_meshes,stats.missing_textures);label(ctx,text,24);
+        snprintf(text,sizeof(text),"HDR: %s / %u local lights / %u shadow faces",stats.hdr_enabled?"RGBA16F":"unavailable",stats.local_shadow_lights,stats.local_shadow_maps);label(ctx,text,24);
+        if(stats.local_shadow_overflow){snprintf(text,sizeof(text),"%u extra local lights render without shadows",stats.local_shadow_overflow);label(ctx,text,24);}
         label(ctx,"GPU samples are delayed; presentation is excluded.",24);
         nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close performance"))app->show_performance=false;
     }nk_end(ctx);
@@ -675,15 +719,14 @@ static void asset_browser(editor *app,float width,float height)
         if(nk_button_label(ctx,"Import normal"))start_import(app,AF_ASSET_NORMAL_MAP);
         nk_layout_row_dynamic(ctx,28,2);if(nk_button_label(ctx,"Import WAV sound"))start_import(app,AF_ASSET_AUDIO);
         if(nk_button_label(ctx,"Import metal/rough"))start_import(app,AF_ASSET_METALLIC_ROUGHNESS);
-        size_t matches=0;nk_layout_row_dynamic(ctx,180,1);
+        size_t matches=0;nk_layout_row_dynamic(ctx,240,1);
         if(nk_group_begin(ctx,"Asset results",NK_WINDOW_BORDER)){
             af_scene_asset builtin={.name="cube",.path="Built-in mesh",.kind=AF_ASSET_MESH};
             if(!af_scene_find_asset(app->document.scene,"cube")&&ed_asset_matches(&builtin,app->asset_search,app->asset_filter-1)){
-                nk_layout_row_dynamic(ctx,28,1);if(nk_select_label(ctx,"cube  /  built-in mesh",NK_TEXT_LEFT,!strcmp(app->selected_asset,"cube")))snprintf(app->selected_asset,sizeof(app->selected_asset),"cube");++matches;}
+                asset_entry(app,&builtin);++matches;}
             for(size_t i=0;i<af_scene_asset_count(app->document.scene);++i){const af_scene_asset *asset=af_scene_asset_at(app->document.scene,i);
-                if(!ed_asset_matches(asset,app->asset_search,app->asset_filter-1))continue;++matches;char title[128];
-                snprintf(title,sizeof(title),"%s  /  %s",asset->name,asset->kind==AF_ASSET_METALLIC_ROUGHNESS?"metal/rough":asset->kind==AF_ASSET_AUDIO?"audio":asset->kind==AF_ASSET_MESH?"mesh":asset->kind==AF_ASSET_NORMAL_MAP?"normal map":"color texture");
-                nk_layout_row_dynamic(ctx,28,1);if(nk_select_label(ctx,title,NK_TEXT_LEFT,!strcmp(app->selected_asset,asset->name)))snprintf(app->selected_asset,sizeof(app->selected_asset),"%s",asset->name);
+                if(!ed_asset_matches(asset,app->asset_search,app->asset_filter-1))continue;++matches;
+                asset_entry(app,asset);
             }
             if(!matches)label(ctx,"No matching assets.",28);nk_group_end(ctx);
         }
@@ -701,6 +744,7 @@ static void asset_browser(editor *app,float width,float height)
             if(!builtin){nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Reload asset from disk")){af_asset_error error;
                 char source[AF_ASSET_PATH_CAPACITY];size_t n=strcspn(asset.path,"#");memcpy(source,asset.path,n);source[n]=0;
                 bool loaded=af_engine_reload_asset_source(app->engine,app->document.scene,source,&error);
+                if(loaded)ed_thumbnails_invalidate(&app->thumbnails);
                 set_status(app,loaded?"Asset reloaded.":error.message);}}
         }
         nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close assets"))app->show_assets=false;
@@ -763,6 +807,7 @@ static void play_hud(editor *app)
 static void build_ui(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
+    ed_thumbnails_begin(&app->thumbnails);
     draw_colliders(app);draw_gizmo(app);
     toolbar(app,width);
     if(!app->runtime.playing||!app->maximize_play){object_list(app,height);inspector(app,width,height);}
@@ -978,9 +1023,10 @@ static void update(af_engine *engine,double delta,void *userdata)
 {
     editor *app=userdata;++app->updates;
     if(app->frame_limit&&af_engine_get_stats(engine).rendered_frames>=app->frame_limit){
-        if(app->play_controls_test||app->wizard_test){app->failed=true;fputs("Editor test did not complete within its frame budget.\n",stderr);}
+        if(app->play_controls_test||app->wizard_test||app->thumbnail_test){app->failed=true;fputs("Editor test did not complete within its frame budget.\n",stderr);}
         af_engine_request_quit(engine);return;}
     poll_dialog(app);poll_project_tool(app);play_controls_smoke(app);smoke(app);
+    if(app->thumbnail_test){app->show_assets=true;if(app->updates==12)app->asset_filter=2;}
     if(app->wizard_test){
         if(app->updates==3){app->show_project=true;snprintf(app->wizard_name,sizeof(app->wizard_name),"Editor wizard check");start_project_tool(app,false);if(!app->tool_process){app->failed=true;af_engine_request_quit(engine);}}
         if(app->updates>3&&!app->tool_process){char path[AF_ASSET_PATH_CAPACITY];af_project project;af_asset_error error;
@@ -999,7 +1045,7 @@ static void update(af_engine *engine,double delta,void *userdata)
         else app->gizmo.projected=false;
     }
     else app->gizmo.projected=false;
-    if(app->watch_assets){af_asset_error message;af_asset_watch_update(app->asset_watch,engine,app->runtime.playing?app->runtime.scene:app->document.scene,delta,&message);if(message.message[0])set_status(app,message.message);}
+    if(app->watch_assets){unsigned before=af_asset_watch_get_stats(app->asset_watch).reloads;af_asset_error message;af_asset_watch_update(app->asset_watch,engine,app->runtime.playing?app->runtime.scene:app->document.scene,delta,&message);if(af_asset_watch_get_stats(app->asset_watch).reloads!=before)ed_thumbnails_invalidate(&app->thumbnails);if(message.message[0])set_status(app,message.message);}
     ed_gui_input(&app->gui,engine);
     keyboard(app,delta);
     build_ui(app,width,height);
@@ -1013,6 +1059,12 @@ static void update(af_engine *engine,double delta,void *userdata)
     char title[512];snprintf(title,sizeof(title),"Afterlight Editor | %s%s",app->document.path[0]?ed_path_name(app->document.path):"Untitled scene",ed_document_dirty(&app->document)?" *":"");
     if(strcmp(title,app->title)){snprintf(app->title,sizeof(app->title),"%s",title);af_engine_set_title(engine,title);}
     if(!ed_gui_render(&app->gui,engine,width,height)){app->failed=true;af_engine_request_quit(engine);}
+    if(app->thumbnail_test&&app->updates>=20){unsigned images=0,ready=0;
+        for(uint32_t i=0;i<app->gui.draw_count;++i)if(app->gui.draws[i].texture>=2)++images;
+        for(unsigned i=0;i<ED_THUMBNAIL_CACHE_SIZE;++i)if(app->thumbnails.entries[i].ready)++ready;
+        app->failed|=images<1||ready<3||ed_document_dirty(&app->document);
+        printf("Editor thumbnails: %u cached / %u image draws; document %s.\n",ready,images,ed_document_dirty(&app->document)?"dirty":"clean");af_engine_request_quit(engine);
+    }
 }
 static void shutdown(af_engine *engine,void *userdata)
 {
@@ -1036,6 +1088,8 @@ int main(int argc,char **argv)
     for(int i=1;i<argc;++i){
         if(!strcmp(argv[i],"--help")){puts("Usage: afterlight_editor [--playground] [--project PATH] [--scene PATH] [--game LIBRARY] [--frames N] [--smoke-test PATH] [--play-controls-test] [--validation | --no-validation]");return 0;}
         if(!strcmp(argv[i],"--playground")){app.playground=true;snprintf(app.module_path,sizeof(app.module_path),"%s",AF_PLAYGROUND_MODULE_PATH);}
+        else if(!strcmp(argv[i],"--show-assets"))app.show_assets=true;
+        else if(!strcmp(argv[i],"--thumbnail-test")){app.thumbnail_test=true;app.show_assets=true;if(!app.frame_limit)app.frame_limit=600;}
         else if(!strcmp(argv[i],"--play-controls-test")){app.play_controls_test=true;if(!app.frame_limit)app.frame_limit=300;}
         else if(!strcmp(argv[i],"--project")&&i+1<argc)app.initial_project=argv[++i];
         else if(!strcmp(argv[i],"--wizard-test")&&i+1<argc){app.wizard_test=true;snprintf(app.wizard_folder,sizeof(app.wizard_folder),"%s-%" PRIu64,argv[++i],SDL_GetTicksNS());if(!app.frame_limit)app.frame_limit=600;}

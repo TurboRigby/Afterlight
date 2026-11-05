@@ -1,5 +1,8 @@
 # Materials, lighting and profiling
 
+Afterlight **0.8** adds floating-point HDR rendering, environment lighting, local
+shadows and bloom. Start with [the Lighting Lab and current controls](lighting-08.md).
+
 Afterlight 0.4 adds the [fifteen completed steps](development-15.md). Engine and
 game code remain C17; shaders are GLSL compiled to embedded SPIR-V.
 
@@ -32,19 +35,22 @@ isotropic Cook–Torrance microfacet path: GGX normal distribution, Schlick Fres
 Smith visibility approximation and energy-split Lambert diffuse. Roughness and
 metallic values are scalar [0,1]; the shader clamps roughness to 0.04 for numerical
 stability. Metallic materials tint specular using base color and remove diffuse.
-There are no metallic/roughness textures, environment reflections/IBL, clearcoat,
-transmission or area lights yet. Ambient is a simple constant, not irradiance.
+Packed metallic/roughness maps and optional diffuse/specular environment lighting
+are supported. Clearcoat, transmission and area lights remain future work. The
+Ambient scalar is separate from the convolved environment contribution.
 
 Emission adds linear RGB times strength independently of lights, including for
-unlit materials. It does not illuminate neighboring geometry or produce bloom.
+unlit materials. It does not illuminate neighboring geometry. When enabled, bloom filters bright
+HDR emission before presentation.
 Color textures, vertex colors and material base color multiply before lighting.
 Selection tint remains transient editor state. Geometry is opaque.
 
 Exposure multiplies scene geometry by 2^stops (range -10 to +10). Optional tone
-mapping uses the Reinhard curve c/(1+c). Output then goes to the swapchain; an
-sRGB swapchain performs output encoding. The editor UI and clear background are
-unaffected. This is a direct forward path, without an HDR intermediate buffer,
-automatic exposure or post-process chain.
+mapping uses the Reinhard curve c/(1+c). Scene color first goes to an RGBA16F target, then bloom, exposure and tone mapping
+are applied before the swapchain; an sRGB swapchain performs output encoding.
+The editor UI is drawn afterwards and is unaffected. Clear scene/background
+color follows scene exposure. Automatic exposure and HDR monitor output are not
+implemented. GPU scene timing includes post processing.
 
 ## Local lights
 
@@ -58,8 +64,8 @@ Spot direction points along emitted light. Inner and outer angles are half-cone
 angles in radians in the C API/scene file, displayed in degrees in the editor:
 0 <= inner <= outer <= 89 degrees. The transition between the cones is smooth;
 equal angles produce a narrow hard transition. Disabled lights consume scene
-slots but are excluded from the GPU light loop. Local lights currently cast no
-shadows. `af_scene_*local_light*` edits CPU data; clone, undo and Play retain it.
+slots but are excluded from the GPU light loop. Local lights can opt into point/spot shadows using a four-light budget; see
+[local shadow limits and filtering](lighting-08.md#4-point-and-spot-shadows). `af_scene_*local_light*` edits CPU data; clone, undo and Play retain it.
 Indices identify entries in the current array and change when a preceding light
 is removed; callers should re-query after structural edits.
 

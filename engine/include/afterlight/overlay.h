@@ -20,6 +20,7 @@ typedef struct af_overlay_command {
     af_rect clip;
     uint32_t first_index;
     uint32_t index_count;
+    uint32_t texture; /* 0 or 1: font atlas; >=2: uploaded overlay texture. */
 } af_overlay_command;
 typedef struct af_overlay_frame {
     const af_overlay_vertex *vertices;

@@ -47,7 +47,7 @@ to stderr; the sandbox's status and controls go to stdout.
 
 ## Frames and resize
 
-The renderer targets Vulkan 1.1. Each frame clears a color attachment and draws
+The renderer targets Vulkan 1.1. Each frame clears an RGBA16F offscreen color attachment and draws
 the attached scene with a graphics pipeline and depth testing. FIFO
 presentation is used for vsync. On macOS, driver properties identify MoltenVK
 and prefer it over other ICDs exposing the same GPU. Selection then favors
@@ -123,7 +123,7 @@ transform and camera changes do not re-upload geometry or wait for the GPU.
 
 The math module is independent of SDL and Vulkan. Matrices use column-major
 storage and column vectors, so the shader receives `projection * view * model`
-in a 1488-byte per-frame camera/light/shadow uniform plus a 128-byte per-draw push constant
+in a 3024-byte per-frame camera/light/shadow uniform plus a 128-byte per-draw push constant
 (model matrix, material/selection tint, flags, surface values and emission). World space is right-handed with Y up,
 angles use radians, and the camera looks along -Z by default. Perspective maps
 near/far planes to Vulkan's [0,1] depth and flips clip Y for the positive-height
@@ -406,3 +406,16 @@ wire segments and projects them into the existing overlay packet.
 runtime and the standalone playground. C modules call that table for scene,
 collision, character and input/camera services. The obstacle course uses the same
 C source linked statically into its standalone app and as a reloadable module.
+
+
+## HDR and editor preview resources (0.8)
+
+`post_vulkan.c` owns HDR/half-resolution bloom attachments and presentation
+pipelines per swapchain image. Scene geometry ends in a sampled layout; bloom
+and final tone mapping precede the separate display-space UI. `ibl.c` builds
+original HDR environment images and GGX/diffuse/BRDF integration inputs.
+`local_shadow.c` builds point/spot projections; local depth arrays are separate
+from cascaded directional shadows and protected per frame in flight.
+`editor/thumbnail.c` produces bounded CPU previews and maintains a 64-entry
+visible-widget cache. Overlay commands select independent UI images without
+exposing Vulkan descriptors in the public API. See [0.8 details](lighting-08.md).

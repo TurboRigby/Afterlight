@@ -56,6 +56,8 @@ typedef struct af_engine_stats {
     float texture_anisotropy;
     size_t shadow_draw_calls;
     uint32_t shadow_cascades,shadow_resolution;
+    uint32_t local_shadow_lights,local_shadow_maps,local_shadow_resolution,local_shadow_overflow;
+    bool hdr_enabled;
     size_t missing_textures;
     size_t draw_calls; /* Visible objects actually drawn in the last submitted frame. */
     size_t missing_meshes; /* Visible objects skipped for unresolved mesh names. */
@@ -129,6 +131,10 @@ void af_engine_set_viewport(af_engine *engine, const af_rect *viewport);
    borrow arrays through rendering after the current update returns.
    Set a packet each update, or NULL to clear; packets do not persist. */
 bool af_engine_upload_overlay_atlas(af_engine *engine, const unsigned char *rgba, uint32_t width, uint32_t height);
+/* Overlay IDs >=2 are caller-selected; at most 128 independent images.
+   Upload/replace/remove waits for in-flight work. Missing IDs draw the atlas. */
+bool af_engine_upload_overlay_texture(af_engine *engine,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height);
+bool af_engine_remove_overlay_texture(af_engine *engine,uint32_t id);
 bool af_engine_set_overlay(af_engine *engine, const af_overlay_frame *frame);
 /* Absolute position in logical window units; wheel/text reset each update. */
 af_vec2 af_engine_mouse_position(const af_engine *engine);

@@ -103,3 +103,12 @@ The toolbar Assets browser filters manifest entries by kind/name/path, assigns
 references and shows texture diagnostics via `af_engine_texture_info`. It includes
 the built-in cube and can create objects from mesh assets. Texture GPU allocation
 stats exclude shadow arrays, fallback images and the UI atlas.
+
+
+## Cached previews (0.8)
+
+The Assets list previews textures and actual mesh silhouettes. Click the image
+or name to select; the Inspector has a material sphere. Cached previews follow
+file changes and successful dependency reloads, retain last-good replacements,
+and upload only one new visible preview per frame. See [preview limits and
+resource lifetime](lighting-08.md#6-editor-thumbnails).

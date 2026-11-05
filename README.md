@@ -8,6 +8,14 @@ files are MPL-2.0; bundled dependencies retain their [own licenses](THIRD_PARTY_
 Builds and exports include covered source and notices. See [licensing and
 distribution](docs/licensing.md), including how MPL applies to C game templates.
 
+Afterlight **0.8** adds build/test CI, RGBA16F HDR rendering, procedural environment
+IBL, point/spot shadows, bloom, and cached texture/model/material previews.
+Try the combined [Lighting Lab](docs/lighting-08.md):
+
+```sh
+cmake --build --preset debug --target run_lighting_editor
+```
+
 The sandbox renders two independently animated cubes, an imported textured pyramid, and a ground platform
 over a dusk background. Four named scene objects use shared meshes and image textures.
 Their definitions load from `sandbox/scenes/demo.afterlight.json`, copied into
@@ -157,7 +165,7 @@ to the executable to override the default. `--help` lists the sandbox arguments.
 ctest --preset debug
 ```
 
-The 35-test suite includes CPU shadow fitting and GPU pixel checks for both the
+The 40-test suite includes CPU shadow fitting and GPU pixel checks for both the
 simple single map and four-cascade variant: cast/receive switches, PCF edges,
 cascade selection/blending, offscreen and distant casters, parent visibility,
 quality changes and resizing. Graphics tests enable synchronization validation.
@@ -319,14 +327,14 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](docs/game-code.md).
 
-The scene format is version 7 and still reads versions 1–6. Asset bytes stay in
+The scene format is version 8 and still reads versions 1–7. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](docs/assets.md),
 [scene format](docs/scene-format.md) and [editor controls](docs/editor.md).
 
 ## Next milestones
 
 - Asset thumbnails, glTF animation and richer material extensions.
-- Environment reflections/IBL, HDR render targets, bloom and local-light shadows.
+- External HDRI import, reflection probes, multiscale bloom and adaptive local shadows.
 - Rigid-body dynamics, spatial/streaming audio and module state migration.
 
 The engine remains a small prototype. These next items are not implemented.

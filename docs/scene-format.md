@@ -1,4 +1,4 @@
-# Afterlight scene format, version 7
+# Afterlight scene format, version 8
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
@@ -9,7 +9,7 @@ scene file.
 ```json
 {
   "format": "afterlight.scene",
-  "version": 7,
+  "version": 8,
   "next_id": "3",
   "assets": [
     {
@@ -232,7 +232,16 @@ scene file.
   ],
   "render": {
     "exposure": 0,
-    "tone_mapping": false
+    "tone_mapping": false,
+    "bloom": false,
+    "bloom_strength": 0.12,
+    "bloom_threshold": 1,
+    "bloom_radius": 1.5,
+    "environment_enabled": false,
+    "environment_profile": 0,
+    "environment_intensity": 1,
+    "environment_rotation": 0,
+    "local_shadow_resolution": 512
   },
   "local_lights": [
     {
@@ -257,13 +266,15 @@ scene file.
         0
       ],
       "inner_angle": 0.2617993877991494,
-      "outer_angle": 0.5235987755982988
+      "outer_angle": 0.5235987755982988,
+      "cast_shadows": false,
+      "shadow_bias": 0.001
     }
   ]
 }
 ```
 
-All shown fields are required in version 7. Names are case sensitive. Unknown or
+All shown fields are required in version 8. Names are case sensitive. Unknown or
 duplicate fields, unsupported versions, trailing data, embedded NUL and malformed
 UTF-8 are rejected. Version 1 remains readable with its original strict schema:
 no `assets`, `light`, `material` or `parent` fields. It receives an empty manifest,
@@ -274,7 +285,7 @@ four-cascade settings and true cast/receive flags. Version 3 retains its strict 
 new surface fields, `render` and `local_lights`. Versions 1–3 use Lambert
 materials with roughness 0.6, metallic/emission 0, no normal map and strength 1;
 exposure is 0, tone mapping is off, and local lights are empty. Saving always
-writes version 7. Version 4 retains material/render/local-light fields but omits
+writes version 8. Version 4 retains material/render/local-light fields but omits
 colliders; versions 1–4 get an enabled collider of type `none`.
 
 IDs, parent IDs and `next_id` are canonical unsigned decimal **strings** so all
@@ -412,3 +423,18 @@ mesh assets with a source selector, e.g. `model.glb#mesh=0,primitive=1`; images 
 `model.glb#image=2`. All text before the selector resolves relative to the scene.
 The exporter copies/rewrites glTF dependencies and keeps selectors. GPU asset
 watching does not overwrite saved transform/material edits. See [shipping](shipping.md).
+
+
+## HDR, environment, bloom and local shadows (version 8)
+
+`render` additionally requires `bloom` and `environment_enabled` booleans,
+`bloom_strength` [0,5], `bloom_threshold` [0,100], `bloom_radius` [0,4],
+`environment_profile` (integer 0 studio / 1 sunset / 2 overcast),
+`environment_intensity` [0,100], `environment_rotation` in radians [-1000,1000],
+and `local_shadow_resolution` (256 / 512 / 1024). Each local light additionally
+requires `cast_shadows` and `shadow_bias` [0,0.1]. All numbers must be finite.
+
+Versions 1–7 retain their strict schemas; their missing new fields receive
+safe defaults, with environment/bloom/local shadows disabled. Saving always
+writes version 8. These settings survive clone, undo/redo, Play and project
+export. See [lighting controls and limits](lighting-08.md).

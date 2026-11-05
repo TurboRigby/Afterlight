@@ -8,7 +8,7 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-The 35-test Debug suite passes on the tested Apple M4/MoltenVK system, including
+The 40-test Debug suite passes on the tested Apple M4/MoltenVK system, including
 Vulkan synchronization validation, actual pixel comparisons, fixed simulation,
 collisions, the controller and obstacle-course gameplay. Graphics tests require
 a desktop and Vulkan driver. The macOS-only module-unload regression accounts
@@ -113,3 +113,18 @@ The finished-game milestone is not part of these changes.
 `afterlight.editor_wizard` invokes the bundled tool through the real editor UI
 process-launch path and validates the generated project while preserving the
 open document/history state. It uses a unique test destination per run.
+
+
+## 0.8 lighting, thumbnails and build CI
+
+See [the six-step milestone](lighting-08.md) for implementation and limits.
+`afterlight.lighting_math`, `afterlight.lighting`, `afterlight.thumbnails` and
+`afterlight.editor_thumbnails` add CPU integration/matrix checks, rendered-pixel
+comparisons, resource changes and real editor image commands. Updated render-data
+checks cover v8 settings and local shadow persistence/rejection. Overlay image
+replacement/removal and independence from exposure/bloom are checked on the GPU.
+
+GitHub's build workflow runs macOS Debug/Release/ASan+UBSan builds and all tests
+without the `graphics` label. Run the interactive suite locally with Vulkan
+synchronization validation. Apple ASan requires `ASAN_OPTIONS=detect_leaks=0`.
+Validate workflow changes with `actionlint .github/workflows/build.yml`.

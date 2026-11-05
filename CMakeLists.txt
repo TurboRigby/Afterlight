@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.24)
-project(Afterlight VERSION 0.7.0 LANGUAGES C)
+project(Afterlight VERSION 0.8.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -16,7 +16,7 @@ find_package(SDL3 3.4 CONFIG REQUIRED)
 
 # Compile GLSL into embedded SPIR-V; no runtime paths or shader compiler needed.
 set(afterlight_shader_headers)
-foreach(shader mesh.vert mesh.frag shadow.vert ui.vert ui.frag)
+foreach(shader mesh.vert mesh.frag shadow.vert ui.vert ui.frag fullscreen.vert post.frag)
     string(REPLACE "." "_" shader_name "${shader}")
     set(shader_source "${CMAKE_CURRENT_SOURCE_DIR}/engine/shaders/${shader}")
     set(shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/${shader_name}.h")
@@ -63,6 +63,9 @@ add_library(afterlight STATIC
     engine/src/engine.c
     engine/src/texture_vulkan.c
     engine/src/ui_vulkan.c
+    engine/src/local_shadow.c
+    engine/src/ibl.c
+    engine/src/post_vulkan.c
     engine/src/renderer_vulkan.c
 )
 add_library(Afterlight::Engine ALIAS afterlight)
@@ -99,8 +102,8 @@ target_link_libraries(afterlight_editor_document PUBLIC Afterlight::Engine SDL3:
 afterlight_warnings(afterlight_editor_document)
 add_library(afterlight_nuklear STATIC editor/nuklear.c)
 target_include_directories(afterlight_nuklear PUBLIC third_party/nuklear editor)
-add_library(afterlight_editor_ui STATIC editor/gui.c editor/dialog.c editor/play_hud.c)
-target_include_directories(afterlight_editor_ui PRIVATE engine/src)
+add_library(afterlight_editor_ui STATIC editor/gui.c editor/dialog.c editor/play_hud.c editor/thumbnail.c)
+target_include_directories(afterlight_editor_ui PRIVATE engine/src sandbox)
 target_link_libraries(afterlight_editor_ui PUBLIC afterlight_nuklear Afterlight::Engine PRIVATE SDL3::SDL3)
 afterlight_warnings(afterlight_editor_ui)
 
@@ -165,7 +168,7 @@ else()
 endif()
 add_custom_target(run_editor COMMAND $<TARGET_FILE:afterlight_editor> DEPENDS afterlight_editor USES_TERMINAL)
 
-set(afterlight_sample_assets "${CMAKE_CURRENT_SOURCE_DIR}/sandbox/assets/pyramid.obj" "${CMAKE_CURRENT_SOURCE_DIR}/sandbox/assets/checker.tga")
+set(afterlight_sample_assets "${CMAKE_CURRENT_SOURCE_DIR}/sandbox/assets/pyramid.obj" "${CMAKE_CURRENT_SOURCE_DIR}/sandbox/assets/checker.tga" "${CMAKE_CURRENT_SOURCE_DIR}/sandbox/assets/sphere.obj")
 if(APPLE)
     foreach(target afterlight_sandbox afterlight_editor)
         target_sources(${target} PRIVATE ${afterlight_sample_assets})
@@ -291,6 +294,13 @@ if(APPLE)
 else()
     add_dependencies(afterlight_player afterlight_editor_assets afterlight_license_copy)
 endif()
+set(afterlight_lighting_scene "${PROJECT_SOURCE_DIR}/sandbox/scenes/lighting.afterlight.json")
+if(APPLE)
+    set_source_files_properties("${afterlight_lighting_scene}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/scenes")
+    target_sources(afterlight_editor PRIVATE "${afterlight_lighting_scene}")
+endif()
+add_custom_target(run_lighting_editor COMMAND $<TARGET_FILE:afterlight_editor> --scene "${afterlight_lighting_scene}" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
+
 add_custom_target(run_player COMMAND $<TARGET_FILE:afterlight_player> --project "${CMAKE_CURRENT_BINARY_DIR}/playground.afterlight.project" DEPENDS afterlight_player afterlight_playground_game USES_TERMINAL)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -331,6 +341,23 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_thumbnail_test tests/thumbnails.c)
+    target_link_libraries(afterlight_thumbnail_test PRIVATE afterlight_editor_ui)
+    afterlight_warnings(afterlight_thumbnail_test)
+    add_test(NAME afterlight.thumbnails COMMAND afterlight_thumbnail_test "${PROJECT_SOURCE_DIR}/tests/assets")
+    add_executable(afterlight_lighting_math_test tests/lighting_math.c)
+    target_include_directories(afterlight_lighting_math_test PRIVATE engine/src)
+    target_link_libraries(afterlight_lighting_math_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_lighting_math_test)
+    add_test(NAME afterlight.lighting_math COMMAND afterlight_lighting_math_test)
+    add_executable(afterlight_lighting_test tests/lighting.c)
+    target_include_directories(afterlight_lighting_test PRIVATE engine/src sandbox)
+    target_link_libraries(afterlight_lighting_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_lighting_test)
+    add_test(NAME afterlight.lighting COMMAND afterlight_lighting_test)
+    set_tests_properties(afterlight.lighting PROPERTIES TIMEOUT 60 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_test(NAME afterlight.editor_thumbnails COMMAND afterlight_editor --scene "${afterlight_lighting_scene}" --thumbnail-test --validation)
+    set_tests_properties(afterlight.editor_thumbnails PROPERTIES TIMEOUT 30 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     add_test(NAME afterlight.licensing COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/licensing.py"
         --root "${CMAKE_CURRENT_SOURCE_DIR}" --archive "${afterlight_source_archive}" --player "${afterlight_player_package}")
     set_tests_properties(afterlight.licensing PROPERTIES LABELS "packaging")

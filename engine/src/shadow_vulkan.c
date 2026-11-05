@@ -148,3 +148,5 @@ void af_vk_shadows_begin(af_vk_shadows *s,VkCommandBuffer command,uint32_t frame
     vkCmdSetDepthBias(command,settings.constant_bias,0,settings.slope_bias);
 }
 void af_vk_shadows_push(af_vk_shadows *s,VkCommandBuffer command,const float *mvp){vkCmdPushConstants(command,s->pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,0,64,mvp);}
+
+VkDescriptorImageInfo af_vk_shadows_image(const af_vk_shadows *s,uint32_t frame){return (VkDescriptorImageInfo){s->sampler,s->frames[frame].array_view,VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};}

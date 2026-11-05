@@ -560,3 +560,6 @@ bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const
     for(size_t i=0;i<count;++i){if(staged[i].asset.kind==AF_ASSET_MESH)af_engine_remove_mesh(engine,staged[i].temporary);else af_engine_remove_texture(engine,staged[i].temporary);}
     if(!matched&&error)snprintf(error->message,sizeof(error->message),"No assets reference this source.");free(staged);return ok&&matched;
 }
+
+bool af_engine_upload_overlay_texture(af_engine *engine,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height){return engine&&af_renderer_upload_overlay_texture(engine->renderer,id,rgba,width,height);}
+bool af_engine_remove_overlay_texture(af_engine *engine,uint32_t id){return engine&&af_renderer_remove_overlay_texture(engine->renderer,id);}

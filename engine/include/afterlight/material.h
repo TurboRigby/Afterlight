@@ -35,10 +35,18 @@ typedef struct af_local_light {
     af_vec3 position,color;
     float intensity,range;
     af_vec3 direction;
+    bool cast_shadows; float shadow_bias; /* Depth comparison bias, [0,0.1]. */
     float inner_angle,outer_angle; /* Radians; 0 <= inner <= outer <= 89 degrees. */
 } af_local_light;
 af_local_light af_local_light_default(af_light_type type);
-typedef struct af_render_settings { float exposure; bool tone_mapping; } af_render_settings; /* Exposure in stops, [-10,10]. */
+typedef struct af_render_settings {
+    float exposure; bool tone_mapping;
+    bool bloom; float bloom_strength,bloom_threshold,bloom_radius;
+    uint32_t local_shadow_resolution; /* 256, 512, 1024; zero selects 512. */
+    bool environment_enabled;
+    uint32_t environment_profile; /* 0=studio, 1=sunset, 2=overcast. */
+    float environment_intensity,environment_rotation; /* Linear multiplier; radians. */
+} af_render_settings; /* Exposure in stops, [-10,10]. */
 af_render_settings af_render_settings_default(void);
 af_material af_material_default(void);
 af_directional_light af_directional_light_default(void);
