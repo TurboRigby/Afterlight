@@ -130,7 +130,7 @@ struct af_renderer {
     uint32_t timestamp_bits;
     float timestamp_period;
     bool timing_valid;
-    double gpu_ms[4];
+    double gpu_ms[5];double cpu_fence_ms,cpu_acquire_ms;
     uint32_t graphics_family;
     uint32_t present_family;
     VkQueue graphics_queue;
@@ -939,7 +939,7 @@ static bool create_frames(af_renderer *renderer)
             &renderer->frames[i].acquired), "vkCreateSemaphore") ||
             !vk_ok(vkCreateFence(renderer->device, &fence_info, NULL,
                 &renderer->frames[i].fence), "vkCreateFence")) return false;
-        if(renderer->timestamp_bits){VkQueryPoolCreateInfo query={.sType=VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,.queryType=VK_QUERY_TYPE_TIMESTAMP,.queryCount=4};
+        if(renderer->timestamp_bits){VkQueryPoolCreateInfo query={.sType=VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,.queryType=VK_QUERY_TYPE_TIMESTAMP,.queryCount=5};
             if(!vk_ok(vkCreateQueryPool(renderer->device,&query,NULL,&renderer->frames[i].timestamps),"timestamp query pool"))return false;}
     }
     return true;
@@ -1204,19 +1204,23 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     af_frame_uniform uniform;af_shadow_view shadow_view;
     if(!prepare_shadows(renderer,scene,camera,resolve_viewport(renderer,viewport_rect),&uniform,&shadow_view))return false;
     af_frame *frame = &renderer->frames[renderer->frame_index];
+    Uint64 wait_start=SDL_GetPerformanceCounter();
     if (!vk_ok(vkWaitForFences(renderer->device, 1, &frame->fence, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
         return false;
-    if(frame->timestamp_submitted){uint64_t values[4];
-        VkResult query=vkGetQueryPoolResults(renderer->device,frame->timestamps,0,4,sizeof(values),values,sizeof(uint64_t),VK_QUERY_RESULT_64_BIT);
+    renderer->cpu_fence_ms=(double)(SDL_GetPerformanceCounter()-wait_start)*1000/(double)SDL_GetPerformanceFrequency();
+    if(frame->timestamp_submitted){uint64_t values[5];
+        VkResult query=vkGetQueryPoolResults(renderer->device,frame->timestamps,0,5,sizeof(values),values,sizeof(uint64_t),VK_QUERY_RESULT_64_BIT);
         if(query==VK_SUCCESS){uint64_t mask=renderer->timestamp_bits==64?UINT64_MAX:((UINT64_C(1)<<renderer->timestamp_bits)-1);
             double scale=(double)renderer->timestamp_period/1000000;
-            renderer->gpu_ms[0]=(double)((values[3]-values[0])&mask)*scale;
-            for(unsigned i=1;i<4;++i)renderer->gpu_ms[i]=(double)((values[i]-values[i-1])&mask)*scale;renderer->timing_valid=true;
+            renderer->gpu_ms[0]=(double)((values[4]-values[0])&mask)*scale;
+            for(unsigned i=1;i<5;++i)renderer->gpu_ms[i]=(double)((values[i]-values[i-1])&mask)*scale;renderer->timing_valid=true;
         }else if(query!=VK_NOT_READY)return vk_ok(query,"timestamp results");
     }
     uint32_t image_index = 0;
+    wait_start=SDL_GetPerformanceCounter();
     VkResult result = vkAcquireNextImageKHR(renderer->device, renderer->swapchain.handle,
         UINT64_MAX, frame->acquired, VK_NULL_HANDLE, &image_index);
+    renderer->cpu_acquire_ms=(double)(SDL_GetPerformanceCounter()-wait_start)*1000/(double)SDL_GetPerformanceFrequency();
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         renderer->resize_pending = renderer->swapchain_invalid = true;
         return true;
@@ -1235,7 +1239,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     };
     if (!vk_ok(vkBeginCommandBuffer(frame->command, &begin), "vkBeginCommandBuffer")) return false;
     if(renderer->ui)af_vk_ui_record_uploads(renderer->ui,frame->command,renderer->frame_index);
-    if(frame->timestamps){vkCmdResetQueryPool(frame->command,frame->timestamps,0,4);vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,frame->timestamps,0);}
+    if(frame->timestamps){vkCmdResetQueryPool(frame->command,frame->timestamps,0,5);vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,frame->timestamps,0);}
     renderer->shadow_draw_calls=0;
     for(uint32_t layer=0;layer<shadow_view.count;++layer){
         af_vk_shadows_begin(renderer->shadows,frame->command,renderer->frame_index,layer,af_scene_get_shadows(scene));
@@ -1333,12 +1337,13 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     vkCmdEndRenderPass(frame->command);
     int logical_w=0,logical_h=0;SDL_GetWindowSize(renderer->window,&logical_w,&logical_h);
     af_rect post_area=resolve_viewport(renderer,viewport_rect);post_area.x/=(float)(logical_w?logical_w:1);post_area.y/=(float)(logical_h?logical_h:1);post_area.width/=(float)(logical_w?logical_w:1);post_area.height/=(float)(logical_h?logical_h:1);
-    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,af_scene_get_render_settings(scene),post_area);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,2);
+    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,af_scene_get_render_settings(scene),post_area);
+    if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,3);
     if (renderer->ui && overlay->index_count)
         af_vk_ui_draw(renderer->ui, frame->command, renderer->frame_index, overlay, renderer->swapchain.extent);
     vkCmdEndRenderPass(frame->command);
-    if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,3);
+    if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,4);
     if(renderer->capture_pending){
         int w=0,h=0;SDL_GetWindowSize(renderer->window,&w,&h);
         uint32_t x=(uint32_t)fmaxf(0,fminf((float)renderer->swapchain.extent.width-1,renderer->capture_position.x*(float)renderer->swapchain.extent.width/(float)(w?w:1)));
@@ -1398,7 +1403,8 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer)
     for(size_t i=0;i<renderer->texture_count;++i){af_texture_info info=af_vk_texture_info(renderer->textures[i].texture);texture_bytes+=info.allocation_bytes;mip_levels+=info.mip_levels;}
     return (af_engine_stats){
         .gpu_timing_supported=renderer->timestamp_bits!=0,.gpu_timing_valid=renderer->timing_valid,
-        .gpu_frame_ms=renderer->gpu_ms[0],.gpu_shadow_ms=renderer->gpu_ms[1],.gpu_scene_ms=renderer->gpu_ms[2],.gpu_overlay_ms=renderer->gpu_ms[3],
+        .gpu_frame_ms=renderer->gpu_ms[0],.gpu_shadow_ms=renderer->gpu_ms[1],.gpu_scene_ms=renderer->gpu_ms[2],.gpu_post_ms=renderer->gpu_ms[3],.gpu_overlay_ms=renderer->gpu_ms[4],
+        .cpu_fence_ms=renderer->cpu_fence_ms,.cpu_acquire_ms=renderer->cpu_acquire_ms,
         .hdr_enabled=renderer->swapchain.post!=NULL,.local_shadow_lights=renderer->local_shadow_lights,.local_shadow_maps=renderer->local_shadow_lights?renderer->local_shadow_layers:0,.local_shadow_resolution=renderer->local_shadow_resolution,.local_shadow_overflow=renderer->local_shadow_overflow,
         .texture_bytes=texture_bytes,.texture_mip_levels=mip_levels,.texture_anisotropy=renderer->anisotropy,
         .rendered_frames = renderer->rendered_frames,

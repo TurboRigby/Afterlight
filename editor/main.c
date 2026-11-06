@@ -723,7 +723,9 @@ static void performance_panel(editor *app,float width,float height)
         snprintf(text,sizeof(text),"CPU submit/wait %.3f ms",stats.cpu_render_ms);label(ctx,text,24);
         if(stats.gpu_timing_valid){
             snprintf(text,sizeof(text),"GPU frame %.3f ms",stats.gpu_frame_ms);label(ctx,text,28);
-            snprintf(text,sizeof(text),"Shadows %.3f / Scene %.3f / UI %.3f ms",stats.gpu_shadow_ms,stats.gpu_scene_ms,stats.gpu_overlay_ms);label(ctx,text,24);
+            snprintf(text,sizeof(text),"Shadows %.3f / Scene %.3f ms",stats.gpu_shadow_ms,stats.gpu_scene_ms);label(ctx,text,24);
+            snprintf(text,sizeof(text),"Post %.3f / UI %.3f ms",stats.gpu_post_ms,stats.gpu_overlay_ms);label(ctx,text,24);
+            snprintf(text,sizeof(text),"CPU fence %.3f / acquire %.3f ms",stats.cpu_fence_ms,stats.cpu_acquire_ms);label(ctx,text,24);
         }else label(ctx,stats.gpu_timing_supported?"GPU sample pending":"GPU timestamps unavailable",26);
         snprintf(text,sizeof(text),"Simulation %" PRIu64 " ticks / %u steps / %.3f alpha",stats.simulation_ticks,stats.simulation_steps,stats.simulation_alpha);label(ctx,text,24);
         snprintf(text,sizeof(text),"Dropped catch-up %.3f s",stats.simulation_dropped_seconds);label(ctx,text,24);

@@ -66,7 +66,8 @@ typedef struct af_engine_stats {
     double frames_per_second;
     double average_frame_ms;
     double cpu_events_ms,cpu_update_ms,cpu_render_ms; /* Last completed CPU iteration; render includes waits/present. */
-    double gpu_frame_ms,gpu_shadow_ms,gpu_scene_ms,gpu_overlay_ms;
+    double gpu_frame_ms,gpu_shadow_ms,gpu_scene_ms,gpu_post_ms,gpu_overlay_ms;
+    double cpu_fence_ms,cpu_acquire_ms; /* Renderer waits, separate from command recording. */
     bool gpu_timing_supported,gpu_timing_valid; /* Delayed completed-frame sample; excludes presentation. */
     uint64_t simulation_ticks;
     unsigned simulation_steps;

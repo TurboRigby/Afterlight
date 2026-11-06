@@ -14,7 +14,7 @@ void main(){
     int mode=int(post.blur_params.z);
     if(mode==0){
         vec3 color=max(texture(source_image,uv).rgb,vec3(0));
-        if(all(greaterThanEqual(uv,post.viewport.xy))&&all(lessThan(uv,post.viewport.zw)))
+        if(post.settings.z>0&&all(greaterThanEqual(uv,post.viewport.xy))&&all(lessThan(uv,post.viewport.zw)))
             color+=texture(bloom_image,uv).rgb*post.settings.z;
         color*=post.settings.x;
         if(post.settings.y>0.5)color=color/(vec3(1)+color);
@@ -32,10 +32,11 @@ void main(){
             color+=value*(max(brightness-post.settings.w,soft)/max(brightness,0.0001))*0.25;
         }
     }else{
-        const float weights[5]=float[5](0.227027027,0.194594595,0.121621622,0.054054054,0.016216216);
         vec2 step_uv=(mode==2?vec2(post.blur_params.x,0):vec2(0,post.blur_params.y))*post.blur_params.w;
-        color=sample_source(uv)*weights[0];
-        for(int i=1;i<5;++i)color+=(sample_source(uv+step_uv*float(i))+sample_source(uv-step_uv*float(i)))*weights[i];
+        // Pair adjacent Gaussian weights using the linear sampler.
+        color=sample_source(uv)*0.227027027;
+        color+=(sample_source(uv+step_uv*1.384615385)+sample_source(uv-step_uv*1.384615385))*0.316216217;
+        color+=(sample_source(uv+step_uv*3.230769231)+sample_source(uv-step_uv*3.230769231))*0.070270270;
     }
     out_color=vec4(color,1);
 }
