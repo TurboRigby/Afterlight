@@ -25,6 +25,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.18: water performance and gameplay](development-018.md)
 - [0.17: water physics and rendering](development-017.md)
 - [0.16: compound physics props](development-016.md)
 - [0.15: physics performance and powered mechanisms](development-015.md)

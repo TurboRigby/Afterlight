@@ -64,11 +64,11 @@ int main(void) {
     af_object_id cup = make_cup(s);
     owner = af_scene_add_object(s, "Fluid", "__node");
     af_transform t = af_transform_identity();
-    t.position.y = 1.1f;
+    t.position.y = .52f;
     CHECK(af_scene_set_object_transform(s, owner, t));
     w = af_water_default();
     w.mode = AF_WATER_PARTICLES;
-    w.half_size = (af_vec2){.4f, .4f};
+    w.half_size = (af_vec2){.5f, .5f};
     w.initial_volume = .4096f;
     w.emission_velocity = (af_vec3){0};
     CHECK(af_scene_set_water(s, owner, w));

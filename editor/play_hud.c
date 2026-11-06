@@ -16,6 +16,7 @@ void ed_play_hud(struct nk_context *ctx,af_engine *engine,af_rect r,bool paused,
         else line(ctx,player?"WASD walk | Space jump | R new run":"C game demo | Hold right mouse + WASD for camera");
         if(player){af_gameplay_status status=af_engine_gameplay_status(engine);char text[160];
             snprintf(text,sizeof(text),"%s %.2f s | Checkpoint %u/%u | Falls %u",status.finished?"FINISHED":"Time",status.finished?status.finish_time:status.elapsed,status.checkpoint,status.checkpoint_count,status.deaths);line(ctx,text);
+            if(status.hint[0])line(ctx,status.hint);
             if(status.finished)line(ctx,"Course complete! R starts a new run.");
             line(ctx,free_camera?"EDITOR CAMERA | Release right mouse to return":af_engine_mouse_captured(engine)?(editor?"PLAYER | Escape releases mouse | F6 maximize":"PLAYER | Escape releases mouse"):"MOUSE RELEASED | Click viewport to play");
             if(!free_camera&&!animated){struct nk_command_buffer *canvas=nk_window_get_canvas(ctx);float x=r.x+r.width/2,y=r.y+r.height/2;

@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **18** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **20** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 18 modules.
+to use newly built ABI 20 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -173,3 +173,18 @@ and rivers; it excludes particles. Particle queries copy positions, velocities
 and per-particle volume into caller storage and return the total available count.
 The runtime fluid state is isolated to Play; definitions belong to the scene.
 `game/water_game.c` demonstrates controls and gradual kinematic cup tipping.
+
+## Swimming and course feedback (0.18)
+
+ABI 20 includes `swim_config_default` and `swim_character` in the C host, plus a
+bounded `hint` string in `af_gameplay_status` for the Play HUD. Keep an
+`af_swim_state` per character and call the swimming controller with world-space
+XZ movement, vertical input in −1…1 and a jump edge. It uses ordinary walking on
+land, so existing game modules keep their chosen movement behavior. Scene water
+queries provide the current; particle fluids are excluded from swimming.
+`game/water_course_game.c` demonstrates input, first-person camera, ordered
+checkpoints, restart/scene changes, saved C state and an actual pouring objective.
+Runtime transform edits to its player are treated as teleports. Code reload
+preserves character/progress state, while fluid state follows the existing scene
+reset/reinitialization rules. Checkpoint/death respawn preserves the active world;
+R reloads the authored scene and resets all fluids.

@@ -94,3 +94,14 @@ Design references: [Khronos texture sampling](https://docs.vulkan.org/tutorial/l
 [Vulkan timestamp queries](https://docs.vulkan.org/spec/latest/chapters/queries.html),
 and [Filament's material-model discussion](https://google.github.io/filament/Filament.html).
 Afterlight implements a small direct-light model and does not include Filament.
+
+## Water optics (0.18)
+
+Water uses dielectric reflection, lit scattering and RGB transmission. The
+optional underwater effect clips the camera-to-fragment path to the active
+region and fades across a 20 cm surface band. River fog approximates the local
+tangent region. Opaque HDR color/depth snapshots support screen-space refraction;
+IOR and strength bend the lookup, viewport bounds clamp it, and foreground depth
+prevents dragging nearby opaque objects into the water. Refraction covers visible
+opaque geometry; off-screen objects and layered transparent refraction are not
+reconstructed. Both effects can be disabled in scene render settings.

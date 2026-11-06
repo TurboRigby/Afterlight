@@ -11,8 +11,8 @@ cmake --build --preset release
 The Debug suite covers the Apple M4/MoltenVK path, including
 Vulkan synchronization validation, actual pixel comparisons, fixed simulation,
 collisions, the controller and obstacle-course gameplay. Graphics tests require
-a desktop and Vulkan driver. The macOS-only module-unload regression accounts
-for one of these tests; other platforms currently have 60. Linux CPU coverage
+a desktop and Vulkan driver. The macOS-only module-unload regression is excluded
+on other platforms. Linux CPU coverage
 is described below; native Linux graphics and Windows still need verification.
 
 `afterlight.editor_playground` opens the actual obstacle course and its C module.
@@ -258,3 +258,22 @@ checks saved settings, history, duplication, prefab owner remapping and deletion
 absorption, quality changes and particle lighting. `water_demo` exercises all six
 C demos with pause/single-step and Play isolation. `water_export` removes sources,
 relocates exports and repeats C Play and standalone launches.
+
+## 0.18 water checks
+
+`water_sleep` verifies frozen fields/particles and wake events. `water_boundaries`
+checks light/heavy thin receivers, moving/rotating panels and downhill sliding.
+Cup-retention tests initialize quiescent contained fluid; impact tests and labs
+allow splashes and account for escaped volume. `swimming` compares 30/60/144 Hz
+entry, surface balance, diving, jumping, walls and currents. `underwater` and
+`refraction` inspect actual Vulkan pixels for medium transitions, region bounds,
+IOR-dependent geometry shifts, foreground rejection, strength, resize and saved
+settings. Existing water Play also verifies streaming without mesh-wide waits.
+
+`water_course_scene` runs both authored maps and transfers real particle volume
+through the expedition chute. `water_course` drives the C module through actual
+walk/swim/dive/current movement, positioned checkpoint/goal visits, hot reload,
+restart and scene transition, then operates the real pouring objective.
+`water_course_export` removes sources, relocates both maps and repeats C Play.
+Release CPU/mesh and native render benchmarks are separate executable targets;
+their timings are diagnostics, without machine-specific CI thresholds.

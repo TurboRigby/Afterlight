@@ -1,4 +1,4 @@
-# Afterlight scene format, version 19
+# Afterlight scene format, version 21
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
@@ -7,7 +7,7 @@ manifest into the renderer separately. Game library selection stays outside the
 scene file.
 
 The following version 10 example shows the base fields; newer extensions are
-documented below. Current saves include all version 19 tables.
+documented below. Current saves include all version 21 tables.
 
 ```json
 {
@@ -515,7 +515,7 @@ Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
 and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
 200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
 positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
-body defaults. Saving writes version 19. Physics runtime limits and diagnostics
+body defaults. Saving writes version 21. Physics runtime limits and diagnostics
 are documented in [0.13](development-013.md).
 
 ## Version 14: mesh colliders and scene joints
@@ -578,7 +578,7 @@ Versions 1–15 remain readable with an empty part table. Game ABI is 15.
 
 Version 17 adds the required root `water` array (maximum eight definitions).
 Version 18 adds river paths/current. Version 19 adds particle source settings.
-Earlier definitions receive defaults. Saving writes version 19, including the
+Earlier definitions receive defaults. Saving writes version 21, including the
 array when empty. Each entry has exactly these fields:
 
 | Field | Meaning |
@@ -601,3 +601,11 @@ and finite ranges are checked by `af_water_valid`; particle volume must fit its
 source footprint/depth and quality capacity. Particle/wave state is transient
 and omitted from the file. See [water development](development-017.md) for the
 physical approximations and numerical budgets.
+
+## Water rendering (versions 20–21)
+
+Version 20 adds the required boolean `render.underwater`. Version 21 adds the
+required boolean `render.refraction` and finite `render.refraction_strength` in
+[0,2]. Earlier scenes receive enabled defaults and strength 1. These fields
+round-trip with render settings, scene cloning and editor history. Version 21
+keeps the same water definitions introduced in 17–19.

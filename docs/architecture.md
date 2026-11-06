@@ -123,7 +123,7 @@ transform and camera changes do not re-upload geometry or wait for the GPU.
 
 The math module is independent of SDL and Vulkan. Matrices use column-major
 storage and column vectors, so the shader receives `projection * view * model`
-in a 3104-byte per-frame camera/light/shadow uniform plus a 128-byte per-draw push constant
+in a 3200-byte per-frame camera/light/shadow/water uniform plus a 128-byte per-draw push constant
 (model matrix, material/selection tint, flags, surface values and emission). World space is right-handed with Y up,
 angles use radians, and the camera looks along -Z by default. Perspective maps
 near/far planes to Vulkan's [0,1] depth and flips clip Y for the positive-height
@@ -525,4 +525,24 @@ removes stale slots. Water first attenuates existing HDR color per channel, then
 adds shadowed PBR reflection/scattering through a compatible additive pipeline.
 Both use the existing 128-byte push constant layout and portable Vulkan 1.1.
 Particle rendering reconstructs bounded implicit surfaces with a drop fallback.
-The current mesh upload waits for GPU safety; streaming buffers remain future work.
+The 0.17 mesh upload waited for GPU safety; 0.18 replaces water uploads with the
+streaming buffers described below.
+
+## Water integration (0.18)
+
+Dynamic water meshes keep CPU snapshots and per-frame mapped GPU allocations.
+Only the completed frame's buffers are resized/written; retirement keeps asset
+indices stable until every in-flight frame releases its allocation. Diagnostics
+separate upload cost from fence/acquire/presentation waits. Calm fields and
+balanced buoyant islands sleep; particle sets wake conservatively when solid
+poses/geometry or emission changes.
+
+Particle sweeps preserve tangential displacement and use bounded boundary
+friction, multiple contact normals and solid effective mass. Kinematic boundaries
+are interpolated across substeps. Swimming is an optional C controller built on
+capsule queries/sliding, with surface hysteresis and current-relative motion.
+Underwater shading uses a bounded view-path medium and smooth surface band.
+Refraction snapshots opaque HDR/depth, then resumes a compatible transparent
+load pass. It uses separate sampled images, explicit barriers and per-frame
+descriptor updates; it does not sample its active attachment. Opaque depth
+rejects foreground lookups. Render settings expose effect toggles/strength.

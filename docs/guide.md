@@ -13,7 +13,12 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
-Afterlight 0.17 adds water in order: pools/lakes, rivers and pourable fluid. Use
+Afterlight 0.18 adds playable swimming courses, streamed water meshes, calm
+sleeping, underwater rendering and scene refraction. Start with
+`run_water-course_editor`, then `run_water-expedition_editor`; see the
+[0.18 guide](development-018.md).
+
+Afterlight 0.17 added water in order: pools/lakes, rivers and pourable fluid. Use
 `run_water-pool_editor` first, then the more demanding demos in the
 [water guide](development-017.md). Water quality affects simulation work and
 surface detail; light color, intensity, shadows and environment affect its look.
@@ -371,7 +376,7 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](game-code.md).
 
-The scene format is version 19 and still reads versions 1–18. Asset bytes stay in
+The scene format is version 21 and still reads versions 1–20. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](assets.md),
 [scene format](scene-format.md) and [editor controls](editor.md).
 

@@ -257,3 +257,14 @@ centerline points and current speed. Particles expose initial volume, spacing,
 emitter rate/velocity and viscosity. Definitions support undo, duplication and
 prefabs. Stop discards simulation state. Water nodes require unit scale and yaw
 rotation; size belongs to the water settings. See the [water guide](development-017.md).
+
+## Playable water courses (0.18)
+
+Open `water-course` before `water-expedition`. Play starts the first-person
+controller. WASD moves, Space jumps/ascends, Ctrl dives and Shift runs on land.
+F grabs/releases, V throws and E near the expedition's source cup tips/returns it.
+R reloads the course and N changes courses. The HUD shows checkpoints, elapsed
+time, water controls and the receiving-cup objective. All markers are normal
+scene objects. Rendering controls include underwater absorption, scene refraction
+and its strength. Edit/Stop and history keep authored water definitions separate
+from transient Play state.

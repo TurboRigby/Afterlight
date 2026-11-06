@@ -3,9 +3,9 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.17** adds buoyant pools and lakes, flowing rivers, and bounded
-pourable fluid, with quality settings and light-dependent water rendering.
-Start with the pool, then try the lake, stream and pouring labs.
+Afterlight **0.18** makes water playable: swim, dive, ride buoyant rafts and solve
+a pouring puzzle. Water meshes stream through frame-owned buffers, calm fluid
+can sleep, and rendering includes underwater absorption and scene refraction.
 
 ## Build and run
 
@@ -15,17 +15,17 @@ first, then run from the repository root:
 
 ```sh
 cmake --preset debug
-cmake --build --preset debug --target run_water-pool_editor
+cmake --build --preset debug --target run_water-course_editor
 ```
 
-Press **Play**, right-click to capture the camera, and use **WASD/QE** to fly.
-**Space** makes ripples, **R** resets, **N** switches the demo pair, and **F6** pauses.
+Press **Play**. **WASD** moves, **Space** jumps/swims up, **Ctrl** dives, and
+**Shift** runs on land. **F/V** grab/throw, **R** restarts, and **N** changes courses.
 
-Try `run_water-lake_editor`, `run_water-stream_editor`, `run_water-river-bend_editor`,
-`run_water-pour_editor`, then `run_water-pour-lab_editor`. **F** tips the cup in the
-pouring lab. Each also has a `_player` target. See the [water guide](docs/development-017.md)
-for settings, controls and simulation limits, or the [compound prop guide](docs/development-016.md)
-for the earlier physics demos.
+Start with `run_water-course_editor`, then `run_water-expedition_editor`. The
+expedition adds a river, cargo and a receiving-cup objective; **E** near the source
+cup starts pouring. Both have `_player` targets. See the [0.18 guide](docs/development-018.md)
+for controls, settings, benchmarks and limits, or the [water laboratory guide](docs/development-017.md)
+for the six focused demos.
 
 ## Documentation
 

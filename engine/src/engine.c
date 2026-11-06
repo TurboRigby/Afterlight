@@ -569,7 +569,7 @@ bool af_engine_mouse_in_viewport(const af_engine *engine){
 af_camera af_engine_get_camera(const af_engine *engine){return engine?engine->camera:af_camera_default();}
 
 af_gameplay_status af_engine_gameplay_status(const af_engine *engine){return engine?engine->gameplay_status:(af_gameplay_status){0};}
-void af_engine_set_gameplay_status(af_engine *engine,af_gameplay_status status){if(engine)engine->gameplay_status=status;}
+void af_engine_set_gameplay_status(af_engine *engine,af_gameplay_status status){if(engine){status.hint[sizeof(status.hint)-1]=0;engine->gameplay_status=status;}}
 
 bool af_engine_load_sound(af_engine *engine,const char *name,const char *path,af_asset_error *error){if(!engine)return false;if(!engine->audio)engine->audio=af_audio_create();return af_audio_load(engine->audio,name,path,error);}
 bool af_engine_play_sound(af_engine *engine,const char *name,float gain){return engine&&af_audio_play(engine->audio,name,gain);}

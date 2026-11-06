@@ -98,3 +98,45 @@ fog on the opaque snapshot is retained without applying it a second time to the
 transmitted color. Pixel tests verify shifted underwater stripes, IOR, foreground
 rejection, strength/toggle, resize and saved settings. Water/underwater, alpha and
 material regressions pass with Vulkan synchronization validation.
+
+`run_water-course_editor` starts the first-person swim/raft course;
+`run_water-expedition_editor` adds a river, cargo, another raft and a lab where
+50 litres must reach the receiving cup before finishing. `_player` variants are
+also available. WASD moves, Space jumps/ascends, Ctrl dives, Shift runs on land,
+F/V grab/throw and E near the source cup tips/returns it. R reloads all authored
+state and N changes courses. The HUD shows controls and the current objective.
+The course module supports character/progress state reload and treats external
+player transform edits as teleports. Its player is kinematic and does not add
+physical body weight to rafts.
+
+The combined course exposed a fluid sweep bug: a contact discarded remaining
+tangential travel and stalled fluid on ramps. Sweeps now retain the slide, with
+bounded contact friction and equal/opposite solid reaction. A downhill regression
+and the actual receiving-cup transfer cover this path. Quiescent cup tests keep
+100 particles; falling-fluid labs may splash outside, with escaped volume counted.
+Course checks drive real movement and pouring, use positioned visits for ordered
+checkpoint/goal logic, and cover restart, scene change, hot reload and Edit
+isolation. Source removal/relocation is tested for both standalone courses.
+
+Verification on 6 November 2026: all 143 macOS Debug checks passed, including
+47 graphics checks. AddressSanitizer/UndefinedBehaviorSanitizer passed the same
+coverage in separate 96-CPU and 47-graphics runs; macOS leak detection was
+disabled. Linux Clang 18 passed 95 CPU checks with address, undefined-behavior
+and leak sanitizers enabled. Native Linux graphics and Windows remain unverified.
+After the final input-comparison cleanup, the Debug course and sanitizer graphics
+checks passed again. Both Release courses and all six Release labs passed source
+removal, relocation, C Play and standalone launches. Sanitized player exports
+remain intentionally rejected; distribution tests use normal Debug/Release builds.
+
+Final Release measurements cover all 18 scene/quality cases. The 90-tick CPU run
+reports 6.55 ms physics / 0.67 ms mesh generation for the high-quality pouring lab;
+the 60-frame render run reports zero mesh-wide idle waits in every case and
+0.031 ms mean water upload for that case. Raw results are in
+build/release/018-water-final.csv and 018-render-final.csv. Scene evolution and
+presentation pacing affect measurements; these are diagnostics rather than a
+claim about uncapped frame rates.
+
+Current scene format is 21 and C module ABI is 20. Rebuild game modules and restart
+older engine/editor binaries. Fluid coupling, local river fog and screen-space
+refraction retain the approximations described above; full CFD, off-screen
+refraction and layered transparent refraction are outside this milestone.

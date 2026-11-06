@@ -181,3 +181,9 @@ Both scene-only asset references and build-folder prefab copies include the mesh
 0.17 adds six `water-*` labs and `afterlight_water_game`. Water definitions ship
 with scenes; generated meshes and fluid particles are recreated at runtime.
 The water export regression removes original sources and relocates all six labs.
+
+0.18 adds `water-course` and `water-expedition` with `afterlight_water_course_game`.
+Both rebuild streamed water, underwater/refraction resources and C gameplay on
+launch. The course export test removes sources and relocates the distribution.
+Shared GLSL includes are covered by the source archive/header checks. Scene
+format is 21 and C ABI is 20; rebuild modules and restart older editors/players.

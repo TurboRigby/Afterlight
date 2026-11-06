@@ -210,9 +210,13 @@ static void collide(af_physics *world, wa_particle *p, float radius, bool sweep)
             af_collision_hit hit;
             if (sweep &&
                 af_collider_sweep_sphere(w, origin, radius, af_vec3_sub(p->q, origin), .0002f, &hit)) {
-                p->q = af_vec3_add(
-                    af_vec3_add(origin, af_vec3_scale(af_vec3_sub(p->q, origin), hit.fraction)),
-                    af_vec3_scale(hit.normal, .0003f));
+                af_vec3 displacement = af_vec3_sub(p->q, origin),
+                        remaining = af_vec3_scale(displacement, 1 - hit.fraction);
+                float into = af_vec3_dot(remaining, hit.normal);
+                if (into < 0)
+                    remaining = af_vec3_sub(remaining, af_vec3_scale(hit.normal, into));
+                p->q = af_vec3_add(af_vec3_add(origin, af_vec3_scale(displacement, hit.fraction)),
+                                   af_vec3_add(remaining, af_vec3_scale(hit.normal, .0003f)));
                 contact(p, b, hit);
             }
             float separation = af_collision_capsule_distance(w, p->q, radius, 0, &hit);
@@ -251,6 +255,22 @@ static void couple(af_physics *world, wa_particle *p, af_vec3 incoming, float ma
         incoming = af_vec3_add(incoming, af_vec3_scale(reaction, 1 / mass));
         float target = af_vec3_dot(af_vec3_sub(incoming, surface), c.normal);
         p->v = af_vec3_add(p->v, af_vec3_scale(c.normal, target - projected));
+        surface = af_vec3_add(b->v, af_vec3_cross(b->w, r));
+        af_vec3 tangent = af_vec3_sub(p->v, surface);
+        tangent = af_vec3_sub(tangent, af_vec3_scale(c.normal, af_vec3_dot(tangent, c.normal)));
+        float speed = af_vec3_length(tangent);
+        if (speed > 1e-7f) {
+            af_vec3 n = af_vec3_scale(tangent, 1 / speed);
+            float effective =
+                1 / mass + b->inv_mass +
+                af_vec3_dot(n, af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(r, n)), r));
+            float friction =
+                fminf(speed / fmaxf(effective, 1e-7f), impulse * fminf(.3f, b->config.friction * .2f));
+            af_vec3 change = af_vec3_scale(n, -friction);
+            p->v = af_vec3_add(p->v, af_vec3_scale(change, 1 / mass));
+            incoming = af_vec3_add(incoming, af_vec3_scale(change, 1 / mass));
+            ph_impulse(b, af_vec3_scale(change, -1), c.point);
+        }
     }
     p->v = ph_limit(p->v, 30);
 }

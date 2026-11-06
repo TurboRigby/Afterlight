@@ -84,6 +84,27 @@ int main(void) {
         CHECK(af_vec3_length(particle.velocity) <= 30.01f);
         af_scene_destroy(s);
     }
+    {
+        af_scene *s = af_scene_create();
+        af_object_id ramp = af_scene_add_object(s, "Sliding ramp", "cube");
+        af_transform t = af_transform_identity();
+        t.rotation.z = -.3f;
+        CHECK(af_scene_set_object_transform(s, ramp, t));
+        af_collider c = af_collider_default();
+        c.type = AF_COLLIDER_BOX;
+        c.half_extents = (af_vec3){2, .1f, 1};
+        CHECK(af_scene_set_object_collider(s, ramp, c));
+        af_object_id owner = fluid(s, (af_vec3){-.84f, .6f, .16f}, (af_vec3){0}, 1);
+        CHECK(owner);
+        af_physics_reset(p);
+        for (unsigned i = 0; i < 120; ++i)
+            CHECK(af_physics_step(p, s, 1.f / 60));
+        af_water_particle particle;
+        CHECK(af_physics_water_particles(p, owner, &particle, 1) == 1);
+        printf("Ramp particle x %.4f y %.4f\n", particle.position.x, particle.position.y);
+        CHECK(particle.position.x > .3f);
+        af_scene_destroy(s);
+    }
     af_physics_destroy(p);
     puts("Fluid boundaries: light/heavy thin receivers, effective mass and translating/rotating "
          "kinematic sweeps passed.");

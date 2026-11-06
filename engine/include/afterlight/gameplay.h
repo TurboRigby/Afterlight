@@ -29,6 +29,7 @@ typedef struct af_gameplay_status {
     double elapsed,finish_time;
     unsigned checkpoint,checkpoint_count,deaths;
     bool running,finished;
+    char hint[128];
 } af_gameplay_status;
 af_gameplay_component af_gameplay_component_default(void);
 bool af_gameplay_component_valid(af_gameplay_component component);
