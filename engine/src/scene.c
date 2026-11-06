@@ -148,10 +148,11 @@ bool af_scene_set_asset(af_scene *scene,const char *name,af_asset_kind kind,cons
     scene->assets[scene->asset_count++]=asset;return true;
 }
 
-af_material af_material_default(void){return (af_material){.base_color={1,1,1,1},.cast_shadows=true,.receive_shadows=true,.roughness=0.6f,.normal_strength=1};}
+af_material af_material_default(void){return (af_material){.alpha_cutoff=.5f,.base_color={1,1,1,1},.cast_shadows=true,.receive_shadows=true,.roughness=0.6f,.normal_strength=1};}
 af_directional_light af_directional_light_default(void){return (af_directional_light){.direction={-0.6f,-1,-0.4f},.color={1,0.95f,0.86f},.intensity=1.2f,.ambient=0.22f};}
 bool af_scene_set_object_material(af_scene *scene,af_object_id id,af_material material){
     af_scene_object *object=find_object(scene,id);if(!object||!memchr(material.texture,0,sizeof(material.texture))||!memchr(material.normal_map,0,sizeof(material.normal_map))||!memchr(material.metallic_roughness_map,0,sizeof(material.metallic_roughness_map)))return false;
+    if(material.alpha_mode<AF_ALPHA_OPAQUE||material.alpha_mode>AF_ALPHA_BLEND||!isfinite(material.alpha_cutoff)||material.alpha_cutoff<0||material.alpha_cutoff>1)return false;
     float values[]={material.base_color.r,material.base_color.g,material.base_color.b,material.base_color.a};
     for(unsigned i=0;i<4;++i)if(!isfinite(values[i])||values[i]<0||values[i]>1)return false;
     if(!isfinite(material.roughness)||material.roughness<0||material.roughness>1||!isfinite(material.metallic)||material.metallic<0||material.metallic>1)return false;

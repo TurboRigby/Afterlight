@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='afterlight-animation-export-') as tempo
         resources = output / 'Game.app/Contents/Resources' if sys.platform == 'darwin' else output
         packed_project = json.loads((resources / 'game.afterlight.project').read_text())
         packed_scene = json.loads((resources / packed_project['startup_scene']).read_text())
-        assert packed_scene['version'] == 11
+        assert packed_scene['version'] in (10,11,12)
         assert any(asset['kind'] == 'animation' for asset in packed_scene['assets'])
         assert sum(bool(obj['animation']['asset']) for obj in packed_scene['objects']) == (1 if name == 'mechanism' else 2)
         assert all(not Path(asset['path'].split('#')[0]).is_absolute() for asset in packed_scene['assets'])

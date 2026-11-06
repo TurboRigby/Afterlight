@@ -8,7 +8,9 @@
 #define AFTERLIGHT_MATERIAL_H
 #include <stdbool.h>
 #include <afterlight/mesh.h>
+typedef enum af_alpha_mode {AF_ALPHA_OPAQUE,AF_ALPHA_MASK,AF_ALPHA_BLEND} af_alpha_mode;
 typedef struct af_material {
+    af_alpha_mode alpha_mode;float alpha_cutoff;
     af_color base_color;
     char texture[AF_MESH_NAME_CAPACITY]; /* Empty means white. */
     bool unlit;

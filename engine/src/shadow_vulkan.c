@@ -8,6 +8,7 @@
 #include <afterlight/mesh.h>
 
 #include "shadow_vert.h"
+#include "shadow_frag.h"
 #include "log.h"
 #include <stdlib.h>
 #include <stddef.h>
@@ -25,7 +26,7 @@ struct af_vk_shadows {
     uint32_t resolution,layers;
     VkFormat format;
     VkRenderPass pass;
-    VkPipelineLayout pipeline_layout;VkDescriptorSetLayout frame_layout;
+    VkPipelineLayout pipeline_layout;VkDescriptorSetLayout frame_layout,texture_layout;
     VkPipeline pipeline;
     VkSampler sampler;
     VkDescriptorSetLayout descriptor_layout;
@@ -53,17 +54,18 @@ void af_vk_shadows_destroy(af_vk_shadows *s)
 }
 static bool pipeline(af_vk_shadows *s)
 {
-    VkShaderModule shader;
+    VkShaderModule shader,fragment=VK_NULL_HANDLE;
     VkShaderModuleCreateInfo code={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(af_shadow_vert),.pCode=af_shadow_vert};
     if(!ok(vkCreateShaderModule(s->device,&code,NULL,&shader),"shader"))return false;
-    VkPushConstantRange push={VK_SHADER_STAGE_VERTEX_BIT,0,80};
-    VkPipelineLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,.setLayoutCount=1,.pSetLayouts=&s->frame_layout,.pushConstantRangeCount=1,.pPushConstantRanges=&push};
+    VkPushConstantRange push={VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,80};VkDescriptorSetLayout layouts[]={s->frame_layout,s->texture_layout};
+    VkPipelineLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,.setLayoutCount=2,.pSetLayouts=layouts,.pushConstantRangeCount=1,.pPushConstantRanges=&push};
     bool success=false;
     if(!ok(vkCreatePipelineLayout(s->device,&layout,NULL,&s->pipeline_layout),"pipeline layout"))goto done;
     VkPipelineShaderStageCreateInfo stage={.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,.stage=VK_SHADER_STAGE_VERTEX_BIT,.module=shader,.pName="main"};
+    code.codeSize=sizeof(af_shadow_frag);code.pCode=af_shadow_frag;if(!ok(vkCreateShaderModule(s->device,&code,NULL,&fragment),"shadow fragment"))goto done;VkPipelineShaderStageCreateInfo stages[]={stage,{.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,.stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment,.pName="main"}};
     VkVertexInputBindingDescription binding={0,sizeof(af_vertex),VK_VERTEX_INPUT_RATE_VERTEX};
-    VkVertexInputAttributeDescription attributes[]={{0,0,VK_FORMAT_R32G32B32_SFLOAT,0},{4,0,VK_FORMAT_R16G16B16A16_UINT,offsetof(af_vertex,joints)},{5,0,VK_FORMAT_R32G32B32A32_SFLOAT,offsetof(af_vertex,weights)}};
-    VkPipelineVertexInputStateCreateInfo input={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,.vertexBindingDescriptionCount=1,.pVertexBindingDescriptions=&binding,.vertexAttributeDescriptionCount=3,.pVertexAttributeDescriptions=attributes};
+    VkVertexInputAttributeDescription attributes[]={{0,0,VK_FORMAT_R32G32B32_SFLOAT,0},{1,0,VK_FORMAT_R32G32B32A32_SFLOAT,offsetof(af_vertex,color)},{3,0,VK_FORMAT_R32G32_SFLOAT,offsetof(af_vertex,uv)},{4,0,VK_FORMAT_R16G16B16A16_UINT,offsetof(af_vertex,joints)},{5,0,VK_FORMAT_R32G32B32A32_SFLOAT,offsetof(af_vertex,weights)}};
+    VkPipelineVertexInputStateCreateInfo input={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,.vertexBindingDescriptionCount=1,.pVertexBindingDescriptions=&binding,.vertexAttributeDescriptionCount=5,.pVertexAttributeDescriptions=attributes};
     VkPipelineInputAssemblyStateCreateInfo assembly={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
     VkPipelineViewportStateCreateInfo viewport={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,.viewportCount=1,.scissorCount=1};
     VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.polygonMode=VK_POLYGON_MODE_FILL,.cullMode=VK_CULL_MODE_NONE,.lineWidth=1,.depthBiasEnable=VK_TRUE};
@@ -72,17 +74,17 @@ static bool pipeline(af_vk_shadows *s)
     VkPipelineColorBlendStateCreateInfo blend={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
     VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR,VK_DYNAMIC_STATE_DEPTH_BIAS};
     VkPipelineDynamicStateCreateInfo dynamic={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,.dynamicStateCount=3,.pDynamicStates=states};
-    VkGraphicsPipelineCreateInfo info={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,.stageCount=1,.pStages=&stage,.pVertexInputState=&input,.pInputAssemblyState=&assembly,
+    VkGraphicsPipelineCreateInfo info={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,.stageCount=2,.pStages=stages,.pVertexInputState=&input,.pInputAssemblyState=&assembly,
         .pViewportState=&viewport,.pRasterizationState=&raster,.pMultisampleState=&samples,.pDepthStencilState=&depth,.pColorBlendState=&blend,.pDynamicState=&dynamic,
         .layout=s->pipeline_layout,.renderPass=s->pass,.basePipelineIndex=-1};
     success=ok(vkCreateGraphicsPipelines(s->device,VK_NULL_HANDLE,1,&info,NULL,&s->pipeline),"pipeline");
 done:
-    vkDestroyShaderModule(s->device,shader,NULL);return success;
+    if(fragment)vkDestroyShaderModule(s->device,fragment,NULL);vkDestroyShaderModule(s->device,shader,NULL);return success;
 }
-af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical,VkDevice device,uint32_t resolution,uint32_t layers,VkDescriptorSetLayout frame_layout)
+af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical,VkDevice device,uint32_t resolution,uint32_t layers,VkDescriptorSetLayout frame_layout,VkDescriptorSetLayout texture_layout)
 {
     if(!resolution||!layers||layers>AF_SHADOW_LAYER_COUNT)return NULL;
-    af_vk_shadows *s=calloc(1,sizeof(*s));if(!s)return NULL;s->device=device;s->frame_layout=frame_layout;s->resolution=resolution;s->layers=layers;
+    af_vk_shadows *s=calloc(1,sizeof(*s));if(!s)return NULL;s->device=device;s->frame_layout=frame_layout;s->texture_layout=texture_layout;s->resolution=resolution;s->layers=layers;
     VkPhysicalDeviceProperties limits;vkGetPhysicalDeviceProperties(physical,&limits);
     if(resolution>limits.limits.maxImageDimension2D||layers>limits.limits.maxImageArrayLayers)goto fail;
     VkFormat formats[]={VK_FORMAT_D32_SFLOAT,VK_FORMAT_D16_UNORM};
@@ -149,6 +151,6 @@ void af_vk_shadows_begin(af_vk_shadows *s,VkCommandBuffer command,uint32_t frame
     vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,s->pipeline);vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,s->pipeline_layout,0,1,&frame_descriptor,0,NULL);vkCmdSetViewport(command,0,1,&viewport);vkCmdSetScissor(command,0,1,&scissor);
     vkCmdSetDepthBias(command,settings.constant_bias,0,settings.slope_bias);
 }
-void af_vk_shadows_push(af_vk_shadows *s,VkCommandBuffer command,const float *mvp,uint32_t skin_base){struct {float mvp[16];uint32_t skin[4];} push={.skin={skin_base,0,0,0}};memcpy(push.mvp,mvp,64);vkCmdPushConstants(command,s->pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(push),&push);}
+void af_vk_shadows_push(af_vk_shadows *s,VkCommandBuffer command,const float *mvp,uint32_t skin_base,uint32_t alpha_mode,float alpha,float cutoff,VkDescriptorSet texture){struct {float mvp[16];uint32_t skin[4];} push={.skin={skin_base,alpha_mode,0,0}};memcpy(&push.skin[2],&alpha,4);memcpy(&push.skin[3],&cutoff,4);memcpy(push.mvp,mvp,64);vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,s->pipeline_layout,1,1,&texture,0,NULL);vkCmdPushConstants(command,s->pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(push),&push);}
 
 VkDescriptorImageInfo af_vk_shadows_image(const af_vk_shadows *s,uint32_t frame){return (VkDescriptorImageInfo){s->sampler,s->frames[frame].array_view,VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};}

@@ -179,7 +179,8 @@ bool af_model_file_load(const char *path,af_model_file *out,af_asset_error *erro
         af_model_primitive value={.mesh={{b.vertices,(uint32_t)b.count,indices,(uint32_t)b.count}},.material=af_material_default(),.base_image=-1,.normal_image=-1,.surface_image=-1,.source_mesh=(unsigned)mi,.source_primitive=(unsigned)pi};
         value.material.physically_based=true;value.material.roughness=1;value.material.metallic=1;
         if(material){
-            if(material->alpha_mode!=cgltf_alpha_mode_opaque||material->emissive_texture.texture||material->has_transmission||material->has_clearcoat){af_mesh_file_free(&value.mesh);message="Only opaque core PBR/unlit glTF materials are supported.";goto done;}
+            if(material->emissive_texture.texture||material->has_transmission||material->has_clearcoat){af_mesh_file_free(&value.mesh);message="Only core PBR/unlit glTF materials without emissive textures/extensions are supported.";goto done;}
+            value.material.alpha_mode=material->alpha_mode==cgltf_alpha_mode_mask?AF_ALPHA_MASK:material->alpha_mode==cgltf_alpha_mode_blend?AF_ALPHA_BLEND:AF_ALPHA_OPAQUE;value.material.alpha_cutoff=material->alpha_cutoff;
             value.material.physically_based=true;value.material.unlit=material->unlit!=0;
             if(material->has_pbr_metallic_roughness){cgltf_pbr_metallic_roughness *p=&material->pbr_metallic_roughness;value.material.base_color=(af_color){p->base_color_factor[0],p->base_color_factor[1],p->base_color_factor[2],p->base_color_factor[3]};value.material.roughness=p->roughness_factor;value.material.metallic=p->metallic_factor;
                 value.base_image=image_index(data,&p->base_color_texture);value.surface_image=image_index(data,&p->metallic_roughness_texture);}

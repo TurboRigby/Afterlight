@@ -609,6 +609,8 @@ static void inspector(editor *app,float width,float height)
             label(context,"Normal map (linear)",22);nk_layout_row_dynamic(context,30,1);
             nk_edit_string_zero_terminated(context,NK_EDIT_FIELD,app->normal_map,sizeof(app->normal_map),nk_filter_default);
             if(strcmp(material.normal_map,app->normal_map)){snprintf(material.normal_map,sizeof(material.normal_map),"%s",app->normal_map);material_changed=true;}
+            static const char *alpha_modes[]={"Opaque","Cutout","Blended"};nk_layout_row_dynamic(context,28,1);int mode=nk_combo(context,alpha_modes,3,(int)material.alpha_mode,26,nk_vec2(270,140));if(mode!=(int)material.alpha_mode){material.alpha_mode=(af_alpha_mode)mode;material_changed=true;}
+            nk_layout_row_dynamic(context,28,1);material_changed|=nk_property_float(context,"Opacity",0,&material.base_color.a,1,.05f,.005f)!=0;if(material.alpha_mode==AF_ALPHA_MASK){nk_layout_row_dynamic(context,28,1);material_changed|=nk_property_float(context,"Cutout threshold",0,&material.alpha_cutoff,1,.05f,.005f)!=0;}
             nk_layout_row_dynamic(context,30,1);material_changed|=nk_property_float(context,"Normal strength",0,&material.normal_strength,4,0.1f,0.01f)!=0;
             if(material_changed)ed_document_material(&app->document,material);
             nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import texture"))start_import(app,AF_ASSET_TEXTURE);

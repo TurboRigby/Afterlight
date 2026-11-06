@@ -76,3 +76,18 @@ listener movement updates gains in the main-thread mixer. The device queue is
 kept to roughly 43 ms. `play_sound_at` is available to C modules; character
 footsteps use it. The CPU gain/mixing tests use SDL's dummy audio driver. This
 adds positioned one-shots, not streaming music, occlusion, reverb or Doppler.
+
+## Cutout and blended materials
+
+Scene version 12 adds material `alpha_mode` (opaque/mask/blend) and
+`alpha_cutoff`; versions 1–11 retain opaque defaults. Core glTF alpha modes import
+and the Inspector exposes opacity, mode and threshold. Opaque/cutout geometry
+writes depth first; blended objects sort back-to-front by object origin and test
+depth without writing it. Straight alpha blending is supported. Intersecting
+transparent geometry is not order-independent transparency.
+
+Cutout thresholds include texture, vertex and material alpha in both color and
+directional/local shadow passes. Blended objects do not cast opaque shadows.
+Texture uploads and alpha edits invalidate the shadow cache. Portable draw pushes
+remain within 128 bytes. Pixel tests check discard, compositing, sorted layers,
+resize, cutout shadows and texture-reload invalidation with Vulkan validation.

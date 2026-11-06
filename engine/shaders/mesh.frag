@@ -53,7 +53,7 @@ int cascade_index(float depth){
     return layer;
 }
 float shadow_visibility(vec3 n){
-    if(frame.shadow_params.x<0.5||draw.params.y<0.5||draw.params.x>0.5)return 1;
+    if(frame.shadow_params.x<0.5||draw.params.y<0.5||((uint(draw.params.x)&1u)!=0u))return 1;
     float depth=dot(world_position-frame.camera_position.xyz,frame.camera_forward.xyz);
     int count=int(frame.cascade_params.x);
     if(depth<0||depth>frame.cascade_splits[count-1])return 1;
@@ -132,14 +132,14 @@ void main(){
             if(dot(mapped,mapped)>1e-12)n=normalize(mat3(tangent,cross(n,tangent)*handedness,n)*normalize(mapped));
         }
     }
-    vec4 base=texture(base_texture,uv)*vertex_color;
+    vec4 base=texture(base_texture,uv)*vertex_color;uint mode=(uint(draw.params.x)>>1u)&3u;float cutoff=float(uint(draw.params.x)>>3u)/65535.0;if(mode==1u&&base.a<cutoff)discard;if(mode!=2u)base.a=1;
     vec3 eye=frame.camera_position.xyz-world_position;
     vec3 v=dot(eye,eye)>1e-12?normalize(eye):n;
     vec4 mr=texture(metallic_roughness_texture,uv);
     float roughness=draw.surface.x*mr.g,metal=draw.surface.y*mr.b;
     vec3 ambient=base.rgb*frame.color_ambient.w*(draw.params.z>0.5?1.0-metal:1.0);
-    vec3 output_rgb=draw.params.x>0.5?base.rgb:ambient+direct_light(base.rgb,n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w,roughness,metal)*shadow_visibility(n);
-    if(draw.params.x<0.5)for(int i=0;i<int(frame.light_count.x);++i){
+    vec3 output_rgb=((uint(draw.params.x)&1u)!=0u)?base.rgb:ambient+direct_light(base.rgb,n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w,roughness,metal)*shadow_visibility(n);
+    if(((uint(draw.params.x)&1u)==0u))for(int i=0;i<int(frame.light_count.x);++i){
         LocalLight light=frame.lights[i];vec3 offset=light.position_range.xyz-world_position;
         float distance_squared=dot(offset,offset),distance_to_light=sqrt(distance_squared);
         if(distance_to_light>=light.position_range.w||distance_to_light<0.00001)continue;
@@ -152,7 +152,7 @@ void main(){
         }
         output_rgb+=direct_light(base.rgb,n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation,roughness,metal)*local_visibility(light,n);
     }
-    if(draw.params.x<0.5)output_rgb+=environment_light(base.rgb,n,v,roughness,metal);
+    if(((uint(draw.params.x)&1u)==0u))output_rgb+=environment_light(base.rgb,n,v,roughness,metal);
     output_rgb+=draw.emission.rgb*draw.emission.w;
     float depth=dot(world_position-frame.camera_position.xyz,frame.camera_forward.xyz);
     if(frame.cascade_params.w>0.5&&frame.shadow_params.x>0.5&&depth>=0&&depth<=frame.cascade_splits[int(frame.cascade_params.x)-1]){

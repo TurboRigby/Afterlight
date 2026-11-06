@@ -16,7 +16,7 @@ find_package(SDL3 3.4 CONFIG REQUIRED)
 
 # Compile GLSL into embedded SPIR-V; no runtime paths or shader compiler needed.
 set(afterlight_shader_headers)
-foreach(shader mesh.vert mesh.frag shadow.vert ui.vert ui.frag fullscreen.vert post.frag sky.frag)
+foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fullscreen.vert post.frag sky.frag)
     string(REPLACE "." "_" shader_name "${shader}")
     set(shader_source "${CMAKE_CURRENT_SOURCE_DIR}/engine/shaders/${shader}")
     set(shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/${shader_name}.h")
@@ -419,6 +419,12 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_alpha_test tests/alpha.c)
+    target_include_directories(afterlight_alpha_test PRIVATE engine/src)
+    target_link_libraries(afterlight_alpha_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_alpha_test)
+    add_test(NAME afterlight.alpha COMMAND afterlight_alpha_test)
+    set_tests_properties(afterlight.alpha PROPERTIES TIMEOUT 60 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     add_executable(afterlight_scene_transition_test tests/scene_transition.c)
     target_link_libraries(afterlight_scene_transition_test PRIVATE afterlight_editor_document SDL3::SDL3)
     afterlight_warnings(afterlight_scene_transition_test)

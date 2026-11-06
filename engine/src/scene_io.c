@@ -194,7 +194,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -258,10 +258,10 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             if(!read_id(cJSON_GetObjectItemCaseSensitive(item,"parent"),&object->parent)){
                 set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid parent ID.");goto fail;
             }
-            static const char *const fields[]={"base_color","texture","unlit","cast_shadows","receive_shadows","physically_based","roughness","metallic","emission","emission_strength","normal_map","normal_strength","metallic_roughness_map"};
+            static const char *const fields[]={"base_color","texture","unlit","cast_shadows","receive_shadows","physically_based","roughness","metallic","emission","emission_strength","normal_map","normal_strength","metallic_roughness_map","alpha_mode","alpha_cutoff"};
             const cJSON *m=cJSON_GetObjectItemCaseSensitive(item,"material"),*color=cJSON_GetObjectItemCaseSensitive(m,"base_color"),*texture=cJSON_GetObjectItemCaseSensitive(m,"texture"),*unlit=cJSON_GetObjectItemCaseSensitive(m,"unlit");
             af_material material=af_material_default();
-            if(!exact_fields(m,fields,version->valuedouble>=7?13:version->valuedouble>=4?12:(version->valuedouble>=3?5:3))||!cJSON_IsArray(color)||cJSON_GetArraySize(color)!=4||!cJSON_IsString(texture)||strlen(texture->valuestring)>=sizeof(material.texture)||!cJSON_IsBool(unlit)){
+            if(!exact_fields(m,fields,version->valuedouble>=12?15:version->valuedouble>=7?13:version->valuedouble>=4?12:(version->valuedouble>=3?5:3))||!cJSON_IsArray(color)||cJSON_GetArraySize(color)!=4||!cJSON_IsString(texture)||strlen(texture->valuestring)>=sizeof(material.texture)||!cJSON_IsBool(unlit)){
                 set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid object material.");goto fail;
             }
             float values[4];for(int c=0;c<4;++c){const cJSON *v=cJSON_GetArrayItem(color,c);if(!cJSON_IsNumber(v)||!isfinite(v->valuedouble)||v->valuedouble<0||v->valuedouble>1){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid material color.");goto fail;}values[c]=(float)v->valuedouble;}
@@ -278,6 +278,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
                 if(version->valuedouble>=7){const cJSON *mr=cJSON_GetObjectItemCaseSensitive(m,"metallic_roughness_map");if(!cJSON_IsString(mr)||strlen(mr->valuestring)>=sizeof(material.metallic_roughness_map)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid metallic/roughness texture.");goto fail;}snprintf(material.metallic_roughness_map,sizeof(material.metallic_roughness_map),"%s",mr->valuestring);}
                 material.physically_based=cJSON_IsTrue(pbr)!=0;snprintf(material.normal_map,sizeof(material.normal_map),"%s",normal->valuestring);
             }
+            if(version->valuedouble>=12){const cJSON *mode=cJSON_GetObjectItemCaseSensitive(m,"alpha_mode");if(!cJSON_IsString(mode)||!read_float_field(m,"alpha_cutoff",&material.alpha_cutoff)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid alpha material.");goto fail;}if(!strcmp(mode->valuestring,"opaque"))material.alpha_mode=AF_ALPHA_OPAQUE;else if(!strcmp(mode->valuestring,"mask"))material.alpha_mode=AF_ALPHA_MASK;else if(!strcmp(mode->valuestring,"blend"))material.alpha_mode=AF_ALPHA_BLEND;else{set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid alpha mode.");goto fail;}}
             if(!af_scene_set_object_material(scene,object->id,material)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid material.");goto fail;}
         }
     }
@@ -494,6 +495,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
         cJSON *animation=cJSON_AddObjectToObject(object,"animation"),*model=cJSON_AddObjectToObject(object,"model");
         if(!animation||!model||!memchr(a->asset,0,sizeof(a->asset))||!valid_utf8((const unsigned char*)a->asset,strlen(a->asset))||!cJSON_AddStringToObject(animation,"asset",a->asset)||!cJSON_AddNumberToObject(animation,"clip",a->clip)||!cJSON_AddNumberToObject(animation,"speed",a->speed)||!cJSON_AddBoolToObject(animation,"autoplay",a->autoplay)||!cJSON_AddBoolToObject(animation,"loop",a->loop)||!add_id(model,"root",binding->root)||!cJSON_AddNumberToObject(model,"node",binding->node)||!cJSON_AddNumberToObject(model,"skin",binding->skin)||!cJSON_AddBoolToObject(model,"primitive",binding->primitive))goto fail;
         cJSON *material=cJSON_AddObjectToObject(object,"material");
+        if(!material||!cJSON_AddStringToObject(material,"alpha_mode",source->material.alpha_mode==AF_ALPHA_MASK?"mask":source->material.alpha_mode==AF_ALPHA_BLEND?"blend":"opaque")||!cJSON_AddNumberToObject(material,"alpha_cutoff",source->material.alpha_cutoff))goto fail;
         double color[]={source->material.base_color.r,source->material.base_color.g,source->material.base_color.b,source->material.base_color.a};
         cJSON *rgba=cJSON_CreateDoubleArray(color,4);
         if(!material||!rgba){cJSON_Delete(rgba);goto fail;}
