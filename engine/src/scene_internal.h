@@ -10,11 +10,13 @@
 #include "collision_mesh_internal.h"
 #include <afterlight/joint.h>
 #include <afterlight/compound.h>
+#include <afterlight/water.h>
 
 struct af_scene {
     cm_slot collision_meshes[AF_COLLISION_MESH_MAX_ASSETS];size_t collision_mesh_count;
     af_joint joints[AF_SCENE_MAX_JOINTS];size_t joint_count;af_joint_id next_joint_id;
     af_collider_part parts[AF_SCENE_MAX_COLLIDER_PARTS];size_t part_count;af_collider_part_id next_part_id;
+    af_water waters[AF_SCENE_MAX_WATERS];size_t water_count;
     af_scene_object *objects;
     size_t count;
     size_t capacity;

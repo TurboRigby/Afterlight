@@ -318,6 +318,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
         Uint64 animation_start=SDL_GetPerformanceCounter();
         if(!af_animation_runtime_update(engine->animations,engine->previous_scene,alpha,animation_delta,engine->animation_enabled)){result=1;break;}
         engine->cpu_animation_ms=(double)(SDL_GetPerformanceCounter()-animation_start)*1000/frequency;
+        if(!af_renderer_update_water(engine->renderer,engine->physics,engine->scene,alpha)){result=1;break;}
         if (!af_renderer_draw(engine->renderer, engine->clear_color, engine->scene, &render_camera, engine->viewport, engine->highlighted, &engine->overlay, &rendered)) {
             result = 1;
             break;
@@ -676,3 +677,7 @@ bool af_engine_grab_body(af_engine *e,af_object_id id,af_vec3 point){return e&&a
 bool af_engine_move_grab(af_engine *e,af_vec3 point){return e&&af_physics_move_grab(e->physics,point);}
 bool af_engine_release_body(af_engine *e,af_vec3 velocity){return e&&af_physics_release(e->physics,(af_scene*)e->scene,velocity);}
 af_object_id af_engine_held_body(const af_engine *e){return af_physics_held(e?e->physics:NULL);}
+
+af_water_sample af_engine_sample_water(const af_engine *e,af_vec3 p){return af_physics_sample_water(e?e->physics:NULL,e?e->scene:NULL,p);}
+bool af_engine_disturb_water(af_engine *e,af_object_id id,af_vec3 p,float radius,float velocity){return e&&af_physics_disturb_water(e->physics,e->scene,id,p,radius,velocity);}
+af_water_stats af_engine_water_stats(const af_engine *e){return af_physics_water_stats(e?e->physics:NULL);}

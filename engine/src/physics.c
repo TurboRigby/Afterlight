@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "physics_internal.h"
+#include <afterlight/water.h>
+#include "water_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +9,7 @@ af_physics *af_physics_create(void) {
     return calloc(1, sizeof(af_physics));
 }
 void af_physics_destroy(af_physics *p) {
+    if(p)free(p->water);
     free(p);
 }
 void af_physics_set_profiling(af_physics *p, bool enabled) {
@@ -16,11 +19,13 @@ void af_physics_set_profiling(af_physics *p, bool enabled) {
 void af_physics_reset(af_physics *p) {
     if (p) {
         bool profiling = p->profiling;
+        free(p->water);
         memset(p, 0, sizeof(*p));
         p->profiling = profiling;
     }
 }
 bool af_physics_active(const af_scene *s) {
+    for(size_t i=0;i<af_scene_water_count(s);++i)if(af_scene_water_at(s,i)->enabled)return true;
     for (size_t i = 0; i < af_scene_object_count(s); ++i) {
         const af_rigid_body *b = &af_scene_object_at(s, i)->body;
         if (b->enabled && b->type != AF_BODY_STATIC)
@@ -364,6 +369,8 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
     double started = ph_clock(p);
     if (!ph_sync(p, s, dt))
         return false;
+    if(!ph_water_sync(p,s))return fail(p,"Invalid water surface or allocation failure.");
+    for(size_t i=0;i<p->count;++i)p->bodies[i].wet=false;
     uint64_t ticks = p->stats.ticks + 1;
     p->stats = (af_physics_stats){.bodies = p->count, .ticks = ticks};
     p->stats.sync_ms = ph_clock(p) - started;
@@ -389,6 +396,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
                 100);
             ph_shape(b);
         }
+        ph_water_step(p,h);
         double stamp = ph_clock(p);
         ph_advance(p, h);
         p->stats.ccd_ms += ph_clock(p) - stamp;
@@ -425,6 +433,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
 bool af_physics_validate_scene(const af_scene *scene, char *error, size_t capacity) {
     if (!scene)
         return false;
+    for(size_t i=0;i<af_scene_water_count(scene);++i){af_water w=*af_scene_water_at(scene,i);if(!wa_owner_valid(scene,w.owner,w)){if(error&&capacity)snprintf(error,capacity,"Invalid water definition or owner transform.");return false;}}
     if (!af_physics_active(scene))
         return true;
     af_physics *test = af_physics_create();

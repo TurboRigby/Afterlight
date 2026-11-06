@@ -67,6 +67,7 @@ bool af_scene_remove_object(af_scene *scene, af_object_id id)
     for(size_t i=0;i<scene->count;++i)removed[i]=scene->objects[i].id==id||af_scene_is_descendant(scene,scene->objects[i].id,id);
     size_t write=0;for(size_t i=0;i<scene->count;++i)if(!removed[i])scene->objects[write++]=scene->objects[i];
     scene->count=write;free(removed);
+    write=0;for(size_t i=0;i<scene->water_count;++i)if(find_object(scene,scene->waters[i].owner))scene->waters[write++]=scene->waters[i];scene->water_count=write;
     write=0;for(size_t i=0;i<scene->part_count;++i)if(find_object(scene,scene->parts[i].owner))scene->parts[write++]=scene->parts[i];scene->part_count=write;
     for(size_t i=scene->joint_count;i>0;--i){af_joint *j=&scene->joints[i-1];if(!find_object(scene,j->a)||(j->b&&!find_object(scene,j->b)))af_scene_remove_joint(scene,j->id);}
     return true;
@@ -90,7 +91,7 @@ bool af_scene_set_object_name(af_scene *scene, af_object_id id, const char *name
 bool af_scene_set_object_mesh(af_scene *scene, af_object_id id, const char *mesh)
 {
     af_scene_object *object = find_object(scene, id);
-    if (!object || !valid_name(mesh, AF_MESH_NAME_CAPACITY)) return false;
+    if (!object || !valid_name(mesh, AF_MESH_NAME_CAPACITY)||(af_scene_get_water(scene,id)&&strcmp(mesh,"__node"))) return false;
     memmove(object->mesh, mesh, strlen(mesh) + 1);
     return true;
 }
@@ -103,6 +104,7 @@ bool af_scene_set_object_transform(af_scene *scene, af_object_id id, af_transfor
         if (!isfinite(vectors[i].x) || !isfinite(vectors[i].y) || !isfinite(vectors[i].z)) return false;
     if (!object) return false;
     af_transform previous=object->transform;object->transform=transform;if(!af_scene_set_body(scene,id,object->body)){object->transform=previous;return false;}
+    const af_water *water=af_scene_get_water(scene,id);if(water&&!af_scene_set_water(scene,id,*water)){object->transform=previous;return false;}
     object->transform = transform;
     return true;
 }
@@ -121,6 +123,7 @@ af_scene *af_scene_clone(const af_scene *source)
     af_scene *copy = af_scene_create();
     if (!copy) return NULL;
     memcpy(copy->joints,source->joints,sizeof(copy->joints));copy->joint_count=source->joint_count;copy->next_joint_id=source->next_joint_id;
+    memcpy(copy->waters,source->waters,sizeof(copy->waters));copy->water_count=source->water_count;
     memcpy(copy->parts,source->parts,sizeof(copy->parts));copy->part_count=source->part_count;copy->next_part_id=source->next_part_id;
     copy->next_id = source->next_id;copy->light=source->light;copy->shadows=source->shadows;copy->render_settings=source->render_settings;copy->local_light_count=source->local_light_count;
     memcpy(copy->local_lights,source->local_lights,sizeof(copy->local_lights));
@@ -185,7 +188,7 @@ bool af_scene_is_descendant(const af_scene *scene,af_object_id id,af_object_id a
 }
 bool af_scene_set_parent(af_scene *scene,af_object_id child,af_object_id parent){
     af_scene_object *object=find_object(scene,child);
-    if(!object||(parent&&object->body.enabled&&object->body.type==AF_BODY_DYNAMIC)||child==parent||(parent&&!find_object(scene,parent))||(parent&&af_scene_is_descendant(scene,parent,child)))return false;
+    if(!object||(parent&&af_scene_get_water(scene,child))||(parent&&object->body.enabled&&object->body.type==AF_BODY_DYNAMIC)||child==parent||(parent&&!find_object(scene,parent))||(parent&&af_scene_is_descendant(scene,parent,child)))return false;
     af_object_id previous=object->parent;object->parent=parent;
     for(size_t i=0;i<scene->count;++i){const af_scene_object *node=&scene->objects[i];unsigned depth=0;
         while(node->parent){if(++depth>=AF_SCENE_MAX_DEPTH||(node=find_object(scene,node->parent))==NULL){object->parent=previous;return false;}}
@@ -259,7 +262,7 @@ bool af_scene_interpolated_world_matrix(const af_scene *scene,const af_scene *pr
     }return false;
 }
 
-bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider collider){af_scene_object *object=find_object(scene,id);if(!object||!af_collider_valid(collider)||(collider.type==AF_COLLIDER_MESH&&(af_vec3_length(collider.center)>1e-6f||(object->body.enabled&&object->body.type!=AF_BODY_STATIC))))return false;af_collider previous=object->collider;object->collider=collider;if(!af_scene_set_body(scene,id,object->body)){object->collider=previous;return false;}return true;}
+bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider collider){af_scene_object *object=find_object(scene,id);if(!object||(collider.enabled&&collider.type!=AF_COLLIDER_NONE&&af_scene_get_water(scene,id))||!af_collider_valid(collider)||(collider.type==AF_COLLIDER_MESH&&(af_vec3_length(collider.center)>1e-6f||(object->body.enabled&&object->body.type!=AF_BODY_STATIC))))return false;af_collider previous=object->collider;object->collider=collider;if(!af_scene_set_body(scene,id,object->body)){object->collider=previous;return false;}return true;}
 
 af_animation_component af_animation_component_default(void){return (af_animation_component){.speed=1,.loop=true};}
 af_model_binding af_model_binding_default(void){return (af_model_binding){.skin=-1};}

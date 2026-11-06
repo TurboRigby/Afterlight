@@ -128,7 +128,7 @@ void ph_sleep(af_physics *p, float dt) {
         if (b->inv_mass == 0)
             continue;
         size_t r = root(p, i);
-        p->island_quiet[r] &= b->config.allow_sleep && b->id != p->held && af_vec3_length(b->v) < .06f &&
+        p->island_quiet[r] &= !b->wet && b->config.allow_sleep && b->id != p->held && af_vec3_length(b->v) < .06f &&
                               af_vec3_length(b->w) < .08f && af_vec3_length(b->force) < 1e-6f &&
                               af_vec3_length(b->torque) < 1e-6f;
         p->island_time[r] = fminf(p->island_time[r], b->sleep_time);

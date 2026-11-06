@@ -66,6 +66,10 @@ float shadow_visibility(vec3 n){
         visibility=mix(visibility,next,smoothstep(end-width,end,depth));
     }return visibility;
 }
+bool water_surface(){return (uint(draw.params.x)&(1u<<19u))!=0u;}
+float water_f0(){float f=(draw.emission.w-1.0)/(draw.emission.w+1.0);return f*f;}
+vec3 water_transmission(vec3 n,vec3 v){return exp(-draw.emission.rgb*draw.surface.z/max(abs(dot(n,v)),.15));}
+vec3 water_scatter(vec3 n,vec3 v,vec3 l,vec3 radiance){return draw.tint.rgb*(vec3(1)-water_transmission(n,v))*radiance*max(dot(n,l),0.0)/3.14159265359;}
 vec3 direct_light(vec3 base,vec3 n,vec3 v,vec3 l,vec3 radiance,float roughness,float metal){
     float nl=max(dot(n,l),0.0);
     if(draw.params.z<0.5)return base*radiance*nl;
@@ -80,7 +84,7 @@ vec3 direct_light(vec3 base,vec3 n,vec3 v,vec3 l,vec3 radiance,float roughness,f
     float distribution=alpha2/(pi*denominator*denominator);
     float k=(rough+1.0)*(rough+1.0)/8.0;
     float geometry=(nv/(nv*(1.0-k)+k))*(nl/(nl*(1.0-k)+k));
-    vec3 f0=mix(vec3(0.04),base,metal);
+    vec3 f0=mix(vec3(water_surface()?water_f0():0.04),base,metal);
     vec3 fresnel=f0+(vec3(1)-f0)*pow(1.0-vh,5.0);
     vec3 specular=distribution*geometry*fresnel/max(4.0*nv*nl,0.0001);
     vec3 diffuse=(vec3(1)-fresnel)*(1.0-metal)*base/pi;
@@ -111,7 +115,7 @@ vec3 environment_light(vec3 base,vec3 n,vec3 v,float roughness,float metal){
     vec3 diffuse=textureLod(irradiance_map,environment_uv(n),0).rgb;
     if(draw.params.z<0.5)return diffuse*base*frame.render_params.z;
     float rough=clamp(roughness,0.04,1.0),nv=max(dot(n,v),0.0);
-    vec3 f0=mix(vec3(0.04),base,metal);
+    vec3 f0=mix(vec3(water_surface()?water_f0():0.04),base,metal);
     vec3 fresnel=f0+(max(vec3(1.0-rough),f0)-f0)*pow(1.0-nv,5.0);
     vec3 radiance=textureLod(environment_map,environment_uv(reflect(-v,n)),rough*5.0).rgb;
     vec2 brdf=texture(brdf_lut,vec2(nv,rough)).rg;
@@ -132,13 +136,15 @@ void main(){
             if(dot(mapped,mapped)>1e-12)n=normalize(mat3(tangent,cross(n,tangent)*handedness,n)*normalize(mapped));
         }
     }
-    vec4 base=texture(base_texture,uv)*vertex_color;uint mode=(uint(draw.params.x)>>1u)&3u;uint cutoff=uint(draw.params.x)>>3u;if(mode==1u&&uint(round(clamp(base.a,0,1)*65535.0))<cutoff)discard;if(mode!=2u)base.a=1;
+    vec4 base=texture(base_texture,uv)*vertex_color;uint mode=(uint(draw.params.x)>>1u)&3u;uint cutoff=(uint(draw.params.x)>>3u)&65535u;if(mode==1u&&uint(round(clamp(base.a,0,1)*65535.0))<cutoff)discard;if(mode!=2u)base.a=1;
     vec3 eye=frame.camera_position.xyz-world_position;
     vec3 v=dot(eye,eye)>1e-12?normalize(eye):n;
+    bool water=water_surface();if(water){if(dot(n,v)<0)n=-n;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);if((uint(draw.params.x)&(1u<<20u))!=0u){out_color=vec4(water_transmission(n,v)*(1.0-f),1);return;}base.rgb=vec3(0);}
     vec4 mr=texture(metallic_roughness_texture,uv);
     float roughness=draw.surface.x*mr.g,metal=draw.surface.y*mr.b;
     vec3 ambient=base.rgb*frame.color_ambient.w*(draw.params.z>0.5?1.0-metal:1.0);
     vec3 output_rgb=((uint(draw.params.x)&1u)!=0u)?base.rgb:ambient+direct_light(base.rgb,n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w,roughness,metal)*shadow_visibility(n);
+    if(water)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*frame.color_ambient.w+water_scatter(n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w)*shadow_visibility(n);
     if(((uint(draw.params.x)&1u)==0u))for(int i=0;i<int(frame.light_count.x);++i){
         LocalLight light=frame.lights[i];vec3 offset=light.position_range.xyz-world_position;
         float distance_squared=dot(offset,offset),distance_to_light=sqrt(distance_squared);
@@ -150,10 +156,12 @@ void main(){
             float blend=clamp((cone-light.params.x)/max(light.direction_inner.w-light.params.x,0.00001),0.0,1.0);
             attenuation*=blend*blend*(3.0-2.0*blend);
         }
+        if(water)output_rgb+=water_scatter(n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation)*local_visibility(light,n);
         output_rgb+=direct_light(base.rgb,n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation,roughness,metal)*local_visibility(light,n);
     }
     if(((uint(draw.params.x)&1u)==0u))output_rgb+=environment_light(base.rgb,n,v,roughness,metal);
-    output_rgb+=draw.emission.rgb*draw.emission.w;
+    if(water&&frame.render_params.z>0)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*textureLod(irradiance_map,environment_uv(n),0).rgb*frame.render_params.z;
+    if(!water)output_rgb+=draw.emission.rgb*draw.emission.w;
     float depth=dot(world_position-frame.camera_position.xyz,frame.camera_forward.xyz);
     if(frame.cascade_params.w>0.5&&frame.shadow_params.x>0.5&&depth>=0&&depth<=frame.cascade_splits[int(frame.cascade_params.x)-1]){
         const vec3 colors[4]=vec3[4](vec3(1,0.25,0.25),vec3(0.25,1,0.25),vec3(0.25,0.5,1),vec3(1,0.85,0.25));

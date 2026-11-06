@@ -428,7 +428,7 @@ static void object_list(editor *app,float height)
         nk_layout_row_dynamic(context,32,2);
         if(nk_button_label(context,"Add cube")){ed_document_add_cube(&app->document);refresh(app);}
         if(nk_button_label(context,"Duplicate")){ed_document_duplicate(&app->document);refresh(app);}
-        nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import mesh (OBJ/glTF)"))start_import(app,AF_ASSET_MESH);
+        nk_layout_row_dynamic(context,30,2);if(nk_button_label(context,"Import mesh"))start_import(app,AF_ASSET_MESH);if(nk_button_label(context,"Add water")){ed_document_add_water(&app->document);refresh(app);}
         nk_layout_row_dynamic(context,30,1);
         if(nk_button_label(context,"Choose C game module")){app->dialog=ed_dialog_begin_module(app->engine);app->dialog_asset=3;app->dialog_save=false;}
         nk_layout_row_dynamic(context,fmaxf(60,height-338),1);
@@ -496,6 +496,16 @@ static void collider_controls(editor *app,af_scene_object object){
 }
 
 
+static void water_controls(editor *app,af_scene_object object){const af_water *source=af_scene_get_water(app->document.scene,object.id);if(!source)return;af_water w=*source,before=w;struct nk_context *ctx=&app->gui.context;
+    label(ctx,"Water",30);nk_layout_row_dynamic(ctx,28,1);nk_bool enabled=w.enabled;if(nk_checkbox_label(ctx,"Simulate water",&enabled))w.enabled=enabled!=0;
+    static const char *qualities[]={"Low: 16 x 16","Medium: 32 x 32","High: 64 x 64"};nk_layout_row_dynamic(ctx,28,1);w.quality=(af_water_quality)nk_combo(ctx,qualities,3,(int)w.quality,26,nk_vec2(260,120));
+    nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Half width (m)",.25f,&w.half_size.x,1000,.25f,.05f);nk_property_float(ctx,"Half length (m)",.25f,&w.half_size.y,1000,.25f,.05f);nk_property_float(ctx,"Depth (m)",.05f,&w.depth,100,.1f,.02f);
+    nk_property_float(ctx,"Density (kg/m3)",.01f,&w.density,20000,50,5);nk_property_float(ctx,"Drag",0,&w.drag,20,.1f,.02f);nk_property_float(ctx,"Wave speed (m/s)",.01f,&w.wave_speed,20,.1f,.02f);nk_property_float(ctx,"Damping",0,&w.damping,20,.1f,.02f);nk_property_float(ctx,"Wind",0,&w.wind,1,.01f,.002f);
+    vector_fields(ctx,"Absorption (RGB / m)",&w.absorption,.05f,.01f);vector_fields(ctx,"Scattering color",&w.scattering,.05f,.01f);nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Roughness",.04f,&w.roughness,1,.02f,.005f);nk_property_float(ctx,"IOR",1,&w.ior,2.5f,.01f,.002f);
+    label(ctx,"Move/yaw the surface; edit its size above.",34);
+    if(memcmp(&w,&before,sizeof(w)))ed_document_water(&app->document,w);
+    nk_layout_row_dynamic(ctx,28,1);if(nk_button_label(ctx,"Remove water component"))ed_document_remove_water(&app->document);
+}
 static void part_controls(editor *app,af_scene_object object){struct nk_context *ctx=&app->gui.context;if(object.gameplay.player.enabled)return;label(ctx,"Collider parts",28);nk_layout_row_dynamic(ctx,28,2);for(unsigned type=0;type<2;++type)if(nk_button_label(ctx,type?"Add sphere part":"Add box part")){af_collider_part part=af_collider_part_default();part.collider.type=type?AF_COLLIDER_SPHERE:AF_COLLIDER_BOX;if(!af_scene_collider_part_count(app->document.scene,object.id)&&(object.collider.type==AF_COLLIDER_BOX||object.collider.type==AF_COLLIDER_SPHERE)){part.collider=object.collider;part.collider.trigger=false;part.local.position=part.collider.center;part.collider.center=(af_vec3){0};}ed_document_end_edit(&app->document);ed_document_part(&app->document,part);ed_document_end_edit(&app->document);return;}
     for(size_t i=0;i<af_scene_collider_part_count(app->document.scene,object.id);++i){af_collider_part part=*af_scene_collider_part_at(app->document.scene,object.id,i),before=part;char title[96];snprintf(title,sizeof(title),"Part %llu: %s",(unsigned long long)part.id,part.name);if(!nk_tree_push_id(ctx,NK_TREE_NODE,title,NK_MINIMIZED,(int)part.id))continue;static const char *types[]={"Box","Sphere"};nk_layout_row_dynamic(ctx,28,1);part.collider.type=nk_combo(ctx,types,2,part.collider.type==AF_COLLIDER_SPHERE,24,nk_vec2(250,100))?AF_COLLIDER_SPHERE:AF_COLLIDER_BOX;vector_fields(ctx,"Part position",&part.local.position,.1f,.01f);af_vec3 degrees=af_vec3_scale(part.local.rotation,180/AF_PI);if(vector_fields(ctx,"Part rotation (degrees)",&degrees,5,.5f))part.local.rotation=af_vec3_scale(degrees,AF_PI/180);vector_fields(ctx,"Part scale",&part.local.scale,.1f,.01f);if(part.collider.type==AF_COLLIDER_BOX)vector_fields(ctx,"Half extents",&part.collider.half_extents,.1f,.01f);else{nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Radius",.001f,&part.collider.radius,10000,.1f,.01f);}nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Density (kg/m3)",.001f,&part.density,1000000,50,5);
         nk_layout_row_dynamic(ctx,28,3);const char *tools[]={"Move part","Rotate part","Scale part"};for(unsigned tool=0;tool<3;++tool)if(nk_button_label(ctx,tools[tool])){app->edit_part=part.id;app->edit_joint=0;app->gizmo.mode=(ed_gizmo_mode)tool;app->gizmo.dragging=false;app->show_colliders=true;ed_document_end_edit(&app->document);}nk_layout_row_dynamic(ctx,28,2);bool fit=nk_button_label(ctx,"Fit mesh bounds")!=0,remove=nk_button_label(ctx,"Delete part")!=0;nk_tree_pop(ctx);if(fit){ed_document_fit_part(&app->document,part.id);return;}if(remove){ed_document_remove_part(&app->document,part.id);return;}if(memcmp(&part,&before,sizeof(part))){ed_document_part(&app->document,part);return;}}
@@ -705,7 +715,7 @@ static void inspector(editor *app,float width,float height)
                     if(nk_combo_item_label(context,text,NK_TEXT_LEFT))ed_document_parent(&app->document,candidate.id);
                 }nk_combo_end(context);
             }
-            collider_controls(app,object);part_controls(app,object);body_controls(app,object);joint_controls(app,object);
+            water_controls(app,object);if(!af_scene_get_water(app->document.scene,object.id)){collider_controls(app,object);part_controls(app,object);body_controls(app,object);joint_controls(app,object);}
             gameplay_controls(app,object);
             label(context,"Material",30);af_material material=object.material;
             nk_layout_row_dynamic(context,80,1);thumbnail_widget(app,NULL,&material);

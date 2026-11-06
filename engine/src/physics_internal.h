@@ -7,6 +7,7 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <time.h>
+typedef struct af_water_runtime af_water_runtime;
 typedef struct ph_body {
     af_object_id id;
     size_t scene_index;
@@ -20,7 +21,7 @@ typedef struct ph_body {
     size_t part_count, part_start;
     af_vec4 q;
     float inv_mass, sleep_time;
-    bool sleeping, supported, external, character_proxy;
+    bool sleeping, supported, external, character_proxy, wet;
 } ph_body;
 typedef struct ph_contact {
     af_physics_contact view;
@@ -43,6 +44,7 @@ typedef struct ph_joint {
     ph_joint_row rows[7];
 } ph_joint;
 struct af_physics {
+    af_water_runtime *water;
     af_object_id held;
     af_vec3 grab_local, grab_target;
     af_scene *scene;
@@ -89,6 +91,8 @@ af_vec3 ph_vector(const ph_body *, af_vec3);
 af_vec3 ph_inverse_inertia(const ph_body *, af_vec3);
 void ph_impulse(ph_body *, af_vec3, af_vec3);
 void ph_shape(ph_body *);
+bool ph_water_sync(af_physics *, const af_scene *);
+void ph_water_step(af_physics *, float);
 void ph_hold(af_physics *, float);
 void ph_advance(af_physics *, float);
 void ph_islands_build(af_physics *);

@@ -9,6 +9,7 @@
 #include <afterlight/scene.h>
 #include <afterlight/joint.h>
 #include <afterlight/compound.h>
+#include <afterlight/water.h>
 
 #define ED_PATH_CAPACITY 4096
 #define ED_HISTORY_LIMIT 32
@@ -39,6 +40,9 @@ bool ed_document_transform(ed_document *document, af_transform transform);
 bool ed_document_name(ed_document *document, const char *name);
 bool ed_document_mesh(ed_document *document, const char *mesh);
 bool ed_document_visible(ed_document *document, bool visible);
+bool ed_document_add_water(ed_document*);
+bool ed_document_water(ed_document*,af_water);
+bool ed_document_remove_water(ed_document*);
 bool ed_document_add_cube(ed_document *document);
 bool ed_document_prefab(ed_document*,const char*);
 bool ed_document_duplicate(ed_document *document);

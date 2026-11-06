@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.24)
-project(Afterlight VERSION 0.16.0 LANGUAGES C)
+project(Afterlight VERSION 0.17.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -54,6 +54,10 @@ add_library(afterlight STATIC
     engine/src/gameplay.c
     engine/src/rig.c
     engine/src/body.c
+    engine/src/water.c
+    engine/src/water_io.c
+    engine/src/water_runtime.c
+    engine/src/physics_water.c
     engine/src/physics.c
     engine/src/physics_bounds.c
     engine/src/physics_compound.c
@@ -240,6 +244,14 @@ add_custom_target(run
 add_library(afterlight_playground_game MODULE game/playground_game.c)
 
 
+add_library(afterlight_water_game MODULE game/water_game.c)
+target_include_directories(afterlight_water_game PRIVATE engine/include)
+set_target_properties(afterlight_water_game PROPERTIES PREFIX "" C_VISIBILITY_PRESET hidden)
+afterlight_warnings(afterlight_water_game)
+if(NOT MSVC)
+    target_link_libraries(afterlight_water_game PRIVATE m)
+endif()
+add_dependencies(afterlight_editor afterlight_water_game)
 add_library(afterlight_compound_game MODULE game/character_game.c)
 target_compile_definitions(afterlight_compound_game PRIVATE AF_TOOLBOX_GAME=1 AF_PHYSICS_GAME=1 AF_MECHANICAL_GAME=1 AF_MACHINERY_GAME=1 AF_COMPOUND_GAME=1)
 target_include_directories(afterlight_compound_game PRIVATE engine/include)
@@ -376,7 +388,7 @@ else()
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${animations_scene}" "${PROJECT_BINARY_DIR}/scenes/animations.afterlight.json")
     add_dependencies(afterlight_editor afterlight_animation_scene_copy)
 endif()
-foreach(sample demo playground mechanism animations character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop)
+foreach(sample demo playground mechanism animations character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake)
     if(sample STREQUAL "demo")
         set(project_scene "${sandbox_scene}")
         set(project_module afterlight_game)
@@ -386,6 +398,9 @@ foreach(sample demo playground mechanism animations character character-course c
     elseif(sample STREQUAL "mechanism")
         set(project_scene "${mechanism_scene}")
         set(project_module afterlight_animation_game)
+    elseif(sample MATCHES "^water-")
+        set(project_scene "${PROJECT_SOURCE_DIR}/sandbox/scenes/${sample}.afterlight.json")
+        set(project_module afterlight_water_game)
     elseif(sample STREQUAL "prop-room" OR sample STREQUAL "prop-workshop")
         set(project_scene "${PROJECT_SOURCE_DIR}/sandbox/scenes/${sample}.afterlight.json")
         set(project_module afterlight_compound_game)
@@ -442,9 +457,11 @@ add_custom_target(run_lighting_editor COMMAND $<TARGET_FILE:afterlight_editor> -
 add_custom_target(run_mechanism_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/mechanism.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
 add_custom_target(run_animation_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/animations.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
 add_custom_target(run_animation_player COMMAND $<TARGET_FILE:afterlight_player> --project "${PROJECT_BINARY_DIR}/animations.afterlight.project" DEPENDS afterlight_player afterlight_animation_game USES_TERMINAL VERBATIM)
-foreach(sample character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop)
+foreach(sample character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake)
     add_custom_target(run_${sample}_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/${sample}.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
-    if(sample STREQUAL "prop-room" OR sample STREQUAL "prop-workshop")
+    if(sample MATCHES "^water-")
+        set(sample_game afterlight_water_game)
+    elseif(sample STREQUAL "prop-room" OR sample STREQUAL "prop-workshop")
         set(sample_game afterlight_compound_game)
     elseif(sample STREQUAL "motor-room" OR sample STREQUAL "machinery-playground")
         set(sample_game afterlight_machinery_game)
@@ -473,6 +490,7 @@ if(APPLE)
 
     set_source_files_properties("${PROJECT_SOURCE_DIR}/sandbox/prefabs/compound-l.afterlight.prefab" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/prefabs")
     target_sources(afterlight_editor PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/prefabs/compound-l.afterlight.prefab")
+    add_custom_command(TARGET afterlight_water_game POST_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game" COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:afterlight_water_game>" "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game/$<TARGET_FILE_NAME:afterlight_water_game>")
     add_custom_command(TARGET afterlight_compound_game POST_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game" COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:afterlight_compound_game>" "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game/$<TARGET_FILE_NAME:afterlight_compound_game>")
     add_custom_command(TARGET afterlight_machinery_game POST_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game" COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:afterlight_machinery_game>" "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game/$<TARGET_FILE_NAME:afterlight_machinery_game>")
     add_custom_command(TARGET afterlight_mechanical_game POST_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game" COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:afterlight_mechanical_game>" "${PROJECT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game/$<TARGET_FILE_NAME:afterlight_mechanical_game>")
@@ -528,6 +546,27 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_water_scenes_test tests/water_scenes.c)
+    target_include_directories(afterlight_water_scenes_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_scenes_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_scenes_test)
+    add_test(NAME afterlight.water_scenes COMMAND afterlight_water_scenes_test "${PROJECT_SOURCE_DIR}/sandbox/scenes/water-pool.afterlight.json" "${PROJECT_SOURCE_DIR}/sandbox/scenes/water-lake.afterlight.json")
+    add_executable(afterlight_water_render_test tests/water_render.c)
+    target_include_directories(afterlight_water_render_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_render_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_render_test)
+    add_test(NAME afterlight.water_render COMMAND afterlight_water_render_test )
+    set_tests_properties(afterlight.water_render PROPERTIES TIMEOUT 40 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_executable(afterlight_water_data_test tests/water_data.c editor/document.c)
+    target_include_directories(afterlight_water_data_test PRIVATE editor engine/src)
+    target_link_libraries(afterlight_water_data_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_data_test)
+    add_test(NAME afterlight.water_data COMMAND afterlight_water_data_test)
+    add_executable(afterlight_water_pool_test tests/water_pool.c)
+    target_include_directories(afterlight_water_pool_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_pool_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_pool_test)
+    add_test(NAME afterlight.water_pool COMMAND afterlight_water_pool_test )
     add_executable(afterlight_compound_scene_test tests/compound_scene.c)
     target_include_directories(afterlight_compound_scene_test PRIVATE engine/src)
     target_link_libraries(afterlight_compound_scene_test PRIVATE Afterlight::Engine)
@@ -1137,7 +1176,7 @@ if(APPLE AND CMAKE_C_COMPILER_ID MATCHES "Clang")
         add_test(NAME afterlight.module_unload COMMAND afterlight_unload_test "$<TARGET_FILE:afterlight_unload_module>")
     endif()
     if(AF_HAS_ASAN_DESTRUCTOR_OPTION)
-        foreach(module afterlight_compound_game afterlight_machinery_game afterlight_mechanical_game afterlight_physics_game afterlight_toolbox_game afterlight_state_game afterlight_state_reject_game afterlight_game afterlight_playground_game afterlight_animation_game afterlight_character_game afterlight_game_fast afterlight_game_bad afterlight_game_init_fail afterlight_unload_module)
+        foreach(module afterlight_water_game afterlight_compound_game afterlight_machinery_game afterlight_mechanical_game afterlight_physics_game afterlight_toolbox_game afterlight_state_game afterlight_state_reject_game afterlight_game afterlight_playground_game afterlight_animation_game afterlight_character_game afterlight_game_fast afterlight_game_bad afterlight_game_init_fail afterlight_unload_module)
             if(TARGET ${module})
                 get_target_property(module_sources ${module} SOURCES)
                 set_property(TARGET ${module} PROPERTY SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/engine/src/module_sanitizer.c" ${module_sources})

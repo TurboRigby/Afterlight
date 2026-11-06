@@ -5,6 +5,7 @@
  */
 
 #include "renderer.h"
+#include "water_internal.h"
 #include "log.h"
 #include "vulkan_device_policy.h"
 #include "ui_vulkan.h"
@@ -83,7 +84,7 @@ typedef struct af_swapchain {
     af_vk_post *post;
     VkRenderPass render_pass;
     VkPipelineLayout pipeline_layout;
-    VkPipeline pipeline,blend_pipeline,sky_pipeline;
+    VkPipeline pipeline,blend_pipeline,sky_pipeline,water_attenuation,water_scattering;
     uint32_t image_count;
     VkImage *images;
     VkImageView *views;
@@ -107,6 +108,7 @@ typedef struct af_mesh_asset {
 } af_mesh_asset;
 
 struct af_renderer {
+    af_water water_configs[AF_SCENE_MAX_WATERS];af_transform water_transforms[AF_SCENE_MAX_WATERS];float water_times[AF_SCENE_MAX_WATERS],water_alphas[AF_SCENE_MAX_WATERS];
     SDL_Window *window;
     const af_scene *previous_scene;float interpolation_alpha;
     af_vk_ui *ui;
@@ -516,6 +518,9 @@ static bool create_pipeline(af_renderer *renderer)
     success = vk_ok(vkCreateGraphicsPipelines(renderer->device, VK_NULL_HANDLE, 1, &pipeline_info,
         NULL, &swapchain->pipeline), "vkCreateGraphicsPipelines");
     if(success){depth.depthWriteEnable=VK_FALSE;attachment.blendEnable=VK_TRUE;attachment.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;attachment.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;attachment.colorBlendOp=VK_BLEND_OP_ADD;attachment.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE;attachment.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;attachment.alphaBlendOp=VK_BLEND_OP_ADD;success=vk_ok(vkCreateGraphicsPipelines(renderer->device,VK_NULL_HANDLE,1,&pipeline_info,NULL,&swapchain->blend_pipeline),"blend pipeline");}
+    if(success){attachment.srcColorBlendFactor=VK_BLEND_FACTOR_ZERO;attachment.dstColorBlendFactor=VK_BLEND_FACTOR_SRC_COLOR;success=vk_ok(vkCreateGraphicsPipelines(renderer->device,VK_NULL_HANDLE,1,&pipeline_info,NULL,&swapchain->water_attenuation),"water attenuation pipeline");}
+    if(success){attachment.srcColorBlendFactor=VK_BLEND_FACTOR_ONE;attachment.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;success=vk_ok(vkCreateGraphicsPipelines(renderer->device,VK_NULL_HANDLE,1,&pipeline_info,NULL,&swapchain->water_scattering),"water scattering pipeline");}
+
 cleanup:
     if (fragment_shader) vkDestroyShaderModule(renderer->device, fragment_shader, NULL);
     vkDestroyShaderModule(renderer->device, vertex_shader, NULL);
@@ -673,6 +678,18 @@ bool af_renderer_remove_mesh(af_renderer *renderer, const char *name)
     return true;
 }
 
+static void water_name(af_object_id id,char name[AF_MESH_NAME_CAPACITY]){snprintf(name,AF_MESH_NAME_CAPACITY,"__water_%llu",(unsigned long long)id);}
+bool af_renderer_update_water(af_renderer *r,const af_physics *physics,const af_scene *s,float alpha){
+    const af_water_runtime *runtime=ph_water_runtime(physics);
+    for(size_t i=r->mesh_count;i>0;--i){const char *name=r->meshes[i-1].name;if(strncmp(name,"__water_",8))continue;bool keep=false;for(size_t k=0;k<af_scene_water_count(s);++k){char expected[64];water_name(af_scene_water_at(s,k)->owner,expected);if(!strcmp(name,expected))keep=true;}if(!keep&&!af_renderer_remove_mesh(r,name))return false;}
+    for(size_t i=0;i<af_scene_water_count(s);++i){af_water w=*af_scene_water_at(s,i);const af_scene_object *o=af_scene_get_object(s,w.owner);if(!o)return false;float time=0;bool live=false;
+        for(size_t k=0;runtime&&k<runtime->count;++k)if(runtime->slots[k].config.owner==w.owner&&!memcmp(&runtime->slots[k].config,&w,sizeof(w))&&!memcmp(&runtime->slots[k].transform,&o->transform,sizeof(o->transform))){time=runtime->slots[k].time;live=true;break;}
+        float a=live?alpha:1;char name[64];water_name(w.owner,name);
+        if(find_mesh_index(r,name)<r->mesh_count&&!memcmp(&r->water_configs[i],&w,sizeof(w))&&!memcmp(&r->water_transforms[i],&o->transform,sizeof(o->transform))&&r->water_times[i]==time&&r->water_alphas[i]==a)continue;
+        af_vertex *v=NULL;uint32_t *ix=NULL;af_mesh_data mesh;bool ok=wa_mesh(live?runtime:NULL,s,w.owner,a,&v,&ix,&mesh)&&af_renderer_upload_mesh(r,name,&mesh);free(v);free(ix);if(!ok)return false;
+        r->water_configs[i]=w;r->water_transforms[i]=o->transform;r->water_times[i]=time;r->water_alphas[i]=a;
+    }return true;
+}
 static VkFormat select_depth_format(af_renderer *renderer)
 {
     const VkFormat formats[] = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT};
@@ -745,6 +762,8 @@ static void destroy_swapchain(af_renderer *renderer)
         if (swapchain->present_ready && swapchain->present_ready[i])
             vkDestroySemaphore(renderer->device, swapchain->present_ready[i], NULL);
     }
+    if(swapchain->water_attenuation)vkDestroyPipeline(renderer->device,swapchain->water_attenuation,NULL);
+    if(swapchain->water_scattering)vkDestroyPipeline(renderer->device,swapchain->water_scattering,NULL);
     if(swapchain->blend_pipeline)vkDestroyPipeline(renderer->device,swapchain->blend_pipeline,NULL);
     if(swapchain->sky_pipeline)vkDestroyPipeline(renderer->device,swapchain->sky_pipeline,NULL);
     if (swapchain->pipeline) vkDestroyPipeline(renderer->device, swapchain->pipeline, NULL);
@@ -1130,8 +1149,10 @@ af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scen
     af_object_id selected = AF_OBJECT_NONE;
     for (size_t i = 0; i < af_scene_object_count(scene); ++i) {
         const af_scene_object *object = af_scene_object_at(scene,i);
-        if (!af_scene_object_visible(scene,object->id)||!strcmp(object->mesh,"__node")) continue;
-        size_t index = find_mesh_index(renderer,object->mesh);
+        const af_water *water=af_scene_get_water(scene,object->id);if(water&&!water->enabled)continue;
+        if (!af_scene_object_visible(scene,object->id)||(!water&&!strcmp(object->mesh,"__node"))) continue;
+        char name[64];if(water)water_name(object->id,name);
+        size_t index = find_mesh_index(renderer,water?name:object->mesh);
         if (index == renderer->mesh_count) continue;
         af_mat4 inverse;
         af_mat4 world;
@@ -1363,14 +1384,16 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         vkCmdSetViewport(frame->command, 0, 1, &viewport);
         vkCmdSetScissor(frame->command, 0, 1, &scissor);
         af_blend_draw *blended=object_count?malloc(object_count*sizeof(*blended)):NULL;size_t blend_count=0;if(object_count&&!blended)return false;
-        for(size_t i=0;i<object_count;++i){const af_scene_object *o=af_scene_object_at(scene,i);if(o->material.alpha_mode!=AF_ALPHA_BLEND)continue;af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;af_vec3 position={world.elements[12],world.elements[13],world.elements[14]};blended[blend_count++]=(af_blend_draw){i,af_vec3_dot(af_vec3_sub(position,camera->position),af_camera_forward(camera))};}if(blend_count>1)qsort(blended,blend_count,sizeof(*blended),blend_compare);
+        for(size_t i=0;i<object_count;++i){const af_scene_object *o=af_scene_object_at(scene,i);if(o->material.alpha_mode!=AF_ALPHA_BLEND&&!af_scene_get_water(scene,o->id))continue;af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;af_vec3 position={world.elements[12],world.elements[13],world.elements[14]};blended[blend_count++]=(af_blend_draw){i,af_vec3_dot(af_vec3_sub(position,camera->position),af_camera_forward(camera))};}if(blend_count>1)qsort(blended,blend_count,sizeof(*blended),blend_compare);
         for(unsigned alpha_pass=0;alpha_pass<2;++alpha_pass){vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,alpha_pass?renderer->swapchain.blend_pipeline:renderer->swapchain.pipeline);
         for (size_t order = 0; order < (alpha_pass?blend_count:object_count); ++order) {size_t i=alpha_pass?blended[order].index:order;
 
             const af_scene_object *object = af_scene_object_at(scene, i);
-            if(!alpha_pass&&object->material.alpha_mode==AF_ALPHA_BLEND)continue;
-            if (!af_scene_object_visible(scene,object->id)||!strcmp(object->mesh,"__node")) continue;
-            size_t index = find_mesh_index(renderer, object->mesh);
+            const af_water *water=af_scene_get_water(scene,object->id);if(water&&!water->enabled)continue;
+            if(!alpha_pass&&(object->material.alpha_mode==AF_ALPHA_BLEND||water))continue;
+            if (!af_scene_object_visible(scene,object->id)||(!water&&!strcmp(object->mesh,"__node"))) continue;
+            char water_mesh[64];if(water)water_name(object->id,water_mesh);
+            size_t index = find_mesh_index(renderer, water?water_mesh:object->mesh);
             if (index == renderer->mesh_count) {
                 ++missing_meshes;
                 continue;
@@ -1380,6 +1403,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
             af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;
             struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{(float)((object->material.unlit?1u:0u)|((uint32_t)object->material.alpha_mode<<1u)|((uint32_t)lroundf(object->material.alpha_cutoff*65535)<<3u)),object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,(float)skin_base(renderer,object->id,mesh)},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
+            if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(2u<<1u)),1,1,0};transform.surface=(af_vec4){water->roughness,0,water->depth,0};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
             _Static_assert(sizeof(transform)==128,"Portable draw push constant limit");
             af_vk_texture *texture=renderer->white;
             if(object->material.texture[0]){bool found=false;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;found=true;break;}
@@ -1397,6 +1421,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             vkCmdPushConstants(frame->command,renderer->swapchain.pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(transform),&transform);
             vkCmdBindVertexBuffers(frame->command, 0, 1, &mesh->vertices.handle, &offset);
             vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
+            if(water){vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,renderer->swapchain.water_attenuation);transform.params.x+=(float)(1u<<20u);vkCmdPushConstants(frame->command,renderer->swapchain.pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(transform),&transform);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++draw_calls;transform.params.x-=(float)(1u<<20u);vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,renderer->swapchain.water_scattering);vkCmdPushConstants(frame->command,renderer->swapchain.pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(transform),&transform);}
+            else vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,alpha_pass?renderer->swapchain.blend_pipeline:renderer->swapchain.pipeline);
             vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
             ++draw_calls;
         }}free(blended);

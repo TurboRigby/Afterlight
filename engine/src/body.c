@@ -35,7 +35,7 @@ bool af_rigid_body_valid(af_rigid_body b) {
 }
 bool af_scene_set_body(af_scene *scene, af_object_id id, af_rigid_body body) {
     af_scene_object *o = (af_scene_object *)af_scene_get_object(scene, id);
-    if (!o || !af_rigid_body_valid(body)||(body.enabled&&body.type!=AF_BODY_STATIC&&o->collider.type==AF_COLLIDER_MESH))
+    if (!o || (body.enabled&&af_scene_get_water(scene,id)) || !af_rigid_body_valid(body)||(body.enabled&&body.type!=AF_BODY_STATIC&&o->collider.type==AF_COLLIDER_MESH))
         return false;
     if (body.enabled && body.type == AF_BODY_DYNAMIC &&
         (o->parent || !o->collider.enabled || o->collider.trigger ||
