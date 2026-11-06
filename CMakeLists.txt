@@ -465,6 +465,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_stress_test tests/physics_stress.c)
+    target_include_directories(afterlight_physics_stress_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_stress_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_stress_test)
+    add_test(NAME afterlight.physics_stress COMMAND afterlight_physics_stress_test )
     add_executable(afterlight_physics_timing_test tests/physics_timing.c)
     target_include_directories(afterlight_physics_timing_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_timing_test PRIVATE Afterlight::Engine)
