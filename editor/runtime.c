@@ -22,6 +22,7 @@ static bool compatible(const af_game_module *api){
 bool ed_runtime_start(ed_runtime *r,const af_scene *source,af_engine *engine,const af_game_module *api){
     if(r->playing)return false;
     if(!compatible(api)){snprintf(r->status,sizeof(r->status),"Incompatible C game ABI or invalid callbacks.");return false;}
+    if(!af_physics_validate_scene(source,r->status,sizeof(r->status)))return false;
     af_scene *scene=af_scene_clone(source);void *state=calloc(1,api->state_size?api->state_size:1);
     if(!scene||!state){af_scene_destroy(scene);free(state);snprintf(r->status,sizeof(r->status),"Not enough memory to enter Play.");return false;}
     af_game_host host=af_game_host_create(scene,engine);host.runtime_context=r;host.project_directory=r->project_directory;host.request_scene=request_scene;

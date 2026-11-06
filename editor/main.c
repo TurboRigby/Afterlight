@@ -63,7 +63,7 @@ typedef struct editor {
     bool free_camera,resume_game_capture,maximize_play;
     bool invalid_name;
     bool failed;
-    bool show_performance,show_assets,show_colliders,show_input,show_prefab;char prefab_path[4096];char input_path[4096];
+    bool show_performance,show_assets,show_colliders,show_input,show_prefab,show_physics;char prefab_path[4096];char input_path[4096];
     bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
     bool show_animation,animation_preview,show_skeleton;af_object_id animation_target;float animation_blend;
     const char *animation_test_path;unsigned animation_test_step;uint64_t animation_test_revision;double animation_test_time;af_rect animation_buttons[3];
@@ -477,6 +477,12 @@ static void collider_controls(editor *app,af_scene_object object){
     }
     if(memcmp(&value,&before,sizeof(value)))ed_document_collider(&app->document,value);
 }
+static void body_controls(editor *app,af_scene_object object){struct nk_context *ctx=&app->gui.context;af_rigid_body body=object.body;bool changed=false;label(ctx,"Rigid body",28);nk_layout_row_dynamic(ctx,26,1);nk_bool enabled=body.enabled;if(nk_checkbox_label(ctx,"Enable physics",&enabled)){body.enabled=enabled!=0;changed=true;}if(body.enabled){static const char *types[]={"Static","Kinematic","Dynamic"};nk_layout_row_dynamic(ctx,28,1);int type=nk_combo(ctx,types,3,(int)body.type,26,nk_vec2(280,150));if(type!=(int)body.type){body.type=(af_body_type)type;changed=true;}
+    float *values[]={&body.mass,&body.friction,&body.restitution,&body.linear_damping,&body.angular_damping,&body.gravity_scale};const char *names[]={"Mass","Friction","Bounce","Linear damping","Angular damping","Gravity scale"};float lo[]={.001f,0,0,0,0,-10},hi[]={10000,2,1,20,20,10};for(unsigned i=0;i<6;++i){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,names[i],lo[i],values[i],hi[i],.1f,.01f)!=0;}
+    nk_layout_row_dynamic(ctx,26,1);nk_bool sleep=body.allow_sleep;if(nk_checkbox_label(ctx,"Allow sleeping",&sleep)){body.allow_sleep=sleep!=0;changed=true;}nk_layout_row_dynamic(ctx,26,1);nk_bool ccd=body.continuous;if(nk_checkbox_label(ctx,"Continuous movement",&ccd)){body.continuous=ccd!=0;changed=true;}
+    float *velocity[]={&body.velocity.x,&body.velocity.y,&body.velocity.z,&body.angular_velocity.x,&body.angular_velocity.y,&body.angular_velocity.z};const char *axes[]={"Velocity X","Velocity Y","Velocity Z","Spin X","Spin Y","Spin Z"};for(unsigned i=0;i<6;++i){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,axes[i],i<3?-100:-50,velocity[i],i<3?100:50,.25f,.025f)!=0;}
+    if(body.type==AF_BODY_KINEMATIC)label(ctx,"Move kinematic poses from C gameplay.",24);
+}if(changed)ed_document_body(&app->document,body);if(app->runtime.playing){af_physics_state state=af_engine_body_state(app->engine,object.id);if(state.available){char text[128];snprintf(text,sizeof(text),"%s | speed %.3f | spin %.3f",state.sleeping?"Sleeping":"Awake",af_vec3_length(state.velocity),af_vec3_length(state.angular_velocity));label(ctx,text,24);}}}
 static void gameplay_controls(editor *app,af_scene_object object)
 {
     struct nk_context *ctx=&app->gui.context;af_gameplay_component g=object.gameplay;bool changed=false;
@@ -576,7 +582,7 @@ static void inspector(editor *app,float width,float height)
                     if(nk_combo_item_label(context,text,NK_TEXT_LEFT))ed_document_parent(&app->document,candidate.id);
                 }nk_combo_end(context);
             }
-            collider_controls(app,object);
+            collider_controls(app,object);body_controls(app,object);
             gameplay_controls(app,object);
             label(context,"Material",30);af_material material=object.material;
             nk_layout_row_dynamic(context,80,1);thumbnail_widget(app,NULL,&material);
@@ -700,6 +706,11 @@ static void draw_skeleton(editor *app){
             if(bones[i].has_parent&&ed_project(&camera,r,bones[i].parent_position,&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,2,nk_rgb(255,194,84));nk_fill_circle(canvas,nk_rect(a.x-3,a.y-3,6,6),nk_rgb(130,240,235));}
     }nk_end(ctx);nk_style_pop_style_item(ctx);
 }
+static void draw_physics(editor *app){if(!app->show_physics)return;struct nk_context *ctx=&app->gui.context;af_rect r=app->viewport;af_camera camera=app->runtime.playing?af_engine_get_camera(app->engine):app->camera;const af_scene *scene=app->runtime.playing?app->runtime.scene:app->document.scene;
+    nk_style_push_style_item(ctx,&ctx->style.window.fixed_background,nk_style_item_color(nk_rgba(0,0,0,0)));if(nk_begin(ctx,"Physics debug",nk_rect(r.x,r.y,r.width,r.height),NK_WINDOW_NO_INPUT|NK_WINDOW_NO_SCROLLBAR|NK_WINDOW_BACKGROUND)){struct nk_command_buffer *canvas=nk_window_get_canvas(ctx);
+        for(size_t i=0;i<af_scene_object_count(scene);++i){const af_scene_object *o=af_scene_object_at(scene,i);if(!o->body.enabled||o->body.type!=AF_BODY_DYNAMIC)continue;af_physics_state state=af_engine_body_state(app->engine,o->id);af_vec3 center=state.available?state.position:o->transform.position;af_vec2 a,b;struct nk_color color=state.sleeping?nk_rgb(110,220,230):nk_rgb(255,180,80);if(ed_project(&camera,r,center,&a)){nk_stroke_circle(canvas,nk_rect(a.x-4,a.y-4,8,8),2,color);if(state.available&&ed_project(&camera,r,af_vec3_add(center,af_vec3_scale(state.velocity,.2f)),&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,2,color);}}
+        af_physics_contact contacts[1024];size_t count=af_engine_physics_contacts(app->engine,contacts,1024);for(size_t i=0;i<count&&i<1024;++i){af_vec2 a,b;if(ed_project(&camera,r,contacts[i].point,&a)){nk_fill_circle(canvas,nk_rect(a.x-2,a.y-2,4,4),nk_rgb(255,110,140));if(ed_project(&camera,r,af_vec3_add(contacts[i].point,af_vec3_scale(contacts[i].normal,.3f)),&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,1,nk_rgb(255,110,140));}}
+    }nk_end(ctx);nk_style_pop_style_item(ctx);}
 static void draw_lights(editor *app){
     if(app->runtime.playing)return;struct nk_context *ctx=&app->gui.context;af_rect r=app->viewport;
     nk_style_push_style_item(ctx,&ctx->style.window.fixed_background,nk_style_item_color(nk_rgba(0,0,0,0)));
@@ -739,6 +750,7 @@ static void performance_panel(editor *app,float width,float height)
         snprintf(text,sizeof(text),"%.1f FPS / %.2f ms (paced)",stats.frames_per_second,stats.average_frame_ms);label(ctx,text,26);
         snprintf(text,sizeof(text),"CPU events %.3f ms",stats.cpu_events_ms);label(ctx,text,24);
         snprintf(text,sizeof(text),"CPU update %.3f ms",stats.cpu_update_ms);label(ctx,text,24);
+        af_physics_stats physics=af_engine_physics_stats(app->engine);snprintf(text,sizeof(text),"Physics %.3f ms | dynamic %zu | sleeping %zu",stats.cpu_physics_ms,physics.dynamic_bodies,physics.sleeping);label(ctx,text,24);snprintf(text,sizeof(text),"Contacts %zu | pairs %zu | substeps %u | CCD %u",physics.contacts,physics.broadphase_pairs,physics.substeps,physics.ccd_hits);label(ctx,text,24);if(app->runtime.playing&&nk_button_label(ctx,"Wake selected body"))af_engine_wake_body(app->engine,app->document.selection);
         snprintf(text,sizeof(text),"CPU animation %.3f ms",stats.cpu_animation_ms);label(ctx,text,24);
         snprintf(text,sizeof(text),"CPU submit/wait %.3f ms",stats.cpu_render_ms);label(ctx,text,24);
         snprintf(text,sizeof(text),"Shadow passes %u / reused %u",stats.shadow_passes,stats.shadow_cached_passes);label(ctx,text,24);
@@ -938,18 +950,19 @@ static void build_ui(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
     ed_thumbnails_begin(&app->thumbnails);ed_thumbnails_poll(&app->thumbnails,app->engine);
-    draw_colliders(app);draw_skeleton(app);draw_lights(app);if(!app->animation_preview)draw_gizmo(app);
+    draw_colliders(app);draw_physics(app);draw_skeleton(app);draw_lights(app);if(!app->animation_preview)draw_gizmo(app);
     toolbar(app,width);
     if(!app->runtime.playing||!app->maximize_play){object_list(app,height);inspector(app,width,height);}
     nk_style_push_vec2(context,&context->style.window.padding,nk_vec2(14,5));
     if(!app->runtime.playing||!app->maximize_play){
     if(nk_begin(context,"Viewport tools",nk_rect(252,64,width-586,40),panel_flags(app)|NK_WINDOW_NO_SCROLLBAR)){
-        nk_layout_row_dynamic(context,22,9);
+        nk_layout_row_dynamic(context,22,10);
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_MOVE?"[Move]":"Move"))app->gizmo.mode=ED_GIZMO_MOVE;
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_ROTATE?"[Rotate]":"Rotate"))app->gizmo.mode=ED_GIZMO_ROTATE;
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_SCALE?"[Scale]":"Scale"))app->gizmo.mode=ED_GIZMO_SCALE;
         nk_bool snap=app->gizmo.snap;nk_checkbox_label(context,"Snap",&snap);app->gizmo.snap=snap!=0;
         if(nk_button_label(context,app->show_colliders?"[Colliders]":"Colliders"))app->show_colliders=!app->show_colliders;
+        if(nk_button_label(context,app->show_physics?"[Physics]":"Physics"))app->show_physics=!app->show_physics;
         if(nk_button_label(context,"Prefabs"))app->show_prefab=!app->show_prefab;
         if(nk_button_label(context,"Input"))app->show_input=!app->show_input;
         if(nk_button_label(context,"Reset view"))reset_camera(app);

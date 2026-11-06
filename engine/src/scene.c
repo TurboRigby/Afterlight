@@ -99,6 +99,7 @@ bool af_scene_set_object_transform(af_scene *scene, af_object_id id, af_transfor
     for (size_t i = 0; i < sizeof(vectors)/sizeof(vectors[0]); ++i)
         if (!isfinite(vectors[i].x) || !isfinite(vectors[i].y) || !isfinite(vectors[i].z)) return false;
     if (!object) return false;
+    af_transform previous=object->transform;object->transform=transform;if(!af_scene_set_body(scene,id,object->body)){object->transform=previous;return false;}
     object->transform = transform;
     return true;
 }
@@ -178,7 +179,7 @@ bool af_scene_is_descendant(const af_scene *scene,af_object_id id,af_object_id a
 }
 bool af_scene_set_parent(af_scene *scene,af_object_id child,af_object_id parent){
     af_scene_object *object=find_object(scene,child);
-    if(!object||child==parent||(parent&&!find_object(scene,parent))||(parent&&af_scene_is_descendant(scene,parent,child)))return false;
+    if(!object||(parent&&object->body.enabled&&object->body.type==AF_BODY_DYNAMIC)||child==parent||(parent&&!find_object(scene,parent))||(parent&&af_scene_is_descendant(scene,parent,child)))return false;
     af_object_id previous=object->parent;object->parent=parent;
     for(size_t i=0;i<scene->count;++i){const af_scene_object *node=&scene->objects[i];unsigned depth=0;
         while(node->parent){if(++depth>=AF_SCENE_MAX_DEPTH||(node=find_object(scene,node->parent))==NULL){object->parent=previous;return false;}}
@@ -252,7 +253,7 @@ bool af_scene_interpolated_world_matrix(const af_scene *scene,const af_scene *pr
     }return false;
 }
 
-bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider collider){af_scene_object *object=find_object(scene,id);if(!object||!af_collider_valid(collider))return false;object->collider=collider;return true;}
+bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider collider){af_scene_object *object=find_object(scene,id);if(!object||!af_collider_valid(collider))return false;af_collider previous=object->collider;object->collider=collider;if(!af_scene_set_body(scene,id,object->body)){object->collider=previous;return false;}return true;}
 
 af_animation_component af_animation_component_default(void){return (af_animation_component){.speed=1,.loop=true};}
 af_model_binding af_model_binding_default(void){return (af_model_binding){.skin=-1};}

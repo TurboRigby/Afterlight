@@ -12,6 +12,7 @@ typedef struct af_physics_stats {size_t bodies,dynamic_bodies,kinematic_bodies,s
 af_physics *af_physics_create(void);
 void af_physics_destroy(af_physics*);
 void af_physics_reset(af_physics*);
+bool af_physics_validate_scene(const af_scene*,char *error,size_t capacity);
 bool af_physics_active(const af_scene*);
 /* Fixed ticks <= .1 s; internal substeps <=1/240 s. Dynamic roots are updated
    in place, including their runtime velocity fields for cloning/hot reload. */

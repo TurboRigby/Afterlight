@@ -60,5 +60,6 @@ bool ed_document_local_light(ed_document *document,size_t index,af_local_light l
 bool ed_document_remove_light(ed_document *document,size_t index);
 bool ed_document_create_mesh_object(ed_document *document,const char *mesh);
 bool ed_document_gameplay(ed_document *document,af_gameplay_component component);
+bool ed_document_body(ed_document*,af_rigid_body);
 bool ed_document_collider(ed_document *document,af_collider collider);
 #endif

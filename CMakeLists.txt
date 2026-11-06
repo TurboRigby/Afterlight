@@ -448,6 +448,10 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_editor_test tests/physics_editor.c)
+    target_link_libraries(afterlight_physics_editor_test PRIVATE afterlight_editor_document)
+    afterlight_warnings(afterlight_physics_editor_test)
+    add_test(NAME afterlight.physics_editor COMMAND afterlight_physics_editor_test)
     add_executable(afterlight_physics_interaction_test tests/physics_interaction.c)
     target_include_directories(afterlight_physics_interaction_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_interaction_test PRIVATE Afterlight::Engine)

@@ -64,3 +64,13 @@ so falling objects meet a kinematic obstruction; the exact capsule controller
 still handles player movement. This is one-way kinematic character interaction,
 not a dynamic/ragdoll character. CPU tests cover pushing, holding, throwing and
 an object settling on the player proxy.
+
+## Editor workflow
+
+The Inspector adds undoable rigid-body settings and initial velocity/spin. Dynamic
+body edits reject incompatible parenting, collider changes or negative scale.
+Physics debug overlays draw awake/sleeping centers, velocity vectors and contact
+points/normals. Performance shows CPU time, bodies, sleep, contacts, broadphase
+pairs, substeps and CCD hits, with a selected-body wake action. Play pause and
+single-step use the same fixed clock as physics; Edit scenes remain authored data.
+Play and prefab spawning preflight body/shape limits before entering simulation.

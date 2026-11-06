@@ -48,3 +48,5 @@ bool af_physics_step(af_physics *p,af_scene *s,float dt){if(!p||!s||!isfinite(dt
     for(size_t i=0;i<p->count;++i){ph_body *b=&p->bodies[i];b->force=b->torque=(af_vec3){0};if(b->config.type==AF_BODY_KINEMATIC)++p->stats.kinematic_bodies;if(!b->inv_mass)continue;++p->stats.dynamic_bodies;if(b->sleeping)++p->stats.sleeping;af_scene_object *o=(af_scene_object*)af_scene_object_at(s,b->scene_index);o->transform.position=b->p;o->transform.rotation=euler(b->q);o->body.velocity=b->v;o->body.angular_velocity=b->w;b->published=o->transform;b->config=o->body;}
     return true;
 }
+
+bool af_physics_validate_scene(const af_scene *scene,char *error,size_t capacity){if(!scene)return false;if(!af_physics_active(scene))return true;af_physics *test=af_physics_create();if(!test)return false;bool ok=ph_sync(test,(af_scene*)scene,0);if(!ok&&error&&capacity)snprintf(error,capacity,"%s",test->error);af_physics_destroy(test);return ok;}
