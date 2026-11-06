@@ -69,12 +69,12 @@ static void queue_events(animation_instance *i,const af_animation_events *events
 bool af_animation_runtime_events(af_animation_runtime *r,af_object_id object,af_animation_events *out){animation_instance *i=instance(r,object);if(!i||!out)return false;*out=i->events;i->events=(af_animation_events){0};return true;}
 bool af_animation_runtime_root_motion(af_animation_runtime *r,af_object_id object,uint32_t node,bool enabled){
     animation_instance *i=instance(r,object);if(!i)return false;animation_asset *a=asset(r,i->configuration.asset);if(node>=a->file.node_count)return false;
-    if(!i->locomotion.ready&&!af_locomotion_player_init(&i->locomotion,&a->file))return false;i->locomotion.root_node=node;i->locomotion.root_motion=enabled;return true;
+    if(!i->locomotion.ready){const af_scene_object *root=af_scene_get_object(r->scene,i->root);if(!(root->rig.enabled?af_locomotion_player_init_rig(&i->locomotion,&a->file,root->rig):af_locomotion_player_init(&i->locomotion,&a->file)))return false;}i->locomotion.root_node=node;i->locomotion.root_motion=enabled;return true;
 }
 bool af_animation_runtime_root_delta(af_animation_runtime *r,af_object_id object,af_vec3 *out){animation_instance *i=instance(r,object);if(!i||!out||!i->driven)return false;*out=i->locomotion.root_delta;return true;}
 bool af_animation_runtime_locomotion(af_animation_runtime *r,af_object_id object,af_locomotion_input input,float dt,af_locomotion *status){
     animation_instance *i=instance(r,object);if(!i)return false;animation_asset *a=asset(r,i->configuration.asset);
-    if(!i->locomotion.ready&&!af_locomotion_player_init(&i->locomotion,&a->file))return false;
+    if(!i->locomotion.ready){const af_scene_object *root=af_scene_get_object(r->scene,i->root);if(!(root->rig.enabled?af_locomotion_player_init_rig(&i->locomotion,&a->file,root->rig):af_locomotion_player_init(&i->locomotion,&a->file)))return false;}
     if(!af_locomotion_player_step(&i->locomotion,&a->file,input,dt))return false;i->driven=true;queue_events(i,&i->locomotion.events);if(status)*status=i->locomotion.motion;return true;
 }
 bool af_animation_runtime_play(af_animation_runtime *r,af_object_id object,size_t clip,float blend){animation_instance *i=instance(r,object);if(i){i->driven=false;i->events=(af_animation_events){0};}return i&&af_animation_player_play(&i->player,&asset(r,i->configuration.asset)->file,clip,blend);}

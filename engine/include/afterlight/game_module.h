@@ -8,7 +8,7 @@
 #define AFTERLIGHT_GAME_MODULE_H
 #include <afterlight/afterlight.h>
 #include <afterlight/third_person.h>
-#define AF_GAME_ABI_VERSION 10u
+#define AF_GAME_ABI_VERSION 11u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
 #define AF_GAME_EXPORT __declspec(dllexport)

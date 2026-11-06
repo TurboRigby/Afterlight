@@ -8,7 +8,7 @@
 #include <math.h>
 typedef struct platform_state {af_object_id id;af_transform base;} platform_state;
 typedef struct character_state {
-    af_third_person player;af_third_person_config third;af_object_id actor,crowd[63];unsigned crowd_count;bool root_motion;
+    af_third_person player;af_third_person_config third;float rig_scale;af_character_rig rig;af_object_id actor,crowd[63];unsigned crowd_count;bool root_motion;
     af_character_config config;
     af_camera camera,initial_camera;
     af_gameplay_status status;
@@ -46,11 +46,11 @@ static bool init(void *memory,const af_game_host *host){
     s->spawn=body->transform.position;const af_scene_object *spawn=host->get_object(host->scene,body->gameplay.player.spawn);af_mat4 world;
     if(body->gameplay.player.spawn&&(!spawn||spawn->gameplay.role!=AF_ROLE_SPAWN)){host->log("The player's spawn reference must select a Spawn component.");return false;}
     if(spawn&&host->world_matrix(host->scene,spawn->id,&world))s->spawn=(af_vec3){world.elements[12],world.elements[13],world.elements[14]};
-    s->checkpoint=s->spawn;s->player=host->third_person_default(s->spawn);s->third=host->third_person_config_default();s->third.controller=s->config;s->third.walk_speed=1.3f;s->third.run_speed=3.25f;s->third.camera_distance=5.5f;
+    s->checkpoint=s->spawn;s->player=host->third_person_default(s->spawn);s->third=host->third_person_config_default();s->third.controller=s->config;const af_scene_object *actor=host->get_object(host->scene,s->actor);if(!actor||!actor->rig.enabled||actor->parent!=s->body)return false;s->rig=actor->rig;s->rig_scale=actor->transform.scale.x;if(s->rig_scale<=0||fabsf(s->rig_scale-actor->transform.scale.y)>.0001f||fabsf(s->rig_scale-actor->transform.scale.z)>.0001f)return false;s->third.walk_speed=s->rig.walk_speed*s->rig_scale;s->third.run_speed=s->rig.run_speed*s->rig_scale;s->third.camera_distance=s->rig.camera_distance;s->third.camera_height=s->rig.camera_height;s->third.turn_speed=s->rig.turn_speed;s->third.mouse_sensitivity=s->sensitivity;s->root_motion=s->rig.root_motion;
     if(!host->game_camera(host->scene,&s->camera))return false;s->initial_camera=s->camera;s->initial_camera.pitch=-.25f;
     s->player.orbit=s->initial_camera;s->player.orbit.pitch=-.25f;
-    if(!s->actor||!host->locomotion_root_motion(host->engine,s->actor,10,false)||!host->locomotion_step(host->engine,s->actor,(af_locomotion_input){0},1.f/60,NULL))return false;
-    for(unsigned i=0;i<s->crowd_count;++i)if(!host->locomotion_root_motion(host->engine,s->crowd[i],10,false))return false;
+    if(!s->actor||!host->locomotion_root_motion(host->engine,s->actor,s->rig.root_node,s->root_motion)||!host->locomotion_step(host->engine,s->actor,(af_locomotion_input){0},1.f/60,NULL))return false;
+    for(unsigned i=0;i<s->crowd_count;++i)if(!host->locomotion_root_motion(host->engine,s->crowd[i],host->get_object(host->scene,s->crowd[i])->rig.root_node,false))return false;
     present(s,host);host->reset_interpolation(host->engine);host->capture_mouse(host->engine,true);host->log("Character demo: WASD walk, Shift run, Space jump, E root motion, R restart, Escape release.");return true;
 }
 static void frame(void *memory,const af_game_host *host,double delta){
@@ -77,15 +77,15 @@ static void update(void *memory,const af_game_host *host,double delta){
     if(s->status.running&&!s->status.finished)s->status.elapsed+=delta;
     af_query_filter filter={.ignore=s->body,.mask=UINT32_MAX};
     bool grounded=s->player.body.grounded;
-    if(controls&&host->key_pressed(host,AF_KEY_E)){s->root_motion=!s->root_motion;host->locomotion_root_motion(host->engine,s->actor,10,s->root_motion);host->log(s->root_motion?"Root motion enabled.":"Velocity movement enabled.");}
+    if(controls&&host->key_pressed(host,AF_KEY_E)){s->root_motion=!s->root_motion;host->locomotion_root_motion(host->engine,s->actor,s->rig.root_node,s->root_motion);host->log(s->root_motion?"Root motion enabled.":"Velocity movement enabled.");}
     af_locomotion_input animation={.speed=0,.vertical_speed=s->player.body.velocity.y,.grounded=s->player.body.grounded};
-    if(s->root_motion){float amount=fminf(1,sqrtf(input.move.x*input.move.x+input.move.y*input.move.y));animation.speed=amount*(input.run?5:2);
+    if(s->root_motion){float amount=fminf(1,sqrtf(input.move.x*input.move.x+input.move.y*input.move.y));animation.speed=amount*(input.run?s->rig.run_speed:s->rig.walk_speed);
         if(input.jump&&animation.grounded){animation.grounded=false;animation.vertical_speed=s->config.jump_speed;}
-        host->locomotion_step(host->engine,s->actor,animation,(float)delta,NULL);af_vec3 motion={0};host->locomotion_root_delta(host->engine,s->actor,&motion);motion.x*=.65f;motion.z*=.65f;
+        host->locomotion_step(host->engine,s->actor,animation,(float)delta,NULL);af_vec3 motion={0};host->locomotion_root_delta(host->engine,s->actor,&motion);motion.x*=s->rig_scale;motion.z*=s->rig_scale;
         if(!host->third_person_step_root_motion(host->scene,&s->player,s->third,input,motion,(float)delta,filter))host->log("Root-motion step rejected.");
     }else{
         if(!host->third_person_step(host->scene,&s->player,s->third,input,(float)delta,filter))host->log("Character step rejected.");
-        animation=(af_locomotion_input){.speed=sqrtf(s->player.body.velocity.x*s->player.body.velocity.x+s->player.body.velocity.z*s->player.body.velocity.z)/.65f,.vertical_speed=s->player.body.velocity.y,.grounded=s->player.body.grounded};
+        animation=(af_locomotion_input){.speed=sqrtf(s->player.body.velocity.x*s->player.body.velocity.x+s->player.body.velocity.z*s->player.body.velocity.z)/s->rig_scale,.vertical_speed=s->player.body.velocity.y,.grounded=s->player.body.grounded};
         host->locomotion_step(host->engine,s->actor,animation,(float)delta,NULL);
     }
     if(grounded&&input.jump&&!s->player.body.grounded)host->play_sound(host->engine,"jump",.45f);

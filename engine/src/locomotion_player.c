@@ -4,9 +4,13 @@
 #include <stdlib.h>
 #include <string.h>
 bool af_locomotion_player_init(af_locomotion_player *p,const af_animation_file *f){
-    if(!p||!f||!f->node_count||f->node_count>AF_ANIMATION_MAX_NODES)return false;
-    af_locomotion_player next={.motion=af_locomotion_default(),.node_count=f->node_count,.weights={1,0,0},.root_node=UINT32_MAX};
-    for(size_t i=0;i<5;++i){next.clips[i]=SIZE_MAX;for(size_t j=0;j<f->clip_count;++j)if(!strcmp(af_locomotion_state_name((af_locomotion_state)i),f->clips[j].name)){next.clips[i]=j;break;}if(next.clips[i]==SIZE_MAX||f->clips[next.clips[i]].duration<=0)return false;}
+    if(!f)return false;af_character_rig rig=af_character_rig_default();for(unsigned i=0;i<5;++i){bool found=false;for(size_t j=0;j<f->clip_count;++j)if(!strcmp(af_locomotion_state_name((af_locomotion_state)i),f->clips[j].name)){rig.clips[i]=(uint32_t)j;found=true;break;}if(!found)return false;}
+    bool ok=af_locomotion_player_init_rig(p,f,rig);if(ok)p->root_node=UINT32_MAX;return ok;
+}
+bool af_locomotion_player_init_rig(af_locomotion_player *p,const af_animation_file *f,af_character_rig rig){
+    if(!p||!f||!af_character_rig_valid(rig)||rig.root_node>=f->node_count||!f->node_count||f->node_count>AF_ANIMATION_MAX_NODES)return false;
+    af_locomotion_player next={.motion=af_locomotion_default(),.node_count=f->node_count,.weights={1,0,0},.root_node=rig.root_node,.root_motion=rig.root_motion};next.motion.walk_speed=rig.walk_speed;next.motion.run_speed=rig.run_speed;
+    for(unsigned i=0;i<5;++i){next.clips[i]=rig.clips[i];if(next.clips[i]>=f->clip_count||f->clips[next.clips[i]].duration<=0)return false;}
     next.scratch=calloc(f->node_count,sizeof(*next.scratch));next.frozen=calloc(f->node_count,sizeof(*next.frozen));next.capture=calloc(f->node_count,sizeof(*next.capture));if(!next.scratch||!next.frozen||!next.capture){free(next.scratch);free(next.frozen);free(next.capture);return false;}
     memcpy(next.frozen,f->bind_pose,f->node_count*sizeof(*next.frozen));next.ready=true;*p=next;return true;
 }

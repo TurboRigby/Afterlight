@@ -52,6 +52,7 @@ add_library(afterlight STATIC
     engine/src/gltf.c
     engine/src/audio.c
     engine/src/gameplay.c
+    engine/src/rig.c
     engine/src/project.c
     engine/src/game_host.c
     engine/src/character.c

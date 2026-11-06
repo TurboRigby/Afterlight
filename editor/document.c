@@ -331,3 +331,5 @@ bool ed_document_animation(ed_document *d,af_object_id id,af_animation_component
     const af_scene_object *o=af_scene_get_object(d->scene,id);if(!o||!memchr(component.asset,0,sizeof(component.asset)))return false;if(!strcmp(o->animation.asset,component.asset)&&o->animation.clip==component.clip&&o->animation.speed==component.speed&&o->animation.loop==component.loop&&o->animation.autoplay==component.autoplay)return true;
     af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_object_animation(next,id,component)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
 }
+
+bool ed_document_rig(ed_document *d,af_object_id id,af_character_rig rig){const af_scene_object *o=af_scene_get_object(d->scene,id);if(!o||!af_character_rig_valid(rig))return false;if(!memcmp(&o->rig,&rig,sizeof(rig)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_character_rig(next,id,rig)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);}

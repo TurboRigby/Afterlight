@@ -873,6 +873,14 @@ static void animation_panel(editor *app,float width,float height)
         if(target&&target->animation.asset[0]){
             af_animation_component component=target->animation;af_object_id root=target->id;af_animation_status status=af_engine_animation_status(app->engine,root);bool changed=false;
             label(ctx,component.asset,24);
+            if(!app->runtime.playing){af_character_rig rig=target->rig;nk_layout_row_dynamic(ctx,26,1);nk_bool enabled=rig.enabled;bool rig_changed=nk_checkbox_label(ctx,"Character animation rig",&enabled)!=0;rig.enabled=enabled!=0;
+                if(rig.enabled){for(unsigned state=0;state<5;++state){char title[100];snprintf(title,sizeof(title),"%s clip",af_locomotion_state_name((af_locomotion_state)state));label(ctx,title,22);nk_layout_row_dynamic(ctx,28,1);af_animation_clip_info info;const char *name=af_engine_animation_clip(app->engine,root,rig.clips[state],&info)?info.name:"Missing clip";if(nk_combo_begin_label(ctx,name,nk_vec2(400,160))){nk_layout_row_dynamic(ctx,26,1);for(size_t clip=0;clip<status.clip_count;++clip)if(af_engine_animation_clip(app->engine,root,clip,&info)&&nk_combo_item_label(ctx,info.name,NK_TEXT_LEFT)){rig.clips[state]=(uint32_t)clip;rig_changed=true;}nk_combo_end(ctx);}}
+                    int node=(int)rig.root_node;nk_layout_row_dynamic(ctx,28,1);if(nk_property_int(ctx,"Root node",0,&node,16383,1,1)){rig.root_node=(uint32_t)node;rig_changed=true;}
+                    float *v[]={&rig.walk_speed,&rig.run_speed,&rig.camera_distance,&rig.camera_height,&rig.turn_speed};const char *names[]={"Walk model speed","Run model speed","Camera distance","Camera height","Turn speed"};float minimum[]={.01f,.02f,.2f,0,0},maximum[]={99,100,30,10,100};for(unsigned i=0;i<5;++i){nk_layout_row_dynamic(ctx,28,1);rig_changed|=nk_property_float(ctx,names[i],minimum[i],v[i],maximum[i],.1f,.01f)!=0;}
+                    nk_layout_row_dynamic(ctx,26,1);nk_bool motion=rig.root_motion;if(nk_checkbox_label(ctx,"Use root motion",&motion)){rig.root_motion=motion!=0;rig_changed=true;}}
+                if(rig_changed&&af_character_rig_valid(rig))ed_document_rig(&app->document,root,rig);
+            }
+
             nk_layout_row_dynamic(ctx,26,1);nk_bool skeleton=app->show_skeleton;if(nk_checkbox_label(ctx,"Show posed skeleton",&skeleton))app->show_skeleton=skeleton!=0;
             af_animation_debug debug=af_engine_animation_debug(app->engine,root);char diagnostic[160];
             if(debug.driven){snprintf(diagnostic,sizeof(diagnostic),"%s | speed %.2f | phase %.2f",af_locomotion_state_name(debug.motion.state),debug.motion.speed,debug.motion.phase);label(ctx,diagnostic,24);

@@ -29,9 +29,9 @@ int main(int argc,char **argv){
         if(!body||!af_scene_set_object_mesh(s,body,"__node"))return 1;char path[4096];snprintf(path,sizeof(path),"%s/locomotion.gltf",argv[1]);af_object_id actor;
         if(!af_scene_import_model(s,"Character",path,&actor,&asset_error)){fprintf(stderr,"%s\n",asset_error.message);return 1;}
         af_transform visual=af_transform_identity();visual.position.y=-.9f;visual.scale=(af_vec3){.65f,.65f,.65f};if(!af_scene_set_parent(s,actor,body)||!af_scene_set_object_transform(s,actor,visual))return 1;
-        af_animation_component animation=af_scene_get_object(s,actor)->animation;animation.autoplay=false;if(!af_scene_set_object_animation(s,actor,animation))return 1;
+        af_animation_component animation=af_scene_get_object(s,actor)->animation;animation.autoplay=false;af_character_rig rig=af_character_rig_default();rig.enabled=true;rig.root_node=10;if(!af_scene_set_character_rig(s,actor,rig))return 1;if(!af_scene_set_object_animation(s,actor,animation))return 1;
         if(variant==2){/* 64 independently posed actors share two asset records. */
-            for(unsigned i=1;i<64;++i){af_object_id root;if(!af_scene_import_model(s,"Character",path,&root,&asset_error))return 1;af_transform t=af_transform_identity();t.position=(af_vec3){(float)(i%8)*2-7,0,-(float)(i/8)*2};t.scale=(af_vec3){.65f,.65f,.65f};if(!af_scene_set_object_transform(s,root,t))return 1;af_animation_component a=af_scene_get_object(s,root)->animation;a.clip=i%3;a.autoplay=true;if(!af_scene_set_object_animation(s,root,a))return 1;
+            for(unsigned i=1;i<64;++i){af_object_id root;if(!af_scene_import_model(s,"Character",path,&root,&asset_error))return 1;af_transform t=af_transform_identity();t.position=(af_vec3){(float)(i%8)*2-7,0,-(float)(i/8)*2};t.scale=(af_vec3){.65f,.65f,.65f};if(!af_scene_set_object_transform(s,root,t))return 1;af_animation_component a=af_scene_get_object(s,root)->animation;af_character_rig rig=af_character_rig_default();rig.enabled=true;rig.root_node=10;if(!af_scene_set_character_rig(s,root,rig))return 1;a.clip=i%3;a.autoplay=true;if(!af_scene_set_object_animation(s,root,a))return 1;
 
             }
         }

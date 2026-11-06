@@ -3,6 +3,7 @@
 #define AFTERLIGHT_LOCOMOTION_H
 #include <afterlight/character.h>
 #include <afterlight/animation.h>
+#include <afterlight/rig.h>
 typedef enum af_locomotion_state {AF_LOCOMOTION_IDLE,AF_LOCOMOTION_WALK,AF_LOCOMOTION_RUN,AF_LOCOMOTION_JUMP,AF_LOCOMOTION_FALL} af_locomotion_state;
 typedef struct af_locomotion_input {float speed,vertical_speed;bool grounded;} af_locomotion_input;
 typedef struct af_locomotion {
@@ -29,6 +30,7 @@ typedef struct af_locomotion_player {
     af_vec3 root_delta;
     bool ready;
 } af_locomotion_player;
+bool af_locomotion_player_init_rig(af_locomotion_player*,const af_animation_file*,af_character_rig);
 bool af_locomotion_player_init(af_locomotion_player *player,const af_animation_file *file);
 void af_locomotion_player_destroy(af_locomotion_player *player);
 bool af_locomotion_player_step(af_locomotion_player *player,const af_animation_file *file,af_locomotion_input input,float delta);

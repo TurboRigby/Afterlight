@@ -168,10 +168,23 @@ static bool read_gameplay(const cJSON *item,af_gameplay_component *out){
     for(unsigned i=0;i<4;++i)if(!read_float_field(camera,camera_fields[i+2],view[i]))return false;
     if(!af_gameplay_component_valid(value))return false;*out=value;return true;
 }
+static bool read_rig(const cJSON *json,af_character_rig *r){
+    static const char *const fields[]={"enabled","root_motion","root_node","clips","walk_speed","run_speed","camera_distance","camera_height","turn_speed"};
+    const cJSON *enabled=cJSON_GetObjectItemCaseSensitive(json,"enabled"),*root=cJSON_GetObjectItemCaseSensitive(json,"root_motion"),*node=cJSON_GetObjectItemCaseSensitive(json,"root_node"),*clips=cJSON_GetObjectItemCaseSensitive(json,"clips");
+    if(!exact_fields(json,fields,9)||!cJSON_IsBool(enabled)||!cJSON_IsBool(root)||!cJSON_IsNumber(node)||!isfinite(node->valuedouble)||node->valuedouble<0||node->valuedouble>=AF_ANIMATION_MAX_NODES||floor(node->valuedouble)!=node->valuedouble||!cJSON_IsArray(clips)||cJSON_GetArraySize(clips)!=5)return false;
+    *r=af_character_rig_default();r->enabled=cJSON_IsTrue(enabled)!=0;r->root_motion=cJSON_IsTrue(root)!=0;r->root_node=(uint32_t)node->valuedouble;
+    for(unsigned i=0;i<5;++i){const cJSON *c=cJSON_GetArrayItem(clips,(int)i);if(!cJSON_IsNumber(c)||!isfinite(c->valuedouble)||c->valuedouble<0||c->valuedouble>=128||floor(c->valuedouble)!=c->valuedouble)return false;r->clips[i]=(uint32_t)c->valuedouble;}
+    float *values[]={&r->walk_speed,&r->run_speed,&r->camera_distance,&r->camera_height,&r->turn_speed};for(unsigned i=0;i<5;++i)if(!read_float_field(json,fields[i+4],values[i]))return false;return af_character_rig_valid(*r);
+}
+static bool add_rig(cJSON *object,af_character_rig r){
+    if(!af_character_rig_valid(r))return false;cJSON *j=cJSON_AddObjectToObject(object,"rig");double clips[5];for(unsigned i=0;i<5;++i)clips[i]=r.clips[i];cJSON *array=cJSON_CreateDoubleArray(clips,5);
+    if(!j||!array){cJSON_Delete(array);return false;}if(!cJSON_AddItemToObject(j,"clips",array)){cJSON_Delete(array);return false;}
+    return cJSON_AddBoolToObject(j,"enabled",r.enabled)&&cJSON_AddBoolToObject(j,"root_motion",r.root_motion)&&cJSON_AddNumberToObject(j,"root_node",r.root_node)&&cJSON_AddNumberToObject(j,"walk_speed",r.walk_speed)&&cJSON_AddNumberToObject(j,"run_speed",r.run_speed)&&cJSON_AddNumberToObject(j,"camera_distance",r.camera_distance)&&cJSON_AddNumberToObject(j,"camera_height",r.camera_height)&&cJSON_AddNumberToObject(j,"turn_speed",r.turn_speed);
+}
 static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene_error *error)
 {
     static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights"};
-    static const char *const object_fields[] = {"id", "name", "mesh", "visible", "position", "rotation", "scale", "material", "parent", "collider", "gameplay", "animation", "model"};
+    static const char *const object_fields[] = {"id", "name", "mesh", "visible", "position", "rotation", "scale", "material", "parent", "collider", "gameplay", "animation", "model", "rig"};
     const cJSON *format = cJSON_GetObjectItemCaseSensitive(root, "format");
     const cJSON *version = cJSON_GetObjectItemCaseSensitive(root, "version");
     const cJSON *objects = cJSON_GetObjectItemCaseSensitive(root, "objects");
@@ -181,7 +194,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -204,9 +217,9 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
     const cJSON *item;
     cJSON_ArrayForEach(item, objects) {
         af_scene_object *object = &scene->objects[scene->count];
-        object->material=af_material_default();object->collider=af_collider_default();object->gameplay=af_gameplay_component_default();object->animation=af_animation_component_default();object->model=af_model_binding_default();
+        object->material=af_material_default();object->collider=af_collider_default();object->gameplay=af_gameplay_component_default();object->animation=af_animation_component_default();object->model=af_model_binding_default();object->rig=af_character_rig_default();
         const cJSON *visible = cJSON_GetObjectItemCaseSensitive(item, "visible");
-        if (!exact_fields(item, object_fields,version->valuedouble==1?7:(version->valuedouble>=10?13:version->valuedouble>=6?11:(version->valuedouble>=5?10:9))) ||
+        if (!exact_fields(item, object_fields,version->valuedouble==1?7:(version->valuedouble>=11?14:version->valuedouble>=10?13:version->valuedouble>=6?11:(version->valuedouble>=5?10:9))) ||
             !read_id(cJSON_GetObjectItemCaseSensitive(item, "id"), &object->id) || object->id == AF_OBJECT_NONE ||
             (next_id != AF_OBJECT_NONE && object->id >= next_id) || !cJSON_IsBool(visible) ||
             !read_name(cJSON_GetObjectItemCaseSensitive(item, "name"), object->name, sizeof(object->name)) ||
@@ -217,6 +230,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid object at index %zu (ID, name, visibility, or transform).", scene->count);
             goto fail;
         }
+        if(version->valuedouble>=11&&!read_rig(cJSON_GetObjectItemCaseSensitive(item,"rig"),&object->rig)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid character rig.");goto fail;}
         if(version->valuedouble>=10){
             static const char *const animation_fields[]={"asset","clip","speed","autoplay","loop"},*const model_fields[]={"root","node","skin","primitive"};
             const cJSON *a=cJSON_GetObjectItemCaseSensitive(item,"animation"),*m=cJSON_GetObjectItemCaseSensitive(item,"model");
@@ -475,7 +489,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
         cJSON *object = cJSON_CreateObject();
         if (!object) goto fail;
         if (!cJSON_AddItemToArray(objects, object)) { cJSON_Delete(object); goto fail; }
-        if(!add_gameplay(object,source->gameplay))goto fail;
+        if(!add_rig(object,source->rig)||!add_gameplay(object,source->gameplay))goto fail;
         const af_animation_component *a=&source->animation;const af_model_binding *binding=&source->model;
         cJSON *animation=cJSON_AddObjectToObject(object,"animation"),*model=cJSON_AddObjectToObject(object,"model");
         if(!animation||!model||!memchr(a->asset,0,sizeof(a->asset))||!valid_utf8((const unsigned char*)a->asset,strlen(a->asset))||!cJSON_AddStringToObject(animation,"asset",a->asset)||!cJSON_AddNumberToObject(animation,"clip",a->clip)||!cJSON_AddNumberToObject(animation,"speed",a->speed)||!cJSON_AddBoolToObject(animation,"autoplay",a->autoplay)||!cJSON_AddBoolToObject(animation,"loop",a->loop)||!add_id(model,"root",binding->root)||!cJSON_AddNumberToObject(model,"node",binding->node)||!cJSON_AddNumberToObject(model,"skin",binding->skin)||!cJSON_AddBoolToObject(model,"primitive",binding->primitive))goto fail;
