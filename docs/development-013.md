@@ -32,3 +32,12 @@ Only sphere/box shapes participate in rigid-body contacts; trigger shapes and
 legacy character capsules remain handled by the existing query/controller APIs.
 Shape dimensions must be at least .01 world units. Contact output is capped at
 8192 points and reports the latest substep. Sparse-scene tests check pair pruning.
+
+## Contact response
+
+The sequential impulse solver combines linear/angular effective mass, warm-started
+normal impulses, Coulomb friction and a restitution threshold. Twenty velocity
+iterations and eight split position iterations run per substep. Face-manifold
+contacts keep flat stacks stable without adding penetration energy to velocity.
+A four-box stack and a sliding-friction regression settle within bounded tolerances.
+This is a primitive solver, not a general constraint/joint or mesh-collision system.

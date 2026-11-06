@@ -56,6 +56,7 @@ add_library(afterlight STATIC
     engine/src/body.c
     engine/src/physics.c
     engine/src/physics_contacts.c
+    engine/src/physics_solver.c
     engine/src/prefab.c
     engine/src/input.c
     engine/src/project.c
@@ -445,6 +446,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_solver_test tests/physics_solver.c)
+    target_include_directories(afterlight_physics_solver_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_solver_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_solver_test)
+    add_test(NAME afterlight.physics_solver COMMAND afterlight_physics_solver_test )
     add_executable(afterlight_physics_contacts_test tests/physics_contacts.c)
     target_include_directories(afterlight_physics_contacts_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_contacts_test PRIVATE Afterlight::Engine)
