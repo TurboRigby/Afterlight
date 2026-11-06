@@ -13,6 +13,7 @@
 typedef struct animation_asset {char name[64];af_animation_file file;size_t bytes;uint64_t generation;} animation_asset;
 typedef struct animation_instance {
     af_object_id root;uint64_t generation;af_animation_component configuration;
+    af_locomotion_player locomotion;bool driven;
     af_animation_player player;af_animation_pose *poses;af_object_id *nodes;size_t node_count;
 } animation_instance;
 struct af_animation_runtime {
@@ -23,7 +24,7 @@ struct af_animation_runtime {
     af_object_id palette_objects[RUNTIME_INSTANCES];size_t palette_count;
 };
 static animation_asset *asset(af_animation_runtime *r,const char *name){for(size_t i=0;i<r->asset_count;++i)if(!strcmp(r->assets[i].name,name))return &r->assets[i];return NULL;}
-static void free_instance(animation_instance *i){af_animation_player_destroy(&i->player);free(i->poses);free(i->nodes);*i=(animation_instance){0};}
+static void free_instance(animation_instance *i){af_animation_player_destroy(&i->player);af_locomotion_player_destroy(&i->locomotion);free(i->poses);free(i->nodes);*i=(animation_instance){0};}
 static void clear_instances(af_animation_runtime *r){for(size_t i=0;i<r->instance_count;++i)free_instance(&r->instances[i]);r->instance_count=r->total_nodes=0;r->world_count=0;}
 af_animation_runtime *af_animation_runtime_create(af_renderer *renderer){af_animation_runtime *r=calloc(1,sizeof(*r));if(r)r->renderer=renderer;return r;}
 void af_animation_runtime_destroy(af_animation_runtime *r){if(!r)return;clear_instances(r);for(size_t i=0;i<r->asset_count;++i)af_animation_file_free(&r->assets[i].file);free(r->local);free(r->world);free(r->ready);free(r);}
@@ -61,10 +62,15 @@ af_animation_status af_animation_runtime_status(af_animation_runtime *r,af_objec
     if(p->clip<a->file.clip_count){s.duration=a->file.clips[p->clip].duration;snprintf(s.name,sizeof(s.name),"%s",a->file.clips[p->clip].name);}return s;
 }
 bool af_animation_runtime_clip(af_animation_runtime *r,af_object_id object,size_t clip,af_animation_clip_info *info){animation_instance *i=instance(r,object);animation_asset *a=i?asset(r,i->configuration.asset):NULL;if(!a||!info||clip>=a->file.clip_count)return false;snprintf(info->name,sizeof(info->name),"%s",a->file.clips[clip].name);info->duration=a->file.clips[clip].duration;return true;}
-bool af_animation_runtime_play(af_animation_runtime *r,af_object_id object,size_t clip,float blend){animation_instance *i=instance(r,object);return i&&af_animation_player_play(&i->player,&asset(r,i->configuration.asset)->file,clip,blend);}
+bool af_animation_runtime_locomotion(af_animation_runtime *r,af_object_id object,af_locomotion_input input,float dt,af_locomotion *status){
+    animation_instance *i=instance(r,object);if(!i)return false;animation_asset *a=asset(r,i->configuration.asset);
+    if(!i->locomotion.ready&&!af_locomotion_player_init(&i->locomotion,&a->file))return false;
+    if(!af_locomotion_player_step(&i->locomotion,&a->file,input,dt))return false;i->driven=true;if(status)*status=i->locomotion.motion;return true;
+}
+bool af_animation_runtime_play(af_animation_runtime *r,af_object_id object,size_t clip,float blend){animation_instance *i=instance(r,object);if(i)i->driven=false;return i&&af_animation_player_play(&i->player,&asset(r,i->configuration.asset)->file,clip,blend);}
 bool af_animation_runtime_pause(af_animation_runtime *r,af_object_id object,bool paused){animation_instance *i=instance(r,object);if(!i)return false;af_animation_player_pause(&i->player,paused);return true;}
-bool af_animation_runtime_stop(af_animation_runtime *r,af_object_id object){animation_instance *i=instance(r,object);if(!i)return false;af_animation_player_stop(&i->player);return true;}
-bool af_animation_runtime_seek(af_animation_runtime *r,af_object_id object,double seconds){animation_instance *i=instance(r,object);return i&&af_animation_player_seek(&i->player,&asset(r,i->configuration.asset)->file,seconds);}
+bool af_animation_runtime_stop(af_animation_runtime *r,af_object_id object){animation_instance *i=instance(r,object);if(!i)return false;i->driven=false;af_animation_player_stop(&i->player);return true;}
+bool af_animation_runtime_seek(af_animation_runtime *r,af_object_id object,double seconds){animation_instance *i=instance(r,object);if(i)i->driven=false;return i&&af_animation_player_seek(&i->player,&asset(r,i->configuration.asset)->file,seconds);}
 bool af_animation_runtime_options(af_animation_runtime *r,af_object_id object,float speed,bool loop){animation_instance *i=instance(r,object);if(!i||!isfinite(speed)||fabsf(speed)>100)return false;i->player.speed=speed;i->player.loop=loop;return true;}
 static size_t object_index(const af_scene *scene,af_object_id id){const af_scene_object *o=af_scene_get_object(scene,id);return o?(size_t)(o-scene->objects):scene->count;}
 static bool world(af_animation_runtime *r,size_t at,unsigned depth){
@@ -79,7 +85,7 @@ bool af_animation_runtime_update(af_animation_runtime *r,const af_scene *previou
     if(!r->instance_count){for(size_t j=0;j<r->palette_count;++j)af_renderer_set_skin_palette(r->renderer,r->palette_objects[j],NULL,0);r->palette_count=r->world_count=0;af_renderer_set_object_worlds(r->renderer,NULL,NULL,0);return true;}
     size_t count=r->scene->count;if(count>r->capacity){af_mat4 *local=calloc(count,sizeof(*local)),*worlds=calloc(count,sizeof(*worlds));unsigned char *ready=calloc(count,1);if(!local||!worlds||!ready){free(local);free(worlds);free(ready);return false;}free(r->local);free(r->world);free(r->ready);r->local=local;r->world=worlds;r->ready=ready;r->capacity=count;}memset(r->ready,0,count);
     for(size_t j=0;j<r->instance_count;++j){animation_instance *i=&r->instances[j];animation_asset *a=asset(r,i->configuration.asset);if(!a||i->generation!=a->generation||i->node_count!=a->file.node_count)continue;memset(i->nodes,0,i->node_count*sizeof(*i->nodes));
-        if(!animate||!a->file.clip_count)memcpy(i->poses,a->file.bind_pose,i->node_count*sizeof(*i->poses));else if(!af_animation_player_update(&i->player,&a->file,delta)||!af_animation_player_sample(&i->player,&a->file,i->poses,i->node_count))memcpy(i->poses,a->file.bind_pose,i->node_count*sizeof(*i->poses));}
+        if(!animate||!a->file.clip_count)memcpy(i->poses,a->file.bind_pose,i->node_count*sizeof(*i->poses));else if(i->driven){if(!af_locomotion_player_sample(&i->locomotion,&a->file,i->poses,i->node_count))return false;}else if(!af_animation_player_update(&i->player,&a->file,delta)||!af_animation_player_sample(&i->player,&a->file,i->poses,i->node_count))memcpy(i->poses,a->file.bind_pose,i->node_count*sizeof(*i->poses));}
     for(size_t j=0;j<count;++j){const af_scene_object *o=&r->scene->objects[j],*old=af_scene_get_object(previous,o->id);af_transform t=o->transform;
         if(old&&old->parent==o->parent){t.position=af_vec3_add(old->transform.position,af_vec3_scale(af_vec3_sub(t.position,old->transform.position),alpha));t.scale=af_vec3_add(old->transform.scale,af_vec3_scale(af_vec3_sub(t.scale,old->transform.scale),alpha));t.rotation=(af_vec3){old->transform.rotation.x+remainderf(t.rotation.x-old->transform.rotation.x,2*AF_PI)*alpha,old->transform.rotation.y+remainderf(t.rotation.y-old->transform.rotation.y,2*AF_PI)*alpha,old->transform.rotation.z+remainderf(t.rotation.z-old->transform.rotation.z,2*AF_PI)*alpha};}
         r->local[j]=af_transform_matrix(t);if(o->model.root&&!o->model.primitive){animation_instance *i=instance(r,o->model.root);if(i&&o->model.node<i->node_count){i->nodes[o->model.node]=o->id;af_mat4 inverse;animation_asset *a=asset(r,i->configuration.asset);if(af_mat4_inverse(af_animation_pose_matrix(a->file.bind_pose[o->model.node]),&inverse))r->local[j]=af_mat4_mul(r->local[j],af_mat4_mul(inverse,af_animation_pose_matrix(i->poses[o->model.node])));}}

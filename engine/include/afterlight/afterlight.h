@@ -18,6 +18,7 @@
 #include <afterlight/character.h>
 #include <afterlight/audio.h>
 #include <afterlight/animation.h>
+#include <afterlight/locomotion.h>
 
 /* All engine/window operations run on the main thread. One engine at a time. */
 typedef struct af_engine af_engine;
@@ -125,6 +126,9 @@ bool af_engine_load_animation(af_engine *engine,const char *name,const char *pat
 af_object_id af_engine_animation_root(const af_engine *engine,af_object_id object);
 af_animation_status af_engine_animation_status(const af_engine *engine,af_object_id root);
 bool af_engine_animation_clip(const af_engine *engine,af_object_id root,size_t clip,af_animation_clip_info *info);
+/* Explicit fixed-tick driver. It takes over automatic playback until Play/Stop/Seek.
+   Inputs use the preceding collision result; file reload/scene changes reset it. */
+bool af_engine_locomotion_step(af_engine *engine,af_object_id root,af_locomotion_input input,float delta,af_locomotion *status);
 bool af_engine_animation_play(af_engine *engine,af_object_id root,size_t clip,float blend_seconds);
 bool af_engine_animation_pause(af_engine *engine,af_object_id root,bool paused);
 bool af_engine_animation_stop(af_engine *engine,af_object_id root);

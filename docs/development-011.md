@@ -22,3 +22,13 @@ avoids oscillation around standing and running thresholds. Landing and takeoff
 are edge signals. `sandbox/assets/locomotion.gltf` is an original nine-joint
 character with all five clips. Regenerate it with
 `python3 scripts/generate_animation_assets.py`.
+
+## Speed blending
+
+The owned `af_locomotion_player` blends adjacent Idle/Walk/Run clips at measured
+speed, using one normalized phase so different clip lengths remain synchronized.
+Translation/scale interpolate linearly and rotations use quaternion SLERP.
+Airborne transitions capture the current mixed pose, including interrupted fades.
+`af_engine_locomotion_step` exposes this fixed-tick driver to C modules; it takes
+over automatic playback until explicit Play, Stop or Seek. Reloading an asset or
+changing scenes discards its driver. Sampling never changes authored scene data.

@@ -610,3 +610,5 @@ bool af_engine_animation_stop(af_engine *e,af_object_id object){return e&&af_ani
 bool af_engine_animation_seek(af_engine *e,af_object_id object,double seconds){return e&&af_animation_runtime_seek(e->animations,object,seconds);}
 bool af_engine_animation_options(af_engine *e,af_object_id object,float speed,bool loop){return e&&af_animation_runtime_options(e->animations,object,speed,loop);}
 bool af_engine_animated_world_matrix(const af_engine *e,af_object_id object,af_mat4 *world){return e&&(af_animation_runtime_world(e->animations,object,world)||af_scene_world_matrix(e->scene,object,world));}
+
+bool af_engine_locomotion_step(af_engine *e,af_object_id object,af_locomotion_input input,float delta,af_locomotion *status){return e&&af_animation_runtime_locomotion(e->animations,object,input,delta,status);}

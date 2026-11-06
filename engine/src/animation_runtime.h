@@ -13,6 +13,7 @@ bool af_animation_runtime_update(af_animation_runtime *runtime,const af_scene *p
 af_object_id af_animation_runtime_root(const af_animation_runtime *runtime,af_object_id object);
 af_animation_status af_animation_runtime_status(af_animation_runtime *runtime,af_object_id object);
 bool af_animation_runtime_clip(af_animation_runtime *runtime,af_object_id object,size_t clip,af_animation_clip_info *info);
+bool af_animation_runtime_locomotion(af_animation_runtime *runtime,af_object_id object,af_locomotion_input input,float delta,af_locomotion *status);
 bool af_animation_runtime_play(af_animation_runtime *runtime,af_object_id object,size_t clip,float blend);
 bool af_animation_runtime_pause(af_animation_runtime *runtime,af_object_id object,bool paused);
 bool af_animation_runtime_stop(af_animation_runtime *runtime,af_object_id object);

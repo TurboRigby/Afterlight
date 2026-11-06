@@ -56,6 +56,7 @@ add_library(afterlight STATIC
     engine/src/character.c
     engine/src/third_person.c
     engine/src/locomotion.c
+    engine/src/locomotion_player.c
     engine/src/collision.c
     engine/src/simulation.c
     engine/src/mipmap.c
@@ -389,6 +390,10 @@ if(BUILD_TESTING)
     target_link_libraries(afterlight_locomotion_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_locomotion_test)
     add_test(NAME afterlight.locomotion COMMAND afterlight_locomotion_test)
+    add_executable(afterlight_locomotion_player_test tests/locomotion_player.c)
+    target_link_libraries(afterlight_locomotion_player_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_locomotion_player_test)
+    add_test(NAME afterlight.locomotion_player COMMAND afterlight_locomotion_player_test "${PROJECT_SOURCE_DIR}/sandbox/assets/locomotion.gltf")
     add_executable(afterlight_third_person_test tests/third_person.c)
     target_link_libraries(afterlight_third_person_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_third_person_test)

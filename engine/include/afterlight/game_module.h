@@ -65,6 +65,7 @@ typedef struct af_game_host {
     bool (*animated_world_matrix)(const af_engine*,af_object_id,af_mat4*);
     bool (*animation_clip)(const af_engine*,af_object_id,size_t,af_animation_clip_info*);
     af_object_id (*animation_root)(const af_engine*,af_object_id);
+    bool (*locomotion_step)(af_engine*,af_object_id,af_locomotion_input,float,af_locomotion*);
     af_third_person_config (*third_person_config_default)(void);
     af_third_person (*third_person_default)(af_vec3);
     void (*third_person_look)(af_third_person*,af_third_person_config,af_vec2);
