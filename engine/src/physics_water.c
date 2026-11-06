@@ -11,9 +11,12 @@ af_water_sample af_physics_sample_water(const af_physics *p, const af_scene *s, 
 af_water_stats af_physics_water_stats(const af_physics *p) {
     af_water_stats stats = p && p->water ? p->water->stats : (af_water_stats){0};
     for (size_t k = 0; p && p->water && k < p->water->count; ++k) {
-        const wa_particles *f = p->water->slots[k].particles;
+        const wa_slot *slot = &p->water->slots[k];
+        const wa_particles *f = slot->particles;
+        stats.sleeping_surfaces += slot->sleeping ? 1u : 0u;
         if (f) {
             stats.particles += f->count;
+            stats.sleeping_particles += f->sleeping ? f->count : 0;
             stats.emitted_volume += f->emitted;
             stats.escaped_volume += f->escaped;
             stats.particle_volume += (float)f->count * f->volume;
@@ -44,6 +47,18 @@ bool ph_water_sync(af_physics *p, const af_scene *s) {
         return false;
     if (!wa_sync(p->water, s))
         return false;
+    for (size_t i = 0; i < p->count; ++i) {
+        ph_body *b = &p->bodies[i];
+        if (!b->sleeping)
+            continue;
+        af_water_sample sample = wa_sample(p->water, s, b->p, 1);
+        bool calm = false;
+        for (size_t k = 0; k < p->water->count; ++k)
+            if (p->water->slots[k].config.owner == sample.owner)
+                calm = p->water->slots[k].sleeping && p->water->slots[k].config.mode == AF_WATER_POOL;
+        if ((b->wet && !calm) || b->water_key != p->water->key)
+            ph_wake_island(p, i);
+    }
     for (size_t i = 0; i < p->water->count; ++i) {
         wa_slot *a = &p->water->slots[i];
         memcpy(a->previous, a->h, sizeof(a->h));
@@ -68,7 +83,6 @@ static void wet_point(af_physics *p, ph_body *b, af_water_sample s, af_vec3 poin
         return;
     b->wet = true;
     b->sleeping = false;
-    b->sleep_time = 0;
     af_vec3 r = af_vec3_sub(point, b->p);
     float displaced = w->density * volume;
     ph_impulse(b, (af_vec3){0, 9.81f * displaced * dt, 0}, point);
@@ -93,6 +107,19 @@ void ph_water_step(af_physics *p, float dt) {
         ph_body *b = &p->bodies[i];
         if (b->inv_mass == 0)
             continue;
+        bool calm = true;
+        for (size_t k = 0; k < p->water->count; ++k) {
+            const wa_slot *slot = &p->water->slots[k];
+            if (slot->config.enabled && slot->config.mode != AF_WATER_PARTICLES)
+                calm &= slot->sleeping && slot->config.mode == AF_WATER_POOL;
+        }
+        if (b->sleeping && calm && b->water_key == p->water->key) {
+            b->wet = b->water_support;
+            continue;
+        }
+        b->water_calm = calm;
+        b->water_support = false;
+        b->water_key = p->water->key;
         float displaced = 0;
         af_water_sample touched = {0};
         for (size_t part = 0; part < (b->part_count ? b->part_count : 1); ++part) {
@@ -146,6 +173,9 @@ void ph_water_step(af_physics *p, float dt) {
         if (displaced > 0 && touched.inside && fabsf(b->p.y - touched.height) < 1 && fabsf(b->v.y) > .2f)
             wa_disturb(p->water, p->scene, touched.owner, b->p, fmaxf(.3f, cbrtf(displaced)),
                        fmaxf(-.1f, fminf(.1f, b->v.y * displaced * dt * .3f)));
+        if (touched.inside && calm)
+            b->water_support = fabsf(displaced * touched.density -
+                                     b->config.mass * b->config.gravity_scale) < b->config.mass * .08f;
         b->v = ph_limit(b->v, 200);
         b->w = ph_limit(b->w, 100);
     }

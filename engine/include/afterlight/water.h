@@ -30,7 +30,7 @@ typedef struct af_water_sample {
     af_vec3 velocity, normal;
 } af_water_sample;
 typedef struct af_water_stats {
-    size_t surfaces, cells, wet_bodies, particles;
+    size_t surfaces, cells, wet_bodies, particles,sleeping_surfaces,sleeping_particles;
     float max_wave, displaced_volume;
     double milliseconds;
     float emitted_volume, escaped_volume, particle_volume;

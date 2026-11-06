@@ -10,7 +10,8 @@ typedef struct wa_slot {
     af_water config;
     af_transform transform;
     unsigned n;
-    float time;
+    float time, quiet_time;
+    bool sleeping;
     float h[AF_WATER_GRID_MAX * AF_WATER_GRID_MAX];
     float previous[AF_WATER_GRID_MAX * AF_WATER_GRID_MAX];
     float v[AF_WATER_GRID_MAX * AF_WATER_GRID_MAX];
@@ -19,6 +20,7 @@ typedef struct af_water_runtime {
     wa_slot slots[AF_SCENE_MAX_WATERS];
     size_t count;
     af_water_stats stats;
+    uint64_t key, disturbance;
 } af_water_runtime;
 float wa_river_length(const af_water *);
 af_vec3 wa_river_point(const af_water *, float, af_vec3 *);

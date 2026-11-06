@@ -21,7 +21,8 @@ typedef struct ph_body {
     size_t part_count, part_start;
     af_vec4 q;
     float inv_mass, sleep_time;
-    bool sleeping, supported, external, character_proxy, wet;
+    bool sleeping, supported, external, character_proxy, wet,water_calm,water_support;
+    uint64_t water_key;
 } ph_body;
 typedef struct ph_contact {
     af_physics_contact view;

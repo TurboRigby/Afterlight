@@ -61,6 +61,16 @@ bool wa_sync(af_water_runtime *r, const af_scene *s) {
         memset(&r->slots[i], 0, sizeof(r->slots[i]));
     }
     r->count = n;
+    uint64_t key = UINT64_C(1469598103934665603) ^ r->disturbance;
+    for (size_t i = 0; i < n; ++i) {
+        const unsigned char *bytes = (const unsigned char *)&r->slots[i].config;
+        for (size_t k = 0; k < sizeof(af_water); ++k)
+            key = (key ^ bytes[k]) * UINT64_C(1099511628211);
+        bytes = (const unsigned char *)&r->slots[i].transform;
+        for (size_t k = 0; k < sizeof(af_transform); ++k)
+            key = (key ^ bytes[k]) * UINT64_C(1099511628211);
+    }
+    r->key = key;
     r->stats = (af_water_stats){.surfaces = n};
     for (size_t i = 0; i < n; ++i)
         if (r->slots[i].config.enabled)
@@ -90,6 +100,9 @@ void wa_step(af_water_runtime *r, float dt) {
         af_water w = a->config;
         if (!w.enabled || w.mode == AF_WATER_PARTICLES)
             continue;
+        if (a->sleeping && w.wind == 0)
+            continue;
+        a->sleeping = false;
         unsigned n = a->n;
         float dx = 2 * w.half_size.x / (float)(n - 1), dz = 2 * length(&w) / (float)(n - 1);
         float c = fminf(w.wave_speed, sqrtf(9.81f * w.depth)), c2 = c * c;
@@ -140,8 +153,18 @@ void wa_step(af_water_runtime *r, float dt) {
                 a->h[k] = next[k] - (w.mode == AF_WATER_POOL ? mean : 0);
             a->time += h;
         }
-        for (unsigned k = 0; k < n * n; ++k)
-            r->stats.max_wave = fmaxf(r->stats.max_wave, fabsf(a->h[k]));
+        float amplitude = 0, speed = 0;
+        for (unsigned k = 0; k < n * n; ++k) {
+            amplitude = fmaxf(amplitude, fabsf(a->h[k]));
+            speed = fmaxf(speed, fabsf(a->v[k]));
+        }
+        a->quiet_time = w.wind == 0 && amplitude < .0002f && speed < .0005f ? a->quiet_time + dt : 0;
+        if (a->quiet_time > .5f) {
+            memset(a->h, 0, sizeof(a->h));
+            memset(a->v, 0, sizeof(a->v));
+            a->sleeping = true;
+        }
+        r->stats.max_wave = fmaxf(r->stats.max_wave, amplitude);
     }
 }
 static af_water_sample sample_id(const af_water_runtime *r, const af_scene *s, af_vec3 p, float alpha,
@@ -214,6 +237,10 @@ bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3
     const af_scene_object *o = af_scene_get_object(s, id);
     if (!a || !o || !a->config.enabled || a->config.mode == AF_WATER_PARTICLES)
         return false;
+    a->sleeping = false;
+    a->quiet_time = 0;
+    ++r->disturbance;
+    ++r->key;
     af_vec3 q = local(o->transform, p);
     if (a->config.mode == AF_WATER_RIVER) {
         float side, along, height;

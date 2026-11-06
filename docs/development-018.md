@@ -44,3 +44,13 @@ frame pacing still dominates render-loop wall time, so no uncapped-FPS claim is
 made. Native water Play verifies uploads, constant idle-wait count, scene
 retirement and cleanup; water pixel, asset-reload and material regressions pass.
 The public diagnostics extension uses C module ABI 19.
+
+Calm height fields now stop after their height/velocity falls below thresholds;
+wind and disturbances wake them. Floating rigid bodies can use balanced buoyancy
+as an island support and retain sleep in calm water. Authored fluid changes or a
+new disturbance wake affected sleeping islands conservatively. Settled contained
+particles freeze as a set after a quiet interval; emission and changed solid
+poses/geometry wake them. Sleeping fluid uses unchanged meshes rather than
+regenerating geometry for interpolation alone. Stats expose sleeping fields and
+particles. `water_sleep` checks fixed sleeping positions and wake events, while
+pool/particle and existing rigid island/sleep regressions pass.

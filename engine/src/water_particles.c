@@ -185,6 +185,21 @@ void ph_particles_step(af_physics *world, wa_slot *slot, float dt) {
     wa_particles *f = slot->particles;
     if (!f)
         return;
+    uint64_t key = UINT64_C(1469598103934665603);
+    for (size_t i = 0; i < world->count; ++i) {
+        ph_body *b = &world->bodies[i];
+        key = (key ^ b->id ^ b->geometry_key) * UINT64_C(1099511628211);
+        const unsigned char *data = (const unsigned char *)&b->p;
+        for (size_t k = 0; k < sizeof(b->p); ++k)
+            key = (key ^ data[k]) * UINT64_C(1099511628211);
+        data = (const unsigned char *)b->axes;
+        for (size_t k = 0; k < sizeof(b->axes); ++k)
+            key = (key ^ data[k]) * UINT64_C(1099511628211);
+    }
+    if (f->sleeping && key == f->geometry_key && slot->config.emission_rate == 0)
+        return;
+    f->sleeping = false;
+    f->geometry_key = key;
     af_water w = slot->config;
     float spacing = f->spacing, h = spacing * 2, radius = spacing * .42f, volume = f->volume;
     size_t before = f->count;
@@ -305,5 +320,17 @@ void ph_particles_step(af_physics *world, wa_slot *slot, float dt) {
         f->values[write++] = p;
     }
     f->count = write;
+    float speed = 0;
+    bool supported = false;
+    for (size_t i = 0; i < f->count; ++i) {
+        speed = fmaxf(speed, af_vec3_length(f->values[i].v));
+        supported |= f->values[i].hit_body < world->count;
+    }
+    f->quiet_time = w.emission_rate == 0 && supported && speed < .12f ? f->quiet_time + dt : 0;
+    if (f->quiet_time > 1) {
+        f->sleeping = true;
+        for (size_t i = 0; i < f->count; ++i)
+            f->values[i].v = (af_vec3){0};
+    }
     slot->time += dt;
 }

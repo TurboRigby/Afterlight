@@ -65,7 +65,7 @@ void ph_islands_build(af_physics *p) {
         size_t r = root(p, i);
         ++p->island_sizes[r];
         p->island_wake[r] |= !b->sleeping || !b->config.allow_sleep || p->held == b->id;
-        p->island_anchor[r] |= b->config.gravity_scale == 0;
+        p->island_anchor[r] |= b->config.gravity_scale == 0 || b->water_support;
     }
     for (size_t i = 0; i < p->contact_count; ++i) {
         ph_contact *c = &p->contacts[i];
@@ -128,9 +128,9 @@ void ph_sleep(af_physics *p, float dt) {
         if (b->inv_mass == 0)
             continue;
         size_t r = root(p, i);
-        p->island_quiet[r] &= !b->wet && b->config.allow_sleep && b->id != p->held && af_vec3_length(b->v) < .06f &&
-                              af_vec3_length(b->w) < .08f && af_vec3_length(b->force) < 1e-6f &&
-                              af_vec3_length(b->torque) < 1e-6f;
+        p->island_quiet[r] &= (!b->wet || b->water_calm) && b->config.allow_sleep && b->id != p->held &&
+                              af_vec3_length(b->v) < .06f && af_vec3_length(b->w) < .08f &&
+                              af_vec3_length(b->force) < 1e-6f && af_vec3_length(b->torque) < 1e-6f;
         p->island_time[r] = fminf(p->island_time[r], b->sleep_time);
     }
     for (size_t i = 0; i < p->joint_count; ++i) {

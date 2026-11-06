@@ -16,6 +16,8 @@ struct wa_particles {
     uint32_t heads[WA_HASH_SIZE];
     size_t count, capacity;
     float spacing, volume, initial_volume, emitted, escaped, pending;
-    uint64_t births;
+    uint64_t births, geometry_key;
+    float quiet_time;
+    bool sleeping;
 };
 #endif

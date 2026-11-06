@@ -6,6 +6,7 @@
 
 #include "renderer.h"
 #include "water_internal.h"
+#include "water_particles_internal.h"
 #include "log.h"
 #include "vulkan_device_policy.h"
 #include "ui_vulkan.h"
@@ -695,7 +696,7 @@ bool af_renderer_update_water(af_renderer *r,const af_physics *physics,const af_
     const af_water_runtime *runtime=ph_water_runtime(physics);
     for(size_t i=r->mesh_count;i>0;--i){const char *name=r->meshes[i-1].name;if(strncmp(name,"__water_",8))continue;bool keep=false;for(size_t k=0;k<af_scene_water_count(s);++k){char expected[64];water_name(af_scene_water_at(s,k)->owner,expected);if(!strcmp(name,expected))keep=true;}if(!r->meshes[i-1].retired&&!keep&&!af_renderer_remove_mesh(r,name))return false;}
     for(size_t i=0;i<af_scene_water_count(s);++i){af_water w=*af_scene_water_at(s,i);const af_scene_object *o=af_scene_get_object(s,w.owner);if(!o)return false;float time=0;bool live=false;
-        for(size_t k=0;runtime&&k<runtime->count;++k)if(runtime->slots[k].config.owner==w.owner&&!memcmp(&runtime->slots[k].config,&w,sizeof(w))&&!memcmp(&runtime->slots[k].transform,&o->transform,sizeof(o->transform))){time=runtime->slots[k].time;live=true;break;}
+        for(size_t k=0;runtime&&k<runtime->count;++k)if(runtime->slots[k].config.owner==w.owner&&!memcmp(&runtime->slots[k].config,&w,sizeof(w))&&!memcmp(&runtime->slots[k].transform,&o->transform,sizeof(o->transform))){time=runtime->slots[k].time;live=true;if(runtime->slots[k].sleeping||(runtime->slots[k].particles&&runtime->slots[k].particles->sleeping))alpha=1;break;}
         float a=live?alpha:1;char name[64];water_name(w.owner,name);
         if(find_mesh_index(r,name)<r->mesh_count&&!memcmp(&r->water_configs[i],&w,sizeof(w))&&!memcmp(&r->water_transforms[i],&o->transform,sizeof(o->transform))&&r->water_times[i]==time&&r->water_alphas[i]==a)continue;
         af_vertex *v=NULL;uint32_t *ix=NULL;af_mesh_data mesh;bool ok=wa_mesh(live?runtime:NULL,s,w.owner,a,&v,&ix,&mesh)&&stream_set(r,name,&mesh);free(v);free(ix);if(!ok)return false;
