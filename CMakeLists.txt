@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.24)
-project(Afterlight VERSION 0.17.0 LANGUAGES C)
+project(Afterlight VERSION 0.18.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -544,6 +544,14 @@ add_custom_target(export_game
     DEPENDS afterlight_player afterlight_playground_game USES_TERMINAL VERBATIM)
 
 include(CTest)
+add_executable(afterlight_water_render_benchmark tests/water_render_benchmark.c)
+target_include_directories(afterlight_water_render_benchmark PRIVATE sandbox)
+target_link_libraries(afterlight_water_render_benchmark PRIVATE Afterlight::Engine)
+afterlight_warnings(afterlight_water_render_benchmark)
+add_executable(afterlight_water_benchmark tests/water_benchmark.c)
+target_include_directories(afterlight_water_benchmark PRIVATE engine/src)
+target_link_libraries(afterlight_water_benchmark PRIVATE Afterlight::Engine)
+afterlight_warnings(afterlight_water_benchmark)
 add_executable(afterlight_physics_benchmark tests/physics_stress.c)
 target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCHMARK=1)
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
