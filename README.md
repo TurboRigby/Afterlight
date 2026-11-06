@@ -8,6 +8,9 @@ files are MPL-2.0; bundled dependencies retain their [own licenses](THIRD_PARTY_
 Builds and exports include covered source and notices. See [licensing and
 distribution](docs/licensing.md), including how MPL applies to C game templates.
 
+Contributions require a **DCO sign-off on every commit** (`git commit -s`).
+Read the [contribution instructions](CONTRIBUTING.md) and [DCO 1.1](DCO).
+
 Afterlight **0.10** adds glTF transform/skeletal animation, editor clip previews
 and C playback controls, background HDR baking, and measured rendering improvements.
 Try the simple mechanism first, then the two-character stage:
