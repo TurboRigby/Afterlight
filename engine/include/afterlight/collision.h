@@ -35,5 +35,6 @@ bool af_scene_raycast(const struct af_scene *scene,af_vec3 origin,af_vec3 direct
 /* Query capsules are upright in world Y. Returns total count even when output capacity is smaller. */
 size_t af_scene_overlap_capsule(const struct af_scene *scene,af_vec3 center,float radius,float half_height,af_query_filter filter,af_collision_hit *hits,size_t capacity);
 size_t af_scene_overlap_sphere(const struct af_scene *scene,af_vec3 center,float radius,af_query_filter filter,af_collision_hit *hits,size_t capacity);
+bool af_collider_sweep_sphere(af_world_collider,af_vec3 center,float radius,af_vec3 displacement,float skin,af_collision_hit*);
 bool af_scene_sweep_capsule(const struct af_scene *scene,af_vec3 center,float radius,float half_height,af_vec3 displacement,float skin,af_query_filter filter,af_collision_hit *hit);
 #endif

@@ -17,6 +17,8 @@ af_vec3 ph_vector(const ph_body*,af_vec3);
 af_vec3 ph_inverse_inertia(const ph_body*,af_vec3);
 void ph_impulse(ph_body*,af_vec3,af_vec3);
 void ph_shape(ph_body*);
+void ph_move(af_physics*,size_t,float);
+void ph_sleep(af_physics*,float);
 void ph_solve(af_physics*,float);
 bool ph_detect(af_physics*);
 bool ph_sync(af_physics*,af_scene*,float);

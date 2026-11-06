@@ -41,3 +41,14 @@ iterations and eight split position iterations run per substep. Face-manifold
 contacts keep flat stacks stable without adding penetration energy to velocity.
 A four-box stack and a sliding-friction regression settle within bounded tolerances.
 This is a primitive solver, not a general constraint/joint or mesh-collision system.
+
+## Sleeping and continuous movement
+
+Resting, supported bodies sleep after 0.6 s below velocity thresholds. Forces,
+impulses, impacts, moving supports and support removal wake them. Sleeping bodies
+act immovable until woken. Continuous movement sweeps spheres against current
+static/kinematic shapes before integration. Boxes use their inscribed sphere as a
+conservative center-path guard; full rotating-box or dynamic/dynamic TOI is not
+implemented. Internal substeps and contact response handle ordinary dynamic pairs.
+Regression checks cover sleep/wake, removed support and a 180-unit/s sphere
+against a .02-unit-thick wall.

@@ -85,6 +85,7 @@ size_t af_scene_overlap_capsule(const af_scene *scene,af_vec3 center,float radiu
     return count;
 }
 size_t af_scene_overlap_sphere(const af_scene *scene,af_vec3 center,float radius,af_query_filter filter,af_collision_hit *hits,size_t capacity){return af_scene_overlap_capsule(scene,center,radius,0,filter,hits,capacity);}
+bool af_collider_sweep_sphere(af_world_collider target,af_vec3 center,float radius,af_vec3 displacement,float skin,af_collision_hit *out){float speed=af_vec3_length(displacement);if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(skin)||skin<0)return false;float t=0;af_collision_hit hit={0};for(unsigned i=0;i<40&&t<=1;++i){float distance=capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,0,&hit),approach=-af_vec3_dot(displacement,hit.normal);if(distance<=skin+.00001f){if(t==0&&distance>=-.0001f&&approach<=1e-7f)return false;hit.fraction=t;hit.distance=t*speed;*out=hit;return true;}if(approach<=1e-8f)return false;t+=fmaxf((distance-skin)/approach,.000001f);}return false;}
 bool af_scene_sweep_capsule(const af_scene *scene,af_vec3 center,float radius,float half_height,af_vec3 displacement,float skin,af_query_filter filter,af_collision_hit *out){
     float speed=af_vec3_length(displacement);
     if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(half_height)||half_height<0||!isfinite(skin)||skin<0)return false;
