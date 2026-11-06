@@ -31,5 +31,9 @@ bool af_locomotion_player_step(af_locomotion_player *p,const af_animation_file *
     }
     float speed=in.speed;if(speed<=next.walk_speed){float t=fminf(1,speed/next.walk_speed);p->weights[0]=1-t;p->weights[1]=t;p->weights[2]=0;}else{float t=fminf(1,(speed-next.walk_speed)/(next.run_speed-next.walk_speed));p->weights[0]=0;p->weights[1]=1-t;p->weights[2]=t;}
     double rate=0;for(unsigned j=0;j<3;++j)rate+=p->weights[j]/f->clips[p->clips[j]].duration;
+    p->events=(af_animation_events){0};
+    if(in.grounded&&in.speed>.12f){unsigned dominant=p->weights[2]>.5f?2:1;const af_animation_clip *clip=&f->clips[p->clips[dominant]];
+        if(!af_animation_collect_events(clip,next.phase*clip->duration,dt*rate*clip->duration,true,&p->events))return false;}
+    if(next.landed&&p->events.count<AF_ANIMATION_EVENT_BATCH)p->events.items[p->events.count++]=(af_animation_event){.name="land"};
     next.phase=fmod(next.phase+dt*rate,1);p->motion=next;return true;
 }

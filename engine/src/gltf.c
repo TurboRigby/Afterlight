@@ -9,6 +9,7 @@
 #include <afterlight/animation.h>
 #include "cgltf.h"
 #include <ctype.h>
+#include "cJSON.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -237,6 +238,15 @@ done:
 
 /* Animation data retains source node indices, independent of import preorder. */
 #include <afterlight/animation.h>
+static bool load_events(const cgltf_animation *a,af_animation_clip *clip){
+    if(!a->extras.data)return true;cJSON *json=cJSON_Parse(a->extras.data);if(!json)return false;
+    const cJSON *events=cJSON_GetObjectItemCaseSensitive(json,"afterlight_events");bool ok=true;
+    if(events){if(!cJSON_IsArray(events)||cJSON_GetArraySize(events)>(int)AF_ANIMATION_MAX_EVENTS)ok=false;
+        else for(const cJSON *e=events->child;e;e=e->next){const cJSON *name=cJSON_GetObjectItemCaseSensitive(e,"name"),*time=cJSON_GetObjectItemCaseSensitive(e,"time");
+            if(!cJSON_IsString(name)||!name->valuestring[0]||strlen(name->valuestring)>=32||!cJSON_IsNumber(time)||!isfinite(time->valuedouble)||time->valuedouble<0||time->valuedouble>=clip->duration){ok=false;break;}
+            af_animation_event *out=&clip->events[clip->event_count++];snprintf(out->name,sizeof(out->name),"%s",name->valuestring);out->time=time->valuedouble;}}
+    cJSON_Delete(json);return ok;
+}
 bool af_animation_file_load(const char *path,af_animation_file *out,af_asset_error *error){
     if(error)*error=(af_asset_error){0};if(out)*out=(af_animation_file){0};if(!path||!out)return error_message(error,"Animation path/output required.");
     memory_budget budget={0};cgltf_data *data=NULL;af_animation_file result={0};bool ok=false;size_t bytes=0,total_channels=0;
@@ -275,6 +285,7 @@ bool af_animation_file_load(const char *path,af_animation_file *out,af_asset_err
             for(size_t k=0;k<c->key_count*stride;++k){float v[4]={0};if(!values(sampler->output,k,v,components))goto done;c->values[k]=(af_vec4){v[0],v[1],v[2],v[3]};
                 if(components==4&&(stride==1||k%3==1)){float length=sqrtf(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]+v[3]*v[3]);if(fabsf(length-1)>.01f)goto done;}}
         }
+        if(!load_events(a,clip))goto done;
     }
     *out=result;result=(af_animation_file){0};ok=true;
 done:

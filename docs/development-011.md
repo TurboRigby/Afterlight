@@ -32,3 +32,13 @@ Airborne transitions capture the current mixed pose, including interrupted fades
 `af_engine_locomotion_step` exposes this fixed-tick driver to C modules; it takes
 over automatic playback until explicit Play, Stop or Seek. Reloading an asset or
 changing scenes discards its driver. Sampling never changes authored scene data.
+
+## Animation events
+
+glTF animation `extras.afterlight_events` accepts up to 64 `{name,time}` markers.
+Names contain 1–31 bytes and time is finite in `[0,clip duration)`. Invalid event
+metadata rejects the asset. The bounded collector handles exact boundaries,
+multiple loops and reverse traversal. Events exclude the old time and include
+the new time; seeking emits none. C modules drain `animation_events`; overflow
+is counted. Ground blending emits markers from its dominant moving clip once,
+and collision-driven landing adds `land`. Each instance queues at most 16 events.

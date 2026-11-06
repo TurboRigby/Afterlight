@@ -122,5 +122,8 @@ jump = clip('Jump', [(8,'rotation',[quat(x=-.6)]*5),(9,'rotation',[quat(x=.35)]*
 fall = clip('Fall', [(8,'rotation',[quat(x=.2)]*5),(9,'rotation',[quat(x=-.2)]*5),(4,'rotation',[quat(z=.1)]*5),(6,'rotation',[quat(z=-.1)]*5)])
 playable = json.loads(json.dumps(robot))
 playable['animations'] = [idle,walk,run,jump,fall]
+for animation in playable['animations'][1:3]:
+    animation['extras'] = {'afterlight_events': [{'name': 'foot_left', 'time': .25}, {'name': 'foot_right', 'time': .75}, {'name': 'foot_left', 'time': 1.25}, {'name': 'foot_right', 'time': 1.75}]}
+
 playable.update(buffers=[{'byteLength':len(data),'uri':'data:application/octet-stream;base64,'+base64.b64encode(data).decode()}],bufferViews=views,accessors=accessors)
 (root / 'sandbox/assets/locomotion.gltf').write_text(json.dumps(playable, indent=2)+'\n')

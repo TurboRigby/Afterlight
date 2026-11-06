@@ -18,7 +18,14 @@ typedef struct af_animation_channel {
     float *times;
     af_vec4 *values; /* CUBIC: in tangent, value, out tangent for each key. */
 } af_animation_channel;
-typedef struct af_animation_clip {char name[64];double duration;af_animation_channel *channels;size_t channel_count;} af_animation_clip;
+#define AF_ANIMATION_MAX_EVENTS 64u
+#define AF_ANIMATION_EVENT_BATCH 16u
+typedef struct af_animation_event {char name[32];double time;} af_animation_event;
+typedef struct af_animation_events {af_animation_event items[AF_ANIMATION_EVENT_BATCH];size_t count;uint64_t dropped;} af_animation_events;
+typedef struct af_animation_clip {char name[64];double duration;af_animation_channel *channels;size_t channel_count;af_animation_event events[AF_ANIMATION_MAX_EVENTS];size_t event_count;} af_animation_clip;
+/* Crossing interval excludes the old time and includes the new time. Loop
+   markers use [0,duration); reverse playback preserves traversal order. */
+bool af_animation_collect_events(const af_animation_clip *clip,double time,double delta,bool loop,af_animation_events *out);
 typedef struct af_animation_skin {uint32_t joints[AF_ANIMATION_MAX_JOINTS];af_mat4 inverse_bind[AF_ANIMATION_MAX_JOINTS];size_t joint_count;} af_animation_skin;
 typedef struct af_animation_file {
     af_animation_pose *bind_pose;

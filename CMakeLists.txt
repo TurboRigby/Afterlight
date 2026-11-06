@@ -45,6 +45,7 @@ add_library(afterlight STATIC
     ${afterlight_shader_headers}
     engine/src/animation.c
     engine/src/animation_player.c
+    engine/src/animation_events.c
     engine/src/animation_runtime.c
     engine/src/environment_job.c
     engine/src/asset_watch.c
@@ -386,6 +387,10 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_animation_events_test tests/animation_events.c)
+    target_link_libraries(afterlight_animation_events_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_animation_events_test)
+    add_test(NAME afterlight.animation_events COMMAND afterlight_animation_events_test "${PROJECT_SOURCE_DIR}/sandbox/assets/locomotion.gltf")
     add_executable(afterlight_locomotion_test tests/locomotion.c)
     target_link_libraries(afterlight_locomotion_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_locomotion_test)

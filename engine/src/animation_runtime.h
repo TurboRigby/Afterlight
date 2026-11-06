@@ -14,6 +14,7 @@ af_object_id af_animation_runtime_root(const af_animation_runtime *runtime,af_ob
 af_animation_status af_animation_runtime_status(af_animation_runtime *runtime,af_object_id object);
 bool af_animation_runtime_clip(af_animation_runtime *runtime,af_object_id object,size_t clip,af_animation_clip_info *info);
 bool af_animation_runtime_locomotion(af_animation_runtime *runtime,af_object_id object,af_locomotion_input input,float delta,af_locomotion *status);
+bool af_animation_runtime_events(af_animation_runtime*,af_object_id,af_animation_events*);
 bool af_animation_runtime_play(af_animation_runtime *runtime,af_object_id object,size_t clip,float blend);
 bool af_animation_runtime_pause(af_animation_runtime *runtime,af_object_id object,bool paused);
 bool af_animation_runtime_stop(af_animation_runtime *runtime,af_object_id object);

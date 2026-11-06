@@ -269,7 +269,27 @@
             "path": "translation"
           }
         }
-      ]
+      ],
+      "extras": {
+        "afterlight_events": [
+          {
+            "name": "foot_left",
+            "time": 0.25
+          },
+          {
+            "name": "foot_right",
+            "time": 0.75
+          },
+          {
+            "name": "foot_left",
+            "time": 1.25
+          },
+          {
+            "name": "foot_right",
+            "time": 1.75
+          }
+        ]
+      }
     },
     {
       "name": "Run",
@@ -331,7 +351,27 @@
             "path": "translation"
           }
         }
-      ]
+      ],
+      "extras": {
+        "afterlight_events": [
+          {
+            "name": "foot_left",
+            "time": 0.25
+          },
+          {
+            "name": "foot_right",
+            "time": 0.75
+          },
+          {
+            "name": "foot_left",
+            "time": 1.25
+          },
+          {
+            "name": "foot_right",
+            "time": 1.75
+          }
+        ]
+      }
     },
     {
       "name": "Jump",
