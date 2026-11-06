@@ -174,7 +174,7 @@ bool ed_document_duplicate(ed_document *d)
     }
     for(size_t i=0;i<count;++i)if(ids[i]){const af_scene_object *source=af_scene_object_at(d->scene,i);af_object_id parent=source->parent;
         if(source->id!=root)for(size_t j=0;j<count;++j)if(af_scene_object_at(d->scene,j)->id==parent){parent=ids[j];break;}
-        if(!af_scene_set_parent(next,ids[i],parent))goto duplicate_failed;
+        if(!af_scene_set_parent(next,ids[i],parent)||!af_scene_set_body(next,ids[i],source->body))goto duplicate_failed;
         af_gameplay_component gameplay=af_scene_get_object(next,ids[i])->gameplay;
         for(size_t j=0;j<count;++j)if(ids[j]&&af_scene_object_at(d->scene,j)->id==gameplay.player.spawn){gameplay.player.spawn=ids[j];break;}
         if(!af_scene_set_object_gameplay(next,ids[i],gameplay))goto duplicate_failed;
@@ -183,6 +183,8 @@ bool ed_document_duplicate(ed_document *d)
         af_model_binding binding=af_model_binding_default();for(size_t j=0;j<count;++j)if(ids[j]&&af_scene_object_at(d->scene,j)->id==source->model.root){binding=source->model;binding.root=ids[j];break;}
         if(!af_scene_set_model_binding(next,ids[i],binding))goto duplicate_failed;
     }
+
+    for(size_t k=0;k<af_scene_joint_count(d->scene);++k){af_joint joint=*af_scene_joint_at(d->scene,k);af_object_id a=0,b=0;for(size_t i=0;i<count;++i)if(ids[i]){af_object_id old=af_scene_object_at(d->scene,i)->id;if(old==joint.a)a=ids[i];if(old==joint.b)b=ids[i];}if(!a||(joint.b&&!b))continue;joint.a=a;joint.b=b;if(!b)joint.anchor_b.x+=1.5f;if(!af_scene_add_joint(next,joint))goto duplicate_failed;}
     free(ids);return commit(d,next,selected,0);
 duplicate_failed:
     free(ids);af_scene_destroy(next);status(d,"Cannot duplicate this subtree.");return false;
@@ -338,3 +340,6 @@ bool ed_document_rig(ed_document *d,af_object_id id,af_character_rig rig){const 
 bool ed_document_prefab(ed_document *d,const char *path){af_scene *next=af_scene_clone(d->scene);if(!next)return false;af_scene_error e;af_object_id root;if(!af_prefab_instantiate(next,path,0,af_transform_identity(),&root,&e)){snprintf(d->status,sizeof(d->status),"%s",e.message);af_scene_destroy(next);return false;}return commit(d,next,root,0);}
 
 bool ed_document_body(ed_document *d,af_rigid_body body){const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;if(!memcmp(&o->body,&body,sizeof(body)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_body(next,d->selection,body)){af_scene_destroy(next);status(d,"Dynamic bodies need centered root sphere/box colliders and valid mass/settings.");return false;}return commit(d,next,d->selection,47);}
+
+bool ed_document_joint(ed_document *d,af_joint j){af_scene *next=af_scene_clone(d->scene);if(!next)return false;bool ok=j.id?af_scene_set_joint(next,j.id,j):af_scene_add_joint(next,j)!=0;if(!ok){af_scene_destroy(next);status(d,"Joint needs valid collider endpoints, one dynamic body and perpendicular unit axes.");return false;}return commit(d,next,d->selection,48);}
+bool ed_document_remove_joint(ed_document *d,af_joint_id id){af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_remove_joint(next,id)){af_scene_destroy(next);return false;}ed_document_end_edit(d);return commit(d,next,d->selection,49);}

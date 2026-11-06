@@ -63,3 +63,20 @@ retain their meaning. Prefabs remap internal body references and reject external
 or world anchors. Endpoint edits that invalidate a joint fail transactionally.
 Pendulum/chain, save/load, clone, deletion and prefab remapping regressions run
 as CPU tests.
+
+## Hinges and authoring
+
+A hinge constrains both anchors and two angular axes while leaving twist free.
+Optional limits use a signed angle from A's zero reference to B's, in radians
+within [-pi, pi]. Axes and perpendicular zero references are explicit unit vectors.
+There are no motors, break forces or constraint-island sleeping yet.
+
+Select a dynamic object in the editor to add distance/hinge joints, choose body B
+or world, edit anchors/axes/references and limits, or delete a joint. Changes use
+undo/redo. Physics overlays show anchors, connecting lines, hinge axes and limit
+arcs; collider overlays show up to 256 imported triangles. Duplicating a subtree
+copies bodies and internal/world joints with fresh IDs, offsetting world anchors
+with the duplicate; joints to external bodies are omitted.
+
+Free hinge motion, angular alignment, bounded twist, persistence, editor undo/redo
+and duplicate reference regressions pass alongside the distance tests.

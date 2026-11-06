@@ -461,15 +461,15 @@ static void local_light_controls(editor *app)
 }
 static void collider_controls(editor *app,af_scene_object object){
     struct nk_context *ctx=&app->gui.context;label(ctx,"Collider",30);af_collider value=object.collider,before=value;
-    static const char *types[]={"No collider","Box","Sphere","Capsule"};nk_layout_row_dynamic(ctx,30,1);
-    value.type=(af_collider_type)nk_combo(ctx,types,4,(int)value.type,26,nk_vec2(290,150));
+    static const char *types[]={"No collider","Box","Sphere","Capsule","Imported mesh"};nk_layout_row_dynamic(ctx,30,1);
+    value.type=(af_collider_type)nk_combo(ctx,types,5,(int)value.type,26,nk_vec2(290,150));
     if(before.type==AF_COLLIDER_NONE&&value.type==AF_COLLIDER_BOX&&!strcmp(object.mesh,"cube"))value.half_extents=(af_vec3){0.65f,0.65f,0.65f};
     if(value.type!=AF_COLLIDER_NONE){nk_layout_row_dynamic(ctx,26,2);nk_bool enabled=value.enabled,trigger=value.trigger;
         nk_checkbox_label(ctx,"Enabled",&enabled);nk_checkbox_label(ctx,"Trigger",&trigger);value.enabled=enabled!=0;value.trigger=trigger!=0;
-        vector_fields(ctx,"Collider center",&value.center,0.1f,0.01f);
+        if(value.type==AF_COLLIDER_MESH){value.center=(af_vec3){0};label(ctx,"Uses imported static triangles; moving bodies unsupported.",42);}else vector_fields(ctx,"Collider center",&value.center,0.1f,0.01f);
         if(value.type==AF_COLLIDER_BOX){label(ctx,"Half extents",22);nk_layout_row_dynamic(ctx,30,3);
             nk_property_float(ctx,"#X",0.001f,&value.half_extents.x,10000,0.1f,0.01f);nk_property_float(ctx,"#Y",0.001f,&value.half_extents.y,10000,0.1f,0.01f);nk_property_float(ctx,"#Z",0.001f,&value.half_extents.z,10000,0.1f,0.01f);
-        }else{nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Radius",0.001f,&value.radius,10000,0.05f,0.005f);
+        }else if(value.type!=AF_COLLIDER_MESH){nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Radius",0.001f,&value.radius,10000,0.05f,0.005f);
             if(value.type==AF_COLLIDER_CAPSULE){nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Segment half height",0,&value.half_height,10000,0.1f,0.01f);}}
         nk_layout_row_dynamic(ctx,30,1);int layer=0;uint32_t bit=value.layer;while(bit>1){bit>>=1;++layer;}int next=layer;nk_property_int(ctx,"Layer bit",0,&next,31,1,1);if(next!=layer)value.layer=UINT32_C(1)<<(unsigned)next;
         char mask[96];snprintf(mask,sizeof(mask),"Mask 0x%08" PRIx32 "; selector assigns one bit.",value.layer);label(ctx,mask,24);
@@ -477,6 +477,18 @@ static void collider_controls(editor *app,af_scene_object object){
         af_world_collider world;if(value.enabled&&!af_scene_world_collider(app->document.scene,object.id,&world)){nk_layout_row_dynamic(ctx,42,1);nk_label_wrap(ctx,"Collider skipped: zero scale or sheared world transform.");}
     }
     if(memcmp(&value,&before,sizeof(value)))ed_document_collider(&app->document,value);
+}
+
+static void joint_controls(editor *app,af_scene_object object){struct nk_context *ctx=&app->gui.context;label(ctx,"Joints",28);
+    if(object.body.enabled&&object.body.type==AF_BODY_DYNAMIC){nk_layout_row_dynamic(ctx,28,2);for(unsigned type=0;type<2;++type)if(nk_button_label(ctx,type?"Add hinge":"Add distance")){af_joint j=af_joint_default();j.a=object.id;j.type=(af_joint_type)type;snprintf(j.name,sizeof(j.name),"%s joint",type?"Hinge":"Distance");af_world_collider c;if(af_scene_world_collider(app->document.scene,object.id,&c))j.anchor_b=af_vec3_add(c.center,(af_vec3){0,type?0:1,0});ed_document_end_edit(&app->document);ed_document_joint(&app->document,j);ed_document_end_edit(&app->document);return;}}
+    for(size_t i=0;i<af_scene_joint_count(app->document.scene);++i){af_joint j=*af_scene_joint_at(app->document.scene,i);if(j.a!=object.id&&j.b!=object.id)continue;char title[96];snprintf(title,sizeof(title),"%s [%llu]",j.name,(unsigned long long)j.id);
+        if(nk_tree_push_id(ctx,NK_TREE_NODE,title,NK_MINIMIZED,(int)j.id)){af_joint before=j;nk_layout_row_dynamic(ctx,26,2);nk_bool enabled=j.enabled,collide=j.collide_connected;nk_checkbox_label(ctx,"Enabled",&enabled);nk_checkbox_label(ctx,"Collide bodies",&collide);j.enabled=enabled!=0;j.collide_connected=collide!=0;
+            label(ctx,"Body B (zero means world)",22);const af_scene_object *other=af_scene_get_object(app->document.scene,j.b);nk_layout_row_dynamic(ctx,28,1);if(nk_combo_begin_label(ctx,other?other->name:"World",nk_vec2(280,200))){nk_layout_row_dynamic(ctx,25,1);if(nk_combo_item_label(ctx,"World",NK_TEXT_LEFT))j.b=0;for(size_t k=0;k<af_scene_object_count(app->document.scene);++k){const af_scene_object *o=af_scene_object_at(app->document.scene,k);if(o->id!=j.a&&o->collider.enabled&&!o->collider.trigger&&o->collider.type!=AF_COLLIDER_NONE&&nk_combo_item_label(ctx,o->name,NK_TEXT_LEFT))j.b=o->id;}nk_combo_end(ctx);}
+            vector_fields(ctx,"Anchor A (body units)",&j.anchor_a,.1f,.01f);vector_fields(ctx,j.b?"Anchor B (body units)":"World anchor B",&j.anchor_b,.1f,.01f);
+            if(j.type==AF_JOINT_DISTANCE){nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Distance",0,&j.distance,10000,.1f,.01f);}else{bool axes=vector_fields(ctx,"Axis A",&j.axis_a,.1f,.01f);axes|=vector_fields(ctx,"Axis B",&j.axis_b,.1f,.01f);axes|=vector_fields(ctx,"Zero reference A",&j.reference_a,.1f,.01f);axes|=vector_fields(ctx,"Zero reference B",&j.reference_b,.1f,.01f);if(axes){j.axis_a=af_vec3_normalize(j.axis_a);j.axis_b=af_vec3_normalize(j.axis_b);j.reference_a=af_vec3_normalize(af_vec3_sub(j.reference_a,af_vec3_scale(j.axis_a,af_vec3_dot(j.axis_a,j.reference_a))));j.reference_b=af_vec3_normalize(af_vec3_sub(j.reference_b,af_vec3_scale(j.axis_b,af_vec3_dot(j.axis_b,j.reference_b))));}nk_bool limits=j.limits_enabled;nk_layout_row_dynamic(ctx,26,1);nk_checkbox_label(ctx,"Angular limits",&limits);j.limits_enabled=limits!=0;float low=j.lower_limit*180/AF_PI,high=j.upper_limit*180/AF_PI;nk_layout_row_dynamic(ctx,28,2);nk_property_float(ctx,"Min deg",-180,&low,high,5,.5f);nk_property_float(ctx,"Max deg",low,&high,180,5,.5f);j.lower_limit=low*AF_PI/180;j.upper_limit=high*AF_PI/180;}
+            bool remove;nk_layout_row_dynamic(ctx,28,1);remove=nk_button_label(ctx,"Delete joint")!=0;nk_tree_pop(ctx);if(remove){ed_document_remove_joint(&app->document,j.id);return;}if(memcmp(&before,&j,sizeof(j))){ed_document_joint(&app->document,j);return;}
+        }
+    }
 }
 static void body_controls(editor *app,af_scene_object object){struct nk_context *ctx=&app->gui.context;af_rigid_body body=object.body;bool changed=false;label(ctx,"Rigid body",28);nk_layout_row_dynamic(ctx,26,1);nk_bool enabled=body.enabled;if(nk_checkbox_label(ctx,"Enable physics",&enabled)){body.enabled=enabled!=0;changed=true;}if(body.enabled){static const char *types[]={"Static","Kinematic","Dynamic"};nk_layout_row_dynamic(ctx,28,1);int type=nk_combo(ctx,types,3,(int)body.type,26,nk_vec2(280,150));if(type!=(int)body.type){body.type=(af_body_type)type;changed=true;}
     float *values[]={&body.mass,&body.friction,&body.restitution,&body.linear_damping,&body.angular_damping,&body.gravity_scale};const char *names[]={"Mass","Friction","Bounce","Linear damping","Angular damping","Gravity scale"};float lo[]={.001f,0,0,0,0,-10},hi[]={10000,2,1,20,20,10};for(unsigned i=0;i<6;++i){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,names[i],lo[i],values[i],hi[i],.1f,.01f)!=0;}
@@ -583,7 +595,7 @@ static void inspector(editor *app,float width,float height)
                     if(nk_combo_item_label(context,text,NK_TEXT_LEFT))ed_document_parent(&app->document,candidate.id);
                 }nk_combo_end(context);
             }
-            collider_controls(app,object);body_controls(app,object);
+            collider_controls(app,object);body_controls(app,object);joint_controls(app,object);
             gameplay_controls(app,object);
             label(context,"Material",30);af_material material=object.material;
             nk_layout_row_dynamic(context,80,1);thumbnail_widget(app,NULL,&material);
@@ -710,6 +722,8 @@ static void draw_skeleton(editor *app){
 static void draw_physics(editor *app){if(!app->show_physics)return;struct nk_context *ctx=&app->gui.context;af_rect r=app->viewport;af_camera camera=app->runtime.playing?af_engine_get_camera(app->engine):app->camera;const af_scene *scene=app->runtime.playing?app->runtime.scene:app->document.scene;
     nk_style_push_style_item(ctx,&ctx->style.window.fixed_background,nk_style_item_color(nk_rgba(0,0,0,0)));if(nk_begin(ctx,"Physics debug",nk_rect(r.x,r.y,r.width,r.height),NK_WINDOW_NO_INPUT|NK_WINDOW_NO_SCROLLBAR|NK_WINDOW_BACKGROUND)){struct nk_command_buffer *canvas=nk_window_get_canvas(ctx);
         for(size_t i=0;i<af_scene_object_count(scene);++i){const af_scene_object *o=af_scene_object_at(scene,i);if(!o->body.enabled||o->body.type!=AF_BODY_DYNAMIC)continue;af_physics_state state=af_engine_body_state(app->engine,o->id);af_vec3 center=state.available?state.position:o->transform.position;af_vec2 a,b;struct nk_color color=state.sleeping?nk_rgb(110,220,230):nk_rgb(255,180,80);if(ed_project(&camera,r,center,&a)){nk_stroke_circle(canvas,nk_rect(a.x-4,a.y-4,8,8),2,color);if(state.available&&ed_project(&camera,r,af_vec3_add(center,af_vec3_scale(state.velocity,.2f)),&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,2,color);}}
+
+        for(size_t i=0;i<af_scene_joint_count(scene);++i){af_joint j=*af_scene_joint_at(scene,i);ed_line3 lines[64];size_t count=ed_joint_lines(scene,j,lines,64);struct nk_color color=j.enabled?nk_rgb(154,190,255):nk_rgb(110,110,110);for(size_t k=0;k<count&&k<64;++k){af_vec2 a,b;if(ed_project(&camera,r,lines[k].a,&a)&&ed_project(&camera,r,lines[k].b,&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,2,color);}}
         af_physics_contact contacts[1024];size_t count=af_engine_physics_contacts(app->engine,contacts,1024);for(size_t i=0;i<count&&i<1024;++i){af_vec2 a,b;if(ed_project(&camera,r,contacts[i].point,&a)){nk_fill_circle(canvas,nk_rect(a.x-2,a.y-2,4,4),nk_rgb(255,110,140));if(ed_project(&camera,r,af_vec3_add(contacts[i].point,af_vec3_scale(contacts[i].normal,.3f)),&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,1,nk_rgb(255,110,140));}}
     }nk_end(ctx);nk_style_pop_style_item(ctx);}
 static void draw_lights(editor *app){

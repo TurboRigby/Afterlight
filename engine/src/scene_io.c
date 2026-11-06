@@ -390,12 +390,16 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
     for(size_t i=0;i<scene->count;++i)if(!af_scene_set_body(scene,scene->objects[i].id,scene->objects[i].body)){set_error(error,AF_SCENE_ERROR_FORMAT,"Dynamic bodies need a root sphere/box collider with a centered origin and positive scale.");goto fail;}
 
     if(version->valuedouble>=14){
-        const cJSON *array=cJSON_GetObjectItemCaseSensitive(root,"joints"),*item;uint64_t next;
-        if(!cJSON_IsArray(array)||cJSON_GetArraySize(array)>AF_SCENE_MAX_JOINTS||!read_id(cJSON_GetObjectItemCaseSensitive(root,"next_joint"),&next))goto joint_fail;
-        cJSON_ArrayForEach(item,array){
-            static const char *const fields[]={"id","name","type","enabled","collide_connected","a","b","anchor_a","anchor_b","distance"};af_joint j=af_joint_default();
-            const cJSON *type=cJSON_GetObjectItemCaseSensitive(item,"type"),*enabled=cJSON_GetObjectItemCaseSensitive(item,"enabled"),*collide=cJSON_GetObjectItemCaseSensitive(item,"collide_connected");
-            if(!exact_fields(item,fields,10)||!read_id(cJSON_GetObjectItemCaseSensitive(item,"id"),&j.id)||!j.id||(next&&j.id>=next)||af_scene_get_joint(scene,j.id)||!read_name(cJSON_GetObjectItemCaseSensitive(item,"name"),j.name,sizeof(j.name))||!cJSON_IsString(type)||strcmp(type->valuestring,"distance")||!cJSON_IsBool(enabled)||!cJSON_IsBool(collide)||!read_id(cJSON_GetObjectItemCaseSensitive(item,"a"),&j.a)||!read_id(cJSON_GetObjectItemCaseSensitive(item,"b"),&j.b)||!read_vector(cJSON_GetObjectItemCaseSensitive(item,"anchor_a"),&j.anchor_a)||!read_vector(cJSON_GetObjectItemCaseSensitive(item,"anchor_b"),&j.anchor_b)||!read_float_field(item,"distance",&j.distance))goto joint_fail;
+        const cJSON *array=cJSON_GetObjectItemCaseSensitive(root,"joints"),*joint_item;uint64_t next;
+        if(!cJSON_IsArray(array)||cJSON_GetArraySize(array)>(int)AF_SCENE_MAX_JOINTS||!read_id(cJSON_GetObjectItemCaseSensitive(root,"next_joint"),&next))goto joint_fail;
+        cJSON_ArrayForEach(joint_item,array){
+            static const char *const fields[]={"id","name","type","enabled","collide_connected","a","b","anchor_a","anchor_b","distance","axis_a","axis_b","reference_a","reference_b","limits_enabled","lower_limit","upper_limit"};af_joint j=af_joint_default();
+            const cJSON *type=cJSON_GetObjectItemCaseSensitive(joint_item,"type"),*enabled=cJSON_GetObjectItemCaseSensitive(joint_item,"enabled"),*collide=cJSON_GetObjectItemCaseSensitive(joint_item,"collide_connected");
+            if(!exact_fields(joint_item,fields,17)||!read_id(cJSON_GetObjectItemCaseSensitive(joint_item,"id"),&j.id)||!j.id||(next&&j.id>=next)||af_scene_get_joint(scene,j.id)||!read_name(cJSON_GetObjectItemCaseSensitive(joint_item,"name"),j.name,sizeof(j.name))||!cJSON_IsString(type)||(strcmp(type->valuestring,"distance")&&strcmp(type->valuestring,"hinge"))||!cJSON_IsBool(enabled)||!cJSON_IsBool(collide)||!read_id(cJSON_GetObjectItemCaseSensitive(joint_item,"a"),&j.a)||!read_id(cJSON_GetObjectItemCaseSensitive(joint_item,"b"),&j.b)||!read_vector(cJSON_GetObjectItemCaseSensitive(joint_item,"anchor_a"),&j.anchor_a)||!read_vector(cJSON_GetObjectItemCaseSensitive(joint_item,"anchor_b"),&j.anchor_b)||!read_float_field(joint_item,"distance",&j.distance))goto joint_fail;
+
+            j.type=!strcmp(type->valuestring,"hinge")?AF_JOINT_HINGE:AF_JOINT_DISTANCE;const cJSON *limits=cJSON_GetObjectItemCaseSensitive(joint_item,"limits_enabled");
+            if(!cJSON_IsBool(limits)||!read_vector(cJSON_GetObjectItemCaseSensitive(joint_item,"axis_a"),&j.axis_a)||!read_vector(cJSON_GetObjectItemCaseSensitive(joint_item,"axis_b"),&j.axis_b)||!read_vector(cJSON_GetObjectItemCaseSensitive(joint_item,"reference_a"),&j.reference_a)||!read_vector(cJSON_GetObjectItemCaseSensitive(joint_item,"reference_b"),&j.reference_b)||!read_float_field(joint_item,"lower_limit",&j.lower_limit)||!read_float_field(joint_item,"upper_limit",&j.upper_limit))goto joint_fail;
+            j.limits_enabled=cJSON_IsTrue(limits)!=0;
             j.enabled=cJSON_IsTrue(enabled)!=0;j.collide_connected=cJSON_IsTrue(collide)!=0;
             af_joint_id assigned=af_scene_add_joint(scene,j);if(!assigned)goto joint_fail;scene->joints[scene->joint_count-1].id=j.id;
         }scene->next_joint_id=next;
@@ -483,7 +487,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
 
     cJSON *joints=cJSON_AddArrayToObject(root,"joints");if(!joints||!add_id(root,"next_joint",scene->next_joint_id))goto fail;
     for(size_t i=0;i<scene->joint_count;++i){af_joint j=scene->joints[i];cJSON *item=cJSON_CreateObject();if(!item)goto fail;cJSON_AddItemToArray(joints,item);
-        if(!af_joint_valid(j)||!add_id(item,"id",j.id)||!cJSON_AddStringToObject(item,"name",j.name)||!cJSON_AddStringToObject(item,"type","distance")||!cJSON_AddBoolToObject(item,"enabled",j.enabled)||!cJSON_AddBoolToObject(item,"collide_connected",j.collide_connected)||!add_id(item,"a",j.a)||!add_id(item,"b",j.b)||!add_vector(item,"anchor_a",j.anchor_a)||!add_vector(item,"anchor_b",j.anchor_b)||!cJSON_AddNumberToObject(item,"distance",j.distance))goto fail;
+        if(!af_joint_valid(j)||!add_id(item,"id",j.id)||!cJSON_AddStringToObject(item,"name",j.name)||!cJSON_AddStringToObject(item,"type",j.type==AF_JOINT_HINGE?"hinge":"distance")||!cJSON_AddBoolToObject(item,"enabled",j.enabled)||!cJSON_AddBoolToObject(item,"collide_connected",j.collide_connected)||!add_id(item,"a",j.a)||!add_id(item,"b",j.b)||!add_vector(item,"anchor_a",j.anchor_a)||!add_vector(item,"anchor_b",j.anchor_b)||!cJSON_AddNumberToObject(item,"distance",j.distance)||!add_vector(item,"axis_a",j.axis_a)||!add_vector(item,"axis_b",j.axis_b)||!add_vector(item,"reference_a",j.reference_a)||!add_vector(item,"reference_b",j.reference_b)||!cJSON_AddBoolToObject(item,"limits_enabled",j.limits_enabled)||!cJSON_AddNumberToObject(item,"lower_limit",j.lower_limit)||!cJSON_AddNumberToObject(item,"upper_limit",j.upper_limit))goto fail;
     }
     cJSON *render=cJSON_AddObjectToObject(root,"render");
     if(!render||!cJSON_AddNumberToObject(render,"exposure",scene->render_settings.exposure)||!cJSON_AddBoolToObject(render,"tone_mapping",scene->render_settings.tone_mapping))goto fail;

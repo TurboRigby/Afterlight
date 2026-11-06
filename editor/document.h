@@ -7,6 +7,7 @@
 #ifndef AF_EDITOR_DOCUMENT_H
 #define AF_EDITOR_DOCUMENT_H
 #include <afterlight/scene.h>
+#include <afterlight/joint.h>
 
 #define ED_PATH_CAPACITY 4096
 #define ED_HISTORY_LIMIT 32
@@ -60,6 +61,8 @@ bool ed_document_local_light(ed_document *document,size_t index,af_local_light l
 bool ed_document_remove_light(ed_document *document,size_t index);
 bool ed_document_create_mesh_object(ed_document *document,const char *mesh);
 bool ed_document_gameplay(ed_document *document,af_gameplay_component component);
+bool ed_document_joint(ed_document*,af_joint);
+bool ed_document_remove_joint(ed_document*,af_joint_id);
 bool ed_document_body(ed_document*,af_rigid_body);
 bool ed_document_collider(ed_document *document,af_collider collider);
 #endif
