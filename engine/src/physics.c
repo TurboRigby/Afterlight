@@ -300,7 +300,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
             return fail(p, "Physics exceeds 8192 contact points.");
         stamp=ph_clock(p);ph_solve(p,h);p->stats.solver_ms+=ph_clock(p)-stamp;
     }
-    ph_sleep(p, dt);
+    ph_sleep(p, dt);ph_joints_report(p);
     for (size_t i = 0; i < p->count; ++i) {
         ph_body *b = &p->bodies[i];
         b->force = b->torque = (af_vec3){0};

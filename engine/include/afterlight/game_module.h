@@ -40,6 +40,7 @@ typedef struct af_game_host {
     bool (*apply_force)(af_engine*,af_object_id,af_vec3,af_vec3);
     bool (*apply_impulse)(af_engine*,af_object_id,af_vec3,af_vec3);
     af_physics_state (*body_state)(const af_engine*,af_object_id);
+    af_physics_joint_state (*joint_state)(const af_engine*,af_joint_id);
     bool (*set_body)(af_scene*,af_object_id,af_rigid_body);
     af_joint_id (*add_joint)(af_scene*,af_joint);
     bool (*set_joint)(af_scene*,af_joint_id,af_joint);

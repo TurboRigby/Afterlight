@@ -50,3 +50,12 @@ when endpoints or settings change. Position correction remains separate from
 velocity impulses. A twelve-link chain with a 16:1 bottom mass ratio stays below
 0.14 world units of length error at 30/60/144 Hz, including a later impulse.
 Sleeping groups skip joint rows until woken.
+
+## Diagnostics
+
+Engine and C-host joint-state queries expose anchor/angle errors, relative hinge
+speed, sleeping state and reaction estimates in newtons/newton-metres. Reactions
+are cached solver impulses divided by substep duration, retaining the last solved
+value during sleep. The suspended 2 kg regression measures approximately 19.62 N.
+The editor shows per-joint state, phase timings, island counts, cache probes and
+CCD clamps; sleeping and high-error joints have distinct overlay colors.

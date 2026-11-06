@@ -80,6 +80,7 @@ bool af_engine_apply_force(af_engine*,af_object_id,af_vec3,af_vec3);
 bool af_engine_apply_impulse(af_engine*,af_object_id,af_vec3,af_vec3);
 bool af_engine_wake_body(af_engine*,af_object_id);
 af_physics_state af_engine_body_state(const af_engine*,af_object_id);
+af_physics_joint_state af_engine_joint_state(const af_engine*,af_joint_id);
 af_physics_stats af_engine_physics_stats(const af_engine*);
 size_t af_engine_physics_contacts(const af_engine*,af_physics_contact*,size_t);
 af_input_map af_engine_input_map(const af_engine*);

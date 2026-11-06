@@ -667,6 +667,7 @@ bool af_engine_apply_force(af_engine *e,af_object_id id,af_vec3 force,af_vec3 po
 bool af_engine_apply_impulse(af_engine *e,af_object_id id,af_vec3 impulse,af_vec3 point){return e&&af_physics_apply_impulse(e->physics,(af_scene*)e->scene,id,impulse,point);}
 bool af_engine_wake_body(af_engine *e,af_object_id id){return e&&af_physics_wake(e->physics,id);}
 af_physics_state af_engine_body_state(const af_engine *e,af_object_id id){return af_physics_get_state(e?e->physics:NULL,id);}
+af_physics_joint_state af_engine_joint_state(const af_engine *e,af_joint_id id){return af_physics_get_joint_state(e?e->physics:NULL,id);}
 af_physics_stats af_engine_physics_stats(const af_engine *e){return af_physics_get_stats(e?e->physics:NULL);}
 size_t af_engine_physics_contacts(const af_engine *e,af_physics_contact *out,size_t cap){return af_physics_contacts(e?e->physics:NULL,out,cap);}
 

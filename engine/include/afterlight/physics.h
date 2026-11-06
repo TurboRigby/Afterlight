@@ -3,6 +3,7 @@
 #define AFTERLIGHT_PHYSICS_H
 #include <afterlight/character.h>
 #include <afterlight/scene.h>
+#include <afterlight/joint.h>
 #define AF_PHYSICS_MAX_BODIES 1024u
 #define AF_PHYSICS_MAX_CONTACTS 8192u
 typedef struct af_physics af_physics;
@@ -18,6 +19,15 @@ typedef struct af_physics_contact {
     af_vec3 point, normal;
     float penetration, impulse;
 } af_physics_contact;
+typedef struct af_physics_joint_state {
+    bool available,sleeping;
+    af_joint_id id;
+    af_vec3 anchor_a,anchor_b;
+    float linear_error,angular_error,angle,speed,force,torque,motor_torque;
+} af_physics_joint_state;
+/* Last fixed-step state. Reaction estimates use cached solver impulses / substep
+   duration and retain their last solved values while the island is asleep. */
+af_physics_joint_state af_physics_get_joint_state(const af_physics*,af_joint_id);
 typedef struct af_physics_stats {
     size_t bodies, dynamic_bodies, kinematic_bodies, sleeping, contacts, broadphase_pairs;
     unsigned substeps, iterations, ccd_hits,ccd_clamped;
@@ -25,6 +35,7 @@ typedef struct af_physics_stats {
     double sync_ms,broadphase_ms,narrowphase_ms,ccd_ms,solver_ms,total_ms;
     size_t ccd_pairs,cache_probes;
     size_t islands,awake_islands,largest_island;
+    float max_joint_error,max_joint_force,max_joint_torque;
 } af_physics_stats;
 af_physics *af_physics_create(void);
 void af_physics_destroy(af_physics *);

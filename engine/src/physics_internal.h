@@ -75,6 +75,7 @@ void ph_wake_island(af_physics*,size_t);
 void ph_sleep(af_physics *, float);
 bool ph_joints_sync(af_physics *);
 bool ph_collision_allowed(const af_physics*,af_object_id,af_object_id);
+void ph_joints_report(af_physics*);
 void ph_joints_warm_start(af_physics*,float);
 void ph_joints_solve(af_physics*,float,bool);
 void ph_solve(af_physics *, float);
