@@ -60,6 +60,8 @@ void ph_hold(af_physics *, float);
 void ph_move(af_physics *, size_t, float);
 void ph_sleep(af_physics *, float);
 void ph_solve(af_physics *, float);
+bool ph_emit(af_physics*,size_t,size_t,af_vec3,af_vec3,float);
+bool ph_mesh_contacts(af_physics*,size_t,size_t);
 bool ph_detect(af_physics *);
 bool ph_sync(af_physics *, af_scene *, float);
 #endif

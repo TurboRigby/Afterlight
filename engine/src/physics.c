@@ -97,15 +97,15 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             for (unsigned axis = 0; axis < 3; ++axis)
                 shape.axes[axis] = ph_axis(axis);
         }
-        if (shape.type != AF_COLLIDER_BOX && shape.type != AF_COLLIDER_SPHERE)
+        if (shape.type != AF_COLLIDER_BOX && shape.type != AF_COLLIDER_SPHERE && shape.type!=AF_COLLIDER_MESH)
             continue;
         if (!ph_finite(shape.half_extents) || !isfinite(shape.radius) || shape.radius > 10000 ||
             shape.half_extents.x > 10000 || shape.half_extents.y > 10000 || shape.half_extents.z > 10000)
             return fail(p, "Physics dimensions exceed 10,000 world units.");
-        if (shape.type == AF_COLLIDER_SPHERE
+        if (shape.type!=AF_COLLIDER_MESH&&(shape.type == AF_COLLIDER_SPHERE
                 ? shape.radius < .01f
                 : (shape.half_extents.x < .01f || shape.half_extents.y < .01f ||
-                   shape.half_extents.z < .01f))
+                   shape.half_extents.z < .01f)))
             return fail(p, "Physics shape dimensions must be at least .01 world units.");
         if (count == AF_PHYSICS_MAX_BODIES || !ph_finite(shape.center) ||
             af_vec3_length(shape.center) > 1000000)

@@ -28,3 +28,12 @@ sweeps use transformed triangles, including mirrored/nonuniform TRS. The charact
 controller and orbit camera consume these existing query APIs automatically.
 CPU callers prepare mesh assets before querying; engine asset loading does it.
 Queries treat triangle surfaces rather than defining a solid interior volume.
+
+## Rigid-body mesh contacts
+
+Sphere/triangle distances and 13-axis box/triangle SAT feed the rigid-body solver.
+Triangle clipping reduces coplanar patches to a wide, bounded contact footprint.
+The BVH filters world-space candidate triangles before narrowphase. Dropped boxes,
+spheres and a three-box stack settle on an imported two-triangle floor; existing
+primitive stack/friction/sleep tests remain in place. Triangle surfaces are static;
+convex decomposition or dynamic concave mesh bodies are not provided.

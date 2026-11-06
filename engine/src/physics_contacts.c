@@ -17,7 +17,7 @@ static float dot(af_vec3 a, af_vec3 b) {
 }
 static ph_bound bound(ph_body *b, size_t index) {
     af_vec3 e = {b->shape.radius, b->shape.radius, b->shape.radius};
-    if (b->shape.type == AF_COLLIDER_BOX) {
+    if (b->shape.type == AF_COLLIDER_BOX||b->shape.type==AF_COLLIDER_MESH) {
         e = (af_vec3){0};
         for (unsigned i = 0; i < 3; ++i) {
             af_vec3 a = b->shape.axes[i];
@@ -40,7 +40,7 @@ static float radius(const ph_body *b, af_vec3 n) {
         r += ph_get(b->shape.half_extents, i) * fabsf(dot(n, b->shape.axes[i]));
     return r;
 }
-static bool emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 n, float penetration) {
+bool ph_emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 n, float penetration) {
     if (p->contact_count == AF_PHYSICS_MAX_CONTACTS)
         return false;
     ph_body *one = &p->bodies[a], *two = &p->bodies[b];
@@ -189,7 +189,7 @@ static bool boxes(af_physics *p, size_t ai, size_t bi) {
             }
         }
         for (size_t i = 0; i < used; ++i)
-            if (!emit(p, ai, bi, chosen[i], normal, depths[i]))
+            if (!ph_emit(p, ai, bi, chosen[i], normal, depths[i]))
                 return false;
         if (used)
             return true;
@@ -203,7 +203,7 @@ static bool boxes(af_physics *p, size_t ai, size_t bi) {
         two = sub(two, mul(b->shape.axes[ib], dot(sub(two, b->p), b->shape.axes[ib])));
         closest_segments(sub(one, ea), add(one, ea), sub(two, eb), add(two, eb), &one, &two);
     }
-    return emit(p, ai, bi, mul(add(one, two), .5f), normal, best);
+    return ph_emit(p, ai, bi, mul(add(one, two), .5f), normal, best);
 }
 static bool sphere_box(af_physics *p, size_t sphere, size_t box, bool reverse) {
     ph_body *s = &p->bodies[sphere], *b = &p->bodies[box];
@@ -233,7 +233,7 @@ static bool sphere_box(af_physics *p, size_t sphere, size_t box, bool reverse) {
         return true;
     af_vec3 point =
         mul(add(add(b->p, ph_vector(b, closest)), sub(s->p, mul(outward, s->shape.radius))), .5f);
-    return emit(p, reverse ? box : sphere, reverse ? sphere : box, point,
+    return ph_emit(p, reverse ? box : sphere, reverse ? sphere : box, point,
                 reverse ? outward : mul(outward, -1), penetration);
 }
 bool ph_detect(af_physics *p) {
@@ -260,7 +260,8 @@ bool ph_detect(af_physics *p) {
                 continue;
             ++p->stats.broadphase_pairs;
             bool ok;
-            if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
+            if(a->shape.type==AF_COLLIDER_MESH||b->shape.type==AF_COLLIDER_MESH)ok=ph_mesh_contacts(p,ai,bi);
+            else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
                 ok = boxes(p, ai, bi);
             else if (a->shape.type != b->shape.type)
                 ok = a->shape.type == AF_COLLIDER_SPHERE ? sphere_box(p, ai, bi, false)
@@ -272,7 +273,7 @@ bool ph_detect(af_physics *p) {
                 if (penetration < -SKIN)
                     continue;
                 af_vec3 n = length > 1e-7f ? mul(d, 1 / length) : (af_vec3){0, 1, 0};
-                ok = emit(p, ai, bi, add(a->p, mul(n, a->shape.radius - penetration * .5f)), n,
+                ok = ph_emit(p, ai, bi, add(a->p, mul(n, a->shape.radius - penetration * .5f)), n,
                           penetration);
             }
             if (!ok)
