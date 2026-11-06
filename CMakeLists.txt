@@ -55,6 +55,7 @@ add_library(afterlight STATIC
     engine/src/game_host.c
     engine/src/character.c
     engine/src/third_person.c
+    engine/src/locomotion.c
     engine/src/collision.c
     engine/src/simulation.c
     engine/src/mipmap.c
@@ -384,6 +385,10 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_locomotion_test tests/locomotion.c)
+    target_link_libraries(afterlight_locomotion_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_locomotion_test)
+    add_test(NAME afterlight.locomotion COMMAND afterlight_locomotion_test)
     add_executable(afterlight_third_person_test tests/third_person.c)
     target_link_libraries(afterlight_third_person_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_third_person_test)

@@ -115,3 +115,12 @@ robot = {'asset': {'version':'2.0','generator':'Afterlight original nine-joint c
          'meshes':[{'primitives':[{'attributes':{'POSITION':robot_position,'NORMAL':robot_normal,'COLOR_0':robot_color,'JOINTS_0':robot_joint,'WEIGHTS_0':robot_weight},'indices':robot_index,'material':0}]}],
          'animations':[idle,walk,wave_clip], 'buffers':[{'byteLength':len(data),'uri':'data:application/octet-stream;base64,'+base64.b64encode(data).decode()}], 'bufferViews':views,'accessors':accessors}
 (root / 'sandbox/assets/character.gltf').write_text(json.dumps(robot, indent=2)+'\n')
+
+# Playable variant keeps the 0.10 display asset and its clip indices unchanged.
+run = clip('Run', [(8,'rotation',[quat(x=v) for v in [-1,1,-1,1,-1]]),(9,'rotation',[quat(x=v) for v in [1,-1,1,-1,1]]),(4,'rotation',[quat(x=v,z=1.1) for v in [.8,-.8,.8,-.8,.8]]),(6,'rotation',[quat(x=v,z=-1.1) for v in [-.8,.8,-.8,.8,-.8]]),(1,'translation',[(0,1.1,0),(0,1.28,0),(0,1.1,0),(0,1.28,0),(0,1.1,0)])])
+jump = clip('Jump', [(8,'rotation',[quat(x=-.6)]*5),(9,'rotation',[quat(x=.35)]*5),(4,'rotation',[quat(z=.6)]*5),(6,'rotation',[quat(z=-.6)]*5)])
+fall = clip('Fall', [(8,'rotation',[quat(x=.2)]*5),(9,'rotation',[quat(x=-.2)]*5),(4,'rotation',[quat(z=.1)]*5),(6,'rotation',[quat(z=-.1)]*5)])
+playable = json.loads(json.dumps(robot))
+playable['animations'] = [idle,walk,run,jump,fall]
+playable.update(buffers=[{'byteLength':len(data),'uri':'data:application/octet-stream;base64,'+base64.b64encode(data).decode()}],bufferViews=views,accessors=accessors)
+(root / 'sandbox/assets/locomotion.gltf').write_text(json.dumps(playable, indent=2)+'\n')

@@ -13,3 +13,12 @@ The camera follows an elevated target with a sphere sweep. It retracts
 immediately at geometry and eases outward as space clears; trigger colliders
 are excluded. Pass the player's collision ID in the query filter. A wall very
 close to the pivot may bring the camera closer than its preferred minimum.
+
+## Locomotion states
+
+`locomotion.h` selects Idle, Walk, Run, Jump or Fall from collision results.
+Horizontal speed and grounded vertical velocity drive the state; hysteresis
+avoids oscillation around standing and running thresholds. Landing and takeoff
+are edge signals. `sandbox/assets/locomotion.gltf` is an original nine-joint
+character with all five clips. Regenerate it with
+`python3 scripts/generate_animation_assets.py`.
