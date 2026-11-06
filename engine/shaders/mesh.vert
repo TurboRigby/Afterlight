@@ -32,7 +32,7 @@ layout(set=0,binding=0) uniform Frame {
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;vec4 sky_params;
-    vec4 water_absorption,water_scattering,water_bounds,water_axes;
+    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport;
 } frame;
 layout(push_constant) uniform Draw {mat4 model;vec4 tint;vec4 params;vec4 surface;vec4 emission;} draw;
 void main(){

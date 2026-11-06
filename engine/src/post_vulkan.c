@@ -22,7 +22,7 @@ static bool framebuffer(af_vk_post *p,VkRenderPass pass,const VkImageView *views
 static bool image(af_vk_post *p,post_image *out,VkExtent2D extent){
     VkImageCreateInfo info={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R16G16B16A16_SFLOAT,
         .extent={extent.width,extent.height,1},.mipLevels=1,.arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
-        .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,.sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+        .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,.sharingMode=VK_SHARING_MODE_EXCLUSIVE};
     if(!ok(vkCreateImage(p->device,&info,NULL,&out->image)))return false;
     VkMemoryRequirements requirements;vkGetImageMemoryRequirements(p->device,out->image,&requirements);
     VkPhysicalDeviceMemoryProperties properties;vkGetPhysicalDeviceMemoryProperties(p->physical,&properties);uint32_t type=UINT32_MAX;
@@ -99,6 +99,7 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical,VkDevice device,VkExtent
     }return p;
 fail:af_vk_post_destroy(p);return NULL;
 }
+VkImage af_vk_post_scene_image(const af_vk_post *p,uint32_t image_index){return p->frames[image_index].hdr.image;}
 VkFramebuffer af_vk_post_scene_framebuffer(const af_vk_post *p,uint32_t image_index){return p->frames[image_index].scene;}
 VkRenderPass af_vk_post_output_pass(const af_vk_post *p){return p->output_pass;}
 void af_vk_post_draw(af_vk_post *p,VkCommandBuffer command,uint32_t index,af_render_settings settings,af_rect area){

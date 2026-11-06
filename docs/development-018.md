@@ -83,3 +83,18 @@ receive the enabled default. Pixel tests verify absorption, disable, surface
 continuity, dry-region exclusion and persistence; existing water, environment
 and material data/pixel regressions pass. Shared GLSL includes are now included
 in corresponding-source archives and license-header verification.
+
+Scene refraction snapshots opaque HDR color and depth into independent per-image
+textures, then resumes a compatible load pass for transparent geometry. Water
+projects an IOR-dependent refracted lookup, clips it to the scene viewport and
+rejects foreground-depth samples. Snapshot barriers and frame descriptor updates
+are explicit; the shader never samples its active color attachment. The
+implementation uses Vulkan 1.1 image copies, following the [Khronos image-copy requirements](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdCopyImage.html).
+
+Format 21 saves `refraction` and `refraction_strength` (0–2); earlier scenes get
+the enabled default at strength 1. This is screen-space opaque-scene refraction:
+o off-screen geometry, multiple refracted layers or full ray tracing. Underwater
+fog on the opaque snapshot is retained without applying it a second time to the
+transmitted color. Pixel tests verify shifted underwater stripes, IOR, foreground
+rejection, strength/toggle, resize and saved settings. Water/underwater, alpha and
+material regressions pass with Vulkan synchronization validation.

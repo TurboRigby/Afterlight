@@ -14,6 +14,7 @@
 #include "shadow_vulkan.h"
 #include "shadow_math.h"
 #include "post_vulkan.h"
+#include "refraction_vulkan.h"
 #include "ibl.h"
 #include "local_shadow.h"
 #include <math.h>
@@ -51,9 +52,9 @@ typedef struct af_frame_uniform {
     af_vec4 light_count;
     af_mat4 local_shadow_matrices[AF_LOCAL_SHADOW_LAYERS];
     af_mat4 inverse_view_projection;af_vec4 sky_params;
-    af_vec4 water_absorption,water_scattering,water_bounds,water_axes;
+    af_vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport;
 } af_frame_uniform;
-_Static_assert(sizeof(af_frame_uniform)==3168,"Shader frame layout");
+_Static_assert(sizeof(af_frame_uniform)==3200,"Shader frame layout");
 typedef struct af_blend_draw {size_t index;float depth;} af_blend_draw;
 static int blend_compare(const void *a,const void *b){const af_blend_draw *x=a,*y=b;if(x->depth!=y->depth)return x->depth>y->depth?-1:1;return (x->index>y->index)-(x->index<y->index);}
 typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;af_vk_texture *texture;float alpha,cutoff;uint32_t alpha_mode;} af_shadow_draw;
@@ -84,8 +85,8 @@ typedef struct af_swapchain {
     VkSwapchainKHR handle;
     VkExtent2D extent;
     VkSurfaceFormatKHR surface_format;
-    af_vk_post *post;
-    VkRenderPass render_pass;
+    af_vk_post *post;af_vk_refraction *refraction;
+    VkRenderPass render_pass,water_pass;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline,blend_pipeline,sky_pipeline,water_attenuation,water_scattering;
     uint32_t image_count;
@@ -708,11 +709,11 @@ bool af_renderer_update_water(af_renderer *r,const af_physics *physics,const af_
 }
 static VkFormat select_depth_format(af_renderer *renderer)
 {
-    const VkFormat formats[] = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT};
+    const VkFormat formats[] = {VK_FORMAT_D32_SFLOAT,VK_FORMAT_D16_UNORM, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT};
     for (size_t i = 0; i < sizeof(formats)/sizeof(formats[0]); ++i) {
         VkFormatProperties properties;
         vkGetPhysicalDeviceFormatProperties(renderer->physical_device, formats[i], &properties);
-        if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) return formats[i];
+        if ((properties.optimalTilingFeatures &(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|VK_FORMAT_FEATURE_TRANSFER_SRC_BIT|VK_FORMAT_FEATURE_TRANSFER_DST_BIT))==(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|VK_FORMAT_FEATURE_TRANSFER_SRC_BIT|VK_FORMAT_FEATURE_TRANSFER_DST_BIT)) return formats[i];
     }
     return VK_FORMAT_UNDEFINED;
 }
@@ -725,7 +726,7 @@ static bool create_depth_attachment(af_renderer *renderer, af_depth_attachment *
         .format = swapchain->depth_format,
         .extent = {swapchain->extent.width, swapchain->extent.height, 1},
         .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
     };
     if (!vk_ok(vkCreateImage(renderer->device, &info, NULL, &depth->image), "vkCreateImage (depth)")) return false;
@@ -763,7 +764,8 @@ static void destroy_swapchain(af_renderer *renderer)
 {
     af_swapchain *swapchain = &renderer->swapchain;
     af_vk_ui_release_pipeline(renderer->ui);
-    af_vk_post_destroy(swapchain->post);
+    af_vk_post_destroy(swapchain->post);af_vk_refraction_destroy(swapchain->refraction);
+    if(swapchain->water_pass)vkDestroyRenderPass(renderer->device,swapchain->water_pass,NULL);
     for (uint32_t i = 0; i < swapchain->image_count; ++i) {
         if (swapchain->framebuffers && swapchain->framebuffers[i])
             vkDestroyFramebuffer(renderer->device, swapchain->framebuffers[i], NULL);
@@ -909,7 +911,7 @@ static bool create_swapchain(af_renderer *renderer)
             .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
         {.format = swapchain->depth_format, .samples = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
             .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}
     };
@@ -924,9 +926,9 @@ static bool create_swapchain(af_renderer *renderer)
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     VkSubpassDependency dependencies[] = {
         {.srcSubpass=VK_SUBPASS_EXTERNAL,.dstSubpass=0,
-         .srcStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT|attachment_stages,.dstStageMask=attachment_stages,
-         .srcAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-         .dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+         .srcStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT|attachment_stages|VK_PIPELINE_STAGE_TRANSFER_BIT,.dstStageMask=attachment_stages,
+         .srcAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT,
+         .dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
         {.srcSubpass=0,.dstSubpass=VK_SUBPASS_EXTERNAL,.srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,.dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
          .srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,.dstAccessMask=VK_ACCESS_SHADER_READ_BIT}
     };
@@ -938,6 +940,8 @@ static bool create_swapchain(af_renderer *renderer)
     };
     if (!vk_ok(vkCreateRenderPass(renderer->device, &pass_info, NULL, &swapchain->render_pass), "vkCreateRenderPass"))
         return false;
+    attachments[0].loadOp=attachments[1].loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;attachments[0].initialLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;attachments[1].initialLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    if(!vk_ok(vkCreateRenderPass(renderer->device,&pass_info,NULL,&swapchain->water_pass),"water load render pass"))return false;
     for (uint32_t i = 0; i < swapchain->image_count; ++i) {
         VkImageViewCreateInfo view_info = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -954,7 +958,7 @@ static bool create_swapchain(af_renderer *renderer)
     VkImageView *depth_views=calloc(swapchain->image_count,sizeof(*depth_views));if(!depth_views)return false;
     for(uint32_t i=0;i<swapchain->image_count;++i)depth_views[i]=swapchain->depths[i].view;
     swapchain->post=af_vk_post_create(renderer->physical_device,renderer->device,extent,swapchain->image_count,swapchain->views,format.format,swapchain->render_pass,depth_views);
-    free(depth_views);if(!swapchain->post||!create_pipeline(renderer)||!create_sky_pipeline(renderer))return false;
+    free(depth_views);swapchain->refraction=af_vk_refraction_create(renderer->physical_device,renderer->device,extent,swapchain->image_count,swapchain->depth_format);if(!swapchain->post||!swapchain->refraction||!create_pipeline(renderer)||!create_sky_pipeline(renderer))return false;
     if (renderer->ui && !af_vk_ui_create_pipeline(renderer->ui, af_vk_post_output_pass(swapchain->post))) return false;
     renderer->resize_pending = false;
     renderer->swapchain_invalid = false;
@@ -1019,15 +1023,16 @@ static bool create_environment(af_renderer *renderer,uint32_t profile){
     if(renderer->frame_pool)update_environment_descriptors(renderer);return true;
 }
 static bool create_frame_layout(af_renderer *renderer){
-    VkDescriptorSetLayoutBinding bindings[7]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
+    VkDescriptorSetLayoutBinding bindings[9]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
     for(uint32_t i=1;i<6;++i)bindings[i]=(VkDescriptorSetLayoutBinding){i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
     bindings[6]=(VkDescriptorSetLayoutBinding){6,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,NULL};
-    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=7,.pBindings=bindings};
+    bindings[7]=(VkDescriptorSetLayoutBinding){7,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};bindings[8]=(VkDescriptorSetLayoutBinding){8,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
+    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=9,.pBindings=bindings};
     return vk_ok(vkCreateDescriptorSetLayout(renderer->device,&layout,NULL,&renderer->frame_layout),"frame layout");
 }
 static bool create_uniforms(af_renderer *renderer)
 {
-    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,5*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,AF_FRAMES_IN_FLIGHT}};
+    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,7*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,AF_FRAMES_IN_FLIGHT}};
     VkDescriptorPoolCreateInfo pool={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,.maxSets=AF_FRAMES_IN_FLIGHT,.poolSizeCount=3,.pPoolSizes=sizes};
     if(!vk_ok(vkCreateDescriptorPool(renderer->device,&pool,NULL,&renderer->frame_pool),"frame pool"))return false;
     for(unsigned i=0;i<AF_FRAMES_IN_FLIGHT;++i){af_frame *frame=&renderer->frames[i];af_frame_uniform initial={0};
@@ -1242,6 +1247,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     af_render_settings render_settings=af_scene_get_render_settings(scene);uniform->render_params=(af_vec4){exp2f(render_settings.exposure),render_settings.tone_mapping?1.0f:0.0f,render_settings.environment_enabled?render_settings.environment_intensity:0,render_settings.environment_rotation};
     if(!af_mat4_inverse(uniform->view_projection,&uniform->inverse_view_projection))return false;
     uniform->sky_params=(af_vec4){render_settings.skybox_intensity,0,0,0};
+    int logical_width=1,logical_height=1;SDL_GetWindowSize(renderer->window,&logical_width,&logical_height);uniform->water_screen=(af_vec4){(float)renderer->swapchain.extent.width,(float)renderer->swapchain.extent.height,render_settings.refraction_strength,render_settings.refraction?1.f:0};uniform->water_viewport=(af_vec4){area.x/(float)logical_width,area.y/(float)logical_height,(area.x+area.width)/(float)logical_width,(area.y+area.height)/(float)logical_height};
     af_water_sample underwater=af_physics_sample_water(renderer->water_physics,scene,camera->position);const af_water *water=af_scene_get_water(scene,underwater.owner);
     if(render_settings.underwater&&water&&underwater.inside&&camera->position.y>underwater.bottom&&camera->position.y<underwater.height+.1f){const af_scene_object *o=af_scene_get_object(scene,water->owner);float blend=fmaxf(0,fminf(1,(underwater.height+.1f-camera->position.y)/.2f));blend=blend*blend*(3-2*blend);float yaw=o->transform.rotation.y;af_vec3 origin=o->transform.position;af_vec2 size=water->half_size;
         if(water->mode==AF_WATER_RIVER){float c=cosf(yaw),s=sinf(yaw);af_vec3 d=af_vec3_sub(camera->position,origin),local={c*d.x-s*d.z,d.y,s*d.x+c*d.z},tangent;float side,along,height;if(wa_river_coordinates(water,local,&side,&along,&height,&tangent)){float length=wa_river_length(water);local=af_vec3_add(local,af_vec3_add((af_vec3){-side*tangent.z,0,side*tangent.x},af_vec3_scale(tangent,length*.5f-along)));origin.x+=c*local.x+s*local.z;origin.z+=-s*local.x+c*local.z;yaw+=atan2f(tangent.x,tangent.z);size.y=length*.5f;}}
@@ -1328,6 +1334,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     }
     if (result == VK_SUBOPTIMAL_KHR) renderer->resize_pending = renderer->swapchain_invalid = true;
     else if (!vk_ok(result, "vkAcquireNextImageKHR")) return false;
+    VkDescriptorImageInfo refraction_images[]={af_vk_refraction_color(renderer->swapchain.refraction,image_index),af_vk_refraction_depth(renderer->swapchain.refraction,image_index)};VkWriteDescriptorSet water_writes[2];for(unsigned i=0;i<2;++i)water_writes[i]=(VkWriteDescriptorSet){.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=frame->descriptor,.dstBinding=7+i,.descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.pImageInfo=&refraction_images[i]};vkUpdateDescriptorSets(renderer->device,2,water_writes,0,NULL);
     if (overlay->index_count && (!renderer->ui || !af_vk_ui_prepare(renderer->ui, renderer->frame_index, overlay))) return false;
     void *mapped=NULL;if(!vk_ok(vkMapMemory(renderer->device,frame->uniform.memory,0,VK_WHOLE_SIZE,0,&mapped),"map frame uniform"))return false;
     memcpy(mapped,&uniform,sizeof(uniform));
@@ -1339,6 +1346,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     };
     if (!vk_ok(vkBeginCommandBuffer(frame->command, &begin), "vkBeginCommandBuffer")) return false;
+    af_vk_refraction_prepare(renderer->swapchain.refraction,frame->command,image_index);
     if(renderer->ui)af_vk_ui_record_uploads(renderer->ui,frame->command,renderer->frame_index);
     if(frame->timestamps){vkCmdResetQueryPool(frame->command,frame->timestamps,0,5);vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,frame->timestamps,0);}
     renderer->shadow_draw_calls=0;renderer->shadow_passes=renderer->shadow_cached_passes=0;
@@ -1407,7 +1415,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         vkCmdSetScissor(frame->command, 0, 1, &scissor);
         af_blend_draw *blended=object_count?malloc(object_count*sizeof(*blended)):NULL;size_t blend_count=0;if(object_count&&!blended)return false;
         for(size_t i=0;i<object_count;++i){const af_scene_object *o=af_scene_object_at(scene,i);if(o->material.alpha_mode!=AF_ALPHA_BLEND&&!af_scene_get_water(scene,o->id))continue;af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;af_vec3 position={world.elements[12],world.elements[13],world.elements[14]};blended[blend_count++]=(af_blend_draw){i,af_vec3_dot(af_vec3_sub(position,camera->position),af_camera_forward(camera))};}if(blend_count>1)qsort(blended,blend_count,sizeof(*blended),blend_compare);
-        for(unsigned alpha_pass=0;alpha_pass<2;++alpha_pass){vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,alpha_pass?renderer->swapchain.blend_pipeline:renderer->swapchain.pipeline);
+        bool refract=environment_settings.refraction&&environment_settings.refraction_strength>0&&af_scene_water_count(scene)>0;
+        for(unsigned alpha_pass=0;alpha_pass<2;++alpha_pass){if(alpha_pass&&refract){vkCmdEndRenderPass(frame->command);af_vk_refraction_copy(renderer->swapchain.refraction,frame->command,image_index,af_vk_post_scene_image(renderer->swapchain.post,image_index),renderer->swapchain.depths[image_index].image);pass.renderPass=renderer->swapchain.water_pass;vkCmdBeginRenderPass(frame->command,&pass,VK_SUBPASS_CONTENTS_INLINE);}
+        vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,alpha_pass?renderer->swapchain.blend_pipeline:renderer->swapchain.pipeline);
         for (size_t order = 0; order < (alpha_pass?blend_count:object_count); ++order) {size_t i=alpha_pass?blended[order].index:order;
 
             const af_scene_object *object = af_scene_object_at(scene, i);
@@ -1426,7 +1436,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
             af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;
             struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{(float)((object->material.unlit?1u:0u)|((uint32_t)object->material.alpha_mode<<1u)|((uint32_t)lroundf(object->material.alpha_cutoff*65535)<<3u)),object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,(float)skin_base(renderer,object->id,mesh)},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
-            if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(2u<<1u)),1,1,0};if(water->mode==AF_WATER_PARTICLES)transform.params.x+=(float)(1u<<21u);transform.surface=(af_vec4){water->roughness,0,water->mode==AF_WATER_PARTICLES?water->particle_spacing:water->depth,0};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
+            if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(2u<<1u)),1,1,0};if(refract)transform.params.x+=(float)(1u<<22u);if(water->mode==AF_WATER_PARTICLES)transform.params.x+=(float)(1u<<21u);transform.surface=(af_vec4){water->roughness,0,water->mode==AF_WATER_PARTICLES?water->particle_spacing:water->depth,0};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
             _Static_assert(sizeof(transform)==128,"Portable draw push constant limit");
             af_vk_texture *texture=renderer->white;
             if(object->material.texture[0]){bool found=false;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;found=true;break;}

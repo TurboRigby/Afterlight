@@ -27,12 +27,14 @@ layout(set=0,binding=0) uniform Frame {
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;vec4 sky_params;
-    vec4 water_absorption,water_scattering,water_bounds,water_axes;
+    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport;
 } frame;
 layout(set=0,binding=1) uniform sampler2DArray local_shadow_map;
 layout(set=0,binding=2) uniform sampler2D environment_map;
 layout(set=0,binding=3) uniform sampler2D irradiance_map;
 layout(set=0,binding=4) uniform sampler2D brdf_lut;
+layout(set=0,binding=7) uniform sampler2D refracted_scene;
+layout(set=0,binding=8) uniform sampler2D opaque_depth;
 layout(set=1,binding=0) uniform sampler2D base_texture;
 layout(push_constant) uniform Draw {mat4 model;vec4 tint;vec4 params;vec4 surface;vec4 emission;} draw;
 layout(set=2,binding=0) uniform sampler2DArray shadow_map;
@@ -142,7 +144,7 @@ void main(){
     vec4 base=texture(base_texture,uv)*vertex_color;uint mode=(uint(draw.params.x)>>1u)&3u;uint cutoff=(uint(draw.params.x)>>3u)&65535u;if(mode==1u&&uint(round(clamp(base.a,0,1)*65535.0))<cutoff)discard;if(mode!=2u)base.a=1;
     vec3 eye=frame.camera_position.xyz-world_position;
     vec3 v=dot(eye,eye)>1e-12?normalize(eye):n;
-    bool water=water_surface();if(water&&(uint(draw.params.x)&(1u<<21u))!=0u&&dot(n,v)<=0)discard;if(water){if(dot(n,v)<0)n=-n;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);if((uint(draw.params.x)&(1u<<20u))!=0u){out_color=vec4(water_transmission(n,v)*(1.0-f),1);return;}base.rgb=vec3(0);}
+    bool water=water_surface();if(water&&(uint(draw.params.x)&(1u<<21u))!=0u&&dot(n,v)<=0)discard;if(water){if(dot(n,v)<0)n=-n;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);if((uint(draw.params.x)&(1u<<20u))!=0u){out_color=vec4((uint(draw.params.x)&(1u<<22u))!=0u?vec3(0):water_transmission(n,v)*(1.0-f),1);return;}base.rgb=vec3(0);}
     vec4 mr=texture(metallic_roughness_texture,uv);
     float roughness=draw.surface.x*mr.g,metal=draw.surface.y*mr.b;
     vec3 ambient=base.rgb*frame.color_ambient.w*(draw.params.z>0.5?1.0-metal:1.0);
@@ -164,13 +166,15 @@ void main(){
     }
     if(((uint(draw.params.x)&1u)==0u))output_rgb+=environment_light(base.rgb,n,v,roughness,metal);
     if(water&&frame.render_params.z>0)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*textureLod(irradiance_map,environment_uv(n),0).rgb*frame.render_params.z;
+    vec3 transmitted_scene=vec3(0);
+    if(water&&(uint(draw.params.x)&(1u<<22u))!=0u){vec2 screen=gl_FragCoord.xy/frame.water_screen.xy;vec3 ray=refract(-v,n,1.0/max(draw.emission.w,1.0001));vec4 projected=frame.view_projection*vec4(world_position+ray*draw.surface.z,1);vec2 offset=projected.w>0?(projected.xy/projected.w*.5+.5-screen)*frame.water_screen.z:vec2(0);vec2 pixel=.5/frame.water_screen.xy;vec2 lo=frame.water_viewport.xy+pixel,hi=frame.water_viewport.zw-pixel;vec2 coordinate=clamp(screen+offset,min(lo,hi),max(lo,hi));if(texture(opaque_depth,coordinate).r+0.0001<gl_FragCoord.z)coordinate=screen;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);transmitted_scene=texture(refracted_scene,coordinate).rgb*water_transmission(n,v)*(1.0-f);}
     if(!water)output_rgb+=draw.emission.rgb*draw.emission.w;
     float depth=dot(world_position-frame.camera_position.xyz,frame.camera_forward.xyz);
     if(frame.cascade_params.w>0.5&&frame.shadow_params.x>0.5&&depth>=0&&depth<=frame.cascade_splits[int(frame.cascade_params.x)-1]){
         const vec3 colors[4]=vec3[4](vec3(1,0.25,0.25),vec3(0.25,1,0.25),vec3(0.25,0.5,1),vec3(1,0.85,0.25));
         output_rgb*=mix(vec3(1),colors[cascade_index(depth)],0.65);
     }
-    output_rgb=underwater_color(output_rgb,world_position);
+    output_rgb=underwater_color(output_rgb,world_position)+transmitted_scene;
     output_rgb=clamp(output_rgb,vec3(0),vec3(60000));
     out_color=vec4(output_rgb,base.a);
 }

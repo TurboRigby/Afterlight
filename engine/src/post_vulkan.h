@@ -8,6 +8,7 @@ typedef struct af_vk_post af_vk_post;
 af_vk_post *af_vk_post_create(VkPhysicalDevice physical,VkDevice device,VkExtent2D extent,uint32_t count,
     const VkImageView *outputs,VkFormat output_format,VkRenderPass scene_pass,const VkImageView *depths);
 void af_vk_post_destroy(af_vk_post *post);
+VkImage af_vk_post_scene_image(const af_vk_post*,uint32_t);
 VkFramebuffer af_vk_post_scene_framebuffer(const af_vk_post *post,uint32_t image);
 VkRenderPass af_vk_post_output_pass(const af_vk_post *post);
 /* Ends with the presentation render pass open so the UI can render after HDR. */
