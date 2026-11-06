@@ -617,3 +617,6 @@ bool af_engine_animation_events(af_engine *e,af_object_id object,af_animation_ev
 
 bool af_engine_locomotion_root_motion(af_engine *e,af_object_id object,uint32_t node,bool enabled){return e&&af_animation_runtime_root_motion(e->animations,object,node,enabled);}
 bool af_engine_locomotion_root_delta(af_engine *e,af_object_id object,af_vec3 *out){return e&&af_animation_runtime_root_delta(e->animations,object,out);}
+
+af_animation_debug af_engine_animation_debug(const af_engine *e,af_object_id o){return e?af_animation_runtime_debug(e->animations,o):(af_animation_debug){0};}
+size_t af_engine_animation_bones(const af_engine *e,af_object_id o,af_animation_bone *out,size_t n){return e?af_animation_runtime_bones(e->animations,o,out,n):0;}

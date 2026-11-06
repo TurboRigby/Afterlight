@@ -13,7 +13,7 @@
 typedef struct animation_asset {char name[64];af_animation_file file;size_t bytes;uint64_t generation;} animation_asset;
 typedef struct animation_instance {
     af_object_id root;uint64_t generation;af_animation_component configuration;
-    af_locomotion_player locomotion;bool driven;af_animation_events events;
+    af_locomotion_player locomotion;bool driven;af_animation_events events;uint64_t emitted;char last_event[32];
     af_animation_player player;af_animation_pose *poses;af_object_id *nodes;size_t node_count;
 } animation_instance;
 struct af_animation_runtime {
@@ -59,10 +59,11 @@ static animation_instance *instance(af_animation_runtime *r,af_object_id object)
 af_animation_status af_animation_runtime_status(af_animation_runtime *r,af_object_id object){
     animation_instance *i=instance(r,object);if(!i)return (af_animation_status){0};animation_asset *a=asset(r,i->configuration.asset);af_animation_player *p=&i->player;
     af_animation_status s={.available=true,.playing=p->playing,.loop=p->loop,.finished=p->finished,.fading=p->fading,.clip=(uint32_t)p->clip,.clip_count=a->file.clip_count,.time=p->time,.speed=p->speed,.blend=p->fading?p->fade_elapsed/p->fade_duration:1};
+    if(i->driven){const af_locomotion *m=&i->locomotion.motion;s.clip=(uint32_t)i->locomotion.clips[m->state];s.playing=true;s.fading=m->transition<1;s.blend=m->transition;s.duration=a->file.clips[s.clip].duration;s.time=m->state<=AF_LOCOMOTION_RUN?m->phase*s.duration:m->time;snprintf(s.name,sizeof(s.name),"%s",af_locomotion_state_name(m->state));return s;}
     if(p->clip<a->file.clip_count){s.duration=a->file.clips[p->clip].duration;snprintf(s.name,sizeof(s.name),"%s",a->file.clips[p->clip].name);}return s;
 }
 bool af_animation_runtime_clip(af_animation_runtime *r,af_object_id object,size_t clip,af_animation_clip_info *info){animation_instance *i=instance(r,object);animation_asset *a=i?asset(r,i->configuration.asset):NULL;if(!a||!info||clip>=a->file.clip_count)return false;snprintf(info->name,sizeof(info->name),"%s",a->file.clips[clip].name);info->duration=a->file.clips[clip].duration;return true;}
-static void queue_events(animation_instance *i,const af_animation_events *events){i->events.dropped+=events->dropped;for(size_t j=0;j<events->count;++j){if(i->events.count<AF_ANIMATION_EVENT_BATCH)i->events.items[i->events.count++]=events->items[j];else ++i->events.dropped;}}
+static void queue_events(animation_instance *i,const af_animation_events *events){i->events.dropped+=events->dropped;i->emitted+=events->count+events->dropped;if(events->count)snprintf(i->last_event,sizeof(i->last_event),"%s",events->items[events->count-1].name);for(size_t j=0;j<events->count;++j){if(i->events.count<AF_ANIMATION_EVENT_BATCH)i->events.items[i->events.count++]=events->items[j];else ++i->events.dropped;}}
 bool af_animation_runtime_events(af_animation_runtime *r,af_object_id object,af_animation_events *out){animation_instance *i=instance(r,object);if(!i||!out)return false;*out=i->events;i->events=(af_animation_events){0};return true;}
 bool af_animation_runtime_root_motion(af_animation_runtime *r,af_object_id object,uint32_t node,bool enabled){
     animation_instance *i=instance(r,object);if(!i)return false;animation_asset *a=asset(r,i->configuration.asset);if(node>=a->file.node_count)return false;
@@ -106,4 +107,14 @@ bool af_animation_runtime_update(af_animation_runtime *r,const af_scene *previou
         if(valid&&af_renderer_set_skin_palette(r->renderer,o->id,palette,skin->joint_count))palettes[palette_count++]=o->id;
     }
     for(size_t j=0;j<r->palette_count;++j){bool found=false;for(size_t k=0;k<palette_count;++k)if(palettes[k]==r->palette_objects[j])found=true;if(!found)af_renderer_set_skin_palette(r->renderer,r->palette_objects[j],NULL,0);}memcpy(r->palette_objects,palettes,palette_count*sizeof(*palettes));r->palette_count=palette_count;return true;
+}
+
+af_animation_debug af_animation_runtime_debug(af_animation_runtime *r,af_object_id object){animation_instance *i=instance(r,object);if(!i)return (af_animation_debug){0};
+    af_animation_debug d={.available=true,.driven=i->driven,.root_motion=i->locomotion.root_motion,.motion=i->locomotion.motion,.root_delta=i->locomotion.root_delta,.pending_events=i->events.count,.emitted_events=i->emitted,.dropped_events=i->events.dropped};memcpy(d.weights,i->locomotion.weights,sizeof(d.weights));snprintf(d.last_event,sizeof(d.last_event),"%s",i->last_event);return d;
+}
+size_t af_animation_runtime_bones(af_animation_runtime *r,af_object_id object,af_animation_bone *out,size_t capacity){
+    animation_instance *i=instance(r,object);if(!i||r->world_count!=r->scene->count)return 0;animation_asset *a=asset(r,i->configuration.asset);unsigned char seen[AF_ANIMATION_MAX_NODES]={0};size_t count=0;
+    for(size_t skin=0;skin<a->file.skin_count;++skin)for(size_t j=0;j<a->file.skins[skin].joint_count;++j){uint32_t node=a->file.skins[skin].joints[j];if(node>=i->node_count||seen[node])continue;seen[node]=1;af_mat4 m;if(!af_animation_runtime_world(r,i->nodes[node],&m))continue;
+        af_animation_bone b={.node=node,.position={m.elements[12],m.elements[13],m.elements[14]}};int32_t parent=a->file.parents[node];if(parent>=0&&(size_t)parent<i->node_count&&af_animation_runtime_world(r,i->nodes[parent],&m)){b.parent_position=(af_vec3){m.elements[12],m.elements[13],m.elements[14]};b.has_parent=true;}if(out&&count<capacity)out[count]=b;++count;}
+    return count;
 }

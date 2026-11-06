@@ -54,3 +54,12 @@ sliding, slopes and platform carry still apply. Gravity and jump own Y; turning
 is controller-driven. Air movement uses the regular controller. The playable
 fixture uses glTF node 10 with forward motion on -Z. Root motion is translation
 only; arbitrary root rotation/vertical trajectories are not extracted.
+
+## Debugging
+
+The editor Animation panel can overlay posed joints and parent connections,
+including during Play with the game camera. It reports locomotion state, speed,
+phase, adjacent weights, extracted root delta, emitted/queued/dropped events and
+the last event. Queries leave the event queue and scene history unchanged.
+Transport controls are disabled while gameplay drives locomotion. Bone queries
+report total count and safely write only the caller's capacity.

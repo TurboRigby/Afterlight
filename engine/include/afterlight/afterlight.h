@@ -119,6 +119,17 @@ typedef struct af_animation_status {
     double time,duration;float speed,blend;char name[64];
 } af_animation_status;
 typedef struct af_animation_clip_info {char name[64];double duration;} af_animation_clip_info;
+typedef struct af_animation_bone {uint32_t node;af_vec3 position,parent_position;bool has_parent;} af_animation_bone;
+typedef struct af_animation_debug {
+    bool available,driven,root_motion;
+    af_locomotion motion;float weights[3];af_vec3 root_delta;
+    size_t pending_events;uint64_t emitted_events,dropped_events;
+    char last_event[32];
+} af_animation_debug;
+af_animation_debug af_engine_animation_debug(const af_engine*,af_object_id);
+/* Returns total joint count; writes up to capacity posed world-space joints.
+   Queries do not drain events or mutate the authored scene. */
+size_t af_engine_animation_bones(const af_engine*,af_object_id,af_animation_bone*,size_t capacity);
 /* Playback poses do not change authored scene transforms. Gameplay follows
    fixed simulation time; real_time is intended for editor previews. */
 void af_engine_set_animation_playback(af_engine *engine,bool enabled,bool real_time);

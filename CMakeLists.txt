@@ -387,6 +387,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_locomotion_runtime_test tests/locomotion_runtime.c)
+    target_include_directories(afterlight_locomotion_runtime_test PRIVATE engine/src)
+    target_link_libraries(afterlight_locomotion_runtime_test PRIVATE Afterlight::Engine SDL3::SDL3)
+    afterlight_warnings(afterlight_locomotion_runtime_test)
+    add_test(NAME afterlight.locomotion_runtime COMMAND afterlight_locomotion_runtime_test "${PROJECT_SOURCE_DIR}/sandbox/assets/locomotion.gltf")
     add_executable(afterlight_root_motion_test tests/root_motion.c)
     target_link_libraries(afterlight_root_motion_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_root_motion_test)

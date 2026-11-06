@@ -64,7 +64,7 @@ typedef struct editor {
     bool failed;
     bool show_performance,show_assets,show_colliders;
     bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
-    bool show_animation,animation_preview;af_object_id animation_target;float animation_blend;
+    bool show_animation,animation_preview,show_skeleton;af_object_id animation_target;float animation_blend;
     const char *animation_test_path;unsigned animation_test_step;uint64_t animation_test_revision;double animation_test_time;af_rect animation_buttons[3];
     char asset_search[128],selected_asset[AF_MESH_NAME_CAPACITY];
     int asset_filter;
@@ -686,6 +686,15 @@ static void draw_colliders(editor *app){
         }
     }nk_end(ctx);nk_style_pop_style_item(ctx);
 }
+static void draw_skeleton(editor *app){
+    if(!app->show_skeleton||!app->animation_target)return;struct nk_context *ctx=&app->gui.context;af_rect r=app->viewport;af_camera camera=app->runtime.playing?af_engine_get_camera(app->engine):app->camera;
+    af_animation_bone bones[256];size_t count=af_engine_animation_bones(app->engine,app->animation_target,bones,256);
+    nk_style_push_style_item(ctx,&ctx->style.window.fixed_background,nk_style_item_color(nk_rgba(0,0,0,0)));
+    if(nk_begin(ctx,"Posed skeleton",nk_rect(r.x,r.y,r.width,r.height),NK_WINDOW_NO_INPUT|NK_WINDOW_NO_SCROLLBAR|NK_WINDOW_BACKGROUND)){
+        struct nk_command_buffer *canvas=nk_window_get_canvas(ctx);for(size_t i=0;i<count&&i<256;++i){af_vec2 a,b;if(!ed_project(&camera,r,bones[i].position,&a))continue;
+            if(bones[i].has_parent&&ed_project(&camera,r,bones[i].parent_position,&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,2,nk_rgb(255,194,84));nk_fill_circle(canvas,nk_rect(a.x-3,a.y-3,6,6),nk_rgb(130,240,235));}
+    }nk_end(ctx);nk_style_pop_style_item(ctx);
+}
 static void draw_lights(editor *app){
     if(app->runtime.playing)return;struct nk_context *ctx=&app->gui.context;af_rect r=app->viewport;
     nk_style_push_style_item(ctx,&ctx->style.window.fixed_background,nk_style_item_color(nk_rgba(0,0,0,0)));
@@ -863,9 +872,17 @@ static void animation_panel(editor *app,float width,float height)
         if(target&&target->animation.asset[0]){
             af_animation_component component=target->animation;af_object_id root=target->id;af_animation_status status=af_engine_animation_status(app->engine,root);bool changed=false;
             label(ctx,component.asset,24);
+            nk_layout_row_dynamic(ctx,26,1);nk_bool skeleton=app->show_skeleton;if(nk_checkbox_label(ctx,"Show posed skeleton",&skeleton))app->show_skeleton=skeleton!=0;
+            af_animation_debug debug=af_engine_animation_debug(app->engine,root);char diagnostic[160];
+            if(debug.driven){snprintf(diagnostic,sizeof(diagnostic),"%s | speed %.2f | phase %.2f",af_locomotion_state_name(debug.motion.state),debug.motion.speed,debug.motion.phase);label(ctx,diagnostic,24);
+                snprintf(diagnostic,sizeof(diagnostic),"Idle %.2f  Walk %.2f  Run %.2f",debug.weights[0],debug.weights[1],debug.weights[2]);label(ctx,diagnostic,24);
+                snprintf(diagnostic,sizeof(diagnostic),"Root motion %s | delta %.3f, %.3f",debug.root_motion?"on":"off",debug.root_delta.x,debug.root_delta.z);label(ctx,diagnostic,24);}
+            snprintf(diagnostic,sizeof(diagnostic),"Events %llu | queued %zu | dropped %llu | %s",(unsigned long long)debug.emitted_events,debug.pending_events,(unsigned long long)debug.dropped_events,debug.last_event);label(ctx,diagnostic,24);
+
             if(!status.available)label(ctx,"Animation asset unavailable. Reload its source.",26);
             else if(!status.clip_count)label(ctx,"Skeleton bind pose (no animation clips).",26);
             else{
+                if(debug.driven)nk_widget_disable_begin(ctx);
                 nk_layout_row_dynamic(ctx,30,1);if(nk_combo_begin_label(ctx,status.name,nk_vec2(500,180))){nk_layout_row_dynamic(ctx,26,1);for(size_t i=0;i<status.clip_count;++i){af_animation_clip_info info;if(af_engine_animation_clip(app->engine,root,i,&info)&&nk_combo_item_label(ctx,info.name,NK_TEXT_LEFT)){
                         if(!app->runtime.playing)app->animation_preview=true;af_engine_animation_play(app->engine,root,i,app->animation_blend);}}
                     nk_combo_end(ctx);}
@@ -881,7 +898,8 @@ static void animation_panel(editor *app,float width,float height)
                 if(!app->runtime.playing){nk_layout_row_dynamic(ctx,26,1);nk_bool autoplay=component.autoplay;if(nk_checkbox_label(ctx,"Autoplay in game",&autoplay)){component.autoplay=autoplay!=0;changed=true;}}
                 if(!app->runtime.playing){nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Use clip, speed and loop as startup defaults")){component.clip=status.clip;component.speed=speed;component.loop=loop!=0;changed=true;}}
                 nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Blend seconds",0,&app->animation_blend,5,.1f,.01f);
-                label(ctx,app->runtime.playing?"Playback follows simulation pause/step.":"Preview leaves authored transforms and history unchanged.",28);
+                if(debug.driven)nk_widget_disable_end(ctx);
+                label(ctx,debug.driven?"Character gameplay controls this animation.":app->runtime.playing?"Playback follows simulation pause/step.":"Preview leaves authored transforms and history unchanged.",28);
             }
             if(changed&&!app->runtime.playing){if(ed_document_animation(&app->document,root,component)){af_engine_set_scene(app->engine,app->document.scene);if(app->animation_preview)af_engine_animation_play(app->engine,root,component.clip,app->animation_blend);}}
         }else label(ctx,"Import a glTF model containing animation or a skin.",30);
@@ -892,7 +910,7 @@ static void build_ui(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
     ed_thumbnails_begin(&app->thumbnails);ed_thumbnails_poll(&app->thumbnails,app->engine);
-    draw_colliders(app);draw_lights(app);if(!app->animation_preview)draw_gizmo(app);
+    draw_colliders(app);draw_skeleton(app);draw_lights(app);if(!app->animation_preview)draw_gizmo(app);
     toolbar(app,width);
     if(!app->runtime.playing||!app->maximize_play){object_list(app,height);inspector(app,width,height);}
     nk_style_push_vec2(context,&context->style.window.padding,nk_vec2(14,5));

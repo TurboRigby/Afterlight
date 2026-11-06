@@ -12,6 +12,8 @@ int main(int argc,char **argv){
     af_animation_runtime *runtime=af_animation_runtime_create(NULL);af_asset_error error;CHECK(runtime&&af_animation_runtime_load(runtime,asset_name,argv[1],&error));af_animation_runtime_scene(runtime,d.scene);
     uint64_t revision=d.revision;af_transform authored=af_scene_get_object(d.scene,tip)->transform;CHECK(af_animation_runtime_update(runtime,NULL,1,.5,false));af_mat4 world;CHECK(af_animation_runtime_world(runtime,tip,&world)&&fabsf(world.elements[0]-1)<.0001f);
     CHECK(af_animation_runtime_update(runtime,NULL,1,.5,true));CHECK(af_animation_runtime_world(runtime,tip,&world)&&fabsf(world.elements[0]-sqrtf(.75f))<.0001f);CHECK(d.revision==revision&&af_scene_get_object(d.scene,tip)->transform.rotation.z==authored.rotation.z);
+    af_animation_bone bones[2];CHECK(af_animation_runtime_bones(runtime,root,bones,2)==2&&bones[1].has_parent&&isfinite(bones[1].position.x));
+    af_animation_debug debug=af_animation_runtime_debug(runtime,root);CHECK(debug.available&&!debug.driven&&debug.pending_events==0);
     CHECK(af_animation_runtime_pause(runtime,root,true)&&af_animation_runtime_update(runtime,NULL,1,.5,true)&&af_animation_runtime_status(runtime,root).time==.5);
     CHECK(af_animation_runtime_seek(runtime,root,1)&&af_animation_runtime_update(runtime,NULL,1,0,true)&&af_animation_runtime_world(runtime,tip,&world)&&fabsf(world.elements[0]-.5f)<.0001f);
     CHECK(!af_animation_runtime_load(runtime,asset_name,"missing-animation.gltf",&error)&&af_animation_runtime_status(runtime,root).time==1); /* last-good source */
