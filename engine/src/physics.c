@@ -157,6 +157,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             b.sleep_time = 0;
         }
         if(player_proxy){b.v=b.w=(af_vec3){0};}
+        b.external=!old||moved||(old&&memcmp(&o->body,&old->config,sizeof(o->body)));if(player_proxy)b.external=false;
         b.config = o->body;
         b.config.type = type;
         if(old&&old->shape.mesh!=shape.mesh)p->contact_count=p->cache_count=0;
@@ -178,13 +179,14 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         p->scratch[count++] = b;
     }
     if (p->scene != s) {
-        p->contact_count = p->cache_count = 0;
+        p->contact_count = p->cache_count = 0;p->joint_count=0;
         p->stats = (af_physics_stats){0};
     }
     memcpy(p->bodies, p->scratch, count * sizeof(ph_body));
     p->count = count;
     p->scene = s;
     if(!ph_joints_sync(p))return fail(p,"Joint endpoint has no supported active physics shape.");
+    ph_islands_build(p);
     p->error[0] = 0;
     return true;
 }
@@ -212,8 +214,7 @@ static bool act(af_physics *p, af_scene *s, af_object_id id, af_vec3 value, af_v
     }
     if (!b || b->inv_mass == 0)
         return false;
-    b->sleeping = false;
-    b->sleep_time = 0;
+    ph_wake_island(p,(size_t)(b-p->bodies));
     if (impulse)
         ph_impulse(b, value, point);
     else {
@@ -233,8 +234,7 @@ bool af_physics_wake(af_physics *p, af_object_id id) {
     ph_body *b = p ? find(p, id) : NULL;
     if (!b || b->inv_mass == 0)
         return false;
-    b->sleeping = false;
-    b->sleep_time = 0;
+    ph_wake_island(p,(size_t)(b-p->bodies));
     return true;
 }
 af_physics_state af_physics_get_state(const af_physics *p, af_object_id id) {

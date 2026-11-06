@@ -1,0 +1,8 @@
+/* SPDX-License-Identifier: MPL-2.0 */
+
+#include <afterlight/physics.h>
+#include <afterlight/joint.h>
+#include <stdio.h>
+#define CHECK(x) do{if(!(x)){fprintf(stderr,"Island %d: %s\n",__LINE__,#x);return 1;}}while(0)
+static af_object_id ball(af_scene *s,float y){af_object_id id=af_scene_add_object(s,"Link","cube");af_collider c=af_collider_default();c.type=AF_COLLIDER_SPHERE;c.radius=.2f;af_transform t=af_transform_identity();t.position.y=y;af_scene_set_object_transform(s,id,t);af_scene_set_object_collider(s,id,c);af_rigid_body b=af_rigid_body_default();b.enabled=true;b.type=AF_BODY_DYNAMIC;af_scene_set_body(s,id,b);return id;}
+int main(void){af_scene *s=af_scene_create();af_physics *p=af_physics_create();af_object_id a=ball(s,2),b=ball(s,1);af_joint j=af_joint_default();j.a=a;j.anchor_b=(af_vec3){0,3,0};CHECK(af_scene_add_joint(s,j));j.a=b;j.b=a;j.anchor_b=(af_vec3){0};CHECK(af_scene_add_joint(s,j));for(unsigned i=0;i<180;++i)CHECK(af_physics_step(p,s,1.f/60));CHECK(af_physics_get_state(p,a).sleeping&&af_physics_get_state(p,b).sleeping);af_physics_stats stats=af_physics_get_stats(p);CHECK(stats.islands==1&&stats.awake_islands==0&&stats.largest_island==2);CHECK(af_physics_apply_impulse(p,s,b,(af_vec3){1,0,0},af_physics_get_state(p,b).position));CHECK(!af_physics_get_state(p,a).sleeping&&!af_physics_get_state(p,b).sleeping);CHECK(af_physics_step(p,s,1.f/60));af_joint_id world=af_scene_joint_at(s,0)->id;CHECK(af_scene_remove_joint(s,world));CHECK(af_physics_step(p,s,1.f/60)&&!af_physics_get_state(p,a).sleeping);af_scene_destroy(s);af_physics_destroy(p);puts("Constraint islands: shared sleep, impulse wake propagation and lost-anchor wake passed.");return 0;}

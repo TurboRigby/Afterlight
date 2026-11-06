@@ -21,6 +21,7 @@ static size_t index_of(af_physics *p, af_object_id id) {
     return SIZE_MAX;
 }
 bool ph_joints_sync(af_physics *p) {
+    ph_joint old[AF_SCENE_MAX_JOINTS];size_t old_count=p->joint_count;memcpy(old,p->joints,old_count*sizeof(*old));
     p->joint_count = 0;
     p->world = (ph_body){.q = {0, 0, 0, 1}};
     for (unsigned k = 0; k < 3; ++k)
@@ -37,15 +38,10 @@ bool ph_joints_sync(af_physics *p) {
         p->joints[n].config = j;
         p->joints[n].a = a;
         p->joints[n].b = b;
-        /* Constraint islands do not yet sleep; this keeps tension and moving
-           supports responsive without stale cached impulses. */
-        p->bodies[a].sleeping = false;
-        p->bodies[a].sleep_time = 0;
-        if (b != SIZE_MAX) {
-            p->bodies[b].sleeping = false;
-            p->bodies[b].sleep_time = 0;
-        }
+        bool changed=true;for(size_t k=0;k<old_count;++k)if(old[k].config.id==j.id&&!memcmp(&old[k].config,&j,sizeof(j))){changed=false;break;}
+        if(changed){p->bodies[a].sleeping=false;p->bodies[a].sleep_time=0;if(b!=SIZE_MAX){p->bodies[b].sleeping=false;p->bodies[b].sleep_time=0;}}
     }
+    for(size_t k=0;k<old_count;++k){bool found=false;for(size_t i=0;i<p->joint_count;++i)found|=p->joints[i].config.id==old[k].config.id;if(found)continue;af_object_id ids[]={old[k].config.a,old[k].config.b};for(unsigned n=0;n<2;++n){size_t at=index_of(p,ids[n]);if(at!=SIZE_MAX){p->bodies[at].sleeping=false;p->bodies[at].sleep_time=0;}}}
     return true;
 }
 bool ph_collision_allowed(const af_physics *p, af_object_id a, af_object_id b) {
@@ -138,6 +134,7 @@ void ph_joints_solve(af_physics *p, float dt, bool pos) {
         const af_joint *j = &p->joints[i].config;
         ph_body *a = &p->bodies[p->joints[i].a],
                 *b = p->joints[i].b == SIZE_MAX ? &p->world : &p->bodies[p->joints[i].b];
+        if((a->inv_mass==0||a->sleeping)&&(b->inv_mass==0||b->sleeping))continue;
         af_vec3 ra = ph_vector(a, j->anchor_a), rb = ph_vector(b, j->anchor_b),
                 delta = sub(add(b->p, rb), add(a->p, ra));
         float length = af_vec3_length(delta);

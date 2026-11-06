@@ -19,18 +19,6 @@ static float inverse_mass(ph_body *b) {
 static bool resting(ph_body *a, ph_body *b) {
     return (a->inv_mass == 0 || a->sleeping) && (b->inv_mass == 0 || b->sleeping);
 }
-static void wake_contact(ph_body *a, ph_body *b, float penetration) {
-    bool moving_a = af_vec3_length(a->v) > .08f || af_vec3_length(a->w) > .08f,
-         moving_b = af_vec3_length(b->v) > .08f || af_vec3_length(b->w) > .08f;
-    if (a->sleeping && (moving_b || penetration > .012f)) {
-        a->sleeping = false;
-        a->sleep_time = 0;
-    }
-    if (b->sleeping && (moving_a || penetration > .012f)) {
-        b->sleeping = false;
-        b->sleep_time = 0;
-    }
-}
 static af_vec3 velocity(ph_body *b, af_vec3 point) {
     return add(b->v, af_vec3_cross(b->w, sub(point, b->p)));
 }
@@ -46,11 +34,11 @@ static void impulse(ph_body *a, ph_body *b, af_vec3 point, af_vec3 j) {
 }
 static unsigned bucket(af_object_id a,af_object_id b){uint64_t hash=(a*UINT64_C(0x9e3779b97f4a7c15))^(b*UINT64_C(0xbf58476d1ce4e5b9));hash^=hash>>32;return (unsigned)hash&16383u;}
 void ph_solve(af_physics *p, float dt) {
+    ph_islands_build(p);
     memset(p->cache_heads,0,sizeof(p->cache_heads));for(size_t i=p->cache_count;i>0;--i){unsigned key=bucket(p->cache[i-1].view.a,p->cache[i-1].view.b);p->cache_next[i-1]=p->cache_heads[key];p->cache_heads[key]=(uint32_t)i;}
     for (size_t i = 0; i < p->contact_count; ++i) {
         ph_contact *c = &p->contacts[i];
         ph_body *a = &p->bodies[c->a], *b = &p->bodies[c->b];
-        wake_contact(a, b, c->view.penetration);
         if (resting(a, b))
             continue;
         af_vec3 n = c->view.normal;

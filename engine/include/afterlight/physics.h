@@ -24,6 +24,7 @@ typedef struct af_physics_stats {
     uint64_t ticks;
     double sync_ms,broadphase_ms,narrowphase_ms,ccd_ms,solver_ms,total_ms;
     size_t ccd_pairs,cache_probes;
+    size_t islands,awake_islands,largest_island;
 } af_physics_stats;
 af_physics *af_physics_create(void);
 void af_physics_destroy(af_physics *);

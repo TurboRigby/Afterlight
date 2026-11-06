@@ -28,6 +28,7 @@ typedef struct ph_bound {
     af_vec3 low, high;
     float key_low,key_high;
 } ph_bound;
+typedef struct ph_joint {af_joint config;size_t a,b;} ph_joint;
 struct af_physics {
     af_object_id held;
     af_vec3 grab_local, grab_target;
@@ -38,7 +39,10 @@ struct af_physics {
     size_t contact_count, cache_count;
     ph_bound bounds[AF_PHYSICS_MAX_BODIES],ccd_bounds[AF_PHYSICS_MAX_BODIES];
     uint32_t cache_heads[16384],cache_next[AF_PHYSICS_MAX_CONTACTS];
-    struct {af_joint config;size_t a,b;} joints[AF_SCENE_MAX_JOINTS];size_t joint_count;ph_body world;
+    ph_joint joints[AF_SCENE_MAX_JOINTS];size_t joint_count;ph_body world;
+    size_t parents[AF_PHYSICS_MAX_BODIES],island_sizes[AF_PHYSICS_MAX_BODIES];
+    bool island_wake[AF_PHYSICS_MAX_BODIES],island_anchor[AF_PHYSICS_MAX_BODIES],island_quiet[AF_PHYSICS_MAX_BODIES];
+    float island_time[AF_PHYSICS_MAX_BODIES];
     af_physics_stats stats;
     float last_dt;
     bool profiling;
@@ -65,6 +69,8 @@ void ph_impulse(ph_body *, af_vec3, af_vec3);
 void ph_shape(ph_body *);
 void ph_hold(af_physics *, float);
 void ph_advance(af_physics*,float);
+void ph_islands_build(af_physics*);
+void ph_wake_island(af_physics*,size_t);
 void ph_sleep(af_physics *, float);
 bool ph_joints_sync(af_physics *);
 bool ph_collision_allowed(const af_physics*,af_object_id,af_object_id);

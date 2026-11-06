@@ -32,3 +32,12 @@ stable-ID pair hash instead of scanning the whole cache. The 256-body sample
 reduced final-tick cache probes from 1717403 to 9662; timing remains machine- and
 scheduling-dependent. Sparse 256-body continuous scenes avoid narrowphase pairs.
 Thin-wall, moving-pair, angular CCD and original stack/controller tests remain.
+
+## Constraint islands
+
+Dynamic bodies joined by contacts or enabled constraints sleep and wake as a
+group. Static ground does not merge unrelated groups. World/static anchors and
+supporting contacts allow quiet groups to sleep; removed supports, moved
+kinematic anchors, impulses and held bodies wake the affected group. Counters
+report island count, awake count and largest group. Tests cover a sleeping chain,
+impulse propagation and removal of its world support, alongside stack sleeping.
