@@ -146,7 +146,7 @@ static bool local_transform(const cgltf_node *node,af_transform *out){
 }
 static bool add_node(af_model_file *model,const cgltf_node *source,const cgltf_data *data,int parent,unsigned depth){
     if(depth>=AF_SCENE_MAX_DEPTH-2||model->node_count>=16384||source->skin||source->has_mesh_gpu_instancing)return false;
-    size_t index=model->node_count;af_model_node value={.parent=parent,.mesh=source->mesh?(int)(source->mesh-data->meshes):-1};
+    size_t index=model->node_count;af_model_node value={.parent=parent,.mesh=source->mesh?(int)(source->mesh-data->meshes):-1,.source_node=(uint32_t)(source-data->nodes)};
     if(!local_transform(source,&value.transform))return false;snprintf(value.name,sizeof(value.name),"%.63s",source->name&&source->name[0]?source->name:"Node");
     void *p=realloc(model->nodes,(index+1)*sizeof(*model->nodes));if(!p)return false;model->nodes=p;model->nodes[model->node_count++]=value;
     for(size_t i=0;i<source->children_count;++i)if(!add_node(model,source->children[i],data,(int)index,depth+1))return false;return true;
@@ -219,4 +219,41 @@ bool af_scene_import_model(af_scene *scene,const char *prefix,const char *path,a
     {af_scene old=*scene;*scene=*next;*next=old;}if(root_out)*root_out=root;ok=true;
 done:
     af_scene_destroy(next);free(nodes);af_model_file_free(&model);if(!ok)error_message(error,"Cannot instantiate glTF hierarchy/materials (scene/asset limits or invalid values).");return ok;
+}
+
+/* Animation data retains source node indices, independent of import preorder. */
+#include <afterlight/animation.h>
+bool af_animation_file_load(const char *path,af_animation_file *out,af_asset_error *error){
+    if(error)*error=(af_asset_error){0};if(out)*out=(af_animation_file){0};if(!path||!out)return error_message(error,"Animation path/output required.");
+    memory_budget budget={0};cgltf_data *data=NULL;af_animation_file result={0};bool ok=false;size_t bytes=0,total_channels=0;
+    if(!parse_model(path,&budget,&data)||data->nodes_count>AF_ANIMATION_MAX_NODES||!data->nodes_count||data->animations_count>AF_ANIMATION_MAX_CLIPS)goto done;
+    result.node_count=data->nodes_count;result.bind_pose=calloc(result.node_count,sizeof(*result.bind_pose));result.parents=calloc(result.node_count,sizeof(*result.parents));
+    result.clip_count=data->animations_count;result.clips=calloc(result.clip_count?result.clip_count:1,sizeof(*result.clips));if(!result.bind_pose||!result.parents||!result.clips)goto done;
+    for(size_t i=0;i<result.node_count;++i){cgltf_node *n=&data->nodes[i];af_transform t;if(!local_transform(n,&t))goto done;
+        result.bind_pose[i]=(af_animation_pose){.translation=t.position,.scale=n->has_matrix?t.scale:(af_vec3){n->scale[0],n->scale[1],n->scale[2]},.rotation=n->has_matrix?af_quaternion_from_euler(t.rotation):(af_vec4){n->rotation[0],n->rotation[1],n->rotation[2],n->rotation[3]}};
+        result.parents[i]=n->parent?(int32_t)(n->parent-data->nodes):-1;
+    }
+    for(size_t i=0;i<result.clip_count;++i){cgltf_animation *a=&data->animations[i];af_animation_clip *clip=&result.clips[i];
+        if(!a->channels_count||a->channels_count>1024||total_channels>4096-a->channels_count)goto done;total_channels+=a->channels_count;
+        snprintf(clip->name,sizeof(clip->name),"%.63s",a->name&&a->name[0]?a->name:"Clip");clip->channel_count=a->channels_count;clip->channels=calloc(clip->channel_count,sizeof(*clip->channels));if(!clip->channels)goto done;
+        for(size_t j=0;j<clip->channel_count;++j){cgltf_animation_channel *source=&a->channels[j];cgltf_animation_sampler *sampler=source->sampler;af_animation_channel *c=&clip->channels[j];
+            if(!source->target_node||source->target_node->has_matrix||!sampler||!sampler->input||!sampler->output)goto done;
+            c->node=(uint32_t)(source->target_node-data->nodes);
+            if(source->target_path==cgltf_animation_path_type_translation)c->path=AF_ANIM_TRANSLATION;else if(source->target_path==cgltf_animation_path_type_rotation)c->path=AF_ANIM_ROTATION;else if(source->target_path==cgltf_animation_path_type_scale)c->path=AF_ANIM_SCALE;else goto done;
+            for(size_t k=0;k<j;++k)if(clip->channels[k].node==c->node&&clip->channels[k].path==c->path)goto done;
+            if(sampler->interpolation!=cgltf_interpolation_type_linear&&sampler->interpolation!=cgltf_interpolation_type_step&&sampler->interpolation!=cgltf_interpolation_type_cubic_spline)goto done;
+            c->interpolation=sampler->interpolation==cgltf_interpolation_type_step?AF_ANIM_STEP:sampler->interpolation==cgltf_interpolation_type_cubic_spline?AF_ANIM_CUBIC:AF_ANIM_LINEAR;
+            c->key_count=sampler->input->count;size_t stride=c->interpolation==AF_ANIM_CUBIC?3u:1u,components=c->path==AF_ANIM_ROTATION?4u:3u;
+            if(!c->key_count||c->key_count>65536||(stride==3&&c->key_count<2)||sampler->input->type!=cgltf_type_scalar||sampler->input->component_type!=cgltf_component_type_r_32f||sampler->output->component_type!=cgltf_component_type_r_32f||sampler->output->type!=(components==4?cgltf_type_vec4:cgltf_type_vec3)||sampler->output->count!=c->key_count*stride)goto done;
+            size_t allocation_bytes=c->key_count*(sizeof(float)+stride*sizeof(af_vec4));if(allocation_bytes>AF_ASSET_FILE_MAX_BYTES-bytes)goto done;bytes+=allocation_bytes;
+            c->times=calloc(c->key_count,sizeof(*c->times));c->values=calloc(c->key_count*stride,sizeof(*c->values));if(!c->times||!c->values)goto done;
+            for(size_t k=0;k<c->key_count;++k){if(!values(sampler->input,k,&c->times[k],1)||c->times[k]<0||(k&&c->times[k]<=c->times[k-1]))goto done;}
+            clip->duration=fmax(clip->duration,c->times[c->key_count-1]);
+            for(size_t k=0;k<c->key_count*stride;++k){float v[4]={0};if(!values(sampler->output,k,v,components))goto done;c->values[k]=(af_vec4){v[0],v[1],v[2],v[3]};
+                if(components==4&&(stride==1||k%3==1)){float length=sqrtf(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]+v[3]*v[3]);if(fabsf(length-1)>.01f)goto done;}}
+        }
+    }
+    *out=result;result=(af_animation_file){0};ok=true;
+done:
+    cgltf_free(data);af_animation_file_free(&result);return ok||error_message(error,"Invalid/unsupported glTF animation: TRS channels, finite increasing times and bounded data required (no morph tracks).");
 }

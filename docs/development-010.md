@@ -81,3 +81,25 @@ and material colors need no depth-map regeneration.
 On the tested Apple M4, warmed static-scene shadow timing fell to about
 0.17–0.25 ms in the benchmark; total GPU time still includes lighting and post
 work and varies with other running applications.
+
+## 4. glTF node animation
+
+`af_animation_file_load` retains source node IDs, parents, quaternion bind poses
+and up to 128 named clips. `af_animation_sample` evaluates translation, rotation
+and scale, including STEP, linear/shortest-path SLERP, and time-scaled Hermite
+CUBICSPLINE interpolation. Channel times clamp independently at either end.
+Quaternion spline results normalize after interpolation. World matrices work
+with parents appearing after children in the source array and reject cycles or
+nonfinite accumulated transforms. Negative TRS scales retain their signs.
+
+Input limits are 16,384 nodes, 4,096 channels across a file, 65,536 keys per
+channel and 64 MiB of decoded key data, in addition to the existing glTF parser
+limits. Morph animation, sheared matrices and singular bind transforms are not
+supported. Animated nodes must use TRS rather than a matrix. Model nodes expose
+`source_node` so import preorder does not change animation targets.
+
+The original `animated.gltf` fixture exercises linear TRS, stepped translation
+and a cubic translation curve; `scripts/generate_animation_assets.py` rebuilds
+it. Tests verify quaternion/Euler convention agreement, parent accumulation,
+clamping, invalid buffers, nonfinite inputs and duplicate tracks. Sampling
+follows [glTF animation interpolation](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-c-animation-sampler-interpolation-modes).

@@ -8,7 +8,7 @@
 #define AFTERLIGHT_MODEL_H
 #include <afterlight/scene.h>
 typedef struct af_model_primitive {af_mesh_file mesh;af_material material;int base_image,normal_image,surface_image;unsigned source_mesh,source_primitive;} af_model_primitive;
-typedef struct af_model_node {char name[64];af_transform transform;int parent;int mesh;} af_model_node;
+typedef struct af_model_node {char name[64];af_transform transform;int parent;int mesh;uint32_t source_node;} af_model_node;
 typedef struct af_model_file {
     af_model_primitive *primitives;size_t primitive_count;
     af_model_node *nodes;size_t node_count;

@@ -43,6 +43,7 @@ target_include_directories(afterlight_image PRIVATE third_party/stb)
 
 add_library(afterlight STATIC
     ${afterlight_shader_headers}
+    engine/src/animation.c
     engine/src/environment_job.c
     engine/src/asset_watch.c
     engine/src/gltf.c
@@ -345,6 +346,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_animation_test tests/animation.c)
+    target_link_libraries(afterlight_animation_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_animation_test)
+    add_test(NAME afterlight.animation COMMAND afterlight_animation_test "${PROJECT_SOURCE_DIR}/tests/assets")
+    add_test(NAME afterlight.animation_data COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/animation_data.py" "$<TARGET_FILE:afterlight_animation_test>" "${PROJECT_SOURCE_DIR}/tests/assets/animated.gltf")
     add_executable(afterlight_shadow_budget_test tests/shadow_budget.c)
     target_include_directories(afterlight_shadow_budget_test PRIVATE engine/src)
     target_link_libraries(afterlight_shadow_budget_test PRIVATE Afterlight::Engine)
