@@ -54,6 +54,8 @@ typedef struct af_game_host {
     const af_water *(*get_water)(const af_scene*,af_object_id);
     size_t (*water_particles)(const af_engine*,af_object_id,af_water_particle*,size_t);
     af_water_stats (*water_stats)(const af_engine*);
+    af_swim_config (*swim_config_default)(void);
+    bool (*swim_character)(af_engine*,af_character*,af_character_config,af_swim_state*,af_swim_config,af_swim_input,float,af_query_filter);
     af_water_sample (*sample_water)(const af_engine*,af_vec3);
     bool (*disturb_water)(af_engine*,af_object_id,af_vec3,float,float);
     af_joint_id (*add_joint)(af_scene*,af_joint);

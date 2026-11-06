@@ -77,6 +77,7 @@ add_library(afterlight STATIC
     engine/src/input.c
     engine/src/project.c
     engine/src/game_host.c
+    engine/src/swim.c
     engine/src/character.c
     engine/src/third_person.c
     engine/src/locomotion.c
@@ -557,6 +558,10 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_swimming_test tests/swimming.c)
+    target_link_libraries(afterlight_swimming_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_swimming_test)
+    add_test(NAME afterlight.swimming COMMAND afterlight_swimming_test)
     add_executable(afterlight_water_boundaries_test tests/water_boundaries.c)
     target_link_libraries(afterlight_water_boundaries_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_water_boundaries_test)

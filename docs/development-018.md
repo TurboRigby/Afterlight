@@ -64,3 +64,12 @@ than testing only its final position. Tests cover 0.1/10/1000/10000 kg receivers
 spilling, calm sleeping and all six C demos. The minimum-dimension validation
 allows floating-point roundoff at the 1 cm half-extent boundary. This remains a
 bounded position-based coupling approximation, without a global pressure solve.
+
+The optional C swimming controller reuses normal character movement on land and
+uses swept capsule sliding in water. It tracks immersion with entry/exit
+hysteresis, neutral surface buoyancy, head submersion and a brief surface-jump
+exit interval. Vertical input dives/ascends and horizontal input is relative to
+water current. It excludes pourable particles. `swim_config_default` and
+`swim_character` are available through the C host. Tests compare 30/60/144 Hz
+surface equilibrium, diving, ascending, surface jump, walls, currents, dry exits
+and transactional rejection of invalid input.

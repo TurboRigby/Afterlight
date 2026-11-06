@@ -19,6 +19,7 @@
 #include <afterlight/overlay.h>
 #include <afterlight/simulation.h>
 #include <afterlight/character.h>
+#include <afterlight/swim.h>
 #include <afterlight/audio.h>
 #include <afterlight/animation.h>
 #include <afterlight/locomotion.h>
@@ -228,6 +229,7 @@ af_vec2 af_engine_mouse_delta(const af_engine *engine);
 bool af_engine_set_mouse_capture(af_engine *engine, bool enabled);
 bool af_engine_mouse_captured(const af_engine *engine);
 size_t af_engine_water_particles(const af_engine*,af_object_id,af_water_particle*,size_t);
+bool af_engine_swim_character(af_engine*,af_character*,af_character_config,af_swim_state*,af_swim_config,af_swim_input,float,af_query_filter);
 af_water_sample af_engine_sample_water(const af_engine*,af_vec3);
 bool af_engine_disturb_water(af_engine*,af_object_id,af_vec3,float,float);
 af_water_stats af_engine_water_stats(const af_engine*);
