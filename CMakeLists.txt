@@ -485,6 +485,10 @@ add_custom_target(export_game
     DEPENDS afterlight_player afterlight_playground_game USES_TERMINAL VERBATIM)
 
 include(CTest)
+add_executable(afterlight_physics_benchmark tests/physics_stress.c)
+target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCHMARK=1)
+target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
+afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
     add_executable(afterlight_mechanical_scene_test tests/mechanical_scene.c)
     target_include_directories(afterlight_mechanical_scene_test PRIVATE engine/src)

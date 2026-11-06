@@ -9,9 +9,9 @@ af_physics *af_physics_create(void) {
 void af_physics_destroy(af_physics *p) {
     free(p);
 }
+void af_physics_set_profiling(af_physics *p,bool enabled){if(p)p->profiling=enabled;}
 void af_physics_reset(af_physics *p) {
-    if (p)
-        memset(p, 0, sizeof(*p));
+    if (p){bool profiling=p->profiling;memset(p,0,sizeof(*p));p->profiling=profiling;}
 }
 bool af_physics_active(const af_scene *s) {
     for (size_t i = 0; i < af_scene_object_count(s); ++i) {
@@ -265,10 +265,12 @@ size_t af_physics_contacts(const af_physics *p, af_physics_contact *out, size_t 
 bool af_physics_step(af_physics *p, af_scene *s, float dt) {
     if (!p || !s || !isfinite(dt) || dt <= 0 || dt > .1f)
         return false;
+    double started=ph_clock(p);
     if (!ph_sync(p, s, dt))
         return false;
     uint64_t ticks = p->stats.ticks + 1;
     p->stats = (af_physics_stats){.bodies = p->count, .ticks = ticks};
+    p->stats.sync_ms=ph_clock(p)-started;
     unsigned steps = (unsigned)ceilf(dt * 240 - 1e-5f);
     if (!steps)
         steps = 1;
@@ -291,10 +293,11 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
                 100);
             ph_shape(b);
         }
-        ph_advance(p,h);
+        double stamp=ph_clock(p);
+        ph_advance(p,h);p->stats.ccd_ms+=ph_clock(p)-stamp;
         if (!ph_detect(p))
             return fail(p, "Physics exceeds 8192 contact points.");
-        ph_solve(p, h);
+        stamp=ph_clock(p);ph_solve(p,h);p->stats.solver_ms+=ph_clock(p)-stamp;
     }
     ph_sleep(p, dt);
     for (size_t i = 0; i < p->count; ++i) {
@@ -315,6 +318,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
         b->published = o->transform;
         b->config = o->body;
     }
+    p->stats.total_ms=ph_clock(p)-started;
     return true;
 }
 

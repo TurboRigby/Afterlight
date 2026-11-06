@@ -57,6 +57,7 @@ void ph_solve(af_physics *p, float dt) {
                 ? c->view.penetration / dt
                 : (speed < -1 ? -fmaxf(a->config.restitution, b->config.restitution) * speed : 0);
         for (size_t j = 0; j < p->cache_count; ++j) {
+            ++p->stats.cache_probes;
             ph_contact *old = &p->cache[j];
             if (old->view.a != c->view.a || old->view.b != c->view.b || dot(old->view.normal, n) < .95f)
                 continue;

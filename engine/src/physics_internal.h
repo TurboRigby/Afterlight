@@ -5,6 +5,7 @@
 #include <afterlight/physics.h>
 #include <afterlight/joint.h>
 #include <math.h>
+#include <time.h>
 typedef struct ph_body {
     af_object_id id;
     size_t scene_index;
@@ -38,8 +39,10 @@ struct af_physics {
     struct {af_joint config;size_t a,b;} joints[AF_SCENE_MAX_JOINTS];size_t joint_count;ph_body world;
     af_physics_stats stats;
     float last_dt;
+    bool profiling;
     char error[256];
 };
+static inline double ph_clock(const af_physics *p){return p->profiling?1000.0*(double)clock()/CLOCKS_PER_SEC:0;}
 static inline bool ph_finite(af_vec3 a) {
     return isfinite(a.x) && isfinite(a.y) && isfinite(a.z);
 }

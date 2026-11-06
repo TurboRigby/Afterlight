@@ -22,10 +22,14 @@ typedef struct af_physics_stats {
     size_t bodies, dynamic_bodies, kinematic_bodies, sleeping, contacts, broadphase_pairs;
     unsigned substeps, iterations, ccd_hits,ccd_clamped;
     uint64_t ticks;
+    double sync_ms,broadphase_ms,narrowphase_ms,ccd_ms,solver_ms,total_ms;
+    size_t ccd_pairs,cache_probes;
 } af_physics_stats;
 af_physics *af_physics_create(void);
 void af_physics_destroy(af_physics *);
 void af_physics_reset(af_physics *);
+/* Optional process-CPU timings. Disabled by default; counters always available. */
+void af_physics_set_profiling(af_physics*,bool);
 bool af_physics_validate_scene(const af_scene *, char *error, size_t capacity);
 bool af_physics_active(const af_scene *);
 /* Fixed ticks <= .1 s; internal substeps <=1/240 s. Dynamic roots are updated

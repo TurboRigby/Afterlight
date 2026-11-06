@@ -251,6 +251,7 @@ void ph_advance(af_physics *p, float dt) {
                     !(a->shape.layer & b->shape.layer) || !ph_collision_allowed(p, a->id, b->id) ||
                     !candidates(a, b, earliest))
                     continue;
+                ++p->stats.ccd_pairs;
                 float t;
                 af_vec3 n, pos;
                 if (pair_toi(a, b, earliest, &t, &n, &pos) && t <= earliest) {

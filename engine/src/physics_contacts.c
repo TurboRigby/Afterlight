@@ -240,6 +240,7 @@ bool ph_detect(af_physics *p) {
     p->cache_count = p->contact_count;
     memcpy(p->cache, p->contacts, p->cache_count * sizeof(ph_contact));
     p->contact_count = 0;
+    double start=ph_clock(p),narrow=0;
     for (size_t i = 0; i < p->count; ++i)
         p->bounds[i] = bound(&p->bodies[i], i);
     if (p->count > 1)
@@ -259,6 +260,7 @@ bool ph_detect(af_physics *p) {
                 one.high.z < two.low.z)
                 continue;
             ++p->stats.broadphase_pairs;
+            double stamp=ph_clock(p);
             bool ok;
             if(a->shape.type==AF_COLLIDER_MESH||b->shape.type==AF_COLLIDER_MESH)ok=ph_mesh_contacts(p,ai,bi);
             else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
@@ -270,15 +272,16 @@ bool ph_detect(af_physics *p) {
                 af_vec3 d = sub(b->p, a->p);
                 float length = af_vec3_length(d),
                       penetration = a->shape.radius + b->shape.radius - length;
-                if (penetration < -SKIN)
-                    continue;
+                if (penetration < -SKIN){narrow+=ph_clock(p)-stamp;continue;}
                 af_vec3 n = length > 1e-7f ? mul(d, 1 / length) : (af_vec3){0, 1, 0};
                 ok = ph_emit(p, ai, bi, add(a->p, mul(n, a->shape.radius - penetration * .5f)), n,
                           penetration);
             }
+            narrow+=ph_clock(p)-stamp;
             if (!ok)
                 return false;
         }
+    p->stats.narrowphase_ms+=narrow;p->stats.broadphase_ms+=fmax(0,ph_clock(p)-start-narrow);
     p->stats.contacts = p->contact_count;
     return true;
 }

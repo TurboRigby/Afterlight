@@ -167,7 +167,7 @@ af_engine *af_engine_create(const af_engine_config *config)
         af_engine_destroy(engine);
         return NULL;
     }
-    engine->physics=af_physics_create();if(!engine->physics){af_engine_destroy(engine);return NULL;}
+    engine->physics=af_physics_create();if(!engine->physics){af_engine_destroy(engine);return NULL;}af_physics_set_profiling(engine->physics,true);
     engine->input_map=af_input_map_default();
     engine->animations=af_animation_runtime_create(engine->renderer);if(!engine->animations){af_engine_destroy(engine);return NULL;}engine->animation_enabled=true;
     engine->clear_color = (af_color){0.035f, 0.025f, 0.07f, 1.0f};
