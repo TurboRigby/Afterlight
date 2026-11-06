@@ -4,7 +4,13 @@
 #include "water_internal.h"
 #define WA_PARTICLE_MAX 4096u
 #define WA_HASH_SIZE 8192u
+typedef struct wa_fluid_contact {
+    size_t body;
+    af_vec3 normal, point;
+} wa_fluid_contact;
 typedef struct wa_particle {
+    wa_fluid_contact contacts[4];
+    unsigned contact_count;
     af_vec3 p, previous, q, v, delta, normal, point;
     float lambda;
     size_t hit_body;

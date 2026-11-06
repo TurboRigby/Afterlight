@@ -125,9 +125,9 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             return fail(p, "Physics dimensions exceed 10,000 world units.");
         if (shape.type != AF_COLLIDER_MESH &&
             (shape.type == AF_COLLIDER_SPHERE
-                 ? shape.radius < .01f
-                 : (shape.half_extents.x < .01f || shape.half_extents.y < .01f ||
-                    shape.half_extents.z < .01f)))
+                 ? shape.radius < .009999f
+                 : (shape.half_extents.x < .009999f || shape.half_extents.y < .009999f ||
+                    shape.half_extents.z < .009999f)))
             return fail(p, "Physics shape dimensions must be at least .01 world units.");
         if (count == AF_PHYSICS_MAX_BODIES || !ph_finite(shape.center) ||
             af_vec3_length(shape.center) > 1000000)
@@ -233,9 +233,9 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                 if (!af_scene_collider_shape_at(s, o->id, k, &part))
                     return fail(p, "Compound part is sheared or singular.");
                 if (part.type == AF_COLLIDER_SPHERE
-                        ? part.radius < .01f
-                        : (part.half_extents.x < .01f || part.half_extents.y < .01f ||
-                           part.half_extents.z < .01f))
+                        ? part.radius < .009999f
+                        : (part.half_extents.x < .009999f || part.half_extents.y < .009999f ||
+                           part.half_extents.z < .009999f))
                     return fail(p, "Compound part dimensions must be at least .01 world units.");
                 part.center = ph_local(&b, af_vec3_sub(part.center, shape.center));
                 for (unsigned axis = 0; axis < 3; ++axis)
@@ -254,6 +254,8 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             }
         }
 
+        b.water_motion=type==AF_BODY_KINEMATIC&&old&&dt>0&&moved;
+        b.water_previous_p=old?old->p:b.p;for(unsigned axis=0;axis<3;++axis)b.water_previous_axes[axis]=old?old->axes[axis]:b.axes[axis];
         b.published = o->transform;
         b.inv_mass = type == AF_BODY_DYNAMIC ? 1 / o->body.mass : 0;
         if (b.inv_mass > 0) {
@@ -396,7 +398,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
                 100);
             ph_shape(b);
         }
-        ph_water_step(p,h);
+        p->water_substep=sub;ph_water_step(p,h);
         double stamp = ph_clock(p);
         ph_advance(p, h);
         p->stats.ccd_ms += ph_clock(p) - stamp;

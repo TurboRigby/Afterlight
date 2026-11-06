@@ -151,35 +151,108 @@ static bool near_shape(af_world_collider w, af_vec3 a, af_vec3 b, float radius) 
            fmaxf(a.y, b.y) >= w.center.y - h.y - radius &&
            fminf(a.z, b.z) <= w.center.z + h.z + radius && fmaxf(a.z, b.z) >= w.center.z - h.z - radius;
 }
+static af_world_collider moving_shape(const ph_body *body, size_t part, float fraction) {
+    if (!body->water_motion)
+        return ph_part_world(body, part);
+    ph_body at = *body;
+    at.p = af_vec3_add(body->water_previous_p,
+                       af_vec3_scale(af_vec3_sub(body->p, body->water_previous_p), fraction));
+    for (unsigned k = 0; k < 2; ++k) {
+        at.axes[k] = af_vec3_add(
+            body->water_previous_axes[k],
+            af_vec3_scale(af_vec3_sub(body->axes[k], body->water_previous_axes[k]), fraction));
+        if (af_vec3_length(at.axes[k]) < 1e-5f)
+            at.axes[k] = body->axes[k];
+    }
+    at.axes[0] = af_vec3_normalize(at.axes[0]);
+    at.axes[1] = af_vec3_sub(at.axes[1], af_vec3_scale(at.axes[0], af_vec3_dot(at.axes[0], at.axes[1])));
+    if (af_vec3_length(at.axes[1]) < 1e-5f)
+        at.axes[1] = body->axes[1];
+    at.axes[1] = af_vec3_normalize(at.axes[1]);
+    at.axes[2] = af_vec3_cross(at.axes[0], at.axes[1]);
+    at.shape.center = at.shape.a = at.shape.b = at.p;
+    for (unsigned k = 0; k < 3; ++k)
+        at.shape.axes[k] = at.axes[k];
+    return ph_part_world(&at, part);
+}
+static void contact(wa_particle *p, size_t body, af_collision_hit hit) {
+    p->normal = hit.normal;
+    p->point = hit.point;
+    p->hit_body = body;
+    for (unsigned i = 0; i < p->contact_count; ++i)
+        if (p->contacts[i].body == body && af_vec3_dot(p->contacts[i].normal, hit.normal) > .97f) {
+            p->contacts[i] = (wa_fluid_contact){body, hit.normal, hit.point};
+            return;
+        }
+    if (p->contact_count < 4)
+        p->contacts[p->contact_count++] = (wa_fluid_contact){body, hit.normal, hit.point};
+}
 static void collide(af_physics *world, wa_particle *p, float radius, bool sweep) {
     for (size_t b = 0; b < world->count; ++b) {
         ph_body *body = &world->bodies[b];
         if (body->shape.trigger || body->character_proxy)
             continue;
         for (size_t k = 0; k < (body->part_count ? body->part_count : 1); ++k) {
-            af_world_collider w = ph_part_world(body, k);
-            if (!near_shape(w, p->p, p->q, radius))
+            float start = (float)world->water_substep / (float)world->stats.substeps,
+                  end = (float)(world->water_substep + 1) / (float)world->stats.substeps;
+            af_world_collider w = moving_shape(body, k, end);
+            af_vec3 origin = p->p;
+            if (body->water_motion) {
+                af_world_collider old = moving_shape(body, k, start);
+                af_vec3 d = af_vec3_sub(p->p, old.center);
+                origin = w.center;
+                for (unsigned axis = 0; axis < 3; ++axis)
+                    origin =
+                        af_vec3_add(origin, af_vec3_scale(w.axes[axis], af_vec3_dot(d, old.axes[axis])));
+            }
+            if (!near_shape(w, origin, p->q, radius))
                 continue;
             af_collision_hit hit;
             if (sweep &&
-                af_collider_sweep_sphere(w, p->p, radius, af_vec3_sub(p->q, p->p), .0002f, &hit)) {
-                p->q =
-                    af_vec3_add(af_vec3_add(p->p, af_vec3_scale(af_vec3_sub(p->q, p->p), hit.fraction)),
-                                af_vec3_scale(hit.normal, .0003f));
-                p->normal = hit.normal;
-                p->point = hit.point;
-                p->hit_body = b;
+                af_collider_sweep_sphere(w, origin, radius, af_vec3_sub(p->q, origin), .0002f, &hit)) {
+                p->q = af_vec3_add(
+                    af_vec3_add(origin, af_vec3_scale(af_vec3_sub(p->q, origin), hit.fraction)),
+                    af_vec3_scale(hit.normal, .0003f));
+                contact(p, b, hit);
             }
             float separation = af_collision_capsule_distance(w, p->q, radius, 0, &hit);
             if (separation < .0002f) {
                 p->q =
                     af_vec3_add(p->q, af_vec3_scale(hit.normal, fminf(radius * 4, .0002f - separation)));
-                p->normal = hit.normal;
-                p->point = hit.point;
-                p->hit_body = b;
+                contact(p, b, hit);
             }
         }
     }
+}
+static void couple(af_physics *world, wa_particle *p, af_vec3 incoming, float mass) {
+    for (unsigned k = 0; k < p->contact_count; ++k) {
+        wa_fluid_contact c = p->contacts[k];
+        ph_body *b = &world->bodies[c.body];
+        af_vec3 r = af_vec3_sub(c.point, b->p), surface = af_vec3_add(b->v, af_vec3_cross(b->w, r));
+        float vn = af_vec3_dot(af_vec3_sub(incoming, surface), c.normal);
+        float projected = af_vec3_dot(af_vec3_sub(p->v, surface), c.normal);
+        if (vn >= 0) {
+            if (projected < 0)
+                p->v = af_vec3_sub(p->v, af_vec3_scale(c.normal, projected));
+            continue;
+        }
+        if (b->inv_mass > 0) {
+            b->sleeping = false;
+            b->sleep_time = 0;
+            b->wet = true;
+            b->water_calm = false;
+        }
+        float inverse =
+            b->inv_mass +
+            af_vec3_dot(c.normal, af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(r, c.normal)), r));
+        float impulse = fminf(-vn, 30) / (1 / mass + fmaxf(0, inverse));
+        af_vec3 reaction = af_vec3_scale(c.normal, impulse);
+        ph_impulse(b, af_vec3_scale(reaction, -1), c.point);
+        incoming = af_vec3_add(incoming, af_vec3_scale(reaction, 1 / mass));
+        float target = af_vec3_dot(af_vec3_sub(incoming, surface), c.normal);
+        p->v = af_vec3_add(p->v, af_vec3_scale(c.normal, target - projected));
+    }
+    p->v = ph_limit(p->v, 30);
 }
 void ph_particles_step(af_physics *world, wa_slot *slot, float dt) {
     wa_particles *f = slot->particles;
@@ -213,6 +286,7 @@ void ph_particles_step(af_physics *world, wa_slot *slot, float dt) {
         p->q = af_vec3_add(p->p, af_vec3_scale(p->v, dt));
         p->normal = (af_vec3){0};
         p->hit_body = SIZE_MAX;
+        p->contact_count = 0;
         collide(world, p, radius, true);
     }
     unsigned iterations = 3u + 2u * (unsigned)w.quality;
@@ -268,23 +342,7 @@ void ph_particles_step(af_physics *world, wa_slot *slot, float dt) {
         wa_particle *p = &f->values[i];
         af_vec3 old = p->v;
         p->v = ph_limit(af_vec3_scale(af_vec3_sub(p->q, p->p), 1 / dt), 30);
-        if (p->hit_body < world->count) {
-            ph_body *body = &world->bodies[p->hit_body];
-            af_vec3 lever = af_vec3_sub(p->point, body->p),
-                    surface = af_vec3_add(body->v, af_vec3_cross(body->w, lever));
-            float incoming = af_vec3_dot(af_vec3_sub(old, surface), p->normal),
-                  normal = af_vec3_dot(af_vec3_sub(p->v, surface), p->normal);
-            if (normal < 0)
-                p->v = af_vec3_sub(p->v, af_vec3_scale(p->normal, normal));
-            if (body->inv_mass > 0 && incoming < 0) {
-                body->sleeping = false;
-                body->sleep_time = 0;
-                body->wet = true;
-                float mass = w.density * volume;
-                float impulse = fminf(mass * (-incoming), mass * (5 + 9.81f * dt));
-                ph_impulse(body, af_vec3_scale(p->normal, -impulse), p->point);
-            }
-        }
+        couple(world, p, old, w.density * volume);
         p->p = p->q;
     }
     grid(f);

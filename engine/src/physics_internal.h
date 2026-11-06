@@ -19,7 +19,7 @@ typedef struct ph_body {
     uint64_t geometry_key;
     af_world_collider *parts;
     size_t part_count, part_start;
-    af_vec4 q;
+    af_vec4 q;af_vec3 water_previous_p,water_previous_axes[3];bool water_motion;
     float inv_mass, sleep_time;
     bool sleeping, supported, external, character_proxy, wet,water_calm,water_support;
     uint64_t water_key;
@@ -64,6 +64,7 @@ struct af_physics {
         island_quiet[AF_PHYSICS_MAX_BODIES];
     float island_time[AF_PHYSICS_MAX_BODIES];
     af_physics_stats stats;
+    unsigned water_substep;
     float last_dt;
     bool profiling;
     char error[256];

@@ -54,3 +54,13 @@ poses/geometry wake them. Sleeping fluid uses unchanged meshes rather than
 regenerating geometry for interpolation alone. Stats expose sleeping fields and
 particles. `water_sleep` checks fixed sleeping positions and wake events, while
 pool/particle and existing rigid island/sleep regressions pass.
+
+Fluid contacts now retain up to four distinct solid normals per particle and
+compute reaction impulses using the particle mass plus the receiver's linear/
+angular effective mass. Kinematic panels are swept through intermediate poses
+across physics substeps; particles move against the relative swept shape, rather
+than testing only its final position. Tests cover 0.1/10/1000/10000 kg receivers,
+2 cm thick panels, translation and 90-degree rotation, existing cup retention/
+spilling, calm sleeping and all six C demos. The minimum-dimension validation
+allows floating-point roundoff at the 1 cm half-extent boundary. This remains a
+bounded position-based coupling approximation, without a global pressure solve.
