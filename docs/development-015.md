@@ -22,3 +22,13 @@ uses the existing force-limited API. Pose deltas are no longer interpreted as
 unbounded kinematic impact velocity. Center, edge and corner landings followed
 by another jump retain bounded crate motion; falling bodies still collide with
 the player and the real C demo interaction tests pass.
+
+## Collision and cache work
+
+CCD now uses conservative swept bounds sorted along the widest scene axis,
+rebuilding after impacts. Worlds without continuous bodies skip CCD pair work.
+Discrete collision shares the same adaptive sweep. Contact warm starts use a
+stable-ID pair hash instead of scanning the whole cache. The 256-body sample
+reduced final-tick cache probes from 1717403 to 9662; timing remains machine- and
+scheduling-dependent. Sparse 256-body continuous scenes avoid narrowphase pairs.
+Thin-wall, moving-pair, angular CCD and original stack/controller tests remain.

@@ -159,7 +159,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         if(player_proxy){b.v=b.w=(af_vec3){0};}
         b.config = o->body;
         b.config.type = type;
-        if(old&&old->shape.mesh!=shape.mesh)p->cache_count=0;
+        if(old&&old->shape.mesh!=shape.mesh)p->contact_count=p->cache_count=0;
         b.shape = shape;
         b.published = o->transform;
         b.inv_mass = type == AF_BODY_DYNAMIC ? 1 / o->body.mass : 0;

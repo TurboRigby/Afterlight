@@ -55,6 +55,7 @@ add_library(afterlight STATIC
     engine/src/rig.c
     engine/src/body.c
     engine/src/physics.c
+    engine/src/physics_bounds.c
     engine/src/physics_contacts.c
     engine/src/physics_mesh.c
     engine/src/physics_solver.c
@@ -490,6 +491,11 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_broadphase_test tests/physics_broadphase.c)
+    target_include_directories(afterlight_physics_broadphase_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_broadphase_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_broadphase_test)
+    add_test(NAME afterlight.physics_broadphase COMMAND afterlight_physics_broadphase_test )
     add_executable(afterlight_physics_landing_test tests/physics_landing.c)
     target_include_directories(afterlight_physics_landing_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_landing_test PRIVATE Afterlight::Engine)

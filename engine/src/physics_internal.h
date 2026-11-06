@@ -26,6 +26,7 @@ typedef struct ph_contact {
 typedef struct ph_bound {
     size_t body;
     af_vec3 low, high;
+    float key_low,key_high;
 } ph_bound;
 struct af_physics {
     af_object_id held;
@@ -35,7 +36,8 @@ struct af_physics {
     size_t count;
     ph_contact contacts[AF_PHYSICS_MAX_CONTACTS], cache[AF_PHYSICS_MAX_CONTACTS];
     size_t contact_count, cache_count;
-    ph_bound bounds[AF_PHYSICS_MAX_BODIES];
+    ph_bound bounds[AF_PHYSICS_MAX_BODIES],ccd_bounds[AF_PHYSICS_MAX_BODIES];
+    uint32_t cache_heads[16384],cache_next[AF_PHYSICS_MAX_CONTACTS];
     struct {af_joint config;size_t a,b;} joints[AF_SCENE_MAX_JOINTS];size_t joint_count;ph_body world;
     af_physics_stats stats;
     float last_dt;
@@ -70,6 +72,8 @@ void ph_joints_solve(af_physics*,float,bool);
 void ph_solve(af_physics *, float);
 bool ph_emit(af_physics*,size_t,size_t,af_vec3,af_vec3,float);
 bool ph_mesh_contacts(af_physics*,size_t,size_t);
+void ph_bounds(af_physics*,ph_bound*,float,bool);
+bool ph_bounds_overlap(ph_bound,ph_bound);
 bool ph_detect(af_physics *);
 bool ph_sync(af_physics *, af_scene *, float);
 #endif

@@ -241,9 +241,13 @@ void ph_advance(af_physics *p, float dt) {
         float earliest = remaining;
         af_vec3 normal = {0}, point = {0};
         bool hit = false;
-        for (size_t i = 0; i < p->count; ++i)
-            for (size_t j = i + 1; j < p->count; ++j) {
-                ph_body *a = &p->bodies[i], *b = &p->bodies[j];
+        bool continuous=false;for(size_t i=0;i<p->count;++i)continuous|=p->bodies[i].config.continuous;if(!continuous){advance_all(p,remaining);return;}
+        ph_bounds(p,p->ccd_bounds,remaining,true);
+        for(size_t one=0;one<p->count;++one)
+            for(size_t two=one+1;two<p->count&&p->ccd_bounds[two].key_low<=p->ccd_bounds[one].key_high;++two){
+                if(!ph_bounds_overlap(p->ccd_bounds[one],p->ccd_bounds[two]))continue;
+                size_t i=p->ccd_bounds[one].body,j=p->ccd_bounds[two].body;if(i>j){size_t swap=i;i=j;j=swap;}
+                ph_body *a=&p->bodies[i],*b=&p->bodies[j];
                 bool ignored = false;
                 for (size_t k = 0; k < ignored_count; ++k)
                     ignored |= ignored_a[k] == i && ignored_b[k] == j;

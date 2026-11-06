@@ -16,25 +16,6 @@ static af_vec3 mul(af_vec3 a, float b) {
 static float dot(af_vec3 a, af_vec3 b) {
     return af_vec3_dot(a, b);
 }
-static ph_bound bound(ph_body *b, size_t index) {
-    af_vec3 e = {b->shape.radius, b->shape.radius, b->shape.radius};
-    if (b->shape.type == AF_COLLIDER_BOX||b->shape.type==AF_COLLIDER_MESH) {
-        e = (af_vec3){0};
-        for (unsigned i = 0; i < 3; ++i) {
-            af_vec3 a = b->shape.axes[i];
-            float h = ph_get(b->shape.half_extents, i);
-            e = add(e, (af_vec3){fabsf(a.x) * h, fabsf(a.y) * h, fabsf(a.z) * h});
-        }
-    }
-    e = add(e, (af_vec3){SKIN, SKIN, SKIN});
-    return (ph_bound){index, sub(b->p, e), add(b->p, e)};
-}
-static int compare(const void *one, const void *two) {
-    const ph_bound *a = one, *b = two;
-    if (a->low.x != b->low.x)
-        return a->low.x < b->low.x ? -1 : 1;
-    return (a->body > b->body) - (a->body < b->body);
-}
 static float radius(const ph_body *b, af_vec3 n) {
     float r = 0;
     for (unsigned i = 0; i < 3; ++i)
@@ -242,12 +223,9 @@ bool ph_detect(af_physics *p) {
     memcpy(p->cache, p->contacts, p->cache_count * sizeof(ph_contact));
     p->contact_count = 0;
     double start=ph_clock(p),narrow=0;
+    ph_bounds(p,p->bounds,0,false);
     for (size_t i = 0; i < p->count; ++i)
-        p->bounds[i] = bound(&p->bodies[i], i);
-    if (p->count > 1)
-        qsort(p->bounds, p->count, sizeof(ph_bound), compare);
-    for (size_t i = 0; i < p->count; ++i)
-        for (size_t j = i + 1; j < p->count && p->bounds[j].low.x <= p->bounds[i].high.x; ++j) {
+        for (size_t j = i + 1; j < p->count && p->bounds[j].key_low <= p->bounds[i].key_high; ++j) {
             ph_bound one = p->bounds[i], two = p->bounds[j];
             size_t ai = one.body, bi = two.body;
             if (ai > bi) {
@@ -257,8 +235,7 @@ bool ph_detect(af_physics *p) {
             }
             ph_body *a = &p->bodies[ai], *b = &p->bodies[bi];
             if ((a->inv_mass == 0 && b->inv_mass == 0) || !(a->shape.layer & b->shape.layer) || !ph_collision_allowed(p,a->id,b->id) ||
-                one.low.y > two.high.y || one.high.y < two.low.y || one.low.z > two.high.z ||
-                one.high.z < two.low.z)
+                !ph_bounds_overlap(one,two))
                 continue;
             ++p->stats.broadphase_pairs;
             double stamp=ph_clock(p);

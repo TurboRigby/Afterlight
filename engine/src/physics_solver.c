@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "physics_internal.h"
+#include <string.h>
 static af_vec3 add(af_vec3 a, af_vec3 b) {
     return af_vec3_add(a, b);
 }
@@ -43,7 +44,9 @@ static void impulse(ph_body *a, ph_body *b, af_vec3 point, af_vec3 j) {
     ph_impulse(a, mul(j, -1), point);
     ph_impulse(b, j, point);
 }
+static unsigned bucket(af_object_id a,af_object_id b){uint64_t hash=(a*UINT64_C(0x9e3779b97f4a7c15))^(b*UINT64_C(0xbf58476d1ce4e5b9));hash^=hash>>32;return (unsigned)hash&16383u;}
 void ph_solve(af_physics *p, float dt) {
+    memset(p->cache_heads,0,sizeof(p->cache_heads));for(size_t i=p->cache_count;i>0;--i){unsigned key=bucket(p->cache[i-1].view.a,p->cache[i-1].view.b);p->cache_next[i-1]=p->cache_heads[key];p->cache_heads[key]=(uint32_t)i;}
     for (size_t i = 0; i < p->contact_count; ++i) {
         ph_contact *c = &p->contacts[i];
         ph_body *a = &p->bodies[c->a], *b = &p->bodies[c->b];
@@ -56,7 +59,8 @@ void ph_solve(af_physics *p, float dt) {
             c->view.penetration < 0
                 ? c->view.penetration / dt
                 : (speed < -1 ? -fmaxf(a->config.restitution, b->config.restitution) * speed : 0);
-        for (size_t j = 0; j < p->cache_count; ++j) {
+        for(uint32_t slot=p->cache_heads[bucket(c->view.a,c->view.b)];slot;slot=p->cache_next[slot-1]){
+            size_t j=slot-1;
             ++p->stats.cache_probes;
             ph_contact *old = &p->cache[j];
             if (old->view.a != c->view.a || old->view.b != c->view.b || dot(old->view.normal, n) < .95f)
