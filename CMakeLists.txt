@@ -53,6 +53,7 @@ add_library(afterlight STATIC
     engine/src/audio.c
     engine/src/gameplay.c
     engine/src/rig.c
+    engine/src/input.c
     engine/src/project.c
     engine/src/game_host.c
     engine/src/character.c
@@ -417,6 +418,10 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_input_test tests/input.c)
+    target_link_libraries(afterlight_input_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_input_test)
+    add_test(NAME afterlight.input COMMAND afterlight_input_test)
     add_library(afterlight_character_code STATIC game/character_game.c)
     target_include_directories(afterlight_character_code PRIVATE engine/include)
     afterlight_warnings(afterlight_character_code)

@@ -62,7 +62,7 @@ typedef struct editor {
     bool free_camera,resume_game_capture,maximize_play;
     bool invalid_name;
     bool failed;
-    bool show_performance,show_assets,show_colliders;
+    bool show_performance,show_assets,show_colliders,show_input;char input_path[4096];
     bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
     bool show_animation,animation_preview,show_skeleton;af_object_id animation_target;float animation_blend;
     const char *animation_test_path;unsigned animation_test_step;uint64_t animation_test_revision;double animation_test_time;af_rect animation_buttons[3];
@@ -284,7 +284,7 @@ static void keyboard(editor *app,double delta)
     }
     if(modifier)return;
     af_vec2 mouse=af_engine_mouse_position(engine);
-    const char *floating[]={"Performance","Assets","Project","Animation","HDR import"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_animation,app->environment_pending};
+    const char *floating[]={"Performance","Assets","Project","Animation","HDR import","Input actions"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_animation,app->environment_pending,app->show_input};
     for(unsigned i=0;i<5;++i)if(open[i]){struct nk_window *panel=nk_window_find(&app->gui.context,floating[i]);
         if(panel&&nk_input_is_mouse_hovering_rect(&app->gui.context.input,panel->bounds))return;}
     if(!app->runtime.playing&&inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_LEFT)&&!af_engine_mouse_captured(engine)){
@@ -915,6 +915,16 @@ static void animation_panel(editor *app,float width,float height)
         nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close animation panel"))app->show_animation=false;
     }nk_end(ctx);
 }
+static void input_panel(editor *app){if(!app->show_input)return;struct nk_context *ctx=&app->gui.context;if(nk_begin(ctx,"Input actions",nk_rect(280,130,540,570),NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MOVABLE)){
+    af_input_map map=af_engine_input_map(app->engine);static const char *keys[]={"None","Escape","Space","R","W","A","S","D","Q","E","Left Shift","Left Control","Left Super","Enter","Tab","Backspace","Delete","Left","Right","Up","Down","Home","End","Z","Y","C","V","X","N","O","F","F5","F6"};
+    label(ctx,"Bindings apply immediately; save them for reuse.",24);
+    for(size_t i=0;i<map.count;++i){af_action_binding b=map.bindings[i];label(ctx,b.name,24);nk_layout_row_dynamic(ctx,28,2);int negative=nk_combo(ctx,keys,AF_KEY_COUNT+1,b.negative_key+1,24,nk_vec2(230,180))-1,positive=nk_combo(ctx,keys,AF_KEY_COUNT+1,b.positive_key+1,24,nk_vec2(230,180))-1;
+        static const char *axes[]={"No stick axis","Left X","Left Y","Right X","Right Y","Left trigger","Right trigger"};nk_layout_row_dynamic(ctx,28,1);int axis=nk_combo(ctx,axes,7,b.pad_axis+1,24,nk_vec2(280,160))-1;
+        static const char *buttons[]={"No button","South / A","East / B","West / X","North / Y","Back","Guide","Start","Left stick","Right stick","Left shoulder","Right shoulder","D-pad up","D-pad down","D-pad left","D-pad right"};nk_layout_row_dynamic(ctx,28,1);int button=nk_combo(ctx,buttons,16,b.pad_button>=15?0:b.pad_button+1,24,nk_vec2(300,180))-1;
+        if(negative!=b.negative_key||positive!=b.positive_key||axis!=b.pad_axis||button!=b.pad_button){b.negative_key=negative;b.positive_key=positive;b.pad_axis=axis;b.pad_button=button;af_engine_bind_action(app->engine,b);}}
+    if(!app->input_path[0])snprintf(app->input_path,sizeof(app->input_path),"input.json");nk_layout_row_dynamic(ctx,28,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->input_path,sizeof(app->input_path),nk_filter_default);
+    nk_layout_row_dynamic(ctx,30,3);af_asset_error error;if(nk_button_label(ctx,"Save bindings")){bool ok=af_engine_save_input_map(app->engine,app->input_path,&error);snprintf(app->document.status,sizeof(app->document.status),"%s",ok?"Input bindings saved.":error.message);}if(nk_button_label(ctx,"Load bindings")){bool ok=af_engine_load_input_map(app->engine,app->input_path,&error);snprintf(app->document.status,sizeof(app->document.status),"%s",ok?"Input bindings loaded.":error.message);}if(nk_button_label(ctx,"Close"))app->show_input=false;
+}nk_end(ctx);}
 static void build_ui(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
@@ -925,12 +935,13 @@ static void build_ui(editor *app,float width,float height)
     nk_style_push_vec2(context,&context->style.window.padding,nk_vec2(14,5));
     if(!app->runtime.playing||!app->maximize_play){
     if(nk_begin(context,"Viewport tools",nk_rect(252,64,width-586,40),panel_flags(app)|NK_WINDOW_NO_SCROLLBAR)){
-        nk_layout_row_dynamic(context,22,7);
+        nk_layout_row_dynamic(context,22,8);
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_MOVE?"[Move]":"Move"))app->gizmo.mode=ED_GIZMO_MOVE;
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_ROTATE?"[Rotate]":"Rotate"))app->gizmo.mode=ED_GIZMO_ROTATE;
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_SCALE?"[Scale]":"Scale"))app->gizmo.mode=ED_GIZMO_SCALE;
         nk_bool snap=app->gizmo.snap;nk_checkbox_label(context,"Snap",&snap);app->gizmo.snap=snap!=0;
         if(nk_button_label(context,app->show_colliders?"[Colliders]":"Colliders"))app->show_colliders=!app->show_colliders;
+        if(nk_button_label(context,"Input"))app->show_input=!app->show_input;
         if(nk_button_label(context,"Reset view"))reset_camera(app);
         if(nk_button_label(context,"Project"))app->show_project=!app->show_project;
     }nk_end(context);
@@ -949,7 +960,7 @@ static void build_ui(editor *app,float width,float height)
     nk_style_pop_vec2(context);
     performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);
     af_engine_set_scene(app->engine,app->runtime.playing?app->runtime.scene:app->document.scene);
-    animation_panel(app,width,height);
+    animation_panel(app,width,height);input_panel(app);
     if(app->modal){
         if(nk_begin(context,"Unsaved changes",nk_rect((width-500)/2,(height-205)/2,500,205),NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR)){
             nk_layout_row_dynamic(context,58,1);nk_label_wrap(context,"Save your changes before continuing? Discard keeps the last saved file unchanged.");

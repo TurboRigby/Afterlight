@@ -22,6 +22,8 @@ typedef struct af_game_host {
     af_scene *scene;
     af_engine *engine;
     bool input_enabled,camera_enabled;
+    float (*action_value)(const struct af_game_host*,const char*);
+    bool (*action_pressed)(const struct af_game_host*,const char*);
     bool (*key_down)(const struct af_game_host*,af_key);
     size_t (*object_count)(const af_scene*);
     const af_scene_object *(*object_at)(const af_scene*,size_t);

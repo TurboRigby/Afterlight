@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <afterlight/math.h>
+#include <afterlight/input.h>
 #include <afterlight/camera.h>
 #include <afterlight/mesh.h>
 #include <afterlight/scene.h>
@@ -30,19 +31,6 @@ typedef struct af_engine_config {
     bool enable_validation;
     bool show_fps; /* Append FPS and average frame time to the window title. */
 } af_engine_config;
-
-typedef enum af_key {
-    AF_KEY_ESCAPE,
-    AF_KEY_SPACE,
-    AF_KEY_R,
-    AF_KEY_W, AF_KEY_A, AF_KEY_S, AF_KEY_D,
-    AF_KEY_Q, AF_KEY_E, AF_KEY_LEFT_SHIFT,
-    AF_KEY_LEFT_CONTROL, AF_KEY_LEFT_SUPER, AF_KEY_ENTER, AF_KEY_TAB,
-    AF_KEY_BACKSPACE, AF_KEY_DELETE, AF_KEY_LEFT, AF_KEY_RIGHT, AF_KEY_UP, AF_KEY_DOWN,
-    AF_KEY_HOME, AF_KEY_END, AF_KEY_Z, AF_KEY_Y, AF_KEY_C, AF_KEY_V, AF_KEY_X,
-    AF_KEY_N, AF_KEY_O, AF_KEY_F, AF_KEY_F5, AF_KEY_F6,
-    AF_KEY_COUNT
-} af_key;
 
 typedef enum af_mouse_button {
     AF_MOUSE_LEFT, AF_MOUSE_RIGHT, AF_MOUSE_MIDDLE, AF_MOUSE_BUTTON_COUNT
@@ -81,6 +69,12 @@ typedef struct af_engine_stats {
     bool validation_enabled;
 } af_engine_stats;
 
+af_input_map af_engine_input_map(const af_engine*);
+bool af_engine_save_input_map(const af_engine*,const char*,af_asset_error*);
+bool af_engine_bind_action(af_engine*,af_action_binding);
+bool af_engine_load_input_map(af_engine*,const char*,af_asset_error*);
+float af_engine_action_value(const af_engine*,const char*);
+bool af_engine_action_pressed(const af_engine*,const char*);
 typedef struct af_game {
     /* Optional callbacks. shutdown also runs when init returns false, so it
        must tolerate partially initialized game state. user_data is borrowed. */

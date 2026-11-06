@@ -56,9 +56,9 @@ static bool init(void *memory,const af_game_host *host){
 static void frame(void *memory,const af_game_host *host,double delta){
     character_state *s=memory;
     if(host->input_enabled){
-        if(host->key_pressed(host,AF_KEY_ESCAPE))host->capture_mouse(host->engine,false);
+        if(host->action_pressed(host,"Release"))host->capture_mouse(host->engine,false);
         else if(host->mouse_pressed(host->engine,AF_MOUSE_LEFT)&&host->mouse_in_viewport(host->engine))host->capture_mouse(host->engine,true);
-        if(host->mouse_captured(host->engine)){af_vec2 motion=host->mouse_delta(host->engine);host->third_person_look(&s->player,s->third,motion);}
+        if(host->mouse_captured(host->engine)){af_vec2 motion={host->action_value(host,"LookX"),host->action_value(host,"LookY")};host->third_person_look(&s->player,s->third,motion);}
     }
     /* A frame callback presents camera/status only; transforms belong to ticks. */
     if(host->camera_enabled){af_query_filter filter={.ignore=s->body,.mask=UINT32_MAX};if(host->third_person_camera(host->scene,&s->player,s->third,(float)fmin(.1,fmax(0,delta)),filter,&s->camera))host->set_camera(host->engine,&s->camera);}
@@ -66,18 +66,18 @@ static void frame(void *memory,const af_game_host *host,double delta){
 }
 static void update(void *memory,const af_game_host *host,double delta){
     character_state *s=memory;af_third_person_input input={0};bool controls=host->input_enabled&&host->mouse_captured(host->engine);
-    if(controls&&host->key_pressed(host,AF_KEY_R)){restart(s,host,true);present(s,host);return;}
+    if(controls&&host->action_pressed(host,"Restart")){restart(s,host,true);present(s,host);return;}
     s->time+=delta;
     for(unsigned i=0;i<s->crowd_count;++i)host->locomotion_step(host->engine,s->crowd[i],(af_locomotion_input){.speed=(float)(i%3)*2.5f,.grounded=true},(float)delta,NULL);
     for(unsigned i=0;i<s->platform_count;++i){platform_state *p=&s->platforms[i];if(host->get_object(host->scene,p->id)){af_transform t=p->base;t.position.x+=2*sinf((float)s->time*.9f);host->set_transform(host->scene,p->id,t);}}
-    if(controls&&!s->status.finished){float forward=(float)host->key_down(host,AF_KEY_W)-(float)host->key_down(host,AF_KEY_S),right=(float)host->key_down(host,AF_KEY_D)-(float)host->key_down(host,AF_KEY_A);
-        input.move=(af_vec2){right,forward};input.run=host->key_down(host,AF_KEY_LEFT_SHIFT);input.jump=host->key_pressed(host,AF_KEY_SPACE);
+    if(controls&&!s->status.finished){float forward=host->action_value(host,"MoveY"),right=host->action_value(host,"MoveX");
+        input.move=(af_vec2){right,forward};input.run=host->action_value(host,"Run")>.5f;input.jump=host->action_pressed(host,"Jump");
         if(forward!=0||right!=0||input.jump)s->status.running=true;
     }
     if(s->status.running&&!s->status.finished)s->status.elapsed+=delta;
     af_query_filter filter={.ignore=s->body,.mask=UINT32_MAX};
     bool grounded=s->player.body.grounded;
-    if(controls&&host->key_pressed(host,AF_KEY_E)){s->root_motion=!s->root_motion;host->locomotion_root_motion(host->engine,s->actor,s->rig.root_node,s->root_motion);host->log(s->root_motion?"Root motion enabled.":"Velocity movement enabled.");}
+    if(controls&&host->action_pressed(host,"Interact")){s->root_motion=!s->root_motion;host->locomotion_root_motion(host->engine,s->actor,s->rig.root_node,s->root_motion);host->log(s->root_motion?"Root motion enabled.":"Velocity movement enabled.");}
     af_locomotion_input animation={.speed=0,.vertical_speed=s->player.body.velocity.y,.grounded=s->player.body.grounded};
     if(s->root_motion){float amount=fminf(1,sqrtf(input.move.x*input.move.x+input.move.y*input.move.y));animation.speed=amount*(input.run?s->rig.run_speed:s->rig.walk_speed);
         if(input.jump&&animation.grounded){animation.grounded=false;animation.vertical_speed=s->config.jump_speed;}

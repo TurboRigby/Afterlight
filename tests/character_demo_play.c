@@ -3,18 +3,21 @@
 #include "cube.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 typedef struct test_state {const char *simple,*course,*module;af_scene *source;ed_runtime runtime;af_object_id actor,body;unsigned phase,ticks;bool failed,saw_jump,saw_fall;float start_z;} test_state;
 static unsigned input_phase;static bool edge;
 static bool down(const af_game_host *host,af_key key){(void)host;return (key==AF_KEY_W&&(input_phase==1||input_phase==2||input_phase==5))||(key==AF_KEY_LEFT_SHIFT&&input_phase==2);}
 static bool pressed(const af_game_host *host,af_key key){(void)host;return edge&&((key==AF_KEY_SPACE&&input_phase==3)||(key==AF_KEY_E&&input_phase==5));}
 static af_vec2 still(const af_engine *engine){(void)engine;return (af_vec2){0};}
 static bool no_mouse(const af_engine *engine,af_mouse_button button){(void)engine;(void)button;return false;}
+static float action_value(const af_game_host *h,const char *name){if(!strcmp(name,"MoveY"))return down(h,AF_KEY_W)?1.f:0;if(!strcmp(name,"Run"))return down(h,AF_KEY_LEFT_SHIFT)?1.f:0;return 0;}
+static bool action_pressed(const af_game_host *h,const char *name){return (!strcmp(name,"Jump")&&pressed(h,AF_KEY_SPACE))||(!strcmp(name,"Restart")&&pressed(h,AF_KEY_R))||(!strcmp(name,"Interact")&&pressed(h,AF_KEY_E));}
 static bool captured(const af_engine *engine){(void)engine;return true;}
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"Character Play phase %u line %d: %s\n",s->phase,__LINE__,#x);s->failed=true;af_engine_request_quit(engine);return;}}while(0)
 static bool load(af_engine *engine,test_state *s,const char *path){
     af_engine_set_scene(engine,NULL);ed_runtime_stop(&s->runtime);af_scene_destroy(s->source);af_scene_error se;af_asset_error ae;s->source=af_scene_load(path,&se);s->actor=s->body=0;
     if(!s->source||!af_engine_load_scene_assets(engine,s->source,&ae)||!ed_runtime_start_file(&s->runtime,s->source,engine,s->module))return false;s->runtime.auto_reload=false;
-    s->runtime.host.key_down=down;s->runtime.host.key_pressed=pressed;s->runtime.host.mouse_captured=captured;s->runtime.host.mouse_delta=still;s->runtime.host.mouse_pressed=no_mouse;
+    s->runtime.host.action_value=action_value;s->runtime.host.action_pressed=action_pressed;s->runtime.host.key_down=down;s->runtime.host.key_pressed=pressed;s->runtime.host.mouse_captured=captured;s->runtime.host.mouse_delta=still;s->runtime.host.mouse_pressed=no_mouse;
     for(size_t i=0;i<af_scene_object_count(s->runtime.scene);++i){const af_scene_object *o=af_scene_object_at(s->runtime.scene,i);if(o->animation.asset[0]&&!s->actor)s->actor=o->id;if(o->gameplay.player.enabled)s->body=o->id;}
     return s->actor&&s->body;
 }

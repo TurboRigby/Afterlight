@@ -20,6 +20,7 @@
 #include <string.h>
 
 struct af_engine {
+    SDL_Gamepad *gamepad;af_input_map input_map;float action_values[32];bool action_pressed[32],fixed_actions[32];
     SDL_Window *window;
     af_audio *audio;
     af_environment_job *environment_job;
@@ -131,7 +132,7 @@ af_engine *af_engine_create(const af_engine_config *config)
     /* Afterlight uses held keys for navigation; suppress Cocoa's accent picker. */
     SDL_SetHint(SDL_HINT_MAC_PRESS_AND_HOLD,"0");
 #endif
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    if (!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMEPAD)) {
         af_log("error", "SDL initialization: %s", SDL_GetError());
         af_engine_destroy(engine);
         return NULL;
@@ -163,6 +164,7 @@ af_engine *af_engine_create(const af_engine_config *config)
         af_engine_destroy(engine);
         return NULL;
     }
+    engine->input_map=af_input_map_default();
     engine->animations=af_animation_runtime_create(engine->renderer);if(!engine->animations){af_engine_destroy(engine);return NULL;}engine->animation_enabled=true;
     engine->clear_color = (af_color){0.035f, 0.025f, 0.07f, 1.0f};
     engine->camera = af_camera_default();
@@ -170,6 +172,13 @@ af_engine *af_engine_create(const af_engine_config *config)
     return engine;
 }
 
+static void update_actions(af_engine *e,double dt){
+    if(e->gamepad&&!SDL_GamepadConnected(e->gamepad)){SDL_CloseGamepad(e->gamepad);e->gamepad=NULL;}
+    if(!e->gamepad){int count=0;SDL_JoystickID *ids=SDL_GetGamepads(&count);if(count)e->gamepad=SDL_OpenGamepad(ids[0]);SDL_free(ids);}
+    af_input_sample sample={0};bool focused=(SDL_GetWindowFlags(e->window)&SDL_WINDOW_INPUT_FOCUS)!=0;if(focused){memcpy(sample.keys,e->keys,sizeof(sample.keys));sample.mouse=e->mouse_delta;if(e->gamepad){for(int i=0;i<SDL_GAMEPAD_BUTTON_COUNT&&i<32;++i)sample.buttons[i]=SDL_GetGamepadButton(e->gamepad,(SDL_GamepadButton)i);for(int i=0;i<SDL_GAMEPAD_AXIS_COUNT&&i<8;++i){Sint16 axis=SDL_GetGamepadAxis(e->gamepad,(SDL_GamepadAxis)i);sample.axes[i]=(float)axis/(axis<0?32768.f:32767.f);}}}
+    for(size_t i=0;i<e->input_map.count;++i){af_action_binding b=e->input_map.bindings[i];float value=af_input_value(&e->input_map,&sample,b.name);if(b.mouse_axis>=0&&(b.mouse_axis==0?sample.mouse.x:sample.mouse.y)==0)value*=(float)dt*900;
+        bool tap=focused&&b.positive_key>=0&&e->pressed[b.positive_key];e->action_pressed[i]=(fabsf(e->action_values[i])<.5f&&fabsf(value)>=.5f)||tap;if(e->action_pressed[i])e->fixed_actions[i]=true;e->action_values[i]=value;if(!focused)e->fixed_actions[i]=false;}
+}
 int af_engine_run(af_engine *engine, const af_game *game)
 {
     if (!engine || !game || engine->has_run) return 1;
@@ -271,6 +280,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
             Uint64 started=SDL_GetPerformanceCounter();bool uploaded=af_renderer_upload_environment_baked(engine->renderer,environment_name,environment_source,environment_images);
             af_environment_job_finish(engine->environment_job,uploaded,(double)(SDL_GetPerformanceCounter()-started)*1000/frequency);
         }
+        update_actions(engine,delta);
         if (game->update) game->update(engine, delta, game->user_data);
         unsigned animation_steps=0;
         if(game->fixed_update){unsigned steps=af_fixed_clock_advance(&engine->clock,elapsed,engine->simulation_paused,engine->step_pending);engine->step_pending=false;animation_steps=steps;
@@ -279,7 +289,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
                 if(engine->scene&&!snapshot){result=1;engine->running=false;break;}
                 af_scene_destroy(engine->previous_scene);engine->previous_scene=snapshot;engine->previous_camera=engine->camera;
                 engine->in_fixed=true;game->fixed_update(engine,AF_FIXED_DELTA,game->user_data);engine->in_fixed=false;++engine->fixed_ticks;engine->fixed_camera_position=engine->camera.position;engine->has_fixed_camera=true;
-                memset(engine->fixed_pressed,0,sizeof(engine->fixed_pressed));
+                memset(engine->fixed_pressed,0,sizeof(engine->fixed_pressed));memset(engine->fixed_actions,0,sizeof(engine->fixed_actions));
             }
         }
         Uint64 render_start=SDL_GetPerformanceCounter();
@@ -323,6 +333,7 @@ void af_engine_destroy(af_engine *engine)
     af_scene_destroy(engine->previous_scene);
     af_audio_destroy(engine->audio);
     af_renderer_destroy(engine->renderer);
+    SDL_CloseGamepad(engine->gamepad);
     SDL_DestroyWindow(engine->window);
     SDL_free(engine->base_title);
     SDL_free(engine->clipboard);
@@ -622,3 +633,11 @@ bool af_engine_locomotion_root_delta(af_engine *e,af_object_id object,af_vec3 *o
 
 af_animation_debug af_engine_animation_debug(const af_engine *e,af_object_id o){return e?af_animation_runtime_debug(e->animations,o):(af_animation_debug){0};}
 size_t af_engine_animation_bones(const af_engine *e,af_object_id o,af_animation_bone *out,size_t n){return e?af_animation_runtime_bones(e->animations,o,out,n):0;}
+
+bool af_engine_bind_action(af_engine *e,af_action_binding b){if(!e||!af_input_bind(&e->input_map,b))return false;memset(e->action_values,0,sizeof(e->action_values));memset(e->fixed_actions,0,sizeof(e->fixed_actions));return true;}
+bool af_engine_load_input_map(af_engine *e,const char *path,af_asset_error *error){if(!e)return false;af_input_map next;if(!af_input_map_load(path,&next,error))return false;e->input_map=next;memset(e->action_values,0,sizeof(e->action_values));memset(e->action_pressed,0,sizeof(e->action_pressed));memset(e->fixed_actions,0,sizeof(e->fixed_actions));return true;}
+float af_engine_action_value(const af_engine *e,const char *name){if(e&&name)for(size_t i=0;i<e->input_map.count;++i)if(!strcmp(e->input_map.bindings[i].name,name))return e->action_values[i];return 0;}
+bool af_engine_action_pressed(const af_engine *e,const char *name){if(e&&name)for(size_t i=0;i<e->input_map.count;++i)if(!strcmp(e->input_map.bindings[i].name,name))return e->in_fixed?e->fixed_actions[i]:e->action_pressed[i];return false;}
+
+af_input_map af_engine_input_map(const af_engine *e){return e?e->input_map:(af_input_map){0};}
+bool af_engine_save_input_map(const af_engine *e,const char *path,af_asset_error *error){return e&&af_input_map_save(path,&e->input_map,error);}

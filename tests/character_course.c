@@ -18,6 +18,8 @@ static bool motion_events(af_engine *e,af_object_id id,af_animation_events *out)
 static bool forward,jump,restart_key,mouse_capture,teleport;static unsigned resets,finished;static af_vec3 target;static af_gameplay_status status;
 static bool down(const af_game_host *host,af_key key){(void)host;return key==AF_KEY_W&&forward;}
 static bool pressed(const af_game_host *host,af_key key){(void)host;return (key==AF_KEY_SPACE&&jump)||(key==AF_KEY_R&&restart_key);}
+static float action_value(const af_game_host *h,const char *name){if(!strcmp(name,"MoveY"))return down(h,AF_KEY_W)?1.f:0;if(!strcmp(name,"Run"))return down(h,AF_KEY_LEFT_SHIFT)?1.f:0;return 0;}
+static bool action_pressed(const af_game_host *h,const char *name){return (!strcmp(name,"Jump")&&pressed(h,AF_KEY_SPACE))||(!strcmp(name,"Restart")&&pressed(h,AF_KEY_R))||(!strcmp(name,"Interact")&&pressed(h,AF_KEY_E));}
 static bool captured(const af_engine *engine){(void)engine;return mouse_capture;}
 static bool capture(af_engine *engine,bool enabled){(void)engine;mouse_capture=enabled;return true;}
 static void reset(af_engine *engine){(void)engine;++resets;}
@@ -33,7 +35,7 @@ int main(int argc,char **argv){CHECK(argc==2);af_scene_error error;af_scene *sce
     animations=af_animation_runtime_create(NULL);CHECK(animations);af_asset_error ae;
     for(size_t i=0;i<af_scene_asset_count(scene);++i){const af_scene_asset *a=af_scene_asset_at(scene,i);if(a->kind==AF_ASSET_ANIMATION){char path[4096];CHECK(af_asset_resolve_path(argv[1],a->path,path,sizeof(path))&&af_animation_runtime_load(animations,a->name,path,&ae));}}
     af_animation_runtime_scene(animations,scene);
-    af_game_host host=af_game_host_create(scene,NULL);host.input_enabled=true;host.camera_enabled=false;host.key_down=down;host.key_pressed=pressed;host.mouse_captured=captured;host.capture_mouse=capture;host.reset_interpolation=reset;host.log=log_message;host.report_gameplay=report;host.third_person_step=move;host.locomotion_root_motion=motion_config;host.locomotion_step=motion_step;host.animation_events=motion_events;
+    af_game_host host=af_game_host_create(scene,NULL);host.input_enabled=true;host.camera_enabled=false;host.action_value=action_value;host.action_pressed=action_pressed;host.key_down=down;host.key_pressed=pressed;host.mouse_captured=captured;host.capture_mouse=capture;host.reset_interpolation=reset;host.log=log_message;host.report_gameplay=report;host.third_person_step=move;host.locomotion_root_motion=motion_config;host.locomotion_step=motion_step;host.animation_events=motion_events;
     const af_game_module *api=af_game_get_api(AF_GAME_ABI_VERSION);CHECK(api&&!af_game_get_api(AF_GAME_ABI_VERSION-1));void *state=calloc(1,api->state_size);CHECK(state&&api->init(state,&host));
     CHECK(mouse_capture&&status.checkpoint_count==2&&!status.running);for(unsigned i=0;i<60;++i)api->update(state,&host,AF_FIXED_DELTA);CHECK(fabsf(host.get_object(scene,player)->transform.position.y-.902f)<.01f&&status.elapsed==0);
     forward=true;for(unsigned i=0;i<420;++i)api->update(state,&host,AF_FIXED_DELTA);af_vec3 climbed=host.get_object(scene,player)->transform.position;CHECK(climbed.y>2&&climbed.z<0&&status.elapsed>1.8);
