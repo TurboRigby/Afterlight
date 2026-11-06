@@ -28,3 +28,19 @@ pouring lab averages 6.57 ms process CPU in physics and 1.32 ms in mesh generati
 submission includes presentation pacing and the old mesh-wide idle wait, so its
 ~10–16 ms mean must not be interpreted as pure GPU work. Raw CSV logs are written
 to build/release/018-water-baseline.csv and 018-render-baseline.csv.
+
+Dynamic water meshes now keep a CPU snapshot and one persistently mapped vertex/
+index allocation per frame in flight. Updates happen after that frame's fence;
+capacity grows geometrically, unchanged revisions reuse buffers, non-coherent
+memory is flushed, and removed meshes retire without reindexing live assets.
+Normal water updates/removals no longer call device-wide idle. Resize/shutdown
+and unrelated static asset operations retain their required synchronization.
+The implementation follows Khronos' [frames-in-flight resource ownership](https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/03_Drawing/03_Frames_in_flight.html).
+
+Engine diagnostics expose water upload bytes/count/time and static mesh idle
+waits. The 18-case Release render benchmark reports zero mesh idle waits during
+each case. At high pouring quality uploads average ~0.032 ms on this M4 run;
+frame pacing still dominates render-loop wall time, so no uncapped-FPS claim is
+made. Native water Play verifies uploads, constant idle-wait count, scene
+retirement and cleanup; water pixel, asset-reload and material regressions pass.
+The public diagnostics extension uses C module ABI 19.

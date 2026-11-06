@@ -8,7 +8,8 @@ typedef struct benchmark {
     af_scene *scene;
     unsigned case_index, frames, measured;
     bool failed;
-    double physics, render, gpu, fence, acquire;
+    double physics, render, gpu, fence, acquire, upload;
+    uint64_t idle;
 } benchmark;
 static const char *names[] = {"water-pool",       "water-lake", "water-stream",
                               "water-river-bend", "water-pour", "water-pour-lab"};
@@ -26,7 +27,8 @@ static bool load(af_engine *e, benchmark *b) {
         return false;
     af_engine_set_scene(e, b->scene);
     b->frames = 0;
-    b->physics = b->render = b->gpu = b->fence = b->acquire = 0;
+    b->physics = b->render = b->gpu = b->fence = b->acquire = b->upload = 0;
+    b->idle = af_engine_get_stats(e).mesh_idle_waits;
     return true;
 }
 static bool init(af_engine *e, void *data) {
@@ -37,7 +39,8 @@ static bool init(af_engine *e, void *data) {
     c.yaw = -AF_PI / 2;
     c.pitch = -.48f;
     af_engine_set_camera(e, &c);
-    puts("scene,quality,frames,cpu_physics_ms,cpu_render_ms,gpu_frame_ms,cpu_fence_ms,cpu_acquire_ms");
+    puts("scene,quality,frames,cpu_physics_ms,cpu_render_ms,gpu_frame_ms,cpu_fence_ms,cpu_acquire_ms,"
+         "cpu_water_upload_ms,mesh_idle_waits");
     return af_engine_upload_mesh(e, "cube", &mesh) && load(e, b);
 }
 static void update(af_engine *e, double dt, void *data) {
@@ -55,12 +58,14 @@ static void update(af_engine *e, double dt, void *data) {
         b->gpu += s.gpu_frame_ms;
         b->fence += s.cpu_fence_ms;
         b->acquire += s.cpu_acquire_ms;
+        b->upload += s.water_upload_ms;
     }
     if (++b->frames < 30 + b->measured)
         return;
     double n = b->measured;
-    printf("%s,%u,%u,%.5f,%.5f,%.5f,%.5f,%.5f\n", names[b->case_index / 3], b->case_index % 3,
-           b->measured, b->physics / n, b->render / n, b->gpu / n, b->fence / n, b->acquire / n);
+    printf("%s,%u,%u,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%llu\n", names[b->case_index / 3], b->case_index % 3,
+           b->measured, b->physics / n, b->render / n, b->gpu / n, b->fence / n, b->acquire / n,
+           b->upload / n, (unsigned long long)(s.mesh_idle_waits - b->idle));
     fflush(stdout);
     if (++b->case_index == 18) {
         af_engine_request_quit(e);

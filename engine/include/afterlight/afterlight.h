@@ -53,6 +53,8 @@ typedef struct af_engine_stats {
     bool hdr_enabled;
     size_t missing_textures;
     size_t draw_calls; /* Visible objects actually drawn in the last submitted frame. */
+    uint64_t water_upload_bytes,water_stream_uploads,mesh_idle_waits;
+    double water_upload_ms;
     size_t missing_meshes; /* Visible objects skipped for unresolved mesh names. */
     /* Successful presentation submissions / real elapsed time, sampled each
        second. Zero before the first sample. Includes pacing/vsync, not GPU time. */

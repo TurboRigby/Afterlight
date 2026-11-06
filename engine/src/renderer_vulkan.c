@@ -37,6 +37,7 @@ _Static_assert(AF_FRAMES_IN_FLIGHT==AF_SHADOW_FRAME_COUNT,"Independent shadow ma
 typedef struct af_gpu_buffer {
     VkBuffer handle;
     VkDeviceMemory memory;
+    VkDeviceSize capacity;void *mapped;bool coherent;
 } af_gpu_buffer;
 
 typedef struct af_gpu_light {af_vec4 position_range,color_intensity,direction_inner,params;} af_gpu_light;
@@ -102,9 +103,13 @@ typedef struct af_gpu_mesh {
     af_vec3 minimum, maximum;
 } af_gpu_mesh;
 
+typedef struct af_stream_frame {af_gpu_mesh gpu;uint64_t revision;} af_stream_frame;
 typedef struct af_mesh_asset {
     char name[AF_MESH_NAME_CAPACITY];
     af_gpu_mesh gpu;
+    bool dynamic,retired;uint64_t revision;
+    af_vertex *cpu_vertices;uint32_t *cpu_indices;uint32_t vertex_count;
+    af_stream_frame streams[AF_FRAMES_IN_FLIGHT];
 } af_mesh_asset;
 
 struct af_renderer {
@@ -151,6 +156,7 @@ struct af_renderer {
     uint32_t frame_index;
     af_swapchain swapchain;
     af_mesh_asset *meshes;
+    uint64_t water_upload_bytes,water_stream_uploads,mesh_idle_waits;double water_upload_ms;
     size_t mesh_count;
     size_t mesh_capacity;
     size_t draw_calls;
@@ -547,6 +553,7 @@ static bool create_sky_pipeline(af_renderer *r){
 }
 static void destroy_buffer(af_renderer *renderer, af_gpu_buffer *buffer)
 {
+    if(buffer->mapped)vkUnmapMemory(renderer->device,buffer->memory);
     if (buffer->handle) vkDestroyBuffer(renderer->device, buffer->handle, NULL);
     if (buffer->memory) vkFreeMemory(renderer->device, buffer->memory, NULL);
     *buffer = (af_gpu_buffer){0};
@@ -607,9 +614,11 @@ static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize 
 static size_t find_mesh_index(const af_renderer *renderer, const char *name)
 {
     for (size_t i = 0; i < renderer->mesh_count; ++i)
-        if (strcmp(renderer->meshes[i].name, name) == 0) return i;
+        if (!renderer->meshes[i].retired&&strcmp(renderer->meshes[i].name, name) == 0) return i;
     return renderer->mesh_count;
 }
+
+#include "mesh_stream_vulkan.h"
 
 bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh)
 {
@@ -655,8 +664,9 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
         renderer->meshes = assets;
         renderer->mesh_capacity = capacity;
     }
+    ++renderer->mesh_idle_waits;
     if (!af_renderer_wait_idle(renderer)) goto fail;
-    if (index < renderer->mesh_count) destroy_mesh(renderer, &renderer->meshes[index].gpu);
+    if (index < renderer->mesh_count) stream_destroy(renderer, &renderer->meshes[index]);
     else ++renderer->mesh_count;
     renderer->meshes[index] = (af_mesh_asset){.gpu = uploaded};
     memcpy(renderer->meshes[index].name, asset_name, strlen(asset_name) + 1);++renderer->mesh_revision;
@@ -670,7 +680,9 @@ bool af_renderer_remove_mesh(af_renderer *renderer, const char *name)
 {
     if (!name) return false;
     size_t index = find_mesh_index(renderer, name);
-    if (index == renderer->mesh_count || !af_renderer_wait_idle(renderer)) return false;
+    if(index==renderer->mesh_count)return false;
+    if(renderer->meshes[index].dynamic){renderer->meshes[index].retired=true;free(renderer->meshes[index].cpu_vertices);free(renderer->meshes[index].cpu_indices);renderer->meshes[index].cpu_vertices=NULL;renderer->meshes[index].cpu_indices=NULL;return true;}
+    ++renderer->mesh_idle_waits;if(!af_renderer_wait_idle(renderer))return false;
     destroy_mesh(renderer, &renderer->meshes[index].gpu);
     memmove(&renderer->meshes[index], &renderer->meshes[index+1],
         (renderer->mesh_count-index-1) * sizeof(*renderer->meshes));
@@ -681,12 +693,12 @@ bool af_renderer_remove_mesh(af_renderer *renderer, const char *name)
 static void water_name(af_object_id id,char name[AF_MESH_NAME_CAPACITY]){snprintf(name,AF_MESH_NAME_CAPACITY,"__water_%llu",(unsigned long long)id);}
 bool af_renderer_update_water(af_renderer *r,const af_physics *physics,const af_scene *s,float alpha){
     const af_water_runtime *runtime=ph_water_runtime(physics);
-    for(size_t i=r->mesh_count;i>0;--i){const char *name=r->meshes[i-1].name;if(strncmp(name,"__water_",8))continue;bool keep=false;for(size_t k=0;k<af_scene_water_count(s);++k){char expected[64];water_name(af_scene_water_at(s,k)->owner,expected);if(!strcmp(name,expected))keep=true;}if(!keep&&!af_renderer_remove_mesh(r,name))return false;}
+    for(size_t i=r->mesh_count;i>0;--i){const char *name=r->meshes[i-1].name;if(strncmp(name,"__water_",8))continue;bool keep=false;for(size_t k=0;k<af_scene_water_count(s);++k){char expected[64];water_name(af_scene_water_at(s,k)->owner,expected);if(!strcmp(name,expected))keep=true;}if(!r->meshes[i-1].retired&&!keep&&!af_renderer_remove_mesh(r,name))return false;}
     for(size_t i=0;i<af_scene_water_count(s);++i){af_water w=*af_scene_water_at(s,i);const af_scene_object *o=af_scene_get_object(s,w.owner);if(!o)return false;float time=0;bool live=false;
         for(size_t k=0;runtime&&k<runtime->count;++k)if(runtime->slots[k].config.owner==w.owner&&!memcmp(&runtime->slots[k].config,&w,sizeof(w))&&!memcmp(&runtime->slots[k].transform,&o->transform,sizeof(o->transform))){time=runtime->slots[k].time;live=true;break;}
         float a=live?alpha:1;char name[64];water_name(w.owner,name);
         if(find_mesh_index(r,name)<r->mesh_count&&!memcmp(&r->water_configs[i],&w,sizeof(w))&&!memcmp(&r->water_transforms[i],&o->transform,sizeof(o->transform))&&r->water_times[i]==time&&r->water_alphas[i]==a)continue;
-        af_vertex *v=NULL;uint32_t *ix=NULL;af_mesh_data mesh;bool ok=wa_mesh(live?runtime:NULL,s,w.owner,a,&v,&ix,&mesh)&&af_renderer_upload_mesh(r,name,&mesh);free(v);free(ix);if(!ok)return false;
+        af_vertex *v=NULL;uint32_t *ix=NULL;af_mesh_data mesh;bool ok=wa_mesh(live?runtime:NULL,s,w.owner,a,&v,&ix,&mesh)&&stream_set(r,name,&mesh);free(v);free(ix);if(!ok)return false;
         r->water_configs[i]=w;r->water_transforms[i]=o->transform;r->water_times[i]=time;r->water_alphas[i]=a;
     }return true;
 }
@@ -1069,7 +1081,7 @@ void af_renderer_destroy(af_renderer *renderer)
         af_vk_texture_destroy(renderer->environment);af_vk_texture_destroy(renderer->irradiance);af_vk_texture_destroy(renderer->brdf);
         if(renderer->frame_pool)vkDestroyDescriptorPool(renderer->device,renderer->frame_pool,NULL);
         if(renderer->frame_layout)vkDestroyDescriptorSetLayout(renderer->device,renderer->frame_layout,NULL);
-        for (size_t i = 0; i < renderer->mesh_count; ++i) destroy_mesh(renderer, &renderer->meshes[i].gpu);
+        for (size_t i = 0; i < renderer->mesh_count; ++i) stream_destroy(renderer, &renderer->meshes[i]);
         free(renderer->meshes);
         for (uint32_t i = 0; i < AF_FRAMES_IN_FLIGHT; ++i) {
             destroy_buffer(renderer,&renderer->frames[i].uniform);destroy_buffer(renderer,&renderer->frames[i].skin_buffer);
@@ -1283,6 +1295,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (!vk_ok(vkWaitForFences(renderer->device, 1, &frame->fence, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
         return false;
     renderer->cpu_fence_ms=(double)(SDL_GetPerformanceCounter()-wait_start)*1000/(double)SDL_GetPerformanceFrequency();
+    if(!stream_prepare(renderer))return false;
     if(frame->timestamp_submitted){uint64_t values[5];
         VkResult query=vkGetQueryPoolResults(renderer->device,frame->timestamps,0,5,sizeof(values),values,sizeof(uint64_t),VK_QUERY_RESULT_64_BIT);
         if(query==VK_SUCCESS){uint64_t mask=renderer->timestamp_bits==64?UINT64_MAX:((UINT64_C(1)<<renderer->timestamp_bits)-1);
@@ -1398,7 +1411,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 ++missing_meshes;
                 continue;
             }
-            const af_gpu_mesh *mesh = &renderer->meshes[index].gpu;
+            const af_mesh_asset *asset=&renderer->meshes[index];
+            const af_gpu_mesh *mesh = asset->dynamic?&asset->streams[renderer->frame_index].gpu:&asset->gpu;
             af_color base=object->material.base_color;
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
             af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;
@@ -1492,6 +1506,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
 
 af_engine_stats af_renderer_stats(const af_renderer *renderer)
 {
+    size_t active_meshes=0;for(size_t i=0;i<renderer->mesh_count;++i)active_meshes+=renderer->meshes[i].name[0]&&!renderer->meshes[i].retired;
     uint64_t texture_bytes=0;uint32_t mip_levels=0;
     for(size_t i=0;i<renderer->texture_count;++i){af_texture_info info=af_vk_texture_info(renderer->textures[i].texture);texture_bytes+=info.allocation_bytes;mip_levels+=info.mip_levels;}
     return (af_engine_stats){
@@ -1502,7 +1517,8 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer)
         .texture_bytes=texture_bytes,.texture_mip_levels=mip_levels,.texture_anisotropy=renderer->anisotropy,
         .rendered_frames = renderer->rendered_frames,
         .swapchain_rebuilds = renderer->swapchain_rebuilds,
-        .loaded_meshes = renderer->mesh_count,
+        .loaded_meshes = active_meshes,
+        .water_upload_bytes=renderer->water_upload_bytes,.water_stream_uploads=renderer->water_stream_uploads,.mesh_idle_waits=renderer->mesh_idle_waits,.water_upload_ms=renderer->water_upload_ms,
         .loaded_textures=renderer->texture_count,.missing_textures=renderer->missing_textures,
         .draw_calls = renderer->draw_calls,
         .shadow_draw_calls=renderer->shadow_draw_calls,.shadow_passes=renderer->shadow_passes,.shadow_cached_passes=renderer->shadow_cached_passes,.shadow_cascades=renderer->shadow_layers,.shadow_resolution=renderer->shadow_resolution,

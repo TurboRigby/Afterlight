@@ -11,7 +11,7 @@ typedef struct test {
     af_scene *source;
     ed_runtime runtime;
     unsigned scene, phase, frames;
-    uint64_t start, paused;
+    uint64_t start, paused, mesh_waits;
     float source_y, particle_y;
     bool failed, kick, manual;
     af_object_id source_body, owner;
@@ -65,7 +65,10 @@ static bool load(af_engine *e, test *s) {
 static bool init(af_engine *e, void *data) {
     test *s = data;
     af_mesh_data mesh = cube_mesh_data();
-    return af_engine_upload_mesh(e, "cube", &mesh) && load(e, s);
+    if (!af_engine_upload_mesh(e, "cube", &mesh))
+        return false;
+    s->mesh_waits = af_engine_get_stats(e).mesh_idle_waits;
+    return load(e, s);
 }
 static void update(af_engine *e, double dt, void *data) {
     test *s = data;
@@ -84,6 +87,9 @@ static void update(af_engine *e, double dt, void *data) {
     af_water_stats water = af_engine_water_stats(e);
     if (s->phase == 0 && ticks >= 90) {
         CHECK(water.surfaces == 1 && af_engine_get_stats(e).validation_errors == 0);
+        CHECK(af_engine_get_stats(e).mesh_idle_waits == s->mesh_waits &&
+              af_engine_get_stats(e).water_stream_uploads > 0 &&
+              af_engine_get_stats(e).water_upload_bytes > 0);
         if (s->scene < 4)
             CHECK(water.wet_bodies > 0);
         else
