@@ -70,7 +70,8 @@ void ph_solve(af_physics *p, float dt) {
         }
         impulse(a, b, c->view.point, add(mul(n, c->normal), c->tangent));
     }
-    for (unsigned iteration = 0; iteration < 20; ++iteration)
+    for (unsigned iteration = 0; iteration < 20; ++iteration) {
+        ph_joints_solve(p,dt,false);
         for (size_t i = 0; i < p->contact_count; ++i) {
             ph_contact *c = &p->contacts[i];
             ph_body *a = &p->bodies[c->a], *b = &p->bodies[c->b];
@@ -99,8 +100,10 @@ void ph_solve(af_physics *p, float dt) {
                 }
             }
         }
+    }
     /* Split positional correction avoids injecting penetration energy into v. */
-    for (unsigned iteration = 0; iteration < 8; ++iteration)
+    for (unsigned iteration = 0; iteration < 8; ++iteration) {
+        ph_joints_solve(p,dt,true);
         for (size_t i = 0; i < p->contact_count; ++i) {
             ph_contact *c = &p->contacts[i];
             ph_body *a = &p->bodies[c->a], *b = &p->bodies[c->b];
@@ -115,6 +118,7 @@ void ph_solve(af_physics *p, float dt) {
             a->p = sub(a->p, mul(shift, inverse_mass(a)));
             b->p = add(b->p, mul(shift, inverse_mass(b)));
         }
+    }
     for (size_t i = 0; i < p->count; ++i)
         if (p->bodies[i].inv_mass > 0)
             ph_shape(&p->bodies[i]);

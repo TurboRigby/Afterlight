@@ -48,3 +48,18 @@ and 16 impact events per substep; exhaustion conservatively truncates motion and
 reports `ccd_clamped`. A pair receives at most one CCD impulse per substep, so
 multiple rebounds between the same pair remain an approximation. This is bounded
 CCD for small scenes, not an exact general time-of-impact solver.
+
+## Distance constraints
+
+Up to 128 scene-owned joints use stable IDs and connect a dynamic sphere/box to
+another physics body or a world anchor. Anchors are in unscaled body axes about
+the collider center; world endpoints use world coordinates. Distance zero is a
+point constraint. The iterative impulse solver includes angular anchor leverage
+and positional correction. Connected-body collision defaults off. Joint bodies
+stay awake until constraint-island sleeping is implemented.
+
+Scene 14 saves joint IDs/settings; clones, body deletion and C game host calls
+retain their meaning. Prefabs remap internal body references and reject external
+or world anchors. Endpoint edits that invalidate a joint fail transactionally.
+Pendulum/chain, save/load, clone, deletion and prefab remapping regressions run
+as CPU tests.

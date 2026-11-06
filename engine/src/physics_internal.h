@@ -3,6 +3,7 @@
 #define AF_PHYSICS_INTERNAL_H
 #include <afterlight/animation.h>
 #include <afterlight/physics.h>
+#include <afterlight/joint.h>
 #include <math.h>
 typedef struct ph_body {
     af_object_id id;
@@ -34,6 +35,7 @@ struct af_physics {
     ph_contact contacts[AF_PHYSICS_MAX_CONTACTS], cache[AF_PHYSICS_MAX_CONTACTS];
     size_t contact_count, cache_count;
     ph_bound bounds[AF_PHYSICS_MAX_BODIES];
+    struct {af_joint config;size_t a,b;} joints[AF_SCENE_MAX_JOINTS];size_t joint_count;ph_body world;
     af_physics_stats stats;
     float last_dt;
     char error[256];
@@ -59,6 +61,9 @@ void ph_shape(ph_body *);
 void ph_hold(af_physics *, float);
 void ph_advance(af_physics*,float);
 void ph_sleep(af_physics *, float);
+bool ph_joints_sync(af_physics *);
+bool ph_collision_allowed(const af_physics*,af_object_id,af_object_id);
+void ph_joints_solve(af_physics*,float,bool);
 void ph_solve(af_physics *, float);
 bool ph_emit(af_physics*,size_t,size_t,af_vec3,af_vec3,float);
 bool ph_mesh_contacts(af_physics*,size_t,size_t);

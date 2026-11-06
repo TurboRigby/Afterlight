@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-#include <afterlight/scene.h>
+#include "scene_internal.h"
 #include <math.h>
 af_rigid_body af_rigid_body_default(void) {
     return (af_rigid_body){.type = AF_BODY_STATIC,
@@ -43,6 +43,7 @@ bool af_scene_set_body(af_scene *scene, af_object_id id, af_rigid_body body) {
          af_vec3_length(o->collider.center) > 1e-6f || o->transform.scale.x <= 0 ||
          o->transform.scale.y <= 0 || o->transform.scale.z <= 0))
         return false;
-    o->body = body;
+    af_rigid_body previous=o->body;o->body=body;
+    if(!af_scene_joints_valid(scene)){o->body=previous;return false;}
     return true;
 }

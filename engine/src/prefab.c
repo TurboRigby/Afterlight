@@ -12,6 +12,9 @@ bool af_prefab_save(const af_scene *s,af_object_id root,const char *source_path,
     if(e)*e=(af_scene_error){0};if(!s||!path||!af_scene_get_object(s,root))return fail(e,"Select a hierarchy to save.");af_scene *p=af_scene_clone(s);if(!p)return false;size_t count=0;
     for(size_t i=0;i<s->count;++i)if(s->objects[i].id==root||af_scene_is_descendant(s,s->objects[i].id,root)){af_scene_object o=s->objects[i];if(o.id==root)o.parent=0;p->objects[count++]=o;}p->count=count;if(count>4096){af_scene_destroy(p);return fail(e,"Prefab exceeds 4096 objects.");}
     for(size_t i=0;i<count;++i){af_scene_object *o=&p->objects[i];if(o->gameplay.player.spawn&&!af_scene_get_object(p,o->gameplay.player.spawn)){af_scene_destroy(p);return fail(e,"Prefab spawn must belong to the saved hierarchy.");}if(o->model.root&&!af_scene_get_object(p,o->model.root)){af_scene_destroy(p);return fail(e,"Save the complete imported model hierarchy.");}}
+
+    p->joint_count=0;
+    for(size_t i=0;i<s->joint_count;++i){af_joint j=s->joints[i];bool a=af_scene_get_object(p,j.a)!=NULL,b=j.b&&af_scene_get_object(p,j.b)!=NULL;if(!a&&!b)continue;if(!a||!b){af_scene_destroy(p);return fail(e,"Prefab joints must connect two bodies inside the saved hierarchy.");}p->joints[p->joint_count++]=j;}
     p->asset_count=0;p->local_light_count=0;for(size_t i=0;i<s->asset_count;++i){bool used=false;for(size_t j=0;j<count;++j)used|=uses(&p->objects[j],s->assets[i].name);if(!used)continue;af_scene_asset a=s->assets[i];char resolved[4096];if(!af_asset_resolve_path(source_path,a.path,resolved,sizeof(resolved))){af_scene_destroy(p);return fail(e,"Cannot resolve prefab asset.");}snprintf(a.path,sizeof(a.path),"%s",resolved);p->assets[p->asset_count++]=a;}
     bool ok=af_scene_save(p,path,e);af_scene_destroy(p);return ok;
 }
@@ -27,6 +30,8 @@ bool af_prefab_instantiate(af_scene *s,const char *path,af_object_id parent,af_t
         char *refs[]={o.mesh,o.material.texture,o.material.normal_map,o.material.metallic_roughness_map,o.animation.asset};for(unsigned ref=0;ref<5;++ref)for(size_t j=0;j<p->asset_count;++j)if(!strcmp(refs[ref],p->assets[j].name)){snprintf(refs[ref],64,"%s",names[j]);break;}
         if(old==old_root){o.transform=placement;new_root=o.id;}af_scene_object *target=(af_scene_object*)af_scene_get_object(next,o.id);*target=o;}
     if(!af_scene_set_object_transform(next,new_root,placement)||!af_scene_set_parent(next,new_root,parent))goto done;for(size_t i=0;i<p->count;++i){af_mat4 matrix;if(!af_scene_world_matrix(next,ids[i],&matrix))goto done;}
+
+    for(size_t i=0;i<p->joint_count;++i){af_joint j=p->joints[i];j.a=mapped(p,ids,j.a);j.b=mapped(p,ids,j.b);if(!j.a||!j.b||!af_scene_add_joint(next,j))goto done;}
     exchange(s,next);if(out)*out=new_root;ok=true;
 done:free(ids);free(names);af_scene_destroy(next);af_scene_destroy(p);return ok||fail(e,"Invalid prefab or instance limits exceeded; destination unchanged.");
 }

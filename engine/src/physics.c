@@ -182,6 +182,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
     memcpy(p->bodies, p->scratch, count * sizeof(ph_body));
     p->count = count;
     p->scene = s;
+    if(!ph_joints_sync(p))return fail(p,"Joint endpoint has no supported active physics shape.");
     p->error[0] = 0;
     return true;
 }

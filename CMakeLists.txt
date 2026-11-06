@@ -59,6 +59,8 @@ add_library(afterlight STATIC
     engine/src/physics_mesh.c
     engine/src/physics_solver.c
     engine/src/physics_sleep.c
+    engine/src/joint.c
+    engine/src/physics_joints.c
     engine/src/physics_ccd.c
     engine/src/physics_interaction.c
     engine/src/prefab.c
@@ -469,6 +471,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_joints_test tests/physics_joints.c)
+    target_include_directories(afterlight_physics_joints_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_joints_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_joints_test)
+    add_test(NAME afterlight.physics_joints COMMAND afterlight_physics_joints_test )
     add_executable(afterlight_physics_ccd_test tests/physics_ccd.c)
     target_include_directories(afterlight_physics_ccd_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_ccd_test PRIVATE Afterlight::Engine)

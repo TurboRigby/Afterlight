@@ -254,7 +254,7 @@ bool ph_detect(af_physics *p) {
                 bi = swap;
             }
             ph_body *a = &p->bodies[ai], *b = &p->bodies[bi];
-            if ((a->inv_mass == 0 && b->inv_mass == 0) || !(a->shape.layer & b->shape.layer) ||
+            if ((a->inv_mass == 0 && b->inv_mass == 0) || !(a->shape.layer & b->shape.layer) || !ph_collision_allowed(p,a->id,b->id) ||
                 one.low.y > two.high.y || one.high.y < two.low.y || one.low.z > two.high.z ||
                 one.high.z < two.low.z)
                 continue;

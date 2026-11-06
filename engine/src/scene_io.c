@@ -193,7 +193,7 @@ static bool read_body(const cJSON *json,af_rigid_body *out){
 static bool add_body(cJSON *json,af_rigid_body b){if(!af_rigid_body_valid(b))return false;cJSON *j=cJSON_AddObjectToObject(json,"body");return j&&cJSON_AddBoolToObject(j,"enabled",b.enabled)&&cJSON_AddStringToObject(j,"type",b.type==AF_BODY_DYNAMIC?"dynamic":b.type==AF_BODY_KINEMATIC?"kinematic":"static")&&cJSON_AddNumberToObject(j,"mass",b.mass)&&cJSON_AddNumberToObject(j,"friction",b.friction)&&cJSON_AddNumberToObject(j,"restitution",b.restitution)&&cJSON_AddNumberToObject(j,"linear_damping",b.linear_damping)&&cJSON_AddNumberToObject(j,"angular_damping",b.angular_damping)&&cJSON_AddNumberToObject(j,"gravity_scale",b.gravity_scale)&&cJSON_AddBoolToObject(j,"allow_sleep",b.allow_sleep)&&cJSON_AddBoolToObject(j,"continuous",b.continuous)&&add_vector(j,"velocity",b.velocity)&&add_vector(j,"angular_velocity",b.angular_velocity);}
 static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene_error *error)
 {
-    static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights"};
+    static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights", "joints", "next_joint"};
     static const char *const object_fields[] = {"id", "name", "mesh", "visible", "position", "rotation", "scale", "material", "parent", "collider", "gameplay", "animation", "model", "rig", "body"};
     const cJSON *format = cJSON_GetObjectItemCaseSensitive(root, "format");
     const cJSON *version = cJSON_GetObjectItemCaseSensitive(root, "version");
@@ -208,7 +208,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
-    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
+    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:version->valuedouble>=14?11:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
         cJSON_GetArraySize(objects) > (int)AF_SCENE_FILE_MAX_OBJECTS) {
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid next_id or object array (maximum %u objects).", AF_SCENE_FILE_MAX_OBJECTS);
         return NULL;
@@ -388,8 +388,21 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         for(size_t i=0;i<scene->count;++i){af_scene_object *o=&scene->objects[i];if(!strcmp(o->name,"Player")&&o->collider.type==AF_COLLIDER_CAPSULE){o->gameplay.player.enabled=true;o->gameplay.player.spawn=spawn;o->gameplay.camera.enabled=o->gameplay.camera.primary=true;o->gameplay.player.controller.radius=o->collider.radius;o->gameplay.player.controller.half_height=o->collider.half_height;}}
     }
     for(size_t i=0;i<scene->count;++i)if(!af_scene_set_body(scene,scene->objects[i].id,scene->objects[i].body)){set_error(error,AF_SCENE_ERROR_FORMAT,"Dynamic bodies need a root sphere/box collider with a centered origin and positive scale.");goto fail;}
+
+    if(version->valuedouble>=14){
+        const cJSON *array=cJSON_GetObjectItemCaseSensitive(root,"joints"),*item;uint64_t next;
+        if(!cJSON_IsArray(array)||cJSON_GetArraySize(array)>AF_SCENE_MAX_JOINTS||!read_id(cJSON_GetObjectItemCaseSensitive(root,"next_joint"),&next))goto joint_fail;
+        cJSON_ArrayForEach(item,array){
+            static const char *const fields[]={"id","name","type","enabled","collide_connected","a","b","anchor_a","anchor_b","distance"};af_joint j=af_joint_default();
+            const cJSON *type=cJSON_GetObjectItemCaseSensitive(item,"type"),*enabled=cJSON_GetObjectItemCaseSensitive(item,"enabled"),*collide=cJSON_GetObjectItemCaseSensitive(item,"collide_connected");
+            if(!exact_fields(item,fields,10)||!read_id(cJSON_GetObjectItemCaseSensitive(item,"id"),&j.id)||!j.id||(next&&j.id>=next)||af_scene_get_joint(scene,j.id)||!read_name(cJSON_GetObjectItemCaseSensitive(item,"name"),j.name,sizeof(j.name))||!cJSON_IsString(type)||strcmp(type->valuestring,"distance")||!cJSON_IsBool(enabled)||!cJSON_IsBool(collide)||!read_id(cJSON_GetObjectItemCaseSensitive(item,"a"),&j.a)||!read_id(cJSON_GetObjectItemCaseSensitive(item,"b"),&j.b)||!read_vector(cJSON_GetObjectItemCaseSensitive(item,"anchor_a"),&j.anchor_a)||!read_vector(cJSON_GetObjectItemCaseSensitive(item,"anchor_b"),&j.anchor_b)||!read_float_field(item,"distance",&j.distance))goto joint_fail;
+            j.enabled=cJSON_IsTrue(enabled)!=0;j.collide_connected=cJSON_IsTrue(collide)!=0;
+            af_joint_id assigned=af_scene_add_joint(scene,j);if(!assigned)goto joint_fail;scene->joints[scene->joint_count-1].id=j.id;
+        }scene->next_joint_id=next;
+    }
     free(ids);
     return scene;
+joint_fail:set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid joint fields, endpoints or ID counter.");
 fail:
     free(ids);
     af_scene_destroy(scene);
@@ -467,6 +480,11 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
     cJSON *objects = cJSON_AddArrayToObject(root, "objects");
     if (!objects || !cJSON_AddStringToObject(root, "format", "afterlight.scene") ||
         !cJSON_AddNumberToObject(root, "version", AF_SCENE_FILE_VERSION) || !add_id(root, "next_id", scene->next_id)) goto fail;
+
+    cJSON *joints=cJSON_AddArrayToObject(root,"joints");if(!joints||!add_id(root,"next_joint",scene->next_joint_id))goto fail;
+    for(size_t i=0;i<scene->joint_count;++i){af_joint j=scene->joints[i];cJSON *item=cJSON_CreateObject();if(!item)goto fail;cJSON_AddItemToArray(joints,item);
+        if(!af_joint_valid(j)||!add_id(item,"id",j.id)||!cJSON_AddStringToObject(item,"name",j.name)||!cJSON_AddStringToObject(item,"type","distance")||!cJSON_AddBoolToObject(item,"enabled",j.enabled)||!cJSON_AddBoolToObject(item,"collide_connected",j.collide_connected)||!add_id(item,"a",j.a)||!add_id(item,"b",j.b)||!add_vector(item,"anchor_a",j.anchor_a)||!add_vector(item,"anchor_b",j.anchor_b)||!cJSON_AddNumberToObject(item,"distance",j.distance))goto fail;
+    }
     cJSON *render=cJSON_AddObjectToObject(root,"render");
     if(!render||!cJSON_AddNumberToObject(render,"exposure",scene->render_settings.exposure)||!cJSON_AddBoolToObject(render,"tone_mapping",scene->render_settings.tone_mapping))goto fail;
     const af_render_settings *rs=&scene->render_settings;
@@ -543,6 +561,8 @@ bool af_scene_save(const af_scene *scene, const char *path, af_scene_error *erro
     if (scene->count > AF_SCENE_FILE_MAX_OBJECTS) {
         set_error(error, AF_SCENE_ERROR_FORMAT, "Scene exceeds the %u-object file limit.", AF_SCENE_FILE_MAX_OBJECTS); return false;
     }
+    if(!af_scene_joints_valid(scene)){set_error(error,AF_SCENE_ERROR_FORMAT,"Joint endpoints must remain valid physics bodies.");return false;}
+    for(size_t i=0;i<scene->joint_count;++i)if(!valid_utf8((const unsigned char*)scene->joints[i].name,strlen(scene->joints[i].name))){set_error(error,AF_SCENE_ERROR_FORMAT,"Joint names must be UTF-8.");return false;}
     /* Scene names are byte strings in memory; JSON on disk must be UTF-8. */
     for (size_t i = 0; i < scene->count; ++i) {
         const af_scene_object *object = &scene->objects[i];
