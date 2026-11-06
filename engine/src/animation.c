@@ -27,7 +27,7 @@ af_mat4 af_animation_pose_matrix(af_animation_pose p){
 }
 void af_animation_file_free(af_animation_file *file){
     if(!file)return;for(size_t i=0;file->clips&&i<file->clip_count;++i){af_animation_clip *clip=&file->clips[i];for(size_t j=0;clip->channels&&j<clip->channel_count;++j){free(clip->channels[j].times);free(clip->channels[j].values);}free(clip->channels);}
-    free(file->clips);free(file->bind_pose);free(file->parents);*file=(af_animation_file){0};
+    free(file->clips);free(file->bind_pose);free(file->parents);free(file->skins);*file=(af_animation_file){0};
 }
 static af_vec4 channel_value(const af_animation_channel *c,double time){
     size_t lo=0,hi=c->key_count-1;while(lo+1<hi){size_t mid=lo+(hi-lo)/2;if(time<c->times[mid])hi=mid;else lo=mid;}
@@ -55,4 +55,9 @@ static bool world_node(const af_animation_file *file,const af_animation_pose *po
 bool af_animation_world_matrices(const af_animation_file *file,const af_animation_pose *poses,af_mat4 *world,size_t capacity){
     if(!file||!poses||!world||capacity<file->node_count||file->node_count>AF_ANIMATION_MAX_NODES)return false;
     unsigned char ready[AF_ANIMATION_MAX_NODES]={0};for(size_t i=0;i<file->node_count;++i)if(!world_node(file,poses,i,world,ready,0))return false;return true;
+}
+bool af_animation_skin_palette(const af_animation_file *file,size_t index,uint32_t mesh_node,const af_mat4 *world,af_mat4 *palette,size_t capacity){
+    if(!file||!world||!palette||index>=file->skin_count||mesh_node>=file->node_count||capacity<file->skins[index].joint_count)return false;
+    af_mat4 inverse;if(!af_mat4_inverse(world[mesh_node],&inverse))return false;const af_animation_skin *skin=&file->skins[index];
+    for(size_t i=0;i<skin->joint_count;++i){if(skin->joints[i]>=file->node_count)return false;palette[i]=af_mat4_mul(inverse,af_mat4_mul(world[skin->joints[i]],skin->inverse_bind[i]));for(unsigned j=0;j<16;++j)if(!isfinite(palette[i].elements[j]))return false;}return true;
 }

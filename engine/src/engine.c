@@ -350,7 +350,7 @@ bool af_engine_remove_mesh(af_engine *engine, const char *name)
 
 void af_engine_set_scene(af_engine *engine, const af_scene *scene)
 {
-    if (engine) {if(engine->scene!=scene)af_engine_reset_interpolation(engine);engine->scene = scene;}
+    if (engine) {if(engine->scene!=scene){af_engine_reset_interpolation(engine);af_renderer_clear_skin_palettes(engine->renderer);}engine->scene = scene;}
 }
 
 bool af_engine_set_window_size(af_engine *engine, int width, int height)
@@ -588,3 +588,5 @@ bool af_engine_start_environment(af_engine *engine,const char *name,const char *
 }
 void af_engine_cancel_environment(af_engine *engine){if(engine)af_environment_job_cancel(engine->environment_job);}
 af_environment_job_status af_engine_environment_status(const af_engine *engine){return af_environment_job_status_get(engine?engine->environment_job:NULL);}
+
+bool af_engine_set_skin_palette(af_engine *engine,af_object_id object,const af_mat4 *matrices,size_t count){return engine&&(!count||af_scene_get_object(engine->scene,object))&&af_renderer_set_skin_palette(engine->renderer,object,matrices,count);}

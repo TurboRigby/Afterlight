@@ -16,6 +16,8 @@ void af_renderer_destroy(af_renderer *renderer);
 bool af_renderer_wait_idle(af_renderer *renderer);
 void af_renderer_resize(af_renderer *renderer);
 bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh);
+bool af_renderer_set_skin_palette(af_renderer *renderer,af_object_id object,const af_mat4 *matrices,size_t count);
+void af_renderer_clear_skin_palettes(af_renderer *renderer);
 bool af_renderer_remove_texture(af_renderer *renderer,const char *name);
 bool af_renderer_upload_texture(af_renderer *renderer,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_renderer_remove_mesh(af_renderer *renderer, const char *name);

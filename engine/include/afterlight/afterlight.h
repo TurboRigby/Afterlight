@@ -17,6 +17,7 @@
 #include <afterlight/simulation.h>
 #include <afterlight/character.h>
 #include <afterlight/audio.h>
+#include <afterlight/animation.h>
 
 /* All engine/window operations run on the main thread. One engine at a time. */
 typedef struct af_engine af_engine;
@@ -109,6 +110,9 @@ void af_engine_set_clear_color(af_engine *engine, af_color color);
    must fit AF_MESH_NAME_CAPACITY. Invalid input/failure preserves old assets.
    Upload/remove wait for GPU work; changing object transforms does not. */
 bool af_engine_upload_mesh(af_engine *engine, const char *name, const af_mesh_data *mesh);
+/* Up to 128 skinned draw objects / 64 joints each. Copies mesh-local matrices.
+   Count zero clears an override. Scene changes clear all palettes. */
+bool af_engine_set_skin_palette(af_engine *engine,af_object_id object,const af_mat4 *matrices,size_t count);
 bool af_engine_upload_texture(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_engine_remove_texture(af_engine *engine,const char *name);
 bool af_engine_load_environment(af_engine *engine,const char *name,const char *path,af_asset_error *error);

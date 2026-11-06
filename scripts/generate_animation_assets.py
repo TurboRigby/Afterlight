@@ -14,7 +14,7 @@ def accessor(values, components, kind, component=5126):
         data.append(0)
     start = len(data)
     for value in values:
-        data.extend(struct.pack('<' + ('f' if component == 5126 else 'H') * components, *value))
+        data.extend(struct.pack('<' + {5126: 'f', 5123: 'H', 5121: 'B'}[component] * components, *value))
     views.append({'buffer': 0, 'byteOffset': start, 'byteLength': len(data) - start})
     accessors.append({'bufferView': len(views) - 1, 'componentType': component, 'count': len(values), 'type': kind})
     return len(accessors) - 1
@@ -44,3 +44,23 @@ gltf = {'asset': {'version': '2.0', 'generator': 'Afterlight original animation 
 bad = json.loads(json.dumps(gltf))
 bad['animations'][0]['channels'].append(bad['animations'][0]['channels'][0])
 (root / 'tests/assets/animated-invalid.gltf').write_text(json.dumps(bad, indent=2) + '\n')
+
+# Two-joint ribbon, authored from scratch. Four influences use normalized weights.
+joints = accessor([(0, 0, 0, 0), (0, 0, 0, 0), (1, 0, 0, 0), (1, 0, 0, 0)], 4, 'VEC4', 5123)
+weights = accessor([(1, 0, 0, 0)] * 4, 4, 'VEC4')
+inverse = accessor([(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1), (1,0,0,0,0,1,0,0,0,0,1,0,0,-1,0,1)], 16, 'MAT4')
+wave = accessor([(0,0,0,1), (0,0,.5,.866025404), (0,0,0,1)], 4, 'VEC4')
+skinned = {'asset': {'version': '2.0', 'generator': 'Afterlight original two-joint ribbon'},
+           'scene': 0, 'scenes': [{'nodes': [3]}],
+           'nodes': [{'name': 'Ribbon', 'mesh': 0, 'skin': 0}, {'name': 'Hip', 'children': [2]}, {'name': 'Tip', 'translation': [0,1,0]}, {'name': 'Character', 'children': [0,1]}],
+           'skins': [{'joints': [1,2], 'inverseBindMatrices': inverse, 'skeleton': 1}],
+           'meshes': [{'primitives': [{'attributes': {'POSITION': positions, 'JOINTS_0': joints, 'WEIGHTS_0': weights}, 'indices': indices}]}],
+           'animations': [{'name': 'Wave', 'samplers': [{'input': times, 'output': wave}], 'channels': [{'sampler': 0, 'target': {'node': 2, 'path': 'rotation'}}]}],
+           'buffers': [{'byteLength': len(data), 'uri': 'data:application/octet-stream;base64,' + base64.b64encode(data).decode()}], 'bufferViews': views, 'accessors': accessors}
+(root / 'tests/assets/skinned.gltf').write_text(json.dumps(skinned, indent=2) + '\n')
+normalized = json.loads(json.dumps(skinned))
+normalized_weights = accessor([(255,0,0,0)] * 4, 4, 'VEC4', 5121)
+accessors[normalized_weights]['normalized'] = True
+normalized['meshes'][0]['primitives'][0]['attributes']['WEIGHTS_0'] = normalized_weights
+normalized.update(buffers=[{'byteLength': len(data), 'uri': 'data:application/octet-stream;base64,' + base64.b64encode(data).decode()}], bufferViews=views, accessors=accessors)
+(root / 'tests/assets/skinned-normalized.gltf').write_text(json.dumps(normalized, indent=2) + '\n')

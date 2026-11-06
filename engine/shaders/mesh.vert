@@ -9,6 +9,9 @@ layout(location=0) in vec3 in_position;
 layout(location=1) in vec4 in_color;
 layout(location=2) in vec3 in_normal;
 layout(location=3) in vec2 in_uv;
+layout(location=4) in uvec4 in_joints;
+layout(location=5) in vec4 in_weights;
+layout(set=0,binding=6,std430) readonly buffer SkinMatrices {mat4 bones[];} skin;
 layout(location=0) out vec4 vertex_color;
 layout(location=1) out vec3 world_position;
 layout(location=2) out vec3 world_normal;
@@ -32,9 +35,11 @@ layout(set=0,binding=0) uniform Frame {
 } frame;
 layout(push_constant) uniform Draw {mat4 model;vec4 tint;vec4 params;vec4 surface;vec4 emission;} draw;
 void main(){
-    vec4 world=draw.model*vec4(in_position,1);
+    mat4 deformation=mat4(1);uint base=uint(draw.surface.w);
+    if(base>0&&dot(in_weights,vec4(1))>0)deformation=skin.bones[base+in_joints.x]*in_weights.x+skin.bones[base+in_joints.y]*in_weights.y+skin.bones[base+in_joints.z]*in_weights.z+skin.bones[base+in_joints.w]*in_weights.w;
+    vec4 world=draw.model*deformation*vec4(in_position,1);
     gl_Position=frame.view_projection*world;
     world_position=world.xyz;uv=in_uv;vertex_color=in_color*draw.tint;
-    mat3 basis=mat3(draw.model);
+    mat3 basis=mat3(draw.model*deformation);
     world_normal=abs(determinant(basis))>1e-12?transpose(inverse(basis))*in_normal:vec3(0);
 }

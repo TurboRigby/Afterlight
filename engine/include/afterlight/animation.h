@@ -19,10 +19,12 @@ typedef struct af_animation_channel {
     af_vec4 *values; /* CUBIC: in tangent, value, out tangent for each key. */
 } af_animation_channel;
 typedef struct af_animation_clip {char name[64];double duration;af_animation_channel *channels;size_t channel_count;} af_animation_clip;
+typedef struct af_animation_skin {uint32_t joints[AF_ANIMATION_MAX_JOINTS];af_mat4 inverse_bind[AF_ANIMATION_MAX_JOINTS];size_t joint_count;} af_animation_skin;
 typedef struct af_animation_file {
     af_animation_pose *bind_pose;
     int32_t *parents;size_t node_count;
     af_animation_clip *clips;size_t clip_count;
+    af_animation_skin *skins;size_t skin_count;
 } af_animation_file;
 bool af_animation_file_load(const char *path,af_animation_file *out,af_asset_error *error);
 void af_animation_file_free(af_animation_file *file);
@@ -33,6 +35,8 @@ af_vec4 af_quaternion_slerp(af_vec4 a,af_vec4 b,float t);
 af_vec4 af_quaternion_from_euler(af_vec3 radians);
 af_mat4 af_animation_pose_matrix(af_animation_pose pose);
 bool af_animation_world_matrices(const af_animation_file *file,const af_animation_pose *poses,af_mat4 *world,size_t capacity);
+/* Mesh-local palette: inverse(mesh world) * joint world * inverse bind. */
+bool af_animation_skin_palette(const af_animation_file *file,size_t skin,uint32_t mesh_node,const af_mat4 *world,af_mat4 *palette,size_t capacity);
 /* Owned playback buffers; initialize with default and destroy once. Do not
    copy a live player by value. File data remains borrowed for each call. */
 typedef struct af_animation_player {

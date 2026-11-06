@@ -19,6 +19,8 @@ typedef struct af_vertex {
     af_color color;
     af_vec3 normal; /* Zero normals use a geometric normal in the lit shader. */
     af_vec2 uv;
+    uint16_t joints[4];
+    af_vec4 weights; /* Zero sum: static. Otherwise four normalized influences. */
 } af_vertex;
 typedef struct af_mesh_data {
     const af_vertex *vertices;

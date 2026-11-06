@@ -118,3 +118,31 @@ a fade captures its current mixed pose to avoid snapping back to a source clip.
 A short destination clip holds its endpoint while the remaining fade finishes.
 Seeking/stopping clears transitions. Runtime time/temporary buffers are separate
 from saved animation configuration and must not be copied by value.
+
+## 6. Skeletons and GPU skinning
+
+The importer supports JOINTS_0/WEIGHTS_0 with four influences, float or normalized
+unsigned byte/short weights, and up to 64 joints per skin. Weights normalize at
+import; zero/nonfinite weights, invalid indices and additional influence sets
+are rejected. Animation files retain joint source-node IDs and inverse binds;
+missing inverse binds default to identity. Palette construction is
+`inverse(mesh world) * joint world * inverse bind`.
+
+`af_engine_set_skin_palette` copies mesh-local matrices for up to 128 draw
+objects. Count zero removes an override; scene switches clear them. One storage
+buffer per frame is written only after its owner fence. The existing frame
+descriptor gains a vertex-stage storage binding; the five material descriptor
+sets and 128-byte scene push constants remain unchanged. Directional, cascade,
+spot and point shadows use the same deformation, with an 80-byte shadow push.
+Normals use the inverse transpose of the combined model/deformation matrix;
+singular bases yield the existing geometric-normal fallback.
+
+Conservative bounds union the mesh box transformed by every bone. Positive
+normalized weights keep deformed positions inside that union. This supports
+shadow fitting/culling and posed box picking without a CPU vertex-skinning pass.
+Palette changes invalidate shadow signatures; repeated identical poses retain
+the cache. Original two-joint ribbon fixtures, normalized-byte variants and
+malformed-skeleton tests verify CPU import and palette math. GPU tests verify
+moving silhouettes, normals, picking, last-good palette retention, directional
+and point shadows, scene switches and resize. Morph targets and more than four
+influences remain unsupported.

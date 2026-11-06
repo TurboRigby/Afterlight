@@ -50,7 +50,10 @@ typedef struct af_frame_uniform {
     af_mat4 inverse_view_projection;af_vec4 sky_params;
 } af_frame_uniform;
 _Static_assert(sizeof(af_frame_uniform)==3104,"Shader frame layout");
-typedef struct af_shadow_draw {af_mat4 model;size_t mesh;} af_shadow_draw;
+typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;} af_shadow_draw;
+#define AF_SKIN_INSTANCES 128u
+#define AF_SKIN_MATRICES (AF_SKIN_INSTANCES*AF_ANIMATION_MAX_JOINTS+1u)
+typedef struct af_skin_instance {af_object_id object;af_mat4 matrices[AF_ANIMATION_MAX_JOINTS];size_t count;} af_skin_instance;
 typedef struct af_environment_asset {char name[AF_MESH_NAME_CAPACITY];af_vk_texture *specular,*diffuse,*sky;} af_environment_asset;
 typedef struct af_texture_asset {char name[AF_MESH_NAME_CAPACITY];af_vk_texture *texture;bool normal;} af_texture_asset;
 
@@ -58,7 +61,7 @@ typedef struct af_frame {
     VkCommandBuffer command;
     VkSemaphore acquired;
     VkFence fence;
-    af_gpu_buffer uniform;
+    af_gpu_buffer uniform,skin_buffer;
     VkDescriptorSet descriptor;
     VkQueryPool timestamps;
     bool timestamp_submitted;
@@ -92,7 +95,7 @@ typedef struct af_swapchain {
 typedef struct af_gpu_mesh {
     af_gpu_buffer vertices;
     af_gpu_buffer indices;
-    uint32_t index_count;
+    uint32_t index_count,max_joint;bool skinned;
     af_vec3 minimum, maximum;
 } af_gpu_mesh;
 
@@ -111,6 +114,7 @@ struct af_renderer {
     af_shadow_draw *shadow_draws;
     af_shadow_bounds *shadow_bounds;
     size_t shadow_capacity,shadow_count,shadow_draw_calls;
+    af_skin_instance skins[AF_SKIN_INSTANCES];size_t skin_count;uint64_t skin_revision;
     uint64_t mesh_revision;uint32_t shadow_passes,shadow_cached_passes;
     af_gpu_buffer capture_buffer;
     af_vec2 capture_position;
@@ -442,12 +446,14 @@ static bool create_pipeline(af_renderer *renderer)
         {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT,
             .offset = offsetof(af_vertex, color)},
         {.location=2,.binding=0,.format=VK_FORMAT_R32G32B32_SFLOAT,.offset=offsetof(af_vertex,normal)},
-        {.location=3,.binding=0,.format=VK_FORMAT_R32G32_SFLOAT,.offset=offsetof(af_vertex,uv)}
+        {.location=3,.binding=0,.format=VK_FORMAT_R32G32_SFLOAT,.offset=offsetof(af_vertex,uv)},
+        {.location=4,.binding=0,.format=VK_FORMAT_R16G16B16A16_UINT,.offset=offsetof(af_vertex,joints)},
+        {.location=5,.binding=0,.format=VK_FORMAT_R32G32B32A32_SFLOAT,.offset=offsetof(af_vertex,weights)}
     };
     VkPipelineVertexInputStateCreateInfo vertex_input = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = &binding,
-        .vertexAttributeDescriptionCount = 4, .pVertexAttributeDescriptions = attributes
+        .vertexAttributeDescriptionCount = 6, .pVertexAttributeDescriptions = attributes
     };
     VkPipelineInputAssemblyStateCreateInfo assembly = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -622,6 +628,9 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
     uploaded.index_count = mesh->index_count;
     uploaded.minimum = uploaded.maximum = mesh->vertices[0].position;
     for (uint32_t i = 0; i < mesh->vertex_count; ++i) {
+        const af_vertex *v=&mesh->vertices[i];float weights[]={v->weights.x,v->weights.y,v->weights.z,v->weights.w};float sum=0;
+        for(unsigned j=0;j<4;++j){if(!isfinite(weights[j])||weights[j]<0||v->joints[j]>=AF_ANIMATION_MAX_JOINTS)goto fail;sum+=weights[j];if(v->joints[j]>uploaded.max_joint)uploaded.max_joint=v->joints[j];}
+        if(sum>0){if(fabsf(sum-1)>.001f)goto fail;uploaded.skinned=true;}
         af_vec3 p = mesh->vertices[i].position;
         if (!isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z)) goto fail;
         uploaded.minimum.x = fminf(uploaded.minimum.x,p.x); uploaded.maximum.x = fmaxf(uploaded.maximum.x,p.x);
@@ -969,22 +978,28 @@ static bool create_environment(af_renderer *renderer,uint32_t profile){
     renderer->environment=environment;renderer->irradiance=irradiance;renderer->brdf=brdf;renderer->environment_profile=profile;
     if(renderer->frame_pool)update_environment_descriptors(renderer);return true;
 }
+static bool create_frame_layout(af_renderer *renderer){
+    VkDescriptorSetLayoutBinding bindings[7]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
+    for(uint32_t i=1;i<6;++i)bindings[i]=(VkDescriptorSetLayoutBinding){i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
+    bindings[6]=(VkDescriptorSetLayoutBinding){6,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,NULL};
+    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=7,.pBindings=bindings};
+    return vk_ok(vkCreateDescriptorSetLayout(renderer->device,&layout,NULL,&renderer->frame_layout),"frame layout");
+}
 static bool create_uniforms(af_renderer *renderer)
 {
-    VkDescriptorSetLayoutBinding bindings[6]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
-    for(uint32_t i=1;i<6;++i)bindings[i]=(VkDescriptorSetLayoutBinding){i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
-    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=6,.pBindings=bindings};
-    if(!vk_ok(vkCreateDescriptorSetLayout(renderer->device,&layout,NULL,&renderer->frame_layout),"frame layout"))return false;
-    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,5*AF_FRAMES_IN_FLIGHT}};
-    VkDescriptorPoolCreateInfo pool={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,.maxSets=AF_FRAMES_IN_FLIGHT,.poolSizeCount=2,.pPoolSizes=sizes};
+    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,5*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,AF_FRAMES_IN_FLIGHT}};
+    VkDescriptorPoolCreateInfo pool={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,.maxSets=AF_FRAMES_IN_FLIGHT,.poolSizeCount=3,.pPoolSizes=sizes};
     if(!vk_ok(vkCreateDescriptorPool(renderer->device,&pool,NULL,&renderer->frame_pool),"frame pool"))return false;
     for(unsigned i=0;i<AF_FRAMES_IN_FLIGHT;++i){af_frame *frame=&renderer->frames[i];af_frame_uniform initial={0};
+        af_mat4 *bones=calloc(AF_SKIN_MATRICES,sizeof(*bones));if(!bones)return false;for(unsigned j=0;j<AF_SKIN_MATRICES;++j)bones[j]=af_mat4_identity();
+        bool bone_ok=upload_buffer(renderer,bones,AF_SKIN_MATRICES*sizeof(*bones),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,&frame->skin_buffer);free(bones);if(!bone_ok)return false;
         if(!upload_buffer(renderer,&initial,sizeof(initial),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,&frame->uniform))return false;
         VkDescriptorSetAllocateInfo allocate={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,.descriptorPool=renderer->frame_pool,.descriptorSetCount=1,.pSetLayouts=&renderer->frame_layout};
         if(!vk_ok(vkAllocateDescriptorSets(renderer->device,&allocate,&frame->descriptor),"frame descriptor"))return false;
         VkDescriptorBufferInfo buffer={frame->uniform.handle,0,sizeof(initial)};
         VkWriteDescriptorSet write={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=frame->descriptor,.dstBinding=0,.descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.pBufferInfo=&buffer};
         vkUpdateDescriptorSets(renderer->device,1,&write,0,NULL);
+        VkDescriptorBufferInfo bone_buffer={frame->skin_buffer.handle,0,AF_SKIN_MATRICES*sizeof(af_mat4)};write.dstBinding=6;write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;write.pBufferInfo=&bone_buffer;vkUpdateDescriptorSets(renderer->device,1,&write,0,NULL);
     }update_environment_descriptors(renderer);return true;
 }
 af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation)
@@ -999,15 +1014,15 @@ af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation)
         af_log("error", "Vulkan surface creation: %s", SDL_GetError());
         goto fail;
     }
-    if (!create_device(renderer) || !create_frames(renderer)) goto fail;
+    if (!create_device(renderer) || !create_frames(renderer)||!create_frame_layout(renderer)) goto fail;
     const unsigned char white[]={255,255,255,255};
     renderer->white=af_vk_texture_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,white,1,1,true,true,renderer->anisotropy);
     const unsigned char flat[]={128,128,255,255};
     renderer->flat_normal=af_vk_texture_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,flat,1,1,false,true,renderer->anisotropy);
     af_shadow_settings shadows=af_shadow_settings_default();renderer->shadow_resolution=shadows.resolution;renderer->shadow_layers=shadows.mode==AF_SHADOW_CASCADED?4u:1u;
-    renderer->shadows=af_vk_shadows_create(renderer->physical_device,renderer->device,shadows.resolution,renderer->shadow_layers);
+    renderer->shadows=af_vk_shadows_create(renderer->physical_device,renderer->device,shadows.resolution,renderer->shadow_layers,renderer->frame_layout);
     renderer->local_shadow_resolution=512;renderer->local_shadow_layers=1;
-    renderer->local_shadows=af_vk_shadows_create(renderer->physical_device,renderer->device,512,1);
+    renderer->local_shadows=af_vk_shadows_create(renderer->physical_device,renderer->device,512,1,renderer->frame_layout);
     if(!renderer->white||!renderer->flat_normal||!renderer->shadows||!renderer->local_shadows||!create_environment(renderer,0)||!create_uniforms(renderer)||!create_swapchain(renderer))goto fail;
     return renderer;
 fail:
@@ -1033,7 +1048,7 @@ void af_renderer_destroy(af_renderer *renderer)
         for (size_t i = 0; i < renderer->mesh_count; ++i) destroy_mesh(renderer, &renderer->meshes[i].gpu);
         free(renderer->meshes);
         for (uint32_t i = 0; i < AF_FRAMES_IN_FLIGHT; ++i) {
-            destroy_buffer(renderer,&renderer->frames[i].uniform);
+            destroy_buffer(renderer,&renderer->frames[i].uniform);destroy_buffer(renderer,&renderer->frames[i].skin_buffer);
             if (renderer->frames[i].acquired) vkDestroySemaphore(renderer->device, renderer->frames[i].acquired, NULL);
             if(renderer->frames[i].timestamps)vkDestroyQueryPool(renderer->device,renderer->frames[i].timestamps,NULL);
             if (renderer->frames[i].fence) vkDestroyFence(renderer->device, renderer->frames[i].fence, NULL);
@@ -1087,6 +1102,8 @@ bool af_renderer_upload_overlay_atlas(af_renderer *renderer, const unsigned char
     return true;
 }
 
+static uint32_t skin_base(const af_renderer *renderer,af_object_id object,const af_gpu_mesh *mesh);
+static af_shadow_bounds object_bounds(af_renderer *renderer,af_object_id object,af_mat4 world,const af_gpu_mesh *mesh);
 af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scene,
     const af_camera *camera, af_rect viewport, af_vec2 point)
 {
@@ -1113,8 +1130,12 @@ af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scen
         af_vec4 origin = af_mat4_transform(inverse,(af_vec4){camera->position.x,camera->position.y,camera->position.z,1});
         af_vec4 direction = af_mat4_transform(inverse,(af_vec4){ray.x,ray.y,ray.z,0});
         af_gpu_mesh *mesh = &renderer->meshes[index].gpu;
+        af_vec3 minimum=mesh->minimum,maximum=mesh->maximum;
+        if(skin_base(renderer,object->id,mesh)){af_shadow_bounds bounds=object_bounds(renderer,object->id,world,mesh);minimum=(af_vec3){INFINITY,INFINITY,INFINITY};maximum=(af_vec3){-INFINITY,-INFINITY,-INFINITY};
+            for(unsigned j=0;j<8;++j){af_vec3 p=bounds.corners[j];minimum=(af_vec3){fminf(minimum.x,p.x),fminf(minimum.y,p.y),fminf(minimum.z,p.z)};maximum=(af_vec3){fmaxf(maximum.x,p.x),fmaxf(maximum.y,p.y),fmaxf(maximum.z,p.z)};}
+            origin=(af_vec4){camera->position.x,camera->position.y,camera->position.z,1};direction=(af_vec4){ray.x,ray.y,ray.z,0};}
         float o[] = {origin.x,origin.y,origin.z}, d[] = {direction.x,direction.y,direction.z};
-        float lo[] = {mesh->minimum.x,mesh->minimum.y,mesh->minimum.z}, hi[] = {mesh->maximum.x,mesh->maximum.y,mesh->maximum.z};
+        float lo[] = {minimum.x,minimum.y,minimum.z}, hi[] = {maximum.x,maximum.y,maximum.z};
         float near = camera->near_clip, far = closest;
         bool hit = true;
         for (unsigned axis = 0; axis < 3; ++axis) {
@@ -1128,12 +1149,22 @@ af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scen
     return selected;
 }
 
+static uint32_t skin_base(const af_renderer *renderer,af_object_id object,const af_gpu_mesh *mesh){
+    if(!mesh->skinned)return 0;for(size_t i=0;i<renderer->skin_count;++i)if(renderer->skins[i].object==object&&renderer->skins[i].count>mesh->max_joint)return 1u+(uint32_t)i*AF_ANIMATION_MAX_JOINTS;return 0;
+}
+static af_shadow_bounds object_bounds(af_renderer *renderer,af_object_id object,af_mat4 world,const af_gpu_mesh *mesh){
+    uint32_t base=skin_base(renderer,object,mesh);if(!base)return af_shadow_transform_bounds(world,mesh->minimum,mesh->maximum);
+    const af_skin_instance *skin=&renderer->skins[(base-1)/AF_ANIMATION_MAX_JOINTS];af_vec3 lo={INFINITY,INFINITY,INFINITY},hi={-INFINITY,-INFINITY,-INFINITY};
+    for(size_t i=0;i<skin->count;++i){af_shadow_bounds b=af_shadow_transform_bounds(af_mat4_mul(world,skin->matrices[i]),mesh->minimum,mesh->maximum);
+        for(unsigned j=0;j<8;++j){af_vec3 v=b.corners[j];lo=(af_vec3){fminf(lo.x,v.x),fminf(lo.y,v.y),fminf(lo.z,v.z)};hi=(af_vec3){fmaxf(hi.x,v.x),fmaxf(hi.y,v.y),fmaxf(hi.z,v.z)};}}
+    return af_shadow_transform_bounds(af_mat4_identity(),lo,hi);
+}
 static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af_camera *camera,af_rect area,af_frame_uniform *uniform,af_shadow_view *view)
 {
     af_shadow_settings settings=af_scene_get_shadows(scene);uint32_t layers=settings.mode==AF_SHADOW_CASCADED?4u:1u;
     if(settings.resolution!=renderer->shadow_resolution||layers!=renderer->shadow_layers){
         if(!af_renderer_wait_idle(renderer))return false;
-        af_vk_shadows *replacement=af_vk_shadows_create(renderer->physical_device,renderer->device,settings.resolution,layers);
+        af_vk_shadows *replacement=af_vk_shadows_create(renderer->physical_device,renderer->device,settings.resolution,layers,renderer->frame_layout);
         if(!replacement)return false;af_vk_shadows_destroy(renderer->shadows);renderer->shadows=replacement;
         renderer->shadow_resolution=settings.resolution;renderer->shadow_layers=layers;
         for(unsigned f=0;f<AF_FRAMES_IN_FLIGHT;++f)memset(renderer->frames[f].shadow_signatures,0,sizeof(renderer->frames[f].shadow_signatures));
@@ -1150,8 +1181,8 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
         size_t mesh=find_mesh_index(renderer,object->mesh);af_mat4 model;
         if(mesh==renderer->mesh_count||!af_scene_interpolated_world_matrix(scene,renderer->previous_scene,object->id,renderer->interpolation_alpha,&model))continue;
         size_t n=renderer->shadow_count++;
-        renderer->shadow_draws[n]=(af_shadow_draw){model,mesh};
-        renderer->shadow_bounds[n]=af_shadow_transform_bounds(model,renderer->meshes[mesh].gpu.minimum,renderer->meshes[mesh].gpu.maximum);
+        renderer->shadow_draws[n]=(af_shadow_draw){model,mesh,skin_base(renderer,object->id,&renderer->meshes[mesh].gpu)};
+        renderer->shadow_bounds[n]=object_bounds(renderer,object->id,model,&renderer->meshes[mesh].gpu);
     }
     af_directional_light light=af_scene_get_light(scene);af_vec3 direction=af_vec3_normalize(light.direction),forward=af_camera_forward(camera);
     if(!af_shadow_build(camera,area.width/area.height,direction,settings,renderer->shadow_bounds,renderer->shadow_count,view))return false;
@@ -1184,7 +1215,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     uint32_t wanted_layers=local_layers?local_layers:1;
     if(wanted_layers!=renderer->local_shadow_layers||render_settings.local_shadow_resolution!=renderer->local_shadow_resolution){
         if(!af_renderer_wait_idle(renderer))return false;
-        af_vk_shadows *replacement=af_vk_shadows_create(renderer->physical_device,renderer->device,render_settings.local_shadow_resolution,wanted_layers);if(!replacement)return false;
+        af_vk_shadows *replacement=af_vk_shadows_create(renderer->physical_device,renderer->device,render_settings.local_shadow_resolution,wanted_layers,renderer->frame_layout);if(!replacement)return false;
         af_vk_shadows_destroy(renderer->local_shadows);renderer->local_shadows=replacement;renderer->local_shadow_layers=wanted_layers;renderer->local_shadow_resolution=render_settings.local_shadow_resolution;
         update_environment_descriptors(renderer);
         for(unsigned f=0;f<AF_FRAMES_IN_FLIGHT;++f)memset(renderer->frames[f].local_shadow_signatures,0,sizeof(renderer->frames[f].local_shadow_signatures));
@@ -1195,7 +1226,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
 static uint64_t shadow_hash(uint64_t h,const void *data,size_t size){const unsigned char *p=data;for(size_t i=0;i<size;++i){h^=p[i];h*=UINT64_C(1099511628211);}return h;}
 static uint64_t shadow_signature(af_renderer *r,af_mat4 matrix,af_shadow_settings settings,bool enabled){
     uint64_t h=shadow_hash(UINT64_C(14695981039346656037),&matrix,sizeof(matrix));
-    h=shadow_hash(h,&settings.constant_bias,sizeof(float));h=shadow_hash(h,&settings.slope_bias,sizeof(float));h=shadow_hash(h,&r->mesh_revision,sizeof(r->mesh_revision));h=shadow_hash(h,&enabled,sizeof(enabled));
+    h=shadow_hash(h,&settings.constant_bias,sizeof(float));h=shadow_hash(h,&settings.slope_bias,sizeof(float));h=shadow_hash(h,&r->mesh_revision,sizeof(r->mesh_revision));h=shadow_hash(h,&enabled,sizeof(enabled));h=shadow_hash(h,&r->skin_revision,sizeof(r->skin_revision));
     if(enabled)for(size_t i=0;i<r->shadow_count;++i){h=shadow_hash(h,&r->shadow_draws[i].model,sizeof(af_mat4));h=shadow_hash(h,&r->shadow_draws[i].mesh,sizeof(size_t));}
     return h?h:1;
 }
@@ -1229,6 +1260,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             for(unsigned i=1;i<5;++i)renderer->gpu_ms[i]=(double)((values[i]-values[i-1])&mask)*scale;renderer->timing_valid=true;
         }else if(query!=VK_NOT_READY)return vk_ok(query,"timestamp results");
     }
+    void *skin_mapped=NULL;if(!vk_ok(vkMapMemory(renderer->device,frame->skin_buffer.memory,0,VK_WHOLE_SIZE,0,&skin_mapped),"map skin matrices"))return false;
+    af_mat4 *skin_destination=skin_mapped;skin_destination[0]=af_mat4_identity();
+    for(size_t i=0;i<renderer->skin_count;++i)for(unsigned j=0;j<AF_ANIMATION_MAX_JOINTS;++j)skin_destination[1+i*AF_ANIMATION_MAX_JOINTS+j]=j<renderer->skins[i].count?renderer->skins[i].matrices[j]:af_mat4_identity();
+    VkMappedMemoryRange skin_range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=frame->skin_buffer.memory,.size=VK_WHOLE_SIZE};bool skin_flushed=vk_ok(vkFlushMappedMemoryRanges(renderer->device,1,&skin_range),"flush skin matrices");vkUnmapMemory(renderer->device,frame->skin_buffer.memory);if(!skin_flushed)return false;
     uint32_t image_index = 0;
     wait_start=SDL_GetPerformanceCounter();
     VkResult result = vkAcquireNextImageKHR(renderer->device, renderer->swapchain.handle,
@@ -1257,11 +1292,11 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     for(uint32_t layer=0;layer<shadow_view.count;++layer){
         uint64_t signature=shadow_signature(renderer,shadow_view.matrices[layer],af_scene_get_shadows(scene),uniform.shadow_params.x>.5f);
         if(frame->shadow_signatures[layer]==signature){++renderer->shadow_cached_passes;continue;}frame->shadow_signatures[layer]=signature;++renderer->shadow_passes;
-        af_vk_shadows_begin(renderer->shadows,frame->command,renderer->frame_index,layer,af_scene_get_shadows(scene));
+        af_vk_shadows_begin(renderer->shadows,frame->command,renderer->frame_index,layer,af_scene_get_shadows(scene),frame->descriptor);
         for(size_t i=0;uniform.shadow_params.x>.5f&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(shadow_view.matrices[layer],&renderer->shadow_bounds[i]))continue;
             af_shadow_draw draw=renderer->shadow_draws[i];const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
-            af_mat4 mvp=af_mat4_mul(shadow_view.matrices[layer],draw.model);af_vk_shadows_push(renderer->shadows,frame->command,mvp.elements);
+            af_mat4 mvp=af_mat4_mul(shadow_view.matrices[layer],draw.model);af_vk_shadows_push(renderer->shadows,frame->command,mvp.elements,draw.skin_base);
             VkDeviceSize offset=0;vkCmdBindVertexBuffers(frame->command,0,1,&mesh->vertices.handle,&offset);
             vkCmdBindIndexBuffer(frame->command,mesh->indices.handle,0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++renderer->shadow_draw_calls;
         }
@@ -1271,11 +1306,11 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         af_shadow_settings bias=af_scene_get_shadows(scene);bias.constant_bias=1;bias.slope_bias=1.5f;
         uint64_t signature=shadow_signature(renderer,uniform.local_shadow_matrices[layer],bias,layer<(uint32_t)uniform.light_count.z);
         if(frame->local_shadow_signatures[layer]==signature){++renderer->shadow_cached_passes;continue;}frame->local_shadow_signatures[layer]=signature;++renderer->shadow_passes;
-        af_vk_shadows_begin(renderer->local_shadows,frame->command,renderer->frame_index,layer,bias);
+        af_vk_shadows_begin(renderer->local_shadows,frame->command,renderer->frame_index,layer,bias,frame->descriptor);
         for(size_t i=0;layer<(uint32_t)uniform.light_count.z&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(uniform.local_shadow_matrices[layer],&renderer->shadow_bounds[i]))continue;
             af_shadow_draw draw=renderer->shadow_draws[i];const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
-            af_mat4 mvp=af_mat4_mul(uniform.local_shadow_matrices[layer],draw.model);af_vk_shadows_push(renderer->local_shadows,frame->command,mvp.elements);
+            af_mat4 mvp=af_mat4_mul(uniform.local_shadow_matrices[layer],draw.model);af_vk_shadows_push(renderer->local_shadows,frame->command,mvp.elements,draw.skin_base);
             VkDeviceSize offset=0;vkCmdBindVertexBuffers(frame->command,0,1,&mesh->vertices.handle,&offset);vkCmdBindIndexBuffer(frame->command,mesh->indices.handle,0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++renderer->shadow_draw_calls;
         }vkCmdEndRenderPass(frame->command);
     }
@@ -1329,7 +1364,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             af_color base=object->material.base_color;
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
             af_mat4 world;if(!af_scene_interpolated_world_matrix(scene,renderer->previous_scene,object->id,renderer->interpolation_alpha,&world))continue;
-            struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{object->material.unlit?1.0f:0.0f,object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,0},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
+            struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{object->material.unlit?1.0f:0.0f,object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,(float)skin_base(renderer,object->id,mesh)},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
             _Static_assert(sizeof(transform)==128,"Portable draw push constant limit");
             af_vk_texture *texture=renderer->white;
             if(object->material.texture[0]){bool found=false;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;found=true;break;}
@@ -1525,3 +1560,12 @@ bool af_renderer_upload_environment_baked(af_renderer *renderer,const char *name
     if(index<renderer->environment_count){af_vk_texture_destroy(renderer->environments[index].specular);af_vk_texture_destroy(renderer->environments[index].diffuse);af_vk_texture_destroy(renderer->environments[index].sky);}else ++renderer->environment_count;
     renderer->environments[index]=asset;update_environment_descriptors(renderer);return true;
 }
+
+bool af_renderer_set_skin_palette(af_renderer *r,af_object_id object,const af_mat4 *matrices,size_t count){
+    if(!r||!object||count>AF_ANIMATION_MAX_JOINTS||(count&&!matrices))return false;size_t index=0;while(index<r->skin_count&&r->skins[index].object!=object)++index;
+    if(!count){if(index<r->skin_count){r->skins[index]=r->skins[--r->skin_count];++r->skin_revision;}return true;}
+    for(size_t i=0;i<count;++i)for(unsigned j=0;j<16;++j)if(!isfinite(matrices[i].elements[j]))return false;
+    if(index<r->skin_count&&r->skins[index].count==count&&!memcmp(r->skins[index].matrices,matrices,count*sizeof(*matrices)))return true;
+    if(index==AF_SKIN_INSTANCES)return false;if(index==r->skin_count)++r->skin_count;r->skins[index].object=object;r->skins[index].count=count;memcpy(r->skins[index].matrices,matrices,count*sizeof(*matrices));++r->skin_revision;return true;
+}
+void af_renderer_clear_skin_palettes(af_renderer *r){if(r&&r->skin_count){r->skin_count=0;++r->skin_revision;}}

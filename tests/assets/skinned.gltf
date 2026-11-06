@@ -1,0 +1,233 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Afterlight original two-joint ribbon"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        3
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Ribbon",
+      "mesh": 0,
+      "skin": 0
+    },
+    {
+      "name": "Hip",
+      "children": [
+        2
+      ]
+    },
+    {
+      "name": "Tip",
+      "translation": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "name": "Character",
+      "children": [
+        0,
+        1
+      ]
+    }
+  ],
+  "skins": [
+    {
+      "joints": [
+        1,
+        2
+      ],
+      "inverseBindMatrices": 9,
+      "skeleton": 1
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "JOINTS_0": 7,
+            "WEIGHTS_0": 8
+          },
+          "indices": 1
+        }
+      ]
+    }
+  ],
+  "animations": [
+    {
+      "name": "Wave",
+      "samplers": [
+        {
+          "input": 2,
+          "output": 10
+        }
+      ],
+      "channels": [
+        {
+          "sampler": 0,
+          "target": {
+            "node": 2,
+            "path": "rotation"
+          }
+        }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 572,
+      "uri": "data:application/octet-stream;base64,zczMvgAAAAAAAAAAzczMPgAAAAAAAAAAzczMPgAAAEAAAAAAzczMvgAAAEAAAAAAAAABAAIAAAACAAMAAAAAAAAAgD8AAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAA8wQ1P/MENT8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAIA/AAAAQAAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAQAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAA/17NdPwAAAAAAAAAAAAAAAAAAgD8="
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 48,
+      "byteLength": 12
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 60,
+      "byteLength": 12
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 72,
+      "byteLength": 36
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 108,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 156,
+      "byteLength": 36
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 192,
+      "byteLength": 108
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 300,
+      "byteLength": 32
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 332,
+      "byteLength": 64
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 396,
+      "byteLength": 128
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 524,
+      "byteLength": 48
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [
+        -0.4,
+        0,
+        0
+      ],
+      "max": [
+        0.4,
+        2,
+        0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 3,
+      "type": "SCALAR",
+      "min": [
+        0
+      ],
+      "max": [
+        2
+      ]
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 9,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5123,
+      "count": 4,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 2,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC4"
+    }
+  ]
+}

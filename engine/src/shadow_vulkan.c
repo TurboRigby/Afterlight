@@ -10,6 +10,8 @@
 #include "shadow_vert.h"
 #include "log.h"
 #include <stdlib.h>
+#include <stddef.h>
+#include <string.h>
 
 typedef struct shadow_frame {
     VkImage image;
@@ -23,7 +25,7 @@ struct af_vk_shadows {
     uint32_t resolution,layers;
     VkFormat format;
     VkRenderPass pass;
-    VkPipelineLayout pipeline_layout;
+    VkPipelineLayout pipeline_layout;VkDescriptorSetLayout frame_layout;
     VkPipeline pipeline;
     VkSampler sampler;
     VkDescriptorSetLayout descriptor_layout;
@@ -54,14 +56,14 @@ static bool pipeline(af_vk_shadows *s)
     VkShaderModule shader;
     VkShaderModuleCreateInfo code={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(af_shadow_vert),.pCode=af_shadow_vert};
     if(!ok(vkCreateShaderModule(s->device,&code,NULL,&shader),"shader"))return false;
-    VkPushConstantRange push={VK_SHADER_STAGE_VERTEX_BIT,0,64};
-    VkPipelineLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,.pushConstantRangeCount=1,.pPushConstantRanges=&push};
+    VkPushConstantRange push={VK_SHADER_STAGE_VERTEX_BIT,0,80};
+    VkPipelineLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,.setLayoutCount=1,.pSetLayouts=&s->frame_layout,.pushConstantRangeCount=1,.pPushConstantRanges=&push};
     bool success=false;
     if(!ok(vkCreatePipelineLayout(s->device,&layout,NULL,&s->pipeline_layout),"pipeline layout"))goto done;
     VkPipelineShaderStageCreateInfo stage={.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,.stage=VK_SHADER_STAGE_VERTEX_BIT,.module=shader,.pName="main"};
     VkVertexInputBindingDescription binding={0,sizeof(af_vertex),VK_VERTEX_INPUT_RATE_VERTEX};
-    VkVertexInputAttributeDescription attribute={0,0,VK_FORMAT_R32G32B32_SFLOAT,0};
-    VkPipelineVertexInputStateCreateInfo input={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,.vertexBindingDescriptionCount=1,.pVertexBindingDescriptions=&binding,.vertexAttributeDescriptionCount=1,.pVertexAttributeDescriptions=&attribute};
+    VkVertexInputAttributeDescription attributes[]={{0,0,VK_FORMAT_R32G32B32_SFLOAT,0},{4,0,VK_FORMAT_R16G16B16A16_UINT,offsetof(af_vertex,joints)},{5,0,VK_FORMAT_R32G32B32A32_SFLOAT,offsetof(af_vertex,weights)}};
+    VkPipelineVertexInputStateCreateInfo input={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,.vertexBindingDescriptionCount=1,.pVertexBindingDescriptions=&binding,.vertexAttributeDescriptionCount=3,.pVertexAttributeDescriptions=attributes};
     VkPipelineInputAssemblyStateCreateInfo assembly={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
     VkPipelineViewportStateCreateInfo viewport={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,.viewportCount=1,.scissorCount=1};
     VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.polygonMode=VK_POLYGON_MODE_FILL,.cullMode=VK_CULL_MODE_NONE,.lineWidth=1,.depthBiasEnable=VK_TRUE};
@@ -77,10 +79,10 @@ static bool pipeline(af_vk_shadows *s)
 done:
     vkDestroyShaderModule(s->device,shader,NULL);return success;
 }
-af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical,VkDevice device,uint32_t resolution,uint32_t layers)
+af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical,VkDevice device,uint32_t resolution,uint32_t layers,VkDescriptorSetLayout frame_layout)
 {
     if(!resolution||!layers||layers>AF_SHADOW_LAYER_COUNT)return NULL;
-    af_vk_shadows *s=calloc(1,sizeof(*s));if(!s)return NULL;s->device=device;s->resolution=resolution;s->layers=layers;
+    af_vk_shadows *s=calloc(1,sizeof(*s));if(!s)return NULL;s->device=device;s->frame_layout=frame_layout;s->resolution=resolution;s->layers=layers;
     VkPhysicalDeviceProperties limits;vkGetPhysicalDeviceProperties(physical,&limits);
     if(resolution>limits.limits.maxImageDimension2D||layers>limits.limits.maxImageArrayLayers)goto fail;
     VkFormat formats[]={VK_FORMAT_D32_SFLOAT,VK_FORMAT_D16_UNORM};
@@ -138,15 +140,15 @@ fail:
 }
 VkDescriptorSetLayout af_vk_shadows_layout(const af_vk_shadows *s){return s->descriptor_layout;}
 VkDescriptorSet af_vk_shadows_descriptor(const af_vk_shadows *s,uint32_t frame){return s->frames[frame].descriptor;}
-void af_vk_shadows_begin(af_vk_shadows *s,VkCommandBuffer command,uint32_t frame,uint32_t layer,af_shadow_settings settings)
+void af_vk_shadows_begin(af_vk_shadows *s,VkCommandBuffer command,uint32_t frame,uint32_t layer,af_shadow_settings settings,VkDescriptorSet frame_descriptor)
 {
     VkClearValue clear={.depthStencil={1,0}};
     VkRenderPassBeginInfo begin={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,.renderPass=s->pass,.framebuffer=s->frames[frame].framebuffers[layer],.renderArea={.extent={s->resolution,s->resolution}},.clearValueCount=1,.pClearValues=&clear};
     vkCmdBeginRenderPass(command,&begin,VK_SUBPASS_CONTENTS_INLINE);
     VkViewport viewport={.width=(float)s->resolution,.height=(float)s->resolution,.maxDepth=1};VkRect2D scissor={.extent={s->resolution,s->resolution}};
-    vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,s->pipeline);vkCmdSetViewport(command,0,1,&viewport);vkCmdSetScissor(command,0,1,&scissor);
+    vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,s->pipeline);vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,s->pipeline_layout,0,1,&frame_descriptor,0,NULL);vkCmdSetViewport(command,0,1,&viewport);vkCmdSetScissor(command,0,1,&scissor);
     vkCmdSetDepthBias(command,settings.constant_bias,0,settings.slope_bias);
 }
-void af_vk_shadows_push(af_vk_shadows *s,VkCommandBuffer command,const float *mvp){vkCmdPushConstants(command,s->pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,0,64,mvp);}
+void af_vk_shadows_push(af_vk_shadows *s,VkCommandBuffer command,const float *mvp,uint32_t skin_base){struct {float mvp[16];uint32_t skin[4];} push={.skin={skin_base,0,0,0}};memcpy(push.mvp,mvp,64);vkCmdPushConstants(command,s->pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(push),&push);}
 
 VkDescriptorImageInfo af_vk_shadows_image(const af_vk_shadows *s,uint32_t frame){return (VkDescriptorImageInfo){s->sampler,s->frames[frame].array_view,VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};}
