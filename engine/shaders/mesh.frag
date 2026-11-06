@@ -144,7 +144,12 @@ void main(){
     vec4 base=texture(base_texture,uv)*vertex_color;uint mode=(uint(draw.params.x)>>1u)&3u;uint cutoff=(uint(draw.params.x)>>3u)&65535u;if(mode==1u&&uint(round(clamp(base.a,0,1)*65535.0))<cutoff)discard;if(mode!=2u)base.a=1;
     vec3 eye=frame.camera_position.xyz-world_position;
     vec3 v=dot(eye,eye)>1e-12?normalize(eye):n;
-    bool water=water_surface();if(water&&(uint(draw.params.x)&(1u<<21u))!=0u&&dot(n,v)<=0)discard;if(water){if(dot(n,v)<0)n=-n;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);if((uint(draw.params.x)&(1u<<20u))!=0u){out_color=vec4((uint(draw.params.x)&(1u<<22u))!=0u?vec3(0):water_transmission(n,v)*(1.0-f),1);return;}base.rgb=vec3(0);}
+    bool water=water_surface();
+    if(water&&(uint(draw.params.x)&(1u<<21u))!=0u){
+        bool inside=(uint(draw.params.x)&(1u<<23u))!=0u;
+        if(inside?dot(n,v)>=0:dot(n,v)<=0)discard;
+    }
+    if(water){if(dot(n,v)<0)n=-n;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);if((uint(draw.params.x)&(1u<<20u))!=0u){out_color=vec4((uint(draw.params.x)&(1u<<22u))!=0u?vec3(0):water_transmission(n,v)*(1.0-f),1);return;}base.rgb=vec3(0);}
     vec4 mr=texture(metallic_roughness_texture,uv);
     float roughness=draw.surface.x*mr.g,metal=draw.surface.y*mr.b;
     vec3 ambient=base.rgb*frame.color_ambient.w*(draw.params.z>0.5?1.0-metal:1.0);

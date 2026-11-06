@@ -225,6 +225,10 @@ af_water_sample wa_sample(const af_water_runtime *r, const af_scene *s, af_vec3 
         return (af_water_sample){0};
     return sample_id(r, s, p, alpha, 0);
 }
+bool wa_contains(const af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3 p) {
+    af_water_sample sample = sample_id(r, s, p, 1, id);
+    return sample.inside && p.y >= sample.bottom && p.y < sample.height;
+}
 bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3 p, float radius,
                 float velocity) {
     if (!r || !isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z) || !isfinite(radius) || radius <= 0 ||
@@ -260,6 +264,26 @@ bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3
         }
     return true;
 }
+static af_vec3 river_bank(const af_water *w, unsigned node) {
+    unsigned before=node?node-1:node,after=node+1<w->path_count?node+1:node;
+    af_vec3 a=af_vec3_sub(w->path[node?node:after],w->path[before]);
+    af_vec3 b=af_vec3_sub(w->path[after],w->path[node+1<w->path_count?node:before]);
+    a.y=b.y=0;a=af_vec3_normalize(a);b=af_vec3_normalize(b);
+    float scale=1/(1+af_vec3_dot(a,b));
+    return (af_vec3){(a.z+b.z)*scale,0,-(a.x+b.x)*scale};
+}
+static af_vec3 river_mesh_point(const af_water *w,float along,float side) {
+    for(unsigned i=1;i<w->path_count;++i){
+        af_vec3 delta=af_vec3_sub(w->path[i],w->path[i-1]);float distance=hypotf(delta.x,delta.z);
+        if(along<=distance||i+1==w->path_count){
+            float t=clamp(along/distance,0,1);af_vec3 a=river_bank(w,i-1),b=river_bank(w,i);
+            return af_vec3_add(af_vec3_add(w->path[i-1],af_vec3_scale(delta,t)),
+                              af_vec3_scale(af_vec3_add(af_vec3_scale(a,1-t),af_vec3_scale(b,t)),side));
+        }
+        along-=distance;
+    }
+    return (af_vec3){0};
+}
 bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, float alpha,
              af_vertex **vertices, uint32_t **indices, af_mesh_data *mesh) {
     const af_water *w = af_scene_get_water(s, id);
@@ -279,7 +303,9 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
         return ok;
     }
     unsigned n = 16u << (unsigned)w->quality;
-    uint32_t vc = n * n, ic = (n - 1) * (n - 1) * 6;
+    uint32_t surface_vertices = n * n;
+    uint32_t vc = 2 * surface_vertices + 16 * (n - 1),
+             ic = (n - 1) * (n - 1) * 12 + 24 * (n - 1);
     af_vertex *v = calloc(vc, sizeof(*v));
     uint32_t *ix = malloc(ic * sizeof(*ix));
     if (!v || !ix) {
@@ -293,17 +319,21 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
         for (unsigned x = 0; x < n; ++x) {
             af_vec3 p = {((float)x / (float)(n - 1) * 2 - 1) * w->half_size.x, 0,
                          ((float)z / (float)(n - 1) * 2 - 1) * length(w)};
-            if (w->mode == AF_WATER_RIVER) {
-                af_vec3 tangent, center = wa_river_point(w, p.z + length(w), &tangent);
-                p = af_vec3_add(center, (af_vec3){p.x * tangent.z, 0, -p.x * tangent.x});
-            }
+            float grid_x=p.x,grid_z=p.z;
+            if (w->mode == AF_WATER_RIVER)
+                p = river_mesh_point(w,p.z+length(w),p.x);
+            float base=p.y;
             af_vec3 wp = af_vec3_add(o->transform.position, rotate(o->transform, p));
             af_water_sample sample = sample_id(r, s, wp, alpha, id);
             p.y = sample.height - o->transform.position.y;
+            if(w->mode==AF_WATER_RIVER){const wa_slot *a=slot(r,id);p.y=base+(a?grid(a,grid_x,grid_z,alpha):0);}
             v[z * n + x] = (af_vertex){.position = p,
                                        .normal = rotate(inverse, sample.normal),
                                        .color = {1, 1, 1, 1},
                                        .uv = {(float)x / (float)(n - 1), (float)z / (float)(n - 1)}};
+            v[surface_vertices + z * n + x] = v[z * n + x];
+            v[surface_vertices + z * n + x].position.y = base - w->depth;
+            v[surface_vertices + z * n + x].normal = (af_vec3){0, -1, 0};
         }
     unsigned k = 0;
     for (unsigned z = 0; z < n - 1; ++z)
@@ -315,6 +345,40 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
             ix[k++] = b;
             ix[k++] = c;
             ix[k++] = d;
+            ix[k++] = surface_vertices + a;
+            ix[k++] = surface_vertices + b;
+            ix[k++] = surface_vertices + c;
+            ix[k++] = surface_vertices + b;
+            ix[k++] = surface_vertices + d;
+            ix[k++] = surface_vertices + c;
+        }
+    for (unsigned z = 0; z < n; ++z)
+        for (unsigned x = 0; x < n; ++x) {
+            af_vec3 dx = af_vec3_sub(v[surface_vertices + z*n + (x+1<n?x+1:x)].position,
+                                      v[surface_vertices + z*n + (x?x-1:x)].position);
+            af_vec3 dz = af_vec3_sub(v[surface_vertices + (z+1<n?z+1:z)*n + x].position,
+                                      v[surface_vertices + (z?z-1:z)*n + x].position);
+            v[surface_vertices + z*n + x].normal = af_vec3_normalize(af_vec3_cross(dx, dz));
+            dx=af_vec3_sub(v[z*n+(x+1<n?x+1:x)].position,v[z*n+(x?x-1:x)].position);
+            dz=af_vec3_sub(v[(z+1<n?z+1:z)*n+x].position,v[(z?z-1:z)*n+x].position);
+            v[z*n+x].normal=af_vec3_normalize(af_vec3_cross(dz,dx));
+        }
+    unsigned next = 2 * surface_vertices;
+    for (unsigned edge = 0; edge < 4; ++edge)
+        for (unsigned j = 0; j < n - 1; ++j) {
+            unsigned a = edge == 0 ? j : edge == 1 ? j*n+n-1
+                         : edge == 2 ? n*n-1-j : (n-1-j)*n;
+            unsigned b = edge == 0 ? a+1 : edge == 1 ? a+n : edge == 2 ? a-1 : a-n;
+            af_vec3 normal = af_vec3_normalize(af_vec3_cross(
+                af_vec3_sub(v[b].position, v[a].position), (af_vec3){0,-1,0}));
+            unsigned source[] = {a,b,surface_vertices+b,surface_vertices+a};
+            for (unsigned q = 0; q < 4; ++q) {
+                v[next+q] = v[source[q]];
+                v[next+q].normal = normal;
+            }
+            ix[k++]=next; ix[k++]=next+1; ix[k++]=next+2;
+            ix[k++]=next; ix[k++]=next+2; ix[k++]=next+3;
+            next += 4;
         }
     *vertices = v;
     *indices = ix;

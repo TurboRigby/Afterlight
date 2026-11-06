@@ -36,6 +36,7 @@ bool wa_particles_mesh(const wa_slot *, float, af_vertex **, uint32_t **, af_mes
 bool wa_sync(af_water_runtime *, const af_scene *);
 void wa_step(af_water_runtime *, float);
 af_water_sample wa_sample(const af_water_runtime *, const af_scene *, af_vec3, float);
+bool wa_contains(const af_water_runtime *, const af_scene *, af_object_id, af_vec3);
 bool wa_disturb(af_water_runtime *, const af_scene *, af_object_id, af_vec3, float, float);
 bool wa_mesh(const af_water_runtime *, const af_scene *, af_object_id, float, af_vertex **, uint32_t **,
              af_mesh_data *);

@@ -141,6 +141,39 @@ static void update(af_engine *e, double dt, void *data) {
     case 11:
         CHECK(p[0] < 3 && p[1] < 3 && p[2] < 3);
         puts("Pourable surface lighting responds to sun and darkness.");
+        w.mode=AF_WATER_POOL;w.half_size=(af_vec2){4,4};w.depth=2;
+        w.absorption=(af_vec3){2,2,2};w.scattering=(af_vec3){.02f,.2f,.8f};
+        l.ambient=.5f;
+        {
+            af_render_settings settings=af_scene_get_render_settings(s->scene);
+            settings.refraction=false;settings.underwater=false;
+            CHECK(af_scene_set_render_settings(s->scene,settings));
+            af_camera camera=af_camera_default();camera.position=(af_vec3){0,-1,6};camera.yaw=-AF_PI/2;
+            af_engine_set_camera(e,&camera);
+        }
+        af_engine_set_clear_color(e,(af_color){.8f,.02f,.02f,1});
+        break;
+    case 12:
+        CHECK(p[2]>p[0]+50 && p[2]>100);
+        {
+            af_camera camera=af_camera_default();camera.position=(af_vec3){0,-3,3};
+            camera.yaw=-AF_PI/2;camera.pitch=atan2f(1,3);af_engine_set_camera(e,&camera);
+        }
+        break;
+    case 13:
+        CHECK(p[2]>p[0]+50 && p[2]>100);
+        {
+            af_camera camera=af_camera_default();camera.position=(af_vec3){0,-1,0};
+            camera.yaw=-AF_PI/2;camera.pitch=atan2f(1,3);af_engine_set_camera(e,&camera);
+        }
+        break;
+    case 14:
+        CHECK(p[2]>p[0]+50 && p[2]>100);
+        w.enabled=false;
+        break;
+    case 15:
+        CHECK(p[0]>150 && p[2]<60);
+        puts("Closed water: side, bottom, inside exit surface and disabled volume pixels passed.");
         af_engine_request_quit(e);
         return;
     default:
@@ -170,5 +203,5 @@ int main(void) {
     int r = af_engine_run(e, &game);
     af_engine_stats stats = af_engine_get_stats(e);
     af_engine_destroy(e);
-    return r || s.failed || s.phase != 11 || stats.validation_errors ? 1 : 0;
+    return r || s.failed || s.phase != 15 || stats.validation_errors ? 1 : 0;
 }
