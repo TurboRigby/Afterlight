@@ -26,3 +26,9 @@ authored pivot. Dynamic compound roots require positive uniform scale; each
 physical part dimension is at least .01 units. Contacts retain part-pair identity
 for warm starting. Character pushing aggregates contacts and applies its impulse
 budget once per owner. Primitive, mesh, hinge, sleep and landing regressions pass.
+
+Compound CCD advances each part from the body's shared pose and velocity. Swept
+root bounds include angular reach, then primitive/mesh distances test individual
+parts. Impact suppression is per part pair, so another protrusion can contact the
+same body during the substep. Work retains the 16-event / 80-sample limits. Tests
+cover offset tips, thin walls, empty-gap passages and rotating protrusions.
