@@ -22,3 +22,13 @@ Runtime velocities are written into the Play scene so clones/reloads retain them
 Static colliders stay fixed; externally moved kinematic shapes derive point
 velocity from their pose changes. Limits: 1024 sphere/box shapes, 200 linear and
 100 angular units/s, and a 1,000,000-unit world radius. C modules call the host.
+
+## Contacts and broadphase
+
+A deterministic sweep-and-prune index filters pairs by bounds and collision layer.
+Sphere/sphere, sphere/OBB and full 15-axis OBB SAT detect contacts. Face clipping
+produces up to four manifold points; edge cases use closest support edges.
+Only sphere/box shapes participate in rigid-body contacts; trigger shapes and
+legacy character capsules remain handled by the existing query/controller APIs.
+Shape dimensions must be at least .01 world units. Contact output is capped at
+8192 points and reports the latest substep. Sparse-scene tests check pair pruning.
