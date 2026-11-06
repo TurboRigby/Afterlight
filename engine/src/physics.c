@@ -118,7 +118,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                                     .w = o->body.angular_velocity,
                                     .q = af_quaternion_from_euler(o->transform.rotation),
                                     .published = o->transform};
-        b.scene_index = i;
+        b.scene_index = i;b.character_proxy=player_proxy;
         af_body_type type = player_proxy      ? AF_BODY_KINEMATIC
                             : o->body.enabled ? o->body.type
                                               : AF_BODY_STATIC;
@@ -156,6 +156,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             b.sleeping = false;
             b.sleep_time = 0;
         }
+        if(player_proxy){b.v=b.w=(af_vec3){0};}
         b.config = o->body;
         b.config.type = type;
         if(old&&old->shape.mesh!=shape.mesh)p->cache_count=0;

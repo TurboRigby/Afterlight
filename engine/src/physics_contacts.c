@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "physics_internal.h"
+#include "collision_internal.h"
 #include <stdlib.h>
 #include <string.h>
 #define SKIN .006f
@@ -262,7 +263,8 @@ bool ph_detect(af_physics *p) {
             ++p->stats.broadphase_pairs;
             double stamp=ph_clock(p);
             bool ok;
-            if(a->shape.type==AF_COLLIDER_MESH||b->shape.type==AF_COLLIDER_MESH)ok=ph_mesh_contacts(p,ai,bi);
+            if(a->character_proxy||b->character_proxy){ph_body *player=a->character_proxy?a:b,*other=player==a?b:a;af_collision_hit hit;float separation=af_collision_capsule_distance(other->shape,player->p,player->shape.radius,player->shape.half_extents.y-player->shape.radius,&hit);ok=separation>SKIN||ph_emit(p,ai,bi,hit.point,player==a?mul(hit.normal,-1):hit.normal,-separation);}
+            else if(a->shape.type==AF_COLLIDER_MESH||b->shape.type==AF_COLLIDER_MESH)ok=ph_mesh_contacts(p,ai,bi);
             else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
                 ok = boxes(p, ai, bi);
             else if (a->shape.type != b->shape.type)

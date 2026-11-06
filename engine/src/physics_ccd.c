@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "physics_internal.h"
 #include "triangle_collision.h"
+#include "collision_internal.h"
 #include <stdlib.h>
 static af_vec3 add(af_vec3 a, af_vec3 b) {
     return af_vec3_add(a, b);
@@ -59,6 +60,7 @@ static float projected(const ph_body *b, af_vec3 n) {
 }
 static float distance(const ph_body *a, const ph_body *b, const af_triangle *triangle, af_vec3 *normal,
                       af_vec3 *point) {
+    if(a->character_proxy||b->character_proxy){const ph_body *player=a->character_proxy?a:b,*other=player==a?b:a;af_collision_hit hit;float d=af_collision_capsule_distance(other->shape,player->p,player->shape.radius,player->shape.half_extents.y-player->shape.radius,&hit);*normal=player==a?mul(hit.normal,-1):hit.normal;*point=hit.point;return d;}
     if (triangle && a->shape.type == AF_COLLIDER_SPHERE) {
         af_collision_hit hit;
         float d = tc_capsule_triangle(*triangle, a->p, a->shape.radius, 0, &hit);

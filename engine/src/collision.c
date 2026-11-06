@@ -9,6 +9,7 @@
 #include <math.h>
 #include <float.h>
 #include "triangle_collision.h"
+#include "collision_internal.h"
 static float clamp(float x,float a,float b){return fminf(b,fmaxf(a,x));}
 static bool finite3(af_vec3 v){return isfinite(v.x)&&isfinite(v.y)&&isfinite(v.z);}
 static af_vec3 point(af_mat4 m,af_vec3 p){af_vec4 q=af_mat4_transform(m,(af_vec4){p.x,p.y,p.z,1});return (af_vec3){q.x,q.y,q.z};}
@@ -63,7 +64,7 @@ static void segment_box(af_vec3 a,af_vec3 b,af_vec3 half,af_vec3 *segment,af_vec
 }
 static af_vec3 box_local(af_world_collider box,af_vec3 p){p=af_vec3_sub(p,box.center);return (af_vec3){af_vec3_dot(p,box.axes[0]),af_vec3_dot(p,box.axes[1]),af_vec3_dot(p,box.axes[2])};}
 static af_vec3 box_vector(af_world_collider box,af_vec3 p){return af_vec3_add(af_vec3_scale(box.axes[0],p.x),af_vec3_add(af_vec3_scale(box.axes[1],p.y),af_vec3_scale(box.axes[2],p.z)));}
-static float capsule_distance(af_world_collider target,af_vec3 center,float radius,float half_height,af_collision_hit *hit){
+float af_collision_capsule_distance(af_world_collider target,af_vec3 center,float radius,float half_height,af_collision_hit *hit){
     if(target.type==AF_COLLIDER_MESH)return tc_mesh_distance(target,center,radius,half_height,hit);
     af_vec3 a=af_vec3_add(center,(af_vec3){0,-half_height,0}),b=af_vec3_add(center,(af_vec3){0,half_height,0}),one,two,normal;float separation;
     if(target.type==AF_COLLIDER_BOX){
@@ -85,11 +86,11 @@ size_t af_scene_overlap_capsule(const af_scene *scene,af_vec3 center,float radiu
     size_t count=0;
     for(size_t i=0;i<af_scene_object_count(scene);++i){af_world_collider target;af_collision_hit hit;
         if(!af_scene_world_collider(scene,af_scene_object_at(scene,i)->id,&target)||!matches(target,filter))continue;
-        if(capsule_distance(target,center,radius,half_height,&hit)<=0){if(count<capacity)hits[count]=hit;++count;}}
+        if(af_collision_capsule_distance(target,center,radius,half_height,&hit)<=0){if(count<capacity)hits[count]=hit;++count;}}
     return count;
 }
 size_t af_scene_overlap_sphere(const af_scene *scene,af_vec3 center,float radius,af_query_filter filter,af_collision_hit *hits,size_t capacity){return af_scene_overlap_capsule(scene,center,radius,0,filter,hits,capacity);}
-bool af_collider_sweep_sphere(af_world_collider target,af_vec3 center,float radius,af_vec3 displacement,float skin,af_collision_hit *out){float speed=af_vec3_length(displacement);if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(skin)||skin<0)return false;if(target.type==AF_COLLIDER_MESH)return tc_mesh_sweep(target,center,radius,0,displacement,skin,out);float t=0;af_collision_hit hit={0};for(unsigned i=0;i<40&&t<=1;++i){float distance=capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,0,&hit),approach=-af_vec3_dot(displacement,hit.normal);if(distance<=skin+.00001f){if(t==0&&approach<=1e-7f)return false;hit.fraction=t;hit.distance=t*speed;*out=hit;return true;}if(approach<=1e-8f)return false;t+=fmaxf((distance-skin)/approach,.000001f);}return false;}
+bool af_collider_sweep_sphere(af_world_collider target,af_vec3 center,float radius,af_vec3 displacement,float skin,af_collision_hit *out){float speed=af_vec3_length(displacement);if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(skin)||skin<0)return false;if(target.type==AF_COLLIDER_MESH)return tc_mesh_sweep(target,center,radius,0,displacement,skin,out);float t=0;af_collision_hit hit={0};for(unsigned i=0;i<40&&t<=1;++i){float distance=af_collision_capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,0,&hit),approach=-af_vec3_dot(displacement,hit.normal);if(distance<=skin+.00001f){if(t==0&&approach<=1e-7f)return false;hit.fraction=t;hit.distance=t*speed;*out=hit;return true;}if(approach<=1e-8f)return false;t+=fmaxf((distance-skin)/approach,.000001f);}return false;}
 bool af_scene_sweep_capsule(const af_scene *scene,af_vec3 center,float radius,float half_height,af_vec3 displacement,float skin,af_query_filter filter,af_collision_hit *out){
     float speed=af_vec3_length(displacement);
     if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(half_height)||half_height<0||!isfinite(skin)||skin<0)return false;
@@ -98,7 +99,7 @@ bool af_scene_sweep_capsule(const af_scene *scene,af_vec3 center,float radius,fl
         if(target.type==AF_COLLIDER_MESH){af_collision_hit hit;if(tc_mesh_sweep(target,center,radius,half_height,displacement,skin,&hit)&&hit.fraction<closest){best=hit;closest=hit.fraction;found=true;}continue;}
         float t=0;af_collision_hit hit={0};
         for(unsigned iteration=0;iteration<40&&t<=1&&t<closest;++iteration){
-            float separation=capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,half_height,&hit),approach=-af_vec3_dot(displacement,hit.normal);
+            float separation=af_collision_capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,half_height,&hit),approach=-af_vec3_dot(displacement,hit.normal);
             if(separation<=skin+0.00001f){if(t==0&&separation>=-0.0001f&&approach<=1e-7f)break;hit.fraction=t;hit.distance=t*speed;best=hit;closest=t;found=true;break;}
             if(approach<=1e-8f)break;
             float advance=(separation-skin)/approach;t+=fmaxf(advance,0.000001f);

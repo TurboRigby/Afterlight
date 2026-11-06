@@ -13,3 +13,12 @@ columns describe the last sample. Optional process-CPU timings separate scene
 synchronization, broadphase, narrowphase, CCD and solving. Profiling is enabled
 for engine diagnostics and disabled by default in standalone physics worlds.
 Counters remain available without timing. Game ABI is now 14; rebuild modules.
+
+## Character landing correction
+
+The rounded player capsule now supplies actual capsule contacts and CCD distances.
+Its controller pose is a passive obstacle for rigid bodies; horizontal pushing
+uses the existing force-limited API. Pose deltas are no longer interpreted as
+unbounded kinematic impact velocity. Center, edge and corner landings followed
+by another jump retain bounded crate motion; falling bodies still collide with
+the player and the real C demo interaction tests pass.

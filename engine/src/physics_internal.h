@@ -15,7 +15,7 @@ typedef struct ph_body {
     af_vec3 p, v, w, force, torque, inertia;
     af_vec4 q;
     float inv_mass, sleep_time;
-    bool sleeping, supported, external;
+    bool sleeping, supported, external,character_proxy;
 } ph_body;
 typedef struct ph_contact {
     af_physics_contact view;
