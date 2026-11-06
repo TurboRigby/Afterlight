@@ -168,3 +168,8 @@ relocation; see [0.13 supported physics and controls](development-013.md).
 include imported collision OBJ assets, scene joints, the C mechanical game module
 and corresponding source. Both scenes are exercised after removing their source
 project and relocating the export. See [0.14](development-014.md).
+
+0.15 adds `motor-room` and `machinery-playground` editor/player targets. Their
+exports contain scene-15 motor fields, the machinery C module, input bindings
+and original mesh assets, together with covered source and dependency notices.
+Source removal/relocation tests exercise both scenes and the motor controls.

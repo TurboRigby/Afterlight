@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **13** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **14** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 13 modules.
+to use newly built ABI 14 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -137,3 +137,15 @@ Use host calls from game DLLs. Engine-linked CPU tools can prepare imported
 meshes with `af_scene_prepare_collision_meshes` and query scene joint frames.
 Pointers to collision meshes are borrowed until cache replacement or scene
 destruction. See [limits and anchor conventions](development-014.md).
+
+## Powered mechanisms (0.15)
+
+ABI 14 adds joint-state diagnostics and joint views/counts to the host table.
+For a hinge, set `motor_enabled`, relative B-A `motor_speed` in rad/s and
+`max_motor_torque` in Nm. Update a copied joint through `set_joint`; never mutate
+borrowed views. Zero speed brakes, disabled motors leave free twist, and limits
+still apply. Joint-state reactions are cached impulses/substep duration.
+
+The machinery C module oscillates limited motors before their endpoints, and
+exposes MotorToggle (Z), MotorReverse (X) and authored-state restart (R). Its
+state callbacks preserve targets and pause state across reload.

@@ -32,10 +32,20 @@ static void impulse(ph_body *a, ph_body *b, af_vec3 point, af_vec3 j) {
     ph_impulse(a, mul(j, -1), point);
     ph_impulse(b, j, point);
 }
-static unsigned bucket(af_object_id a,af_object_id b){uint64_t hash=(a*UINT64_C(0x9e3779b97f4a7c15))^(b*UINT64_C(0xbf58476d1ce4e5b9));hash^=hash>>32;return (unsigned)hash&16383u;}
+static unsigned bucket(af_object_id a, af_object_id b) {
+    uint64_t hash = (a * UINT64_C(0x9e3779b97f4a7c15)) ^ (b * UINT64_C(0xbf58476d1ce4e5b9));
+    hash ^= hash >> 32;
+    return (unsigned)hash & 16383u;
+}
 void ph_solve(af_physics *p, float dt) {
-    ph_islands_build(p);ph_joints_warm_start(p,dt);
-    memset(p->cache_heads,0,sizeof(p->cache_heads));for(size_t i=p->cache_count;i>0;--i){unsigned key=bucket(p->cache[i-1].view.a,p->cache[i-1].view.b);p->cache_next[i-1]=p->cache_heads[key];p->cache_heads[key]=(uint32_t)i;}
+    ph_islands_build(p);
+    ph_joints_warm_start(p, dt);
+    memset(p->cache_heads, 0, sizeof(p->cache_heads));
+    for (size_t i = p->cache_count; i > 0; --i) {
+        unsigned key = bucket(p->cache[i - 1].view.a, p->cache[i - 1].view.b);
+        p->cache_next[i - 1] = p->cache_heads[key];
+        p->cache_heads[key] = (uint32_t)i;
+    }
     for (size_t i = 0; i < p->contact_count; ++i) {
         ph_contact *c = &p->contacts[i];
         ph_body *a = &p->bodies[c->a], *b = &p->bodies[c->b];
@@ -47,8 +57,9 @@ void ph_solve(af_physics *p, float dt) {
             c->view.penetration < 0
                 ? c->view.penetration / dt
                 : (speed < -1 ? -fmaxf(a->config.restitution, b->config.restitution) * speed : 0);
-        for(uint32_t slot=p->cache_heads[bucket(c->view.a,c->view.b)];slot;slot=p->cache_next[slot-1]){
-            size_t j=slot-1;
+        for (uint32_t slot = p->cache_heads[bucket(c->view.a, c->view.b)]; slot;
+             slot = p->cache_next[slot - 1]) {
+            size_t j = slot - 1;
             ++p->stats.cache_probes;
             ph_contact *old = &p->cache[j];
             if (old->view.a != c->view.a || old->view.b != c->view.b || dot(old->view.normal, n) < .95f)
@@ -64,7 +75,7 @@ void ph_solve(af_physics *p, float dt) {
         impulse(a, b, c->view.point, add(mul(n, c->normal), c->tangent));
     }
     for (unsigned iteration = 0; iteration < 20; ++iteration) {
-        ph_joints_solve(p,dt,false);
+        ph_joints_solve(p, dt, false);
         for (size_t i = 0; i < p->contact_count; ++i) {
             ph_contact *c = &p->contacts[i];
             ph_body *a = &p->bodies[c->a], *b = &p->bodies[c->b];
@@ -96,7 +107,7 @@ void ph_solve(af_physics *p, float dt) {
     }
     /* Split positional correction avoids injecting penetration energy into v. */
     for (unsigned iteration = 0; iteration < 8; ++iteration) {
-        ph_joints_solve(p,dt,true);
+        ph_joints_solve(p, dt, true);
         for (size_t i = 0; i < p->contact_count; ++i) {
             ph_contact *c = &p->contacts[i];
             ph_body *a = &p->bodies[c->a], *b = &p->bodies[c->b];

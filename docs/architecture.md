@@ -481,3 +481,21 @@ Scene-owned distance/hinge joints bind stable object IDs into the physics solver
 Anchor rows include angular inertia; hinges add two alignment rows and optional
 twist-limit rows. Connected collision filtering is shared by discrete and CCD
 paths. Joint bodies remain awake pending constraint-island sleeping.
+
+## Constraint islands and powered rows (0.15)
+
+Discrete and continuous collision share an adaptive-axis bounds sweep. CCD uses
+rotation-conservative swept bounds, refreshed after each impact. Stable-ID pair
+hash buckets replace global contact-cache scans.
+
+Dynamic contact/constraint graphs form islands; static ground does not join
+independent groups. Quiet supported islands sleep together, and impulses, moved
+supports and removed anchors propagate waking. Joint rows retain scaled impulses
+between substeps. Hinge alignment, unilateral stops and torque-budgeted velocity
+motors share the iterative solver. Diagnostics estimate reaction from cached
+impulses. Running motors remain awake; zero-speed brakes may sleep when quiet.
+
+The character capsule is a passive, accurately rounded obstacle to rigid bodies.
+Pose deltas do not inject kinematic landing energy. Character pushing remains
+explicitly force limited. Center/edge/corner landing regressions guard against
+self-propelled crates.

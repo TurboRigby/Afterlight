@@ -9,9 +9,16 @@ af_physics *af_physics_create(void) {
 void af_physics_destroy(af_physics *p) {
     free(p);
 }
-void af_physics_set_profiling(af_physics *p,bool enabled){if(p)p->profiling=enabled;}
+void af_physics_set_profiling(af_physics *p, bool enabled) {
+    if (p)
+        p->profiling = enabled;
+}
 void af_physics_reset(af_physics *p) {
-    if (p){bool profiling=p->profiling;memset(p,0,sizeof(*p));p->profiling=profiling;}
+    if (p) {
+        bool profiling = p->profiling;
+        memset(p, 0, sizeof(*p));
+        p->profiling = profiling;
+    }
 }
 bool af_physics_active(const af_scene *s) {
     for (size_t i = 0; i < af_scene_object_count(s); ++i) {
@@ -68,7 +75,9 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
     size_t count = 0;
     if (!p || !s)
         return false;
-    af_asset_error mesh_error;if(!af_scene_prepare_collision_meshes(s,&mesh_error))return fail(p,mesh_error.message);
+    af_asset_error mesh_error;
+    if (!af_scene_prepare_collision_meshes(s, &mesh_error))
+        return fail(p, mesh_error.message);
     for (size_t i = 0; i < af_scene_object_count(s); ++i) {
         const af_scene_object *o = af_scene_object_at(s, i);
         if (o->body.enabled && !af_rigid_body_valid(o->body))
@@ -82,7 +91,8 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                 p, "Dynamic bodies require centered root sphere/box colliders with positive scale.");
         af_world_collider shape;
         if (!af_scene_world_collider(s, o->id, &shape)) {
-            if ((o->body.enabled && o->body.type == AF_BODY_DYNAMIC)||o->collider.type==AF_COLLIDER_MESH)
+            if ((o->body.enabled && o->body.type == AF_BODY_DYNAMIC) ||
+                o->collider.type == AF_COLLIDER_MESH)
                 return fail(p, "Collider has no prepared, valid world shape.");
             continue;
         }
@@ -97,15 +107,17 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             for (unsigned axis = 0; axis < 3; ++axis)
                 shape.axes[axis] = ph_axis(axis);
         }
-        if (shape.type != AF_COLLIDER_BOX && shape.type != AF_COLLIDER_SPHERE && shape.type!=AF_COLLIDER_MESH)
+        if (shape.type != AF_COLLIDER_BOX && shape.type != AF_COLLIDER_SPHERE &&
+            shape.type != AF_COLLIDER_MESH)
             continue;
         if (!ph_finite(shape.half_extents) || !isfinite(shape.radius) || shape.radius > 10000 ||
             shape.half_extents.x > 10000 || shape.half_extents.y > 10000 || shape.half_extents.z > 10000)
             return fail(p, "Physics dimensions exceed 10,000 world units.");
-        if (shape.type!=AF_COLLIDER_MESH&&(shape.type == AF_COLLIDER_SPHERE
-                ? shape.radius < .01f
-                : (shape.half_extents.x < .01f || shape.half_extents.y < .01f ||
-                   shape.half_extents.z < .01f)))
+        if (shape.type != AF_COLLIDER_MESH &&
+            (shape.type == AF_COLLIDER_SPHERE
+                 ? shape.radius < .01f
+                 : (shape.half_extents.x < .01f || shape.half_extents.y < .01f ||
+                    shape.half_extents.z < .01f)))
             return fail(p, "Physics shape dimensions must be at least .01 world units.");
         if (count == AF_PHYSICS_MAX_BODIES || !ph_finite(shape.center) ||
             af_vec3_length(shape.center) > 1000000)
@@ -118,7 +130,8 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                                     .w = o->body.angular_velocity,
                                     .q = af_quaternion_from_euler(o->transform.rotation),
                                     .published = o->transform};
-        b.scene_index = i;b.character_proxy=player_proxy;
+        b.scene_index = i;
+        b.character_proxy = player_proxy;
         af_body_type type = player_proxy      ? AF_BODY_KINEMATIC
                             : o->body.enabled ? o->body.type
                                               : AF_BODY_STATIC;
@@ -156,11 +169,16 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             b.sleeping = false;
             b.sleep_time = 0;
         }
-        if(player_proxy){b.v=b.w=(af_vec3){0};}
-        b.external=!old||moved||(old&&memcmp(&o->body,&old->config,sizeof(o->body)));if(player_proxy)b.external=false;
+        if (player_proxy) {
+            b.v = b.w = (af_vec3){0};
+        }
+        b.external = !old || moved || (old && memcmp(&o->body, &old->config, sizeof(o->body)));
+        if (player_proxy)
+            b.external = false;
         b.config = o->body;
         b.config.type = type;
-        if(old&&old->shape.mesh!=shape.mesh)p->contact_count=p->cache_count=0;
+        if (old && old->shape.mesh != shape.mesh)
+            p->contact_count = p->cache_count = 0;
         b.shape = shape;
         b.published = o->transform;
         b.inv_mass = type == AF_BODY_DYNAMIC ? 1 / o->body.mass : 0;
@@ -179,13 +197,15 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         p->scratch[count++] = b;
     }
     if (p->scene != s) {
-        p->contact_count = p->cache_count = 0;p->joint_count=0;
+        p->contact_count = p->cache_count = 0;
+        p->joint_count = 0;
         p->stats = (af_physics_stats){0};
     }
     memcpy(p->bodies, p->scratch, count * sizeof(ph_body));
     p->count = count;
     p->scene = s;
-    if(!ph_joints_sync(p))return fail(p,"Joint endpoint has no supported active physics shape.");
+    if (!ph_joints_sync(p))
+        return fail(p, "Joint endpoint has no supported active physics shape.");
     ph_islands_build(p);
     p->error[0] = 0;
     return true;
@@ -214,7 +234,7 @@ static bool act(af_physics *p, af_scene *s, af_object_id id, af_vec3 value, af_v
     }
     if (!b || b->inv_mass == 0)
         return false;
-    ph_wake_island(p,(size_t)(b-p->bodies));
+    ph_wake_island(p, (size_t)(b - p->bodies));
     if (impulse)
         ph_impulse(b, value, point);
     else {
@@ -234,7 +254,7 @@ bool af_physics_wake(af_physics *p, af_object_id id) {
     ph_body *b = p ? find(p, id) : NULL;
     if (!b || b->inv_mass == 0)
         return false;
-    ph_wake_island(p,(size_t)(b-p->bodies));
+    ph_wake_island(p, (size_t)(b - p->bodies));
     return true;
 }
 af_physics_state af_physics_get_state(const af_physics *p, af_object_id id) {
@@ -266,12 +286,12 @@ size_t af_physics_contacts(const af_physics *p, af_physics_contact *out, size_t 
 bool af_physics_step(af_physics *p, af_scene *s, float dt) {
     if (!p || !s || !isfinite(dt) || dt <= 0 || dt > .1f)
         return false;
-    double started=ph_clock(p);
+    double started = ph_clock(p);
     if (!ph_sync(p, s, dt))
         return false;
     uint64_t ticks = p->stats.ticks + 1;
     p->stats = (af_physics_stats){.bodies = p->count, .ticks = ticks};
-    p->stats.sync_ms=ph_clock(p)-started;
+    p->stats.sync_ms = ph_clock(p) - started;
     unsigned steps = (unsigned)ceilf(dt * 240 - 1e-5f);
     if (!steps)
         steps = 1;
@@ -294,13 +314,17 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
                 100);
             ph_shape(b);
         }
-        double stamp=ph_clock(p);
-        ph_advance(p,h);p->stats.ccd_ms+=ph_clock(p)-stamp;
+        double stamp = ph_clock(p);
+        ph_advance(p, h);
+        p->stats.ccd_ms += ph_clock(p) - stamp;
         if (!ph_detect(p))
             return fail(p, "Physics exceeds 8192 contact points.");
-        stamp=ph_clock(p);ph_solve(p,h);p->stats.solver_ms+=ph_clock(p)-stamp;
+        stamp = ph_clock(p);
+        ph_solve(p, h);
+        p->stats.solver_ms += ph_clock(p) - stamp;
     }
-    ph_sleep(p, dt);ph_joints_report(p);
+    ph_sleep(p, dt);
+    ph_joints_report(p);
     for (size_t i = 0; i < p->count; ++i) {
         ph_body *b = &p->bodies[i];
         b->force = b->torque = (af_vec3){0};
@@ -319,7 +343,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
         b->published = o->transform;
         b->config = o->body;
     }
-    p->stats.total_ms=ph_clock(p)-started;
+    p->stats.total_ms = ph_clock(p) - started;
     return true;
 }
 

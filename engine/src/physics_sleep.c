@@ -1,23 +1,167 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 
 #include "physics_internal.h"
-static size_t root(af_physics *p,size_t i){while(p->parents[i]!=i){p->parents[i]=p->parents[p->parents[i]];i=p->parents[i];}return i;}
-static void join(af_physics *p,size_t a,size_t b){if(a>=p->count||b>=p->count||p->bodies[a].inv_mass==0||p->bodies[b].inv_mass==0)return;a=root(p,a);b=root(p,b);if(a!=b){if(a>b){size_t swap=a;a=b;b=swap;}p->parents[b]=a;}}
-static size_t contact_index(af_physics *p,size_t index,af_object_id id){if(index<p->count&&p->bodies[index].id==id)return index;for(size_t i=0;i<p->count;++i)if(p->bodies[i].id==id)return i;return SIZE_MAX;}
-void ph_wake_island(af_physics *p,size_t i){if(i>=p->count)return;size_t r=root(p,i);for(size_t k=0;k<p->count;++k)if(p->bodies[k].inv_mass>0&&root(p,k)==r){p->bodies[k].sleeping=false;p->bodies[k].sleep_time=0;}}
-static bool active(ph_body *b){return af_vec3_length(b->v)>.08f||af_vec3_length(b->w)>.08f||(b->external&&!b->character_proxy);}
-void ph_islands_build(af_physics *p){for(size_t i=0;i<p->count;++i){p->parents[i]=i;p->island_sizes[i]=0;p->island_wake[i]=p->island_anchor[i]=false;}
-    for(size_t i=0;i<p->joint_count;++i)join(p,p->joints[i].a,p->joints[i].b);
-    for(size_t i=0;i<p->contact_count;++i){ph_contact *c=&p->contacts[i];size_t a=contact_index(p,c->a,c->view.a),b=contact_index(p,c->b,c->view.b);if(a!=SIZE_MAX&&b!=SIZE_MAX)join(p,a,b);}
-    for(size_t i=0;i<p->count;++i){ph_body *b=&p->bodies[i];if(b->inv_mass==0)continue;size_t r=root(p,i);++p->island_sizes[r];p->island_wake[r]|=!b->sleeping||!b->config.allow_sleep||p->held==b->id;p->island_anchor[r]|=b->config.gravity_scale==0;}
-    for(size_t i=0;i<p->contact_count;++i){ph_contact *c=&p->contacts[i];size_t a=contact_index(p,c->a,c->view.a),b=contact_index(p,c->b,c->view.b);if(a==SIZE_MAX||b==SIZE_MAX)continue;ph_body *one=&p->bodies[a],*two=&p->bodies[b];if(one->inv_mass>0){size_t r=root(p,a);p->island_wake[r]|=(two->inv_mass==0&&active(two))||c->view.penetration>.012f;p->island_anchor[r]|=two->inv_mass==0&&c->view.normal.y<-.5f;}if(two->inv_mass>0){size_t r=root(p,b);p->island_wake[r]|=(one->inv_mass==0&&active(one))||c->view.penetration>.012f;p->island_anchor[r]|=one->inv_mass==0&&c->view.normal.y>.5f;}}
-    for(size_t i=0;i<p->joint_count;++i){ph_joint *j=&p->joints[i];ph_body *a=&p->bodies[j->a],*b=j->b==SIZE_MAX?&p->world:&p->bodies[j->b];if(a->inv_mass>0){size_t r=root(p,j->a);p->island_wake[r]|=j->config.motor_enabled&&j->config.max_motor_torque>0&&fabsf(j->config.motor_speed)>1e-5f;p->island_anchor[r]|=b->inv_mass==0;p->island_wake[r]|=b->inv_mass==0&&active(b);}if(b->inv_mass>0){size_t r=root(p,j->b);p->island_wake[r]|=j->config.motor_enabled&&j->config.max_motor_torque>0&&fabsf(j->config.motor_speed)>1e-5f;p->island_anchor[r]|=a->inv_mass==0;p->island_wake[r]|=a->inv_mass==0&&active(a);}}
-    p->stats.islands=p->stats.awake_islands=p->stats.largest_island=0;for(size_t i=0;i<p->count;++i)if(p->island_sizes[i]){++p->stats.islands;if(p->island_wake[i])++p->stats.awake_islands;if(p->island_sizes[i]>p->stats.largest_island)p->stats.largest_island=p->island_sizes[i];}
-    for(size_t i=0;i<p->count;++i)if(p->bodies[i].inv_mass>0&&p->island_wake[root(p,i)]&&p->bodies[i].sleeping){p->bodies[i].sleeping=false;p->bodies[i].sleep_time=0;}
+static size_t root(af_physics *p, size_t i) {
+    while (p->parents[i] != i) {
+        p->parents[i] = p->parents[p->parents[i]];
+        i = p->parents[i];
+    }
+    return i;
 }
-void ph_sleep(af_physics *p,float dt){ph_islands_build(p);for(size_t i=0;i<p->count;++i){p->island_quiet[i]=true;p->island_time[i]=1e30f;}
-    for(size_t i=0;i<p->count;++i){ph_body *b=&p->bodies[i];if(b->inv_mass==0)continue;size_t r=root(p,i);p->island_quiet[r]&=b->config.allow_sleep&&b->id!=p->held&&af_vec3_length(b->v)<.06f&&af_vec3_length(b->w)<.08f&&af_vec3_length(b->force)<1e-6f&&af_vec3_length(b->torque)<1e-6f;p->island_time[r]=fminf(p->island_time[r],b->sleep_time);}
-    for(size_t i=0;i<p->joint_count;++i){ph_joint *joint=&p->joints[i];af_joint *j=&joint->config;ph_body *a=&p->bodies[joint->a],*b=joint->b==SIZE_MAX?&p->world:&p->bodies[joint->b];af_vec3 delta=af_vec3_sub(af_vec3_add(b->p,ph_vector(b,j->anchor_b)),af_vec3_add(a->p,ph_vector(a,j->anchor_a)));float error=fabsf(af_vec3_length(delta)-(j->type==AF_JOINT_DISTANCE?j->distance:0));size_t r=root(p,a->inv_mass>0?joint->a:joint->b);p->island_quiet[r]&=error<.006f&&!(j->motor_enabled&&j->max_motor_torque>0&&fabsf(j->motor_speed)>1e-5f);if(j->type==AF_JOINT_HINGE)p->island_quiet[r]&=af_vec3_dot(ph_vector(a,j->axis_a),ph_vector(b,j->axis_b))>.9999f;}
-    p->stats.awake_islands=0;for(size_t i=0;i<p->count;++i)if(p->island_sizes[i]){p->island_time[i]=p->island_quiet[i]&&p->island_anchor[i]?p->island_time[i]+dt:0;if(p->island_time[i]<.6f)++p->stats.awake_islands;}
-    for(size_t i=0;i<p->count;++i){ph_body *b=&p->bodies[i];if(b->inv_mass==0)continue;size_t r=root(p,i);b->supported=p->island_anchor[r];b->sleep_time=p->island_time[r];b->sleeping=b->sleep_time>=.6f;if(b->sleeping)b->v=b->w=(af_vec3){0};}
+static void join(af_physics *p, size_t a, size_t b) {
+    if (a >= p->count || b >= p->count || p->bodies[a].inv_mass == 0 || p->bodies[b].inv_mass == 0)
+        return;
+    a = root(p, a);
+    b = root(p, b);
+    if (a != b) {
+        if (a > b) {
+            size_t swap = a;
+            a = b;
+            b = swap;
+        }
+        p->parents[b] = a;
+    }
+}
+static size_t contact_index(af_physics *p, size_t index, af_object_id id) {
+    if (index < p->count && p->bodies[index].id == id)
+        return index;
+    for (size_t i = 0; i < p->count; ++i)
+        if (p->bodies[i].id == id)
+            return i;
+    return SIZE_MAX;
+}
+void ph_wake_island(af_physics *p, size_t i) {
+    if (i >= p->count)
+        return;
+    size_t r = root(p, i);
+    for (size_t k = 0; k < p->count; ++k)
+        if (p->bodies[k].inv_mass > 0 && root(p, k) == r) {
+            p->bodies[k].sleeping = false;
+            p->bodies[k].sleep_time = 0;
+        }
+}
+static bool active(ph_body *b) {
+    return af_vec3_length(b->v) > .08f || af_vec3_length(b->w) > .08f ||
+           (b->external && !b->character_proxy);
+}
+void ph_islands_build(af_physics *p) {
+    for (size_t i = 0; i < p->count; ++i) {
+        p->parents[i] = i;
+        p->island_sizes[i] = 0;
+        p->island_wake[i] = p->island_anchor[i] = false;
+    }
+    for (size_t i = 0; i < p->joint_count; ++i)
+        join(p, p->joints[i].a, p->joints[i].b);
+    for (size_t i = 0; i < p->contact_count; ++i) {
+        ph_contact *c = &p->contacts[i];
+        size_t a = contact_index(p, c->a, c->view.a), b = contact_index(p, c->b, c->view.b);
+        if (a != SIZE_MAX && b != SIZE_MAX)
+            join(p, a, b);
+    }
+    for (size_t i = 0; i < p->count; ++i) {
+        ph_body *b = &p->bodies[i];
+        if (b->inv_mass == 0)
+            continue;
+        size_t r = root(p, i);
+        ++p->island_sizes[r];
+        p->island_wake[r] |= !b->sleeping || !b->config.allow_sleep || p->held == b->id;
+        p->island_anchor[r] |= b->config.gravity_scale == 0;
+    }
+    for (size_t i = 0; i < p->contact_count; ++i) {
+        ph_contact *c = &p->contacts[i];
+        size_t a = contact_index(p, c->a, c->view.a), b = contact_index(p, c->b, c->view.b);
+        if (a == SIZE_MAX || b == SIZE_MAX)
+            continue;
+        ph_body *one = &p->bodies[a], *two = &p->bodies[b];
+        if (one->inv_mass > 0) {
+            size_t r = root(p, a);
+            p->island_wake[r] |= (two->inv_mass == 0 && active(two)) || c->view.penetration > .012f;
+            p->island_anchor[r] |= two->inv_mass == 0 && c->view.normal.y < -.5f;
+        }
+        if (two->inv_mass > 0) {
+            size_t r = root(p, b);
+            p->island_wake[r] |= (one->inv_mass == 0 && active(one)) || c->view.penetration > .012f;
+            p->island_anchor[r] |= one->inv_mass == 0 && c->view.normal.y > .5f;
+        }
+    }
+    for (size_t i = 0; i < p->joint_count; ++i) {
+        ph_joint *j = &p->joints[i];
+        ph_body *a = &p->bodies[j->a], *b = j->b == SIZE_MAX ? &p->world : &p->bodies[j->b];
+        if (a->inv_mass > 0) {
+            size_t r = root(p, j->a);
+            p->island_wake[r] |= j->config.motor_enabled && j->config.max_motor_torque > 0 &&
+                                 fabsf(j->config.motor_speed) > 1e-5f;
+            p->island_anchor[r] |= b->inv_mass == 0;
+            p->island_wake[r] |= b->inv_mass == 0 && active(b);
+        }
+        if (b->inv_mass > 0) {
+            size_t r = root(p, j->b);
+            p->island_wake[r] |= j->config.motor_enabled && j->config.max_motor_torque > 0 &&
+                                 fabsf(j->config.motor_speed) > 1e-5f;
+            p->island_anchor[r] |= a->inv_mass == 0;
+            p->island_wake[r] |= a->inv_mass == 0 && active(a);
+        }
+    }
+    p->stats.islands = p->stats.awake_islands = p->stats.largest_island = 0;
+    for (size_t i = 0; i < p->count; ++i)
+        if (p->island_sizes[i]) {
+            ++p->stats.islands;
+            if (p->island_wake[i])
+                ++p->stats.awake_islands;
+            if (p->island_sizes[i] > p->stats.largest_island)
+                p->stats.largest_island = p->island_sizes[i];
+        }
+    for (size_t i = 0; i < p->count; ++i)
+        if (p->bodies[i].inv_mass > 0 && p->island_wake[root(p, i)] && p->bodies[i].sleeping) {
+            p->bodies[i].sleeping = false;
+            p->bodies[i].sleep_time = 0;
+        }
+}
+void ph_sleep(af_physics *p, float dt) {
+    ph_islands_build(p);
+    for (size_t i = 0; i < p->count; ++i) {
+        p->island_quiet[i] = true;
+        p->island_time[i] = 1e30f;
+    }
+    for (size_t i = 0; i < p->count; ++i) {
+        ph_body *b = &p->bodies[i];
+        if (b->inv_mass == 0)
+            continue;
+        size_t r = root(p, i);
+        p->island_quiet[r] &= b->config.allow_sleep && b->id != p->held && af_vec3_length(b->v) < .06f &&
+                              af_vec3_length(b->w) < .08f && af_vec3_length(b->force) < 1e-6f &&
+                              af_vec3_length(b->torque) < 1e-6f;
+        p->island_time[r] = fminf(p->island_time[r], b->sleep_time);
+    }
+    for (size_t i = 0; i < p->joint_count; ++i) {
+        ph_joint *joint = &p->joints[i];
+        af_joint *j = &joint->config;
+        ph_body *a = &p->bodies[joint->a], *b = joint->b == SIZE_MAX ? &p->world : &p->bodies[joint->b];
+        af_vec3 delta = af_vec3_sub(af_vec3_add(b->p, ph_vector(b, j->anchor_b)),
+                                    af_vec3_add(a->p, ph_vector(a, j->anchor_a)));
+        float error = fabsf(af_vec3_length(delta) - (j->type == AF_JOINT_DISTANCE ? j->distance : 0));
+        size_t r = root(p, a->inv_mass > 0 ? joint->a : joint->b);
+        p->island_quiet[r] &= error < .006f && !(j->motor_enabled && j->max_motor_torque > 0 &&
+                                                 fabsf(j->motor_speed) > 1e-5f);
+        if (j->type == AF_JOINT_HINGE)
+            p->island_quiet[r] &= af_vec3_dot(ph_vector(a, j->axis_a), ph_vector(b, j->axis_b)) > .9999f;
+    }
+    p->stats.awake_islands = 0;
+    for (size_t i = 0; i < p->count; ++i)
+        if (p->island_sizes[i]) {
+            p->island_time[i] = p->island_quiet[i] && p->island_anchor[i] ? p->island_time[i] + dt : 0;
+            if (p->island_time[i] < .6f)
+                ++p->stats.awake_islands;
+        }
+    for (size_t i = 0; i < p->count; ++i) {
+        ph_body *b = &p->bodies[i];
+        if (b->inv_mass == 0)
+            continue;
+        size_t r = root(p, i);
+        b->supported = p->island_anchor[r];
+        b->sleep_time = p->island_time[r];
+        b->sleeping = b->sleep_time >= .6f;
+        if (b->sleeping)
+            b->v = b->w = (af_vec3){0};
+    }
 }

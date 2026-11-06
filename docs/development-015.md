@@ -79,3 +79,44 @@ existing Snap toggle uses 0.5 units or 15 degrees. A drag is one undo operation;
 Escape cancels it. Finish joint edit returns to object tools. Tests cover rotated
 and nonuniformly scaled bodies, world endpoints, actual snapped drag results and
 grouped undo/redo, alongside native editor smoke/animation tests.
+
+## Simple-to-complex machinery
+
+`run_motor-room_editor` adds one powered door to the mesh room. Then use
+`run_machinery-playground_editor` for the door, swing, seesaw and rotating platform
+with passive chains, ramp balls and continuous projectiles. Matching `_player`
+targets run independently. Limited mechanisms reverse near their endpoints.
+
+Z brakes/resumes all motors, X reverses their targets, R restores authored bodies
+and motor settings, and N switches the two scenes. Movement, Q crate spawning, F
+grab/release and V throw remain. C state callbacks preserve motor control state.
+
+Limits remain 1024 physics bodies, 8192 contacts and 128 joints. Motors are velocity
+targets, without servo-angle controllers or breakable joints. CCD retains bounded
+approximate impacts. The chain stress test is bounded and does not establish
+stability for arbitrary sizes or mass ratios. Timings must be measured in Release.
+
+## Verification and local measurements
+
+All 114 native Debug tests and all 114 macOS ASan/UBSan tests pass with Vulkan
+validation. All 75 Linux Clang sanitizer CPU tests pass with leak detection.
+The powered scenes pass relocated Debug and optimized Release exports after
+source removal. Static analysis of the physics and joint-gizmo paths is clean.
+
+The landing regression observed zero horizontal speed/spin in its three cases.
+The 12-link chain's maximum measured length errors were 0.00096 / 0.00113 /
+0.00106 units at 30 / 60 / 144 Hz. Powered scene anchor/length error stayed below
+0.00050 units in the local native run. These are bounded regression scenarios.
+
+Local Apple M4 Release benchmark samples, in process-CPU milliseconds:
+
+| Bodies | Initial mean / p95 | Final mean / p95 |
+| --- | --- | --- |
+| 64 | 2.59 / 2.67 | 1.71 / 3.52 |
+| 128 | 5.68 / 5.90 | 4.20 / 6.43 |
+| 256 | 10.82 / 11.32 | 6.53 / 10.19 |
+
+Sleeping remains enabled, so samples include groups becoming quiet during the
+measurement window. Background build load and CPU scheduling also vary; these
+are diagnostic observations, not a controlled speedup claim or frame-rate budget.
+The cache-probe reduction provides a separate measure of avoided lookup work.

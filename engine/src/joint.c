@@ -11,7 +11,7 @@ af_joint af_joint_default(void) {
                       .axis_b = {0, 1, 0},
                       .reference_a = {1, 0, 0},
                       .reference_b = {1, 0, 0},
-                      .max_motor_torque=10,
+                      .max_motor_torque = 10,
                       .lower_limit = -AF_PI,
                       .upper_limit = AF_PI};
 }
@@ -29,7 +29,9 @@ bool af_joint_valid(af_joint j) {
            fabsf(af_vec3_dot(j.axis_a, j.reference_a)) < .001f &&
            fabsf(af_vec3_dot(j.axis_b, j.reference_b)) < .001f && isfinite(j.lower_limit) &&
            isfinite(j.upper_limit) && j.lower_limit >= -AF_PI && j.upper_limit <= AF_PI &&
-           j.lower_limit <= j.upper_limit&&isfinite(j.motor_speed)&&fabsf(j.motor_speed)<=100&&isfinite(j.max_motor_torque)&&j.max_motor_torque>=0&&j.max_motor_torque<=1000000&&(!j.motor_enabled||j.type==AF_JOINT_HINGE);
+           j.lower_limit <= j.upper_limit && isfinite(j.motor_speed) && fabsf(j.motor_speed) <= 100 &&
+           isfinite(j.max_motor_torque) && j.max_motor_torque >= 0 && j.max_motor_torque <= 1000000 &&
+           (!j.motor_enabled || j.type == AF_JOINT_HINGE);
 }
 static bool endpoint(const af_scene *s, af_object_id id) {
     const af_scene_object *o = af_scene_get_object(s, id);

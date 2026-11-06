@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-#include "physics_internal.h"
 #include "collision_internal.h"
+#include "physics_internal.h"
 #include <stdlib.h>
 #include <string.h>
 #define SKIN .006f
@@ -216,14 +216,14 @@ static bool sphere_box(af_physics *p, size_t sphere, size_t box, bool reverse) {
     af_vec3 point =
         mul(add(add(b->p, ph_vector(b, closest)), sub(s->p, mul(outward, s->shape.radius))), .5f);
     return ph_emit(p, reverse ? box : sphere, reverse ? sphere : box, point,
-                reverse ? outward : mul(outward, -1), penetration);
+                   reverse ? outward : mul(outward, -1), penetration);
 }
 bool ph_detect(af_physics *p) {
     p->cache_count = p->contact_count;
     memcpy(p->cache, p->contacts, p->cache_count * sizeof(ph_contact));
     p->contact_count = 0;
-    double start=ph_clock(p),narrow=0;
-    ph_bounds(p,p->bounds,0,false);
+    double start = ph_clock(p), narrow = 0;
+    ph_bounds(p, p->bounds, 0, false);
     for (size_t i = 0; i < p->count; ++i)
         for (size_t j = i + 1; j < p->count && p->bounds[j].key_low <= p->bounds[i].key_high; ++j) {
             ph_bound one = p->bounds[i], two = p->bounds[j];
@@ -234,14 +234,23 @@ bool ph_detect(af_physics *p) {
                 bi = swap;
             }
             ph_body *a = &p->bodies[ai], *b = &p->bodies[bi];
-            if ((a->inv_mass == 0 && b->inv_mass == 0) || !(a->shape.layer & b->shape.layer) || !ph_collision_allowed(p,a->id,b->id) ||
-                !ph_bounds_overlap(one,two))
+            if ((a->inv_mass == 0 && b->inv_mass == 0) || !(a->shape.layer & b->shape.layer) ||
+                !ph_collision_allowed(p, a->id, b->id) || !ph_bounds_overlap(one, two))
                 continue;
             ++p->stats.broadphase_pairs;
-            double stamp=ph_clock(p);
+            double stamp = ph_clock(p);
             bool ok;
-            if(a->character_proxy||b->character_proxy){ph_body *player=a->character_proxy?a:b,*other=player==a?b:a;af_collision_hit hit;float separation=af_collision_capsule_distance(other->shape,player->p,player->shape.radius,player->shape.half_extents.y-player->shape.radius,&hit);ok=separation>SKIN||ph_emit(p,ai,bi,hit.point,player==a?mul(hit.normal,-1):hit.normal,-separation);}
-            else if(a->shape.type==AF_COLLIDER_MESH||b->shape.type==AF_COLLIDER_MESH)ok=ph_mesh_contacts(p,ai,bi);
+            if (a->character_proxy || b->character_proxy) {
+                ph_body *player = a->character_proxy ? a : b, *other = player == a ? b : a;
+                af_collision_hit hit;
+                float separation = af_collision_capsule_distance(
+                    other->shape, player->p, player->shape.radius,
+                    player->shape.half_extents.y - player->shape.radius, &hit);
+                ok = separation > SKIN ||
+                     ph_emit(p, ai, bi, hit.point, player == a ? mul(hit.normal, -1) : hit.normal,
+                             -separation);
+            } else if (a->shape.type == AF_COLLIDER_MESH || b->shape.type == AF_COLLIDER_MESH)
+                ok = ph_mesh_contacts(p, ai, bi);
             else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
                 ok = boxes(p, ai, bi);
             else if (a->shape.type != b->shape.type)
@@ -251,16 +260,20 @@ bool ph_detect(af_physics *p) {
                 af_vec3 d = sub(b->p, a->p);
                 float length = af_vec3_length(d),
                       penetration = a->shape.radius + b->shape.radius - length;
-                if (penetration < -SKIN){narrow+=ph_clock(p)-stamp;continue;}
+                if (penetration < -SKIN) {
+                    narrow += ph_clock(p) - stamp;
+                    continue;
+                }
                 af_vec3 n = length > 1e-7f ? mul(d, 1 / length) : (af_vec3){0, 1, 0};
                 ok = ph_emit(p, ai, bi, add(a->p, mul(n, a->shape.radius - penetration * .5f)), n,
-                          penetration);
+                             penetration);
             }
-            narrow+=ph_clock(p)-stamp;
+            narrow += ph_clock(p) - stamp;
             if (!ok)
                 return false;
         }
-    p->stats.narrowphase_ms+=narrow;p->stats.broadphase_ms+=fmax(0,ph_clock(p)-start-narrow);
+    p->stats.narrowphase_ms += narrow;
+    p->stats.broadphase_ms += fmax(0, ph_clock(p) - start - narrow);
     p->stats.contacts = p->contact_count;
     return true;
 }

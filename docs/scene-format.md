@@ -512,7 +512,7 @@ Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
 and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
 200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
 positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
-body defaults. Saving writes version 14. Physics runtime limits and diagnostics
+body defaults. Saving writes version 15. Physics runtime limits and diagnostics
 are documented in [0.13](development-013.md).
 
 ## Version 14: mesh colliders and scene joints
@@ -542,3 +542,14 @@ IDs are unique and below the nonzero next counter. At least one endpoint must
 be dynamic; endpoints need enabled, nontrigger sphere/box/static-mesh colliders.
 Body deletion removes attached joints. Versions 1–13 load with no joints.
 Prefabs remap internal joint endpoints and reject external/world constraints.
+
+## Version 15: powered hinges
+
+All version-14 scene fields remain. Every joint additionally requires
+`motor_enabled` (boolean), `motor_speed` (finite relative B-A angular velocity,
+-100..100 rad/s) and `max_motor_torque` (finite 0..1000000 Nm). Enabled motors
+require hinge joints. The accumulated impulse budget is torque multiplied by
+substep duration. A zero speed target is a brake. Versions 1–14 remain readable;
+version-14 joints default to motors disabled, speed zero and torque 10 Nm.
+Runtime islands, cached impulses and diagnostics are reconstructed from saved
+components. Game ABI 14 modules must be rebuilt with the matching headers.

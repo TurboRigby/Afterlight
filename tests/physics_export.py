@@ -16,9 +16,10 @@ p.add_argument('--player', type=Path, required=True)
 p.add_argument('--module', type=Path, required=True)
 p.add_argument('--sanitized', action='store_true')
 p.add_argument('--mechanical', action='store_true')
+p.add_argument('--machinery', action='store_true')
 p.add_argument('--play-test', type=Path)
 a = p.parse_args()
-scenes=("mesh-room","mechanical-playground") if a.mechanical else ("physics-drop","physics-playground")
+scenes=("motor-room","machinery-playground") if a.machinery else ("mesh-room","mechanical-playground") if a.mechanical else ("physics-drop","physics-playground")
 def run(args, cwd, success=True):
     env = os.environ.copy();env['SDL_AUDIO_DRIVER'] = 'dummy';env['VK_LAYER_VALIDATE_SYNC'] = '1'
     result = subprocess.run([str(x) for x in args], cwd=cwd, env=env, capture_output=True, text=True, timeout=90)
@@ -51,8 +52,9 @@ with tempfile.TemporaryDirectory(prefix='afterlight-physics-export-') as tempora
         resources = output / 'Game.app/Contents/Resources' if sys.platform == 'darwin' else output
         packed_project = json.loads((resources / 'game.afterlight.project').read_text())
         packed_scene = json.loads((resources / packed_project['startup_scene']).read_text())
-        assert packed_scene['version'] == (14 if a.mechanical else 13)
-        if a.mechanical: assert packed_scene['joints'] and any(o['collider']['type']=='mesh' for o in packed_scene['objects'])
+        assert packed_scene['version'] == (15 if a.machinery else 14 if a.mechanical else 13)
+        if a.machinery: assert any(j['motor_enabled'] for j in packed_scene['joints'])
+        if a.mechanical or a.machinery: assert packed_scene['joints'] and any(o['collider']['type']=='mesh' for o in packed_scene['objects'])
         assert (resources/'input.json').is_file()
         prefab=json.loads((resources/'prefabs/physics-crate.afterlight.prefab').read_text())
         assert prefab['objects'][0]['body']['enabled'] and prefab['objects'][0]['body']['type']=='dynamic'

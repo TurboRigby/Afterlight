@@ -23,6 +23,9 @@ typedef struct character_state {
 #ifdef AF_PHYSICS_GAME
     struct {af_object_id id;af_transform transform;af_rigid_body body;} initial_bodies[128];unsigned initial_body_count;
 #endif
+#ifdef AF_MACHINERY_GAME
+    af_joint initial_joints[128];float motor_targets[128];unsigned motor_count;bool motors_paused;
+#endif
 } character_state;
 static void present(character_state *s,const af_game_host *host){
     const af_scene_object *body=host->get_object(host->scene,s->body);
@@ -45,6 +48,10 @@ static bool init(void *memory,const af_game_host *host){
     }
 #ifdef AF_PHYSICS_GAME
     for(size_t i=0;i<host->object_count(host->scene);++i){const af_scene_object *o=host->object_at(host->scene,i);if(o->body.enabled&&o->body.type==AF_BODY_DYNAMIC){if(s->initial_body_count==128)return false;unsigned at=s->initial_body_count++;s->initial_bodies[at].id=o->id;s->initial_bodies[at].transform=o->transform;s->initial_bodies[at].body=o->body;}}
+#endif
+
+#ifdef AF_MACHINERY_GAME
+    for(size_t i=0;i<host->joint_count(host->scene);++i){const af_joint *j=host->joint_at(host->scene,i);if(!j->motor_enabled)continue;if(s->motor_count==128)return false;unsigned n=s->motor_count++;s->initial_joints[n]=*j;s->motor_targets[n]=j->motor_speed;}host->log("Machinery: Z brake/resume, X reverse, R reset, N switch rooms.");
 #endif
     for(unsigned i=1;i<=s->status.checkpoint_count;++i)if(!orders[i]){host->log("Checkpoint orders must be unique and consecutive from 1.");return false;}
     const af_scene_object *body=host->get_object(host->scene,s->body);
@@ -78,9 +85,14 @@ static void update(void *memory,const af_game_host *host,double delta){
 #ifdef AF_PHYSICS_GAME
         if(host->held_body(host->engine))host->release_body(host->engine,(af_vec3){0});for(size_t i=host->object_count(host->scene);i>0;--i){const af_scene_object *o=host->object_at(host->scene,i-1);if(!o||!o->body.enabled||o->body.type!=AF_BODY_DYNAMIC)continue;bool original=false;for(unsigned j=0;j<s->initial_body_count;++j)original|=s->initial_bodies[j].id==o->id;if(!original)host->remove_object(host->scene,o->id);}for(unsigned i=0;i<s->initial_body_count;++i){host->set_transform(host->scene,s->initial_bodies[i].id,s->initial_bodies[i].transform);host->set_body(host->scene,s->initial_bodies[i].id,s->initial_bodies[i].body);}
 #endif
+#ifdef AF_MACHINERY_GAME
+        s->motors_paused=false;for(unsigned i=0;i<s->motor_count;++i){host->set_joint(host->scene,s->initial_joints[i].id,s->initial_joints[i]);s->motor_targets[i]=s->initial_joints[i].motor_speed;}
+#endif
         restart(s,host,true);present(s,host);return;}
 #ifdef AF_TOOLBOX_GAME
-#ifdef AF_MECHANICAL_GAME
+#ifdef AF_MACHINERY_GAME
+    const char *simple_scene="motor-room",*course_scene="machinery-playground",*prefab="physics-crate";
+#elif defined(AF_MECHANICAL_GAME)
     const char *simple_scene="mesh-room",*course_scene="mechanical-playground",*prefab="physics-crate";
 #elif defined(AF_PHYSICS_GAME)
     const char *simple_scene="physics-drop",*course_scene="physics-playground",*prefab="physics-crate";
@@ -89,6 +101,12 @@ static void update(void *memory,const af_game_host *host,double delta){
 #endif
     if(controls&&host->action_pressed(host,"NextScene")){if(host->request_scene)host->request_scene(host,s->status.checkpoint_count?simple_scene:course_scene);return;}
     if(controls&&host->action_pressed(host,"Spawn")&&host->project_directory){char path[4096];if(snprintf(path,sizeof(path),"%sprefabs/%s.afterlight.prefab",host->project_directory,prefab)<(int)sizeof(path)){af_transform placement=host->get_object(host->scene,s->body)->transform;placement.position.x+=2;placement.position.y+=.25f;af_object_id root;af_scene_error error;if(!host->spawn_prefab(host->engine,host->scene,path,0,placement,&root,&error))host->log(error.message);}}
+#endif
+
+#ifdef AF_MACHINERY_GAME
+    if(controls&&host->action_pressed(host,"MotorToggle"))s->motors_paused=!s->motors_paused;
+    bool reverse=controls&&host->action_pressed(host,"MotorReverse");
+    for(unsigned i=0;i<s->motor_count;++i){const af_joint *borrowed=host->get_joint(host->scene,s->initial_joints[i].id);if(!borrowed)continue;af_joint j=*borrowed;if(reverse)s->motor_targets[i]=-s->motor_targets[i];af_physics_joint_state state=host->joint_state(host->engine,j.id);if(!s->motors_paused&&state.available&&j.limits_enabled){float speed=fabsf(s->motor_targets[i]);if(state.angle>j.upper_limit-.08f&&s->motor_targets[i]>0)s->motor_targets[i]=-speed;else if(state.angle<j.lower_limit+.08f&&s->motor_targets[i]<0)s->motor_targets[i]=speed;}float speed=s->motors_paused?0:s->motor_targets[i];if(j.motor_speed!=speed){j.motor_speed=speed;host->set_joint(host->scene,j.id,j);}}
 #endif
     s->time+=delta;
     for(unsigned i=0;i<s->crowd_count;++i)host->locomotion_step(host->engine,s->crowd[i],(af_locomotion_input){.speed=(float)(i%3)*2.5f,.grounded=true},(float)delta,NULL);
@@ -132,7 +150,11 @@ static void update(void *memory,const af_game_host *host,double delta){
 }
 static void shutdown(void *memory,const af_game_host *host){(void)memory;host->capture_mouse(host->engine,false);}
 static size_t save_state(const void *memory,void *bytes,size_t capacity){if(!bytes)return sizeof(character_state);if(capacity<sizeof(character_state))return 0;memcpy(bytes,memory,sizeof(character_state));return sizeof(character_state);}
-static bool load_state(void *memory,const af_game_host *host,uint32_t version,const void *bytes,size_t size){if(version!=1||size!=sizeof(character_state)||!bytes)return false;character_state value;memcpy(&value,bytes,size);if(!host->get_object(host->scene,value.body)||!host->get_object(host->scene,value.actor)||!isfinite(value.time)||!isfinite(value.status.elapsed)||!isfinite(value.player.body.position.x)||!isfinite(value.player.body.position.y)||!isfinite(value.player.body.position.z)||value.platform_count>16||value.crowd_count>63)return false;memcpy(memory,&value,size);host->locomotion_root_motion(host->engine,value.actor,value.rig.root_node,value.root_motion);present(memory,host);return true;}
+static bool load_state(void *memory,const af_game_host *host,uint32_t version,const void *bytes,size_t size){if(version!=1||size!=sizeof(character_state)||!bytes)return false;character_state value;memcpy(&value,bytes,size);if(!host->get_object(host->scene,value.body)||!host->get_object(host->scene,value.actor)||!isfinite(value.time)||!isfinite(value.status.elapsed)||!isfinite(value.player.body.position.x)||!isfinite(value.player.body.position.y)||!isfinite(value.player.body.position.z)||value.platform_count>16||value.crowd_count>63)return false;
+#ifdef AF_MACHINERY_GAME
+    if(value.motor_count>128)return false;
+#endif
+    memcpy(memory,&value,size);host->locomotion_root_motion(host->engine,value.actor,value.rig.root_node,value.root_motion);present(memory,host);return true;}
 AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t version){
     static const af_game_module api={.abi_version=AF_GAME_ABI_VERSION,.struct_size=sizeof(af_game_module),.host_size=sizeof(af_game_host),.object_size=sizeof(af_scene_object),.name="Afterlight animated character course",.state_size=sizeof(character_state),.init=init,.update=update,.shutdown=shutdown,.frame_update=frame,.state_version=1,.save_state=save_state,.load_state=load_state};
     return version==AF_GAME_ABI_VERSION?&api:NULL;

@@ -216,3 +216,20 @@ module for pushing/grabbing/throwing, pause/step, reload and edit isolation.
 Run the full native Debug and ASan/UBSan suites serially for window focus, and
 Linux ASan/UBSan CPU tests with `ctest --test-dir BUILD -LE graphics`. Physics
 timing samples are machine-specific diagnostics, not performance gates.
+
+## 0.15 physics and machinery checks
+
+`physics_landing` reproduces the old launch bug with real character stepping,
+center/edge/corner landings and a second jump. `physics_broadphase` checks sparse
+continuous scenes. `physics_islands` checks group sleep/wake and lost supports;
+`joint_stress` exercises 12 links / 16:1 mass ratios at 30/60/144 Hz.
+`joint_diagnostics` compares reaction to a suspended weight; `hinge_motor` checks
+acceleration, torque budgets, target speeds, braking, stops and persistence.
+`joint_gizmo` checks world/body conversion, snapped drags and grouped history.
+
+`motor_scene` runs the powered-door room before the machinery playground, checking
+finite bodies, joint errors and motor torque budgets. `machinery_demo` runs their
+actual C module through brake/reverse/reset, pause/single-step and hot reload.
+`machinery_export` removes sources, relocates both exports and repeats Play.
+The standalone Release `afterlight_physics_benchmark` reports 64/128/256 bodies
+without enabling the whole test suite; timings are diagnostics, not CI gates.

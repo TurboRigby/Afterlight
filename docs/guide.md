@@ -13,10 +13,10 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
-Afterlight 0.14 adds static imported mesh collision, BVHs, distance and hinge
-constraints, editor authoring and mechanical demos. Start with
-`run_mesh-room_editor`, then `run_mechanical-playground_editor`. See
-[0.14 features and limitations](development-014.md).
+Afterlight 0.15 adds physics profiling/optimization, sleeping constraint islands,
+warm-started joints, torque-limited motors and viewport joint editing. Start with
+`run_motor-room_editor`, then `run_machinery-playground_editor`. See
+[0.15 features and limitations](development-015.md).
 
 Afterlight 0.12 adds configurable rigs, named input/controller bindings, prefabs,
 stateful C reload, scene transitions, spatial audio and alpha materials. Start
@@ -367,7 +367,7 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](game-code.md).
 
-The scene format is version 14 and still reads versions 1–13. Asset bytes stay in
+The scene format is version 15 and still reads versions 1–14. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](assets.md),
 [scene format](scene-format.md) and [editor controls](editor.md).
 

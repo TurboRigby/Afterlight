@@ -128,5 +128,25 @@
     "mouse_axis": -1,
     "deadzone": 0.18,
     "scale": 1
+  },
+  {
+    "name": "MotorToggle",
+    "negative_key": -1,
+    "positive_key": 22,
+    "pad_button": -1,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "MotorReverse",
+    "negative_key": -1,
+    "positive_key": 26,
+    "pad_button": -1,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
   }
 ]

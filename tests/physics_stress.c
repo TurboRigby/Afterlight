@@ -36,15 +36,17 @@ static int compare(const void *a, const void *b) {
     return (x > y) - (x < y);
 }
 int main(void) {
-    puts("bodies,samples,mean_cpu_ms,p95_cpu_ms,max_penetration,contacts,pairs,sync_ms,broadphase_ms,narrowphase_ms,ccd_ms,solver_ms,cache_probes");
-    #ifdef AF_PHYSICS_BENCHMARK
-    unsigned counts[]={64,128,256};
+    puts("bodies,samples,mean_cpu_ms,p95_cpu_ms,max_penetration,contacts,pairs,sync_ms,broadphase_ms,"
+         "narrowphase_ms,ccd_ms,solver_ms,cache_probes");
+#ifdef AF_PHYSICS_BENCHMARK
+    unsigned counts[] = {64, 128, 256};
 #else
-    unsigned counts[]={16,64};
+    unsigned counts[] = {16, 64};
 #endif
-    for (unsigned test = 0; test < sizeof(counts)/sizeof(counts[0]); ++test) {
+    for (unsigned test = 0; test < sizeof(counts) / sizeof(counts[0]); ++test) {
         af_scene *s = af_scene_create();
-        af_physics *p = af_physics_create();af_physics_set_profiling(p,true);
+        af_physics *p = af_physics_create();
+        af_physics_set_profiling(p, true);
         CHECK(s && p && box(s, (af_vec3){0, -.5f, 0}, (af_vec3){100, .5f, 100}, 0));
         af_object_id ids[256];
         for (unsigned i = 0; i < counts[test]; ++i) {
@@ -78,8 +80,10 @@ int main(void) {
         }
         qsort(times, 60, sizeof(double), compare);
         af_physics_stats stats = af_physics_get_stats(p);
-        printf("%u,60,%.4f,%.4f,%.5f,%zu,%zu,%.4f,%.4f,%.4f,%.4f,%.4f,%zu\n", counts[test], total / 60, times[56], peak,
-               stats.contacts, stats.broadphase_pairs,stats.sync_ms,stats.broadphase_ms,stats.narrowphase_ms,stats.ccd_ms,stats.solver_ms,stats.cache_probes);
+        printf("%u,60,%.4f,%.4f,%.5f,%zu,%zu,%.4f,%.4f,%.4f,%.4f,%.4f,%zu\n", counts[test], total / 60,
+               times[56], peak, stats.contacts, stats.broadphase_pairs, stats.sync_ms,
+               stats.broadphase_ms, stats.narrowphase_ms, stats.ccd_ms, stats.solver_ms,
+               stats.cache_probes);
         af_physics_destroy(p);
         af_scene_destroy(s);
     }

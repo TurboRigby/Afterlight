@@ -215,3 +215,21 @@ world. Edit anchors in body units, hinge axes and perpendicular zero references,
 and optional degree limits. **Physics** overlays draw anchors, axes, reference
 rays and limit arcs in Edit and Play. Edits/deletion support undo and redo.
 See [the full physics contract](development-014.md).
+
+## Powered mechanisms and viewport joints (0.15)
+
+Use Hinge motor, Speed and Max torque in a hinge's inspector. Speed measures
+body B relative to A, in radians per second; torque uses newton-metres.
+During Play the inspector reports sleeping state, anchor error, angle and cached
+reaction forces/torques. The Performance panel separates physics phases and
+shows islands, cache probes and CCD clamps.
+
+Choose Drag anchor A/B or Rotate axis A/B for viewport handles/rings. Snap uses
+0.5 units for anchors and 15 degrees for orientation. Axis rotation preserves a
+perpendicular zero reference. Release commits one grouped undo operation; Escape
+cancels. Finish joint edit restores the object tools. Body anchors use unscaled
+collider axes, including on scaled objects; world endpoints use world units.
+
+Start with `run_motor-room_editor`, then `run_machinery-playground_editor`. In
+Play, Z brakes/resumes motors, X reverses them, R restores authored poses/targets
+and N switches rooms. The usual movement, pushing, grabbing and throwing remain.

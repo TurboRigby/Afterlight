@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#include "collision_internal.h"
 #include "physics_internal.h"
 #include "triangle_collision.h"
-#include "collision_internal.h"
 #include <stdlib.h>
 static af_vec3 add(af_vec3 a, af_vec3 b) {
     return af_vec3_add(a, b);
@@ -60,7 +60,16 @@ static float projected(const ph_body *b, af_vec3 n) {
 }
 static float distance(const ph_body *a, const ph_body *b, const af_triangle *triangle, af_vec3 *normal,
                       af_vec3 *point) {
-    if(a->character_proxy||b->character_proxy){const ph_body *player=a->character_proxy?a:b,*other=player==a?b:a;af_collision_hit hit;float d=af_collision_capsule_distance(other->shape,player->p,player->shape.radius,player->shape.half_extents.y-player->shape.radius,&hit);*normal=player==a?mul(hit.normal,-1):hit.normal;*point=hit.point;return d;}
+    if (a->character_proxy || b->character_proxy) {
+        const ph_body *player = a->character_proxy ? a : b, *other = player == a ? b : a;
+        af_collision_hit hit;
+        float d =
+            af_collision_capsule_distance(other->shape, player->p, player->shape.radius,
+                                          player->shape.half_extents.y - player->shape.radius, &hit);
+        *normal = player == a ? mul(hit.normal, -1) : hit.normal;
+        *point = hit.point;
+        return d;
+    }
     if (triangle && a->shape.type == AF_COLLIDER_SPHERE) {
         af_collision_hit hit;
         float d = tc_capsule_triangle(*triangle, a->p, a->shape.radius, 0, &hit);
@@ -241,13 +250,26 @@ void ph_advance(af_physics *p, float dt) {
         float earliest = remaining;
         af_vec3 normal = {0}, point = {0};
         bool hit = false;
-        bool continuous=false;for(size_t i=0;i<p->count;++i)continuous|=p->bodies[i].config.continuous;if(!continuous){advance_all(p,remaining);return;}
-        ph_bounds(p,p->ccd_bounds,remaining,true);
-        for(size_t one=0;one<p->count;++one)
-            for(size_t two=one+1;two<p->count&&p->ccd_bounds[two].key_low<=p->ccd_bounds[one].key_high;++two){
-                if(!ph_bounds_overlap(p->ccd_bounds[one],p->ccd_bounds[two]))continue;
-                size_t i=p->ccd_bounds[one].body,j=p->ccd_bounds[two].body;if(i>j){size_t swap=i;i=j;j=swap;}
-                ph_body *a=&p->bodies[i],*b=&p->bodies[j];
+        bool continuous = false;
+        for (size_t i = 0; i < p->count; ++i)
+            continuous |= p->bodies[i].config.continuous;
+        if (!continuous) {
+            advance_all(p, remaining);
+            return;
+        }
+        ph_bounds(p, p->ccd_bounds, remaining, true);
+        for (size_t one = 0; one < p->count; ++one)
+            for (size_t two = one + 1;
+                 two < p->count && p->ccd_bounds[two].key_low <= p->ccd_bounds[one].key_high; ++two) {
+                if (!ph_bounds_overlap(p->ccd_bounds[one], p->ccd_bounds[two]))
+                    continue;
+                size_t i = p->ccd_bounds[one].body, j = p->ccd_bounds[two].body;
+                if (i > j) {
+                    size_t swap = i;
+                    i = j;
+                    j = swap;
+                }
+                ph_body *a = &p->bodies[i], *b = &p->bodies[j];
                 bool ignored = false;
                 for (size_t k = 0; k < ignored_count; ++k)
                     ignored |= ignored_a[k] == i && ignored_b[k] == j;
