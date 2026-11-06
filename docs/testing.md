@@ -8,7 +8,7 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-The 61-test Debug suite covers the Apple M4/MoltenVK path, including
+The Debug suite covers the Apple M4/MoltenVK path, including
 Vulkan synchronization validation, actual pixel comparisons, fixed simulation,
 collisions, the controller and obstacle-course gameplay. Graphics tests require
 a desktop and Vulkan driver. The macOS-only module-unload regression accounts
@@ -166,3 +166,16 @@ macOS, 37 on Linux; hosted jobs exclude its 23 desktop graphics checks.
 
 `afterlight_profile` produces fixed-camera CSV measurements rather than asserting
 an FPS threshold. See [profiling and demo commands](development-010.md).
+
+
+## 0.11 animated character checks
+
+See [the development notes](development-011.md) for the two playable scenes,
+64-rig CPU benchmark and limits. `afterlight.third_person`, `locomotion`,
+`locomotion_player`, `animation_events`, `root_motion`, `locomotion_runtime`,
+`character_game` and `animation_stress` cover CPU controls, blended poses,
+marker boundaries/overflow, collision-resolved motion, diagnostics and scaling.
+The animation-data regression also rejects malformed marker metadata.
+`character_demo_play`, `character_simple`, `character_course`, `character_crowd`
+and `character_export` cover the real C module, camera, renderer and relocated
+exports. `afterlight.dco` runs the seven sign-off-checker regressions.

@@ -74,6 +74,7 @@ typedef struct af_game_host {
     af_third_person (*third_person_default)(af_vec3);
     void (*third_person_look)(af_third_person*,af_third_person_config,af_vec2);
     bool (*third_person_step)(const af_scene*,af_third_person*,af_third_person_config,af_third_person_input,float,af_query_filter);
+    bool (*third_person_step_root_motion)(const af_scene*,af_third_person*,af_third_person_config,af_third_person_input,af_vec3,float,af_query_filter);
     bool (*third_person_camera)(const af_scene*,af_third_person*,af_third_person_config,float,af_query_filter,af_camera*);
 } af_game_host;
 typedef struct af_game_module {

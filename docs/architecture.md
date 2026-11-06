@@ -448,3 +448,12 @@ are copied into per-frame storage buffers after owner fences. Scene and shadow
 shaders share four-influence deformation; palette revisions invalidate cached
 maps. Physics still uses authored colliders. See
 [limits, timing, ownership and source references](development-010.md).
+
+## Playable character runtime (0.11)
+
+[The 0.11 notes](development-011.md) describe the C third-person controller,
+fixed-tick locomotion driver, synchronized adjacent clip blending, validated
+animation markers, bounded event queues, horizontal root-motion extraction and
+posed skeleton queries. Game ABI is 10; scene format remains 10. The pose runtime
+builds an object-ID index once per update and reuses per-instance transition
+buffers. `cpu_animation_ms` measures pose/world/palette work inside render time.

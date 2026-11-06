@@ -23,5 +23,6 @@ af_third_person af_third_person_default(af_vec3 capsule_center);
    camera-right, Move.y camera-forward. Camera collision excludes triggers. */
 void af_third_person_look(af_third_person *player,af_third_person_config config,af_vec2 pixels);
 bool af_third_person_step(const struct af_scene *scene,af_third_person *player,af_third_person_config config,af_third_person_input input,float delta,af_query_filter filter);
+bool af_third_person_step_root_motion(const struct af_scene*,af_third_person*,af_third_person_config,af_third_person_input,af_vec3 local_delta,float delta,af_query_filter);
 bool af_third_person_camera(const struct af_scene *scene,af_third_person *player,af_third_person_config config,float delta,af_query_filter filter,af_camera *camera);
 #endif

@@ -11,21 +11,26 @@ distribution](docs/licensing.md), including how MPL applies to C game templates.
 Contributions require a **DCO sign-off on every commit** (`git commit -s`).
 Read the [contribution instructions](CONTRIBUTING.md) and [DCO 1.1](DCO).
 
-Afterlight **0.10** adds glTF transform/skeletal animation, editor clip previews
-and C playback controls, background HDR baking, and measured rendering improvements.
-Try the simple mechanism first, then the two-character stage:
+Afterlight **0.11** adds a playable third-person character: camera collision,
+Idle/Walk/Run/Jump/Fall states, speed blending, footstep/landing events, optional
+root motion, and posed-skeleton debugging. Try the practice scene, then the course:
 
 ```sh
 cmake --preset debug
-cmake --build --preset debug --target run_mechanism_editor
-cmake --build --preset debug --target run_animation_editor
+cmake --build --preset debug --target run_character_editor
+cmake --build --preset debug --target run_character-course_editor
 ```
 
-Press **Play** to run the C demo. Clips cycle automatically; **Space** chooses a
-clip and **WASD** moves the first actor. In Edit, select the imported model and
-open **Animation clips** to preview, blend and scrub without changing transforms.
-See [animation workflow, architecture and limits](docs/development-010.md).
-The [Lighting Lab](docs/assets-09.md) remains available through `run_lighting_editor`.
+Press **Play**. **WASD** walks, **Shift** runs, **Space** jumps, **E** toggles
+root motion, **R** restarts and **Escape** releases the mouse. Use
+`run_character_player` or `run_character-course_player` for standalone play.
+Select the character's imported model and open **Animation clips** to see its
+posed skeleton, state, weights, phase and events. `run_character-stress_editor`
+opens the 64-character scene. See [0.11 workflow and limits](docs/development-011.md).
+
+The earlier [animation demos](docs/development-010.md) remain available through
+`run_mechanism_editor` and `run_animation_editor`, and the
+[Lighting Lab](docs/assets-09.md) through `run_lighting_editor`.
 
 The sandbox renders two independently animated cubes, an imported textured pyramid, and a ground platform
 over a dusk background. Four named scene objects use shared meshes and image textures.
@@ -149,7 +154,8 @@ set `VK_LAYER_PATH` to the directory containing `VkLayer_khronos_validation.json
 ### Linux and Windows
 
 The code uses SDL3 and Vulkan rather than platform-specific window APIs. These
-platforms have not yet been tested. Install the prerequisites with your package
+Linux CPU builds and sanitizer checks run in CI; an interactive Linux Vulkan session
+and Windows remain unverified. Install the prerequisites with your package
 manager or the Vulkan SDK, and use the same CMake presets from a shell with a C
 compiler and Ninja available. Set `CMAKE_PREFIX_PATH` in a local
 `CMakeUserPresets.json` if SDL3 is outside CMake's search path.
@@ -176,7 +182,7 @@ to the executable to override the default. `--help` lists the sandbox arguments.
 ctest --preset debug
 ```
 
-The 61-test suite includes CPU shadow fitting and GPU pixel checks for both the
+The test suite includes CPU shadow fitting and GPU pixel checks for both the
 simple single map and four-cascade variant: cast/receive switches, PCF edges,
 cascade selection/blending, offscreen and distant casters, parent visibility,
 quality changes and resizing. Graphics tests enable synchronization validation.
@@ -344,7 +350,7 @@ source files referenced by the manifest. See [assets/materials](docs/assets.md),
 
 ## Next milestones
 
-- Morph animation, animation events/root motion and richer material extensions.
+- Morph animation, richer character rigs and material extensions.
 - Reflection probes, multiscale bloom and adaptive local shadows.
 - Rigid-body dynamics, spatial/streaming audio and module state migration.
 

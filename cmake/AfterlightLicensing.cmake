@@ -17,7 +17,7 @@ add_custom_command(OUTPUT "${afterlight_source_archive}"
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/package_source.py"
         --root "${PROJECT_SOURCE_DIR}" --output "${afterlight_source_archive}"
     DEPENDS ${afterlight_source_inputs} CMakeLists.txt CMakePresets.json README.md
-        LICENSE NOTICE THIRD_PARTY_NOTICES.md .gitignore .gitattributes
+        LICENSE NOTICE THIRD_PARTY_NOTICES.md CONTRIBUTING.md DCO .gitignore .gitattributes
     COMMENT "Archiving Afterlight source for MPL distribution" VERBATIM)
 add_custom_target(afterlight_source DEPENDS "${afterlight_source_archive}")
 

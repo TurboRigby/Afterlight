@@ -75,3 +75,63 @@ after indexing scene IDs once per update and reusing refreshed instances.
 Transition capture buffers are also reused. These are CPU-only measurements;
 GPU skinning/shadows are exercised separately. The Performance panel exposes
 animation CPU time, included in its render total.
+
+
+## Playable demos and compatibility
+
+Run `run_character_editor` first, then `run_character-course_editor`; press Play.
+The matching `run_character_player` and `run_character-course_player` targets
+start standalone games. WASD walks, Shift runs, Space jumps, E switches between
+velocity and root motion, R restarts, Escape releases the mouse. The course keeps
+ordered checkpoints, goal locking, moving platforms, falling/respawn and timers.
+Right mouse in editor Play temporarily returns to the editor camera.
+
+The C module uses a 0.65-scale visual rig attached to the unit-scale capsule.
+Walk/run speeds are 1.3/3.25 world units per second; the rig's 2/5 model-space
+speeds and extracted displacement are scaled consistently. Velocity mode blends
+from collision-resolved speed. Root mode uses requested speed and the preceding
+contact result before moving through collision; contacts reach its animation on
+the following fixed tick. The module assumes this fixture's root node 10 and
+all five named clips. Crowd actors are visual-only, without individual controllers.
+The 64-character stress scene shares assets and has independently driven poses.
+
+Regenerate scenes deliberately (this overwrites these three sample files):
+
+```sh
+cmake --build --preset debug --target afterlight_character_builder
+build/debug/afterlight_character_builder "$PWD/sandbox/assets" \
+  "$PWD/sandbox/scenes/obstacle.afterlight.json" "$PWD/sandbox/scenes"
+```
+
+Scene format remains **10**, reading 1–9. These are runtime controls and do not
+add serialized fields. C game ABI is **10**: rebuild custom modules against the
+current headers. Source archives include the new C code, original assets,
+contribution instructions and DCO. No editor or custom module should be hot-loaded
+across an ABI change; restart the editor after rebuilding.
+
+The CPU role regression runs the course after renaming objects and verifies
+ordered checkpoints, respawn, a locked goal, finish, restart and timer freezing.
+A Vulkan Play test loads the real module, exercises movement states/events/root
+motion, checks startup camera and authored-scene isolation, and resizes during
+course play. Separate simple/course/crowd smoke tests check validation. Export
+checks remove the source project before relocating and running both games.
+
+
+## Verified results
+
+On Apple M4/MoltenVK, the 75-test Debug suite and 75-test ASan/UBSan suite
+passed with synchronization validation. After isolating native mouse motion
+from the scripted character inputs, the affected Debug checks passed three
+consecutive runs; the final sanitizer control check also passed. The Linux
+Clang 18 ASan/UBSan build passed all 46 CPU tests. Both Release character exports
+ran after source deletion and relocation. Sanitizer exports are rejected.
+
+The Release fixed-camera profiler on the 64-rig scene measured 0.550 ms mean CPU
+animation work and 2.334 ms mean completed GPU frame time (120 samples after 30
+warmup frames, 1280×800 window at 2× display scale). This profiler uses automatic
+clip playback and excludes presentation from GPU timestamps. These numbers are
+machine-specific and are not pass/fail budgets. Run:
+
+```sh
+build/release/afterlight_profile sandbox/scenes/character-stress.afterlight.json
+```

@@ -8,7 +8,7 @@
 #include <afterlight/scene.h>
 #include <math.h>
 bool af_character_step_root_motion(const struct af_scene *scene,af_character *c,af_character_config config,af_vec3 displacement,bool jump,float dt,af_query_filter filter){
-    if(!isfinite(dt)||dt<=0||dt>.1f||!isfinite(displacement.x)||!isfinite(displacement.y)||!isfinite(displacement.z))return false;
+    if(!af_character_config_valid(config)||!isfinite(dt)||dt<=0||dt>.1f||!isfinite(displacement.x)||!isfinite(displacement.y)||!isfinite(displacement.z))return false;
     displacement.y=0;float length=af_vec3_length(displacement);if(!isfinite(length)||length/dt>100)return false;
     config.speed=length/dt;return af_character_step(scene,c,config,(af_character_input){.move=length>0?af_vec3_scale(displacement,1/length):(af_vec3){0},.jump=jump},dt,filter);
 }
