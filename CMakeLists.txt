@@ -387,6 +387,10 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_root_motion_test tests/root_motion.c)
+    target_link_libraries(afterlight_root_motion_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_root_motion_test)
+    add_test(NAME afterlight.root_motion COMMAND afterlight_root_motion_test "${PROJECT_SOURCE_DIR}/sandbox/assets/locomotion.gltf")
     add_executable(afterlight_animation_events_test tests/animation_events.c)
     target_link_libraries(afterlight_animation_events_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_animation_events_test)

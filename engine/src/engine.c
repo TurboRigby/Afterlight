@@ -614,3 +614,6 @@ bool af_engine_animated_world_matrix(const af_engine *e,af_object_id object,af_m
 bool af_engine_locomotion_step(af_engine *e,af_object_id object,af_locomotion_input input,float delta,af_locomotion *status){return e&&af_animation_runtime_locomotion(e->animations,object,input,delta,status);}
 
 bool af_engine_animation_events(af_engine *e,af_object_id object,af_animation_events *out){return e&&af_animation_runtime_events(e->animations,object,out);}
+
+bool af_engine_locomotion_root_motion(af_engine *e,af_object_id object,uint32_t node,bool enabled){return e&&af_animation_runtime_root_motion(e->animations,object,node,enabled);}
+bool af_engine_locomotion_root_delta(af_engine *e,af_object_id object,af_vec3 *out){return e&&af_animation_runtime_root_delta(e->animations,object,out);}

@@ -15,6 +15,8 @@ af_animation_status af_animation_runtime_status(af_animation_runtime *runtime,af
 bool af_animation_runtime_clip(af_animation_runtime *runtime,af_object_id object,size_t clip,af_animation_clip_info *info);
 bool af_animation_runtime_locomotion(af_animation_runtime *runtime,af_object_id object,af_locomotion_input input,float delta,af_locomotion *status);
 bool af_animation_runtime_events(af_animation_runtime*,af_object_id,af_animation_events*);
+bool af_animation_runtime_root_motion(af_animation_runtime*,af_object_id,uint32_t node,bool enabled);
+bool af_animation_runtime_root_delta(af_animation_runtime*,af_object_id,af_vec3*);
 bool af_animation_runtime_play(af_animation_runtime *runtime,af_object_id object,size_t clip,float blend);
 bool af_animation_runtime_pause(af_animation_runtime *runtime,af_object_id object,bool paused);
 bool af_animation_runtime_stop(af_animation_runtime *runtime,af_object_id object);

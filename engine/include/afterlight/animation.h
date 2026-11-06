@@ -37,6 +37,9 @@ bool af_animation_file_load(const char *path,af_animation_file *out,af_asset_err
 void af_animation_file_free(af_animation_file *file);
 /* Output has file->node_count entries. Time clamps per channel. */
 bool af_animation_sample(const af_animation_file *file,size_t clip,double time,af_animation_pose *out,size_t capacity);
+/* Extracts translation across loop boundaries, including full cycles. Rotation
+   and vertical character physics remain caller-controlled. No pose allocation. */
+bool af_animation_root_delta(const af_animation_file *file,size_t clip,uint32_t node,double time,double delta,bool loop,af_vec3 *out);
 af_vec4 af_quaternion_normalize(af_vec4 q);
 af_vec4 af_quaternion_slerp(af_vec4 a,af_vec4 b,float t);
 af_vec4 af_quaternion_from_euler(af_vec3 radians);

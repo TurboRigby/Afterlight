@@ -64,6 +64,11 @@ af_animation_status af_animation_runtime_status(af_animation_runtime *r,af_objec
 bool af_animation_runtime_clip(af_animation_runtime *r,af_object_id object,size_t clip,af_animation_clip_info *info){animation_instance *i=instance(r,object);animation_asset *a=i?asset(r,i->configuration.asset):NULL;if(!a||!info||clip>=a->file.clip_count)return false;snprintf(info->name,sizeof(info->name),"%s",a->file.clips[clip].name);info->duration=a->file.clips[clip].duration;return true;}
 static void queue_events(animation_instance *i,const af_animation_events *events){i->events.dropped+=events->dropped;for(size_t j=0;j<events->count;++j){if(i->events.count<AF_ANIMATION_EVENT_BATCH)i->events.items[i->events.count++]=events->items[j];else ++i->events.dropped;}}
 bool af_animation_runtime_events(af_animation_runtime *r,af_object_id object,af_animation_events *out){animation_instance *i=instance(r,object);if(!i||!out)return false;*out=i->events;i->events=(af_animation_events){0};return true;}
+bool af_animation_runtime_root_motion(af_animation_runtime *r,af_object_id object,uint32_t node,bool enabled){
+    animation_instance *i=instance(r,object);if(!i)return false;animation_asset *a=asset(r,i->configuration.asset);if(node>=a->file.node_count)return false;
+    if(!i->locomotion.ready&&!af_locomotion_player_init(&i->locomotion,&a->file))return false;i->locomotion.root_node=node;i->locomotion.root_motion=enabled;return true;
+}
+bool af_animation_runtime_root_delta(af_animation_runtime *r,af_object_id object,af_vec3 *out){animation_instance *i=instance(r,object);if(!i||!out||!i->driven)return false;*out=i->locomotion.root_delta;return true;}
 bool af_animation_runtime_locomotion(af_animation_runtime *r,af_object_id object,af_locomotion_input input,float dt,af_locomotion *status){
     animation_instance *i=instance(r,object);if(!i)return false;animation_asset *a=asset(r,i->configuration.asset);
     if(!i->locomotion.ready&&!af_locomotion_player_init(&i->locomotion,&a->file))return false;

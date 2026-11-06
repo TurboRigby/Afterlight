@@ -24,6 +24,9 @@ typedef struct af_locomotion_player {
     float weights[3];
     af_animation_pose *scratch,*frozen;
     af_animation_events events;
+    uint32_t root_node;
+    bool root_motion;
+    af_vec3 root_delta;
     bool ready;
 } af_locomotion_player;
 bool af_locomotion_player_init(af_locomotion_player *player,const af_animation_file *file);

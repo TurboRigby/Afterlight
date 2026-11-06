@@ -42,3 +42,15 @@ multiple loops and reverse traversal. Events exclude the old time and include
 the new time; seeking emits none. C modules drain `animation_events`; overflow
 is counted. Ground blending emits markers from its dominant moving clip once,
 and collision-driven landing adds `land`. Each instance queues at most 16 events.
+
+## Optional root motion
+
+Configure `locomotion_root_motion(root,node,enabled)` before driving a rig. Both
+modes strip horizontal translation from the selected node to avoid double
+movement. Enabled extraction blends clip displacements across full loops and
+returns `locomotion_root_delta` in model space each fixed tick. Rotate it into
+world space and pass it to `move_character_root_motion`: capsule sweeps, wall
+sliding, slopes and platform carry still apply. Gravity and jump own Y; turning
+is controller-driven. Air movement uses the regular controller. The playable
+fixture uses glTF node 10 with forward motion on -Z. Root motion is translation
+only; arbitrary root rotation/vertical trajectories are not extracted.

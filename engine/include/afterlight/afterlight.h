@@ -131,6 +131,8 @@ bool af_engine_animation_clip(const af_engine *engine,af_object_id root,size_t c
 bool af_engine_locomotion_step(af_engine *engine,af_object_id root,af_locomotion_input input,float delta,af_locomotion *status);
 /* Drains the bounded event queue; dropped reports overflow since the last drain. */
 bool af_engine_animation_events(af_engine*,af_object_id,af_animation_events*);
+bool af_engine_locomotion_root_motion(af_engine*,af_object_id,uint32_t node,bool enabled);
+bool af_engine_locomotion_root_delta(af_engine*,af_object_id,af_vec3*);
 bool af_engine_animation_play(af_engine *engine,af_object_id root,size_t clip,float blend_seconds);
 bool af_engine_animation_pause(af_engine *engine,af_object_id root,bool paused);
 bool af_engine_animation_stop(af_engine *engine,af_object_id root);

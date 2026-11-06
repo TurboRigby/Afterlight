@@ -120,6 +120,11 @@ robot = {'asset': {'version':'2.0','generator':'Afterlight original nine-joint c
 run = clip('Run', [(8,'rotation',[quat(x=v) for v in [-1,1,-1,1,-1]]),(9,'rotation',[quat(x=v) for v in [1,-1,1,-1,1]]),(4,'rotation',[quat(x=v,z=1.1) for v in [.8,-.8,.8,-.8,.8]]),(6,'rotation',[quat(x=v,z=-1.1) for v in [-.8,.8,-.8,.8,-.8]]),(1,'translation',[(0,1.1,0),(0,1.28,0),(0,1.1,0),(0,1.28,0),(0,1.1,0)])])
 jump = clip('Jump', [(8,'rotation',[quat(x=-.6)]*5),(9,'rotation',[quat(x=.35)]*5),(4,'rotation',[quat(z=.6)]*5),(6,'rotation',[quat(z=-.6)]*5)])
 fall = clip('Fall', [(8,'rotation',[quat(x=.2)]*5),(9,'rotation',[quat(x=-.2)]*5),(4,'rotation',[quat(z=.1)]*5),(6,'rotation',[quat(z=-.1)]*5)])
+# Rig node 10 moves forward at 2/5 m/s. The driver strips XZ when extraction is enabled.
+for animation, distance in [(walk,4),(run,10)]:
+    output=accessor([(0,0,-distance*t/2) for t in [0,.5,1,1.5,2]],3,'VEC3')
+    animation['channels'].append({'sampler':len(animation['samplers']),'target':{'node':10,'path':'translation'}})
+    animation['samplers'].append({'input':robot_times,'output':output})
 playable = json.loads(json.dumps(robot))
 playable['animations'] = [idle,walk,run,jump,fall]
 for animation in playable['animations'][1:3]:

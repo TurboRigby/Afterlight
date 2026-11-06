@@ -48,6 +48,14 @@ bool af_animation_sample(const af_animation_file *file,size_t clip_index,double 
         float components[]={p->translation.x,p->translation.y,p->translation.z,p->scale.x,p->scale.y,p->scale.z,v.x,v.y,v.z,v.w};for(unsigned k=0;k<10;++k)if(!isfinite(components[k]))return false;
     }return true;
 }
+bool af_animation_root_delta(const af_animation_file *f,size_t clip,uint32_t node,double time,double delta,bool loop,af_vec3 *out){
+    if(!f||!out||clip>=f->clip_count||node>=f->node_count||!isfinite(time)||fabs(time)>1e9||!isfinite(delta)||fabs(delta)>8640000)return false;
+    const af_animation_clip *c=&f->clips[clip];double d=c->duration;if(!isfinite(d)||d<=0)return false;
+    *out=(af_vec3){0};const af_animation_channel *track=NULL;for(size_t i=0;i<c->channel_count;++i)if(c->channels[i].node==node&&c->channels[i].path==AF_ANIM_TRANSLATION){track=&c->channels[i];break;}if(!track)return true;
+    double a=time,b=time+delta,cycles=0;if(loop){double ca=floor(a/d),cb=floor(b/d);cycles=cb-ca;a-=ca*d;b-=cb*d;}else{a=fmax(0,fmin(d,a));b=fmax(0,fmin(d,b));}
+    af_vec4 va=channel_value(track,a),vb=channel_value(track,b),start=channel_value(track,0),end=channel_value(track,d);
+    *out=(af_vec3){(float)(vb.x-va.x+cycles*(end.x-start.x)),(float)(vb.y-va.y+cycles*(end.y-start.y)),(float)(vb.z-va.z+cycles*(end.z-start.z))};return isfinite(out->x)&&isfinite(out->y)&&isfinite(out->z);
+}
 static bool world_node(const af_animation_file *file,const af_animation_pose *poses,size_t node,af_mat4 *world,unsigned char *ready,unsigned depth){
     if(ready[node])return true;if(depth>=128)return false;af_mat4 local=af_animation_pose_matrix(poses[node]);int32_t parent=file->parents[node];
     if(parent>=0){if((size_t)parent>=file->node_count||!world_node(file,poses,(size_t)parent,world,ready,depth+1))return false;local=af_mat4_mul(world[parent],local);}for(unsigned i=0;i<16;++i)if(!isfinite(local.elements[i]))return false;world[node]=local;ready[node]=1;return true;

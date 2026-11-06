@@ -5,7 +5,7 @@
 #include <string.h>
 bool af_locomotion_player_init(af_locomotion_player *p,const af_animation_file *f){
     if(!p||!f||!f->node_count||f->node_count>AF_ANIMATION_MAX_NODES)return false;
-    af_locomotion_player next={.motion=af_locomotion_default(),.node_count=f->node_count,.weights={1,0,0}};
+    af_locomotion_player next={.motion=af_locomotion_default(),.node_count=f->node_count,.weights={1,0,0},.root_node=UINT32_MAX};
     for(size_t i=0;i<5;++i){next.clips[i]=SIZE_MAX;for(size_t j=0;j<f->clip_count;++j)if(!strcmp(af_locomotion_state_name((af_locomotion_state)i),f->clips[j].name)){next.clips[i]=j;break;}if(next.clips[i]==SIZE_MAX||f->clips[next.clips[i]].duration<=0)return false;}
     next.scratch=calloc(f->node_count,sizeof(*next.scratch));next.frozen=calloc(f->node_count,sizeof(*next.frozen));if(!next.scratch||!next.frozen){free(next.scratch);free(next.frozen);return false;}
     memcpy(next.frozen,f->bind_pose,f->node_count*sizeof(*next.frozen));next.ready=true;*p=next;return true;
@@ -20,7 +20,8 @@ bool af_locomotion_player_sample(af_locomotion_player *p,const af_animation_file
         if(p->weights[b]>0){if(!af_animation_sample(f,p->clips[b],p->motion.phase*f->clips[p->clips[b]].duration,p->scratch,p->node_count))return false;
             /* mix writes its destination: scratch -> out using the adjacent weight. */
             mix(p->scratch,out,p->node_count,p->weights[b]/total);memcpy(out,p->scratch,p->node_count*sizeof(*out));}}
-    if(p->motion.transition<1)mix(out,p->frozen,p->node_count,p->motion.transition);return true;
+    if(p->motion.transition<1)mix(out,p->frozen,p->node_count,p->motion.transition);
+    if(p->root_node!=UINT32_MAX){if(p->root_node>=p->node_count)return false;out[p->root_node].translation.x=f->bind_pose[p->root_node].translation.x;out[p->root_node].translation.z=f->bind_pose[p->root_node].translation.z;}return true;
 }
 bool af_locomotion_player_step(af_locomotion_player *p,const af_animation_file *f,af_locomotion_input in,float dt){
     if(!p||!p->ready||!f||f->node_count!=p->node_count)return false;af_locomotion next=p->motion;if(!af_locomotion_update(&next,in,dt))return false;
@@ -35,5 +36,6 @@ bool af_locomotion_player_step(af_locomotion_player *p,const af_animation_file *
     if(in.grounded&&in.speed>.12f){unsigned dominant=p->weights[2]>.5f?2:1;const af_animation_clip *clip=&f->clips[p->clips[dominant]];
         if(!af_animation_collect_events(clip,next.phase*clip->duration,dt*rate*clip->duration,true,&p->events))return false;}
     if(next.landed&&p->events.count<AF_ANIMATION_EVENT_BATCH)p->events.items[p->events.count++]=(af_animation_event){.name="land"};
+    p->root_delta=(af_vec3){0};if(p->root_motion&&in.grounded){for(unsigned j=0;j<3;++j){af_vec3 delta;const af_animation_clip *c=&f->clips[p->clips[j]];if(!af_animation_root_delta(f,p->clips[j],p->root_node,next.phase*c->duration,dt*rate*c->duration,true,&delta))return false;p->root_delta=af_vec3_add(p->root_delta,af_vec3_scale(delta,p->weights[j]));}p->root_delta.y=0;}
     next.phase=fmod(next.phase+dt*rate,1);p->motion=next;return true;
 }
