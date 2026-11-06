@@ -146,3 +146,46 @@ malformed-skeleton tests verify CPU import and palette math. GPU tests verify
 moving silhouettes, normals, picking, last-good palette retention, directional
 and point shadows, scene switches and resize. Morph targets and more than four
 influences remain unsupported.
+
+## 7. Scene instances, editor and C games
+
+Importing an animated/skinned glTF creates a named `animation` asset and a model
+root. Root configuration stores the startup clip, speed, looping and autoplay;
+node/primitive bindings retain the root ID, source node index and optional skin.
+Duplicating a complete model remaps root IDs and creates independent playback;
+duplicating only a child detaches its animation binding. Reparenting a bound
+subtree outside its root also detaches it. Scene format 10 persists these fields
+and reads versions 1–9 with empty animation defaults.
+
+The runtime owns clip state, sampled poses and palettes separately from authored
+scene data. Animation is applied as a delta from the imported bind transform,
+preserving authored local offsets. Gameplay advances on fixed simulation ticks,
+including paused single steps; previews use frame time. Previous/current authored
+transforms retain normal interpolation. Visual node/skeleton animation does not
+deform colliders or generate root motion; position a character through its model
+root/controller. Posed world matrices are available for visual attachments.
+
+Select an imported model or one of its children, then **Animation clips** in the
+Inspector. Clip selection, Preview, Pause/Resume, Stop, Time, Speed, Loop and Blend
+seconds are runtime controls and do not dirty the document. **Use clip, speed and
+loop as startup defaults** and **Autoplay in game** create normal undoable edits.
+Stopping preview returns to authored transforms. Play uses a separate runtime
+scene and Stop restores the edit scene. Reopening/undoing or changing scene
+identity resets its players. Successful source reload replaces mesh/animation
+resources together and restarts affected players; failed staging keeps old data.
+
+C game ABI is 9. The host table supplies animation play/pause/stop/seek/options,
+status, clip enumeration, root lookup and posed world matrices. Rebuild modules
+and refresh copied headers in generated projects. Example:
+
+```c
+host->animation_play(host->engine, actor, walk_clip, 0.2f);
+host->animation_options(host->engine, actor, 1.0f, true);
+```
+
+Budgets are 32 resident animation assets including staged replacements, 256 MiB
+of decoded library data, 128 model players and 65,536 sampled source nodes across
+players. GPU skinning additionally limits simultaneous primitive palettes to 128.
+Root status reports unavailable resources; missing animation leaves authored
+geometry available. Last computed poses can be queried during callbacks; fresh
+sampling/publication runs after game updates and before rendering.

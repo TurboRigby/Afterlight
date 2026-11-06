@@ -171,7 +171,7 @@ static bool read_gameplay(const cJSON *item,af_gameplay_component *out){
 static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene_error *error)
 {
     static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights"};
-    static const char *const object_fields[] = {"id", "name", "mesh", "visible", "position", "rotation", "scale", "material", "parent", "collider", "gameplay"};
+    static const char *const object_fields[] = {"id", "name", "mesh", "visible", "position", "rotation", "scale", "material", "parent", "collider", "gameplay", "animation", "model"};
     const cJSON *format = cJSON_GetObjectItemCaseSensitive(root, "format");
     const cJSON *version = cJSON_GetObjectItemCaseSensitive(root, "version");
     const cJSON *objects = cJSON_GetObjectItemCaseSensitive(root, "objects");
@@ -181,7 +181,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -204,9 +204,9 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
     const cJSON *item;
     cJSON_ArrayForEach(item, objects) {
         af_scene_object *object = &scene->objects[scene->count];
-        object->material=af_material_default();object->collider=af_collider_default();object->gameplay=af_gameplay_component_default();
+        object->material=af_material_default();object->collider=af_collider_default();object->gameplay=af_gameplay_component_default();object->animation=af_animation_component_default();object->model=af_model_binding_default();
         const cJSON *visible = cJSON_GetObjectItemCaseSensitive(item, "visible");
-        if (!exact_fields(item, object_fields,version->valuedouble==1?7:(version->valuedouble>=6?11:(version->valuedouble>=5?10:9))) ||
+        if (!exact_fields(item, object_fields,version->valuedouble==1?7:(version->valuedouble>=10?13:version->valuedouble>=6?11:(version->valuedouble>=5?10:9))) ||
             !read_id(cJSON_GetObjectItemCaseSensitive(item, "id"), &object->id) || object->id == AF_OBJECT_NONE ||
             (next_id != AF_OBJECT_NONE && object->id >= next_id) || !cJSON_IsBool(visible) ||
             !read_name(cJSON_GetObjectItemCaseSensitive(item, "name"), object->name, sizeof(object->name)) ||
@@ -216,6 +216,14 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             !read_vector(cJSON_GetObjectItemCaseSensitive(item, "scale"), &object->transform.scale)) {
             set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid object at index %zu (ID, name, visibility, or transform).", scene->count);
             goto fail;
+        }
+        if(version->valuedouble>=10){
+            static const char *const animation_fields[]={"asset","clip","speed","autoplay","loop"},*const model_fields[]={"root","node","skin","primitive"};
+            const cJSON *a=cJSON_GetObjectItemCaseSensitive(item,"animation"),*m=cJSON_GetObjectItemCaseSensitive(item,"model");
+            const cJSON *asset=cJSON_GetObjectItemCaseSensitive(a,"asset"),*clip=cJSON_GetObjectItemCaseSensitive(a,"clip"),*autoplay=cJSON_GetObjectItemCaseSensitive(a,"autoplay"),*loop=cJSON_GetObjectItemCaseSensitive(a,"loop"),*node=cJSON_GetObjectItemCaseSensitive(m,"node"),*skin=cJSON_GetObjectItemCaseSensitive(m,"skin"),*primitive=cJSON_GetObjectItemCaseSensitive(m,"primitive");
+            if(!exact_fields(a,animation_fields,5)||!exact_fields(m,model_fields,4)||!cJSON_IsString(asset)||strlen(asset->valuestring)>=sizeof(object->animation.asset)||!cJSON_IsNumber(clip)||!isfinite(clip->valuedouble)||clip->valuedouble<0||clip->valuedouble>=128||floor(clip->valuedouble)!=clip->valuedouble||!read_float_field(a,"speed",&object->animation.speed)||fabsf(object->animation.speed)>100||!cJSON_IsBool(autoplay)||!cJSON_IsBool(loop)||!read_id(cJSON_GetObjectItemCaseSensitive(m,"root"),&object->model.root)||!cJSON_IsNumber(node)||!isfinite(node->valuedouble)||node->valuedouble<0||node->valuedouble>=16384||floor(node->valuedouble)!=node->valuedouble||!cJSON_IsNumber(skin)||!isfinite(skin->valuedouble)||skin->valuedouble< -1||skin->valuedouble>=128||floor(skin->valuedouble)!=skin->valuedouble||!cJSON_IsBool(primitive)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid animation component or model binding.");goto fail;}
+            snprintf(object->animation.asset,sizeof(object->animation.asset),"%s",asset->valuestring);object->animation.clip=(uint32_t)clip->valuedouble;object->animation.autoplay=cJSON_IsTrue(autoplay)!=0;object->animation.loop=cJSON_IsTrue(loop)!=0;
+            object->model.node=(uint32_t)node->valuedouble;object->model.skin=(int32_t)skin->valuedouble;object->model.primitive=cJSON_IsTrue(primitive)!=0;
         }
         if(version->valuedouble>=6&&!read_gameplay(cJSON_GetObjectItemCaseSensitive(item,"gameplay"),&object->gameplay)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid player/camera/gameplay component.");goto fail;}
         if(version->valuedouble>=5){
@@ -269,6 +277,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
     for(size_t i=0;i<scene->count;++i){const af_scene_object *node=&scene->objects[i];unsigned depth=0;
         while(node->parent){if(++depth>=AF_SCENE_MAX_DEPTH||(node=af_scene_get_object(scene,node->parent))==NULL){set_error(error,AF_SCENE_ERROR_FORMAT,"Hierarchy contains a missing parent, cycle or excessive depth.");goto fail;}}
     }
+    for(size_t i=0;i<scene->count;++i)if(!af_scene_set_object_animation(scene,scene->objects[i].id,scene->objects[i].animation)||!af_scene_set_model_binding(scene,scene->objects[i].id,scene->objects[i].model)){set_error(error,AF_SCENE_ERROR_FORMAT,"Animation binding root is missing or outside its hierarchy.");goto fail;}
     if(version->valuedouble>=2){
         static const char *const light_fields[]={"direction","color","intensity","ambient"};
         const cJSON *l=cJSON_GetObjectItemCaseSensitive(root,"light"),*intensity=cJSON_GetObjectItemCaseSensitive(l,"intensity"),*ambient=cJSON_GetObjectItemCaseSensitive(l,"ambient");
@@ -287,9 +296,9 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             const cJSON *kind=cJSON_GetObjectItemCaseSensitive(asset,"kind");
             if(!exact_fields(asset,fields,3)||!read_name(cJSON_GetObjectItemCaseSensitive(asset,"name"),name,sizeof(name))||
                !read_name(cJSON_GetObjectItemCaseSensitive(asset,"path"),path,sizeof(path))||!cJSON_IsString(kind)||
-               (strcmp(kind->valuestring,"mesh")&&strcmp(kind->valuestring,"texture")&&(version->valuedouble<4||strcmp(kind->valuestring,"normal_map"))&&(version->valuedouble<6||strcmp(kind->valuestring,"audio"))&&(version->valuedouble<7||strcmp(kind->valuestring,"metallic_roughness"))&&(version->valuedouble<9||strcmp(kind->valuestring,"environment")))||af_scene_find_asset(scene,name)||
+               (strcmp(kind->valuestring,"mesh")&&strcmp(kind->valuestring,"texture")&&(version->valuedouble<4||strcmp(kind->valuestring,"normal_map"))&&(version->valuedouble<6||strcmp(kind->valuestring,"audio"))&&(version->valuedouble<7||strcmp(kind->valuestring,"metallic_roughness"))&&(version->valuedouble<9||strcmp(kind->valuestring,"environment"))&&(version->valuedouble<10||strcmp(kind->valuestring,"animation")))||af_scene_find_asset(scene,name)||
                !af_asset_resolve_path(scene_path,path,resolved,sizeof(resolved))||
-               !af_scene_set_asset(scene,name,!strcmp(kind->valuestring,"environment")?AF_ASSET_ENVIRONMENT:!strcmp(kind->valuestring,"metallic_roughness")?AF_ASSET_METALLIC_ROUGHNESS:!strcmp(kind->valuestring,"audio")?AF_ASSET_AUDIO:!strcmp(kind->valuestring,"mesh")?AF_ASSET_MESH:!strcmp(kind->valuestring,"normal_map")?AF_ASSET_NORMAL_MAP:AF_ASSET_TEXTURE,resolved)){
+               !af_scene_set_asset(scene,name,!strcmp(kind->valuestring,"animation")?AF_ASSET_ANIMATION:!strcmp(kind->valuestring,"environment")?AF_ASSET_ENVIRONMENT:!strcmp(kind->valuestring,"metallic_roughness")?AF_ASSET_METALLIC_ROUGHNESS:!strcmp(kind->valuestring,"audio")?AF_ASSET_AUDIO:!strcmp(kind->valuestring,"mesh")?AF_ASSET_MESH:!strcmp(kind->valuestring,"normal_map")?AF_ASSET_NORMAL_MAP:AF_ASSET_TEXTURE,resolved)){
                 set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid or duplicate asset reference.");goto fail;
             }
         }
@@ -459,7 +468,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
         const char *reference=a->path;if(!strncmp(reference,folder,strlen(folder)))reference+=strlen(folder);
         cJSON *asset=cJSON_CreateObject();if(!asset)goto fail;
         if(!cJSON_AddItemToArray(assets,asset)){cJSON_Delete(asset);goto fail;}
-        if(!cJSON_AddStringToObject(asset,"name",a->name)||!cJSON_AddStringToObject(asset,"kind",a->kind==AF_ASSET_ENVIRONMENT?"environment":a->kind==AF_ASSET_METALLIC_ROUGHNESS?"metallic_roughness":a->kind==AF_ASSET_AUDIO?"audio":a->kind==AF_ASSET_MESH?"mesh":a->kind==AF_ASSET_NORMAL_MAP?"normal_map":"texture")||!cJSON_AddStringToObject(asset,"path",reference))goto fail;
+        if(!cJSON_AddStringToObject(asset,"name",a->name)||!cJSON_AddStringToObject(asset,"kind",a->kind==AF_ASSET_ANIMATION?"animation":a->kind==AF_ASSET_ENVIRONMENT?"environment":a->kind==AF_ASSET_METALLIC_ROUGHNESS?"metallic_roughness":a->kind==AF_ASSET_AUDIO?"audio":a->kind==AF_ASSET_MESH?"mesh":a->kind==AF_ASSET_NORMAL_MAP?"normal_map":"texture")||!cJSON_AddStringToObject(asset,"path",reference))goto fail;
     }
     for (size_t i = 0; i < scene->count; ++i) {
         const af_scene_object *source = &scene->objects[i];
@@ -467,6 +476,9 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
         if (!object) goto fail;
         if (!cJSON_AddItemToArray(objects, object)) { cJSON_Delete(object); goto fail; }
         if(!add_gameplay(object,source->gameplay))goto fail;
+        const af_animation_component *a=&source->animation;const af_model_binding *binding=&source->model;
+        cJSON *animation=cJSON_AddObjectToObject(object,"animation"),*model=cJSON_AddObjectToObject(object,"model");
+        if(!animation||!model||!memchr(a->asset,0,sizeof(a->asset))||!valid_utf8((const unsigned char*)a->asset,strlen(a->asset))||!cJSON_AddStringToObject(animation,"asset",a->asset)||!cJSON_AddNumberToObject(animation,"clip",a->clip)||!cJSON_AddNumberToObject(animation,"speed",a->speed)||!cJSON_AddBoolToObject(animation,"autoplay",a->autoplay)||!cJSON_AddBoolToObject(animation,"loop",a->loop)||!add_id(model,"root",binding->root)||!cJSON_AddNumberToObject(model,"node",binding->node)||!cJSON_AddNumberToObject(model,"skin",binding->skin)||!cJSON_AddBoolToObject(model,"primitive",binding->primitive))goto fail;
         cJSON *material=cJSON_AddObjectToObject(object,"material");
         double color[]={source->material.base_color.r,source->material.base_color.g,source->material.base_color.b,source->material.base_color.a};
         cJSON *rgba=cJSON_CreateDoubleArray(color,4);

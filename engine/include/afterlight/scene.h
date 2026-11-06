@@ -22,6 +22,10 @@
 
 typedef uint64_t af_object_id;
 typedef struct af_scene af_scene;
+typedef struct af_animation_component {char asset[AF_MESH_NAME_CAPACITY];uint32_t clip;float speed;bool autoplay,loop;} af_animation_component;
+typedef struct af_model_binding {af_object_id root;uint32_t node;int32_t skin;bool primitive;} af_model_binding;
+af_animation_component af_animation_component_default(void);
+af_model_binding af_model_binding_default(void);
 typedef struct af_scene_object {
     af_object_id id;
     char name[AF_OBJECT_NAME_CAPACITY];
@@ -32,6 +36,8 @@ typedef struct af_scene_object {
     af_collider collider;
     af_gameplay_component gameplay;
     af_object_id parent; /* Zero means scene root. Transform is parent-local. */
+    af_animation_component animation;
+    af_model_binding model;
 } af_scene_object;
 
 /* CPU-only scene data; no engine, window, or game callbacks required. IDs are
@@ -52,6 +58,8 @@ const af_scene_object *af_scene_object_at(const af_scene *scene, size_t index);
 bool af_scene_set_object_name(af_scene *scene, af_object_id id, const char *name);
 bool af_scene_set_object_mesh(af_scene *scene, af_object_id id, const char *mesh);
 bool af_scene_set_object_transform(af_scene *scene, af_object_id id, af_transform transform);
+bool af_scene_set_object_animation(af_scene *scene,af_object_id id,af_animation_component component);
+bool af_scene_set_model_binding(af_scene *scene,af_object_id id,af_model_binding binding);
 bool af_scene_set_object_visible(af_scene *scene, af_object_id id, bool visible);
 
 #define AF_SCENE_MAX_DEPTH 128
@@ -85,7 +93,7 @@ const af_scene_asset *af_scene_asset_at(const af_scene *scene,size_t index);
 const af_scene_asset *af_scene_find_asset(const af_scene *scene,const char *name);
 bool af_scene_set_asset(af_scene *scene,const char *name,af_asset_kind kind,const char *path);
 
-#define AF_SCENE_FILE_VERSION 9
+#define AF_SCENE_FILE_VERSION 10
 #define AF_SCENE_FILE_MAX_BYTES (16u * 1024u * 1024u)
 #define AF_SCENE_FILE_MAX_OBJECTS 65536u
 

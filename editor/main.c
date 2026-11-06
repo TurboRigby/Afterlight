@@ -64,6 +64,8 @@ typedef struct editor {
     bool failed;
     bool show_performance,show_assets,show_colliders;
     bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
+    bool show_animation,animation_preview;af_object_id animation_target;float animation_blend;
+    const char *animation_test_path;unsigned animation_test_step;uint64_t animation_test_revision;double animation_test_time;af_rect animation_buttons[3];
     char asset_search[128],selected_asset[AF_MESH_NAME_CAPACITY];
     int asset_filter;
     size_t selected_light;bool light_selected,light_dragging;size_t drag_light;af_local_light initial_light;uint64_t light_drag_revision;
@@ -521,7 +523,7 @@ static void thumbnail_widget(editor *app,const af_scene_asset *asset,const af_ma
 }
 static void asset_entry(editor *app,const af_scene_asset *asset){
     struct nk_context *ctx=&app->gui.context;char title[128];
-    snprintf(title,sizeof(title),"%s  /  %s",asset->name,asset->kind==AF_ASSET_ENVIRONMENT?"HDR environment":asset->kind==AF_ASSET_METALLIC_ROUGHNESS?"metal/rough":asset->kind==AF_ASSET_AUDIO?"audio":asset->kind==AF_ASSET_MESH?"mesh":asset->kind==AF_ASSET_NORMAL_MAP?"normal map":"color texture");
+    snprintf(title,sizeof(title),"%s  /  %s",asset->name,asset->kind==AF_ASSET_ANIMATION?"animation":asset->kind==AF_ASSET_ENVIRONMENT?"HDR environment":asset->kind==AF_ASSET_METALLIC_ROUGHNESS?"metal/rough":asset->kind==AF_ASSET_AUDIO?"audio":asset->kind==AF_ASSET_MESH?"mesh":asset->kind==AF_ASSET_NORMAL_MAP?"normal map":"color texture");
     nk_layout_row_begin(ctx,NK_DYNAMIC,64,2);nk_layout_row_push(ctx,.17f);thumbnail_widget(app,asset,NULL);
     nk_layout_row_push(ctx,.83f);if(nk_select_label(ctx,title,NK_TEXT_LEFT,!strcmp(app->selected_asset,asset->name)))snprintf(app->selected_asset,sizeof(app->selected_asset),"%s",asset->name);nk_layout_row_end(ctx);
 }
@@ -537,6 +539,7 @@ static void inspector(editor *app,float width,float height)
             af_scene_object object=*found;
             if(app->refresh_fields){snprintf(app->name,sizeof(app->name),"%s",object.name);snprintf(app->mesh,sizeof(app->mesh),"%s",object.mesh);snprintf(app->texture,sizeof(app->texture),"%s",object.material.texture);snprintf(app->normal_map,sizeof(app->normal_map),"%s",object.material.normal_map);app->refresh_fields=false;}
             char id[64];snprintf(id,sizeof(id),"Object ID  %" PRIu64,object.id);label(context,id,22);
+            if(object.animation.asset[0]||object.model.root){nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Animation clips")){app->show_animation=true;app->animation_target=object.animation.asset[0]?object.id:object.model.root;}}
             label(context,"Name",23);nk_layout_row_dynamic(context,34,1);
             nk_edit_string_zero_terminated(context,(nk_flags)NK_EDIT_FIELD|(nk_flags)NK_EDIT_SIG_ENTER,app->name,sizeof(app->name),nk_filter_default);
             if(app->name[0]&&strcmp(app->name,object.name))ed_document_name(&app->document,app->name);
@@ -750,8 +753,8 @@ static void asset_browser(editor *app,float width,float height)
         nk_layout_row_dynamic(ctx,26,1);nk_bool watch=app->watch_assets;nk_checkbox_label(ctx,"Reload changed assets",&watch);app->watch_assets=watch!=0;
         label(ctx,"Search names or paths",22);nk_layout_row_dynamic(ctx,30,1);
         nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->asset_search,sizeof(app->asset_search),nk_filter_default);
-        static const char *filters[]={"All assets","Meshes","Color textures","Normal maps","Audio","Metal/rough maps","HDR environments"};
-        nk_layout_row_dynamic(ctx,30,1);app->asset_filter=nk_combo(ctx,filters,7,app->asset_filter,26,nk_vec2(220,150));
+        static const char *filters[]={"All assets","Meshes","Color textures","Normal maps","Audio","Metal/rough maps","HDR environments","Animations"};
+        nk_layout_row_dynamic(ctx,30,1);app->asset_filter=nk_combo(ctx,filters,8,app->asset_filter,26,nk_vec2(220,150));
         nk_layout_row_dynamic(ctx,30,3);
         if(nk_button_label(ctx,"Import mesh"))start_import(app,AF_ASSET_MESH);
         if(nk_button_label(ctx,"Import texture"))start_import(app,AF_ASSET_TEXTURE);
@@ -777,6 +780,7 @@ static void asset_browser(editor *app,float width,float height)
             nk_layout_row_dynamic(ctx,46,1);nk_label_wrap(ctx,asset.path);
             af_texture_info info;if(af_engine_texture_info(app->engine,asset.name,&info)){char text[160];snprintf(text,sizeof(text),"%u x %u / %u mips / %.2f MiB / %.0fx / %s",info.width,info.height,info.mip_levels,(double)info.allocation_bytes/1048576,info.anisotropy,info.srgb?"sRGB":"linear");label(ctx,text,24);}
             if(asset.kind==AF_ASSET_AUDIO){nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Preview sound"))af_engine_play_sound(app->engine,asset.name,.5f);}
+            else if(asset.kind==AF_ASSET_ANIMATION){label(ctx,"Clip data for the matching imported model.",26);}
             else if(asset.kind==AF_ASSET_ENVIRONMENT){nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Use environment lighting"))ed_document_assign_asset(&app->document,asset.name);}
             else if(af_scene_get_object(app->document.scene,app->document.selection)){nk_layout_row_dynamic(ctx,30,1);
                 if(nk_button_label(ctx,"Assign to selected object")){if(ed_document_assign_asset(&app->document,asset.name))refresh(app);}}
@@ -845,11 +849,49 @@ static void play_hud(editor *app)
     for(size_t i=0;i<af_scene_object_count(app->runtime.scene);++i)if(af_scene_object_at(app->runtime.scene,i)->gameplay.player.enabled){player=true;break;}
     ed_play_hud(&app->gui.context,app->engine,app->viewport,app->runtime.paused,app->free_camera,true,player);
 }
+static bool animation_button(editor *app,unsigned index,const char *text){struct nk_rect b=nk_widget_bounds(&app->gui.context);app->animation_buttons[index]=(af_rect){b.x,b.y,b.w,b.h};return nk_button_label(&app->gui.context,text)!=0;}
+static void animation_panel(editor *app,float width,float height)
+{
+    if(!app->show_animation)return;const af_scene *scene=app->runtime.playing?app->runtime.scene:app->document.scene;struct nk_context *ctx=&app->gui.context;
+    const af_scene_object *target=af_scene_get_object(scene,app->animation_target);
+    if(!target||!target->animation.asset[0]){app->animation_target=0;for(size_t i=0;i<af_scene_object_count(scene);++i){const af_scene_object *o=af_scene_object_at(scene,i);if(o->animation.asset[0]){app->animation_target=o->id;target=o;break;}}}
+    nk_flags flags=NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MOVABLE;if(app->modal||app->dialog)flags|=NK_WINDOW_ROM;
+    if(nk_begin(ctx,"Animation",nk_rect(fmaxf(20,(width-560)/2),110,560,fminf(590,height-150)),flags)){
+        nk_layout_row_dynamic(ctx,30,1);if(nk_combo_begin_label(ctx,target?target->name:"No animated model selected",nk_vec2(500,180))){nk_layout_row_dynamic(ctx,26,1);
+            for(size_t i=0;i<af_scene_object_count(scene);++i){const af_scene_object *o=af_scene_object_at(scene,i);if(o->animation.asset[0]&&nk_combo_item_label(ctx,o->name,NK_TEXT_LEFT)){app->animation_target=o->id;target=o;}}nk_combo_end(ctx);}
+        if(target&&target->animation.asset[0]){
+            af_animation_component component=target->animation;af_object_id root=target->id;af_animation_status status=af_engine_animation_status(app->engine,root);bool changed=false;
+            label(ctx,component.asset,24);
+            if(!status.available)label(ctx,"Animation asset unavailable. Reload its source.",26);
+            else if(!status.clip_count)label(ctx,"Skeleton bind pose (no animation clips).",26);
+            else{
+                nk_layout_row_dynamic(ctx,30,1);if(nk_combo_begin_label(ctx,status.name,nk_vec2(500,180))){nk_layout_row_dynamic(ctx,26,1);for(size_t i=0;i<status.clip_count;++i){af_animation_clip_info info;if(af_engine_animation_clip(app->engine,root,i,&info)&&nk_combo_item_label(ctx,info.name,NK_TEXT_LEFT)){
+                        if(!app->runtime.playing)app->animation_preview=true;af_engine_animation_play(app->engine,root,i,app->animation_blend);}}
+                    nk_combo_end(ctx);}
+                nk_layout_row_dynamic(ctx,32,3);
+                if(animation_button(app,0,app->runtime.playing?"Restart":"Preview")){if(!app->runtime.playing)app->animation_preview=true;af_engine_animation_play(app->engine,root,status.clip,app->animation_blend);}
+                if(animation_button(app,1,status.playing?"Pause":"Resume"))af_engine_animation_pause(app->engine,root,status.playing);
+                if(animation_button(app,2,"Stop")){af_engine_animation_stop(app->engine,root);if(!app->runtime.playing)app->animation_preview=false;}
+                float time=(float)status.time;nk_layout_row_dynamic(ctx,30,1);if(nk_property_float(ctx,"Time",0,&time,(float)status.duration,.05f,.005f)){if(!app->runtime.playing)app->animation_preview=true;af_engine_animation_pause(app->engine,root,true);af_engine_animation_seek(app->engine,root,time);}
+                char text[128];snprintf(text,sizeof(text),"%.3f / %.3f s%s",status.time,status.duration,status.fading?"  (blending)":"");label(ctx,text,24);
+                float speed=status.speed;nk_bool loop=status.loop;
+                nk_layout_row_dynamic(ctx,30,1);bool options=nk_property_float(ctx,"Speed",-4,&speed,4,.1f,.01f)!=0;nk_layout_row_dynamic(ctx,26,1);options|=nk_checkbox_label(ctx,"Loop",&loop)!=0;
+                if(options)af_engine_animation_options(app->engine,root,speed,loop!=0);
+                if(!app->runtime.playing){nk_layout_row_dynamic(ctx,26,1);nk_bool autoplay=component.autoplay;if(nk_checkbox_label(ctx,"Autoplay in game",&autoplay)){component.autoplay=autoplay!=0;changed=true;}}
+                if(!app->runtime.playing){nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Use clip, speed and loop as startup defaults")){component.clip=status.clip;component.speed=speed;component.loop=loop!=0;changed=true;}}
+                nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Blend seconds",0,&app->animation_blend,5,.1f,.01f);
+                label(ctx,app->runtime.playing?"Playback follows simulation pause/step.":"Preview leaves authored transforms and history unchanged.",28);
+            }
+            if(changed&&!app->runtime.playing){if(ed_document_animation(&app->document,root,component)){af_engine_set_scene(app->engine,app->document.scene);if(app->animation_preview)af_engine_animation_play(app->engine,root,component.clip,app->animation_blend);}}
+        }else label(ctx,"Import a glTF model containing animation or a skin.",30);
+        nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close animation panel"))app->show_animation=false;
+    }nk_end(ctx);
+}
 static void build_ui(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
     ed_thumbnails_begin(&app->thumbnails);ed_thumbnails_poll(&app->thumbnails,app->engine);
-    draw_colliders(app);draw_lights(app);draw_gizmo(app);
+    draw_colliders(app);draw_lights(app);if(!app->animation_preview)draw_gizmo(app);
     toolbar(app,width);
     if(!app->runtime.playing||!app->maximize_play){object_list(app,height);inspector(app,width,height);}
     nk_style_push_vec2(context,&context->style.window.padding,nk_vec2(14,5));
@@ -878,6 +920,8 @@ static void build_ui(editor *app,float width,float height)
     }nk_end(context);
     nk_style_pop_vec2(context);
     performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);
+    af_engine_set_scene(app->engine,app->runtime.playing?app->runtime.scene:app->document.scene);
+    animation_panel(app,width,height);
     if(app->modal){
         if(nk_begin(context,"Unsaved changes",nk_rect((width-500)/2,(height-205)/2,500,205),NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR)){
             nk_layout_row_dynamic(context,58,1);nk_label_wrap(context,"Save your changes before continuing? Discard keeps the last saved file unchanged.");
@@ -895,7 +939,7 @@ static void build_ui(editor *app,float width,float height)
 }
 static bool init(af_engine *engine,void *userdata)
 {
-    editor *app=userdata;app->engine=engine;
+    editor *app=userdata;app->engine=engine;af_engine_set_animation_playback(engine,false,false);
     if(!ed_document_init(&app->document))return false;
     app->document_ready=true;
     const char *base=af_engine_get_base_path(engine);
@@ -914,6 +958,7 @@ static bool init(af_engine *engine,void *userdata)
         if(SDL_GetPathInfo(development,&info)&&info.type==SDL_PATHTYPE_FILE)snprintf(app->module_path,sizeof(app->module_path),"%s",development);}
     af_mesh_data cube=cube_mesh_data();
     if(!af_engine_upload_mesh(engine,"cube",&cube)||!ed_gui_init(&app->gui,engine,font))return false;
+    if(app->animation_test_path){if(!ed_document_new(&app->document)||!ed_document_import_mesh(&app->document,"actor",app->animation_test_path))return false;app->animation_target=app->document.selection;af_animation_component c=af_scene_get_object(app->document.scene,app->animation_target)->animation;c.autoplay=false;if(!af_scene_set_object_animation(app->document.scene,app->animation_target,c))return false;app->show_animation=true;app->animation_test_revision=app->document.revision;}
     load_assets(app);app->asset_watch=af_asset_watch_create();app->watch_assets=true;
     SDL_SetWindowMinimumSize(af_engine_sdl_window(engine),1000,640);
     reset_camera(app);refresh(app);
@@ -942,6 +987,27 @@ static void smoke_key(editor *app,SDL_Scancode key)
     event.type=SDL_EVENT_KEY_UP;event.key.down=false;app->failed|=!SDL_PushEvent(&event);
 }
 #define SMOKE_CHECK(app,condition) do{if(!(condition)){fprintf(stderr,"Editor smoke frame %u: %s\n",(app)->updates,#condition);(app)->failed=true;}}while(0)
+static void animation_tools_smoke(editor *app){
+    if(!app->animation_test_path||app->updates<8)return;
+    if(!(SDL_GetWindowFlags(af_engine_sdl_window(app->engine))&SDL_WINDOW_INPUT_FOCUS)&&app->animation_test_step==0){SDL_RaiseWindow(af_engine_sdl_window(app->engine));return;}
+    af_animation_status status=af_engine_animation_status(app->engine,app->animation_target);int click=-1;
+    switch(app->animation_test_step++){
+    case 0:SMOKE_CHECK(app,nk_window_find(&app->gui.context,"Animation")&&status.clip_count==3&&!app->animation_preview);click=0;break;
+    case 1:SMOKE_CHECK(app,app->animation_preview);break;
+    case 2:SMOKE_CHECK(app,status.time>0&&status.playing);click=1;break;
+    case 3:SMOKE_CHECK(app,!status.playing);app->animation_test_time=status.time;break;
+    case 4:SMOKE_CHECK(app,status.time==app->animation_test_time);click=1;break;
+    case 5:SMOKE_CHECK(app,status.playing);break;
+    case 6:SMOKE_CHECK(app,status.time>app->animation_test_time);click=2;break;
+    case 7:SMOKE_CHECK(app,!app->animation_preview&&status.time==0);break;
+    case 8:SMOKE_CHECK(app,app->document.revision==app->animation_test_revision);toggle_play(app);SMOKE_CHECK(app,app->runtime.playing&&af_engine_animation_play(app->engine,app->animation_target,0,0));break;
+    case 9:case 10:break;
+    case 11:SMOKE_CHECK(app,af_engine_animation_status(app->engine,app->animation_target).time>0);stop_play(app);break;
+    case 12:SMOKE_CHECK(app,!app->runtime.playing&&app->document.revision==app->animation_test_revision&&af_scene_get_object(app->document.scene,app->animation_target)->animation.clip==0);puts("Editor animation: actual Preview/Pause/Resume/Stop clicks, clean history and Play isolation passed.");af_engine_request_quit(app->engine);return;
+    default:break;
+    }
+    if(click>=0){af_rect b=app->animation_buttons[click];smoke_click(app,b.x+b.width*.5f,b.y+b.height*.5f);}
+}
 static void light_tools_smoke(editor *app){
     if(!app->light_test||app->updates<8)return;
     if(!(SDL_GetWindowFlags(af_engine_sdl_window(app->engine))&SDL_WINDOW_INPUT_FOCUS)&&app->light_test_step==0){SDL_RaiseWindow(af_engine_sdl_window(app->engine));return;}
@@ -1091,7 +1157,7 @@ static void update(af_engine *engine,double delta,void *userdata)
 {
     editor *app=userdata;++app->updates;
     if(app->frame_limit&&af_engine_get_stats(engine).rendered_frames>=app->frame_limit){
-        if(app->play_controls_test||app->wizard_test||app->thumbnail_test||app->light_test){app->failed=true;fputs("Editor test did not complete within its frame budget.\n",stderr);}
+        if(app->play_controls_test||app->wizard_test||app->thumbnail_test||app->light_test||app->animation_test_path){app->failed=true;fputs("Editor test did not complete within its frame budget.\n",stderr);}
         af_engine_request_quit(engine);return;}
     poll_dialog(app);poll_project_tool(app);play_controls_smoke(app);smoke(app);
     if(app->environment_pending){af_environment_job_status job=af_engine_environment_status(engine);
@@ -1130,7 +1196,9 @@ static void update(af_engine *engine,double delta,void *userdata)
     if(app->runtime.playing)app->camera=af_engine_get_camera(engine);
     if(app->runtime.playing&&strcmp(app->runtime_status,app->runtime.status)){snprintf(app->runtime_status,sizeof(app->runtime_status),"%s",app->runtime.status);set_status(app,app->runtime.status);}
     light_tools_smoke(app);
+    animation_tools_smoke(app);
     af_engine_set_scene(engine,app->runtime.playing?app->runtime.scene:app->document.scene);
+    af_engine_set_animation_playback(engine,app->runtime.playing||app->animation_preview,!app->runtime.playing&&app->animation_preview);
     af_engine_highlight_object(engine,app->runtime.playing?AF_OBJECT_NONE:app->document.selection);
     af_engine_set_simulation_paused(engine,!app->runtime.playing||app->runtime.paused);
     char title[512];snprintf(title,sizeof(title),"Afterlight Editor | %s%s",app->document.path[0]?ed_path_name(app->document.path):"Untitled scene",ed_document_dirty(&app->document)?" *":"");
@@ -1174,6 +1242,7 @@ int main(int argc,char **argv)
         else if(!strcmp(argv[i],"--play-controls-test")){app.play_controls_test=true;if(!app.frame_limit)app.frame_limit=300;}
         else if(!strcmp(argv[i],"--project")&&i+1<argc)app.initial_project=argv[++i];
         else if(!strcmp(argv[i],"--wizard-test")&&i+1<argc){app.wizard_test=true;snprintf(app.wizard_folder,sizeof(app.wizard_folder),"%s-%" PRIu64,argv[++i],SDL_GetTicksNS());if(!app.frame_limit)app.frame_limit=600;}
+        else if(!strcmp(argv[i],"--animation-tools-test")&&i+1<argc){app.animation_test_path=argv[++i];if(!app.frame_limit)app.frame_limit=600;}
         else if(!strcmp(argv[i],"--scene")&&i+1<argc)app.initial_scene=argv[++i];
         else if(!strcmp(argv[i],"--game")&&i+1<argc){app.module_override=true;const char *path=argv[++i];if(strlen(path)>=sizeof(app.module_path)){fputs("Game module path too long.\n",stderr);return 1;}snprintf(app.module_path,sizeof(app.module_path),"%s",path);}
         else if(!strcmp(argv[i],"--smoke-test")&&i+1<argc){app.smoke_path=argv[++i];if(!app.frame_limit)app.frame_limit=180;}

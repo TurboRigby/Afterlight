@@ -7,7 +7,7 @@
 #ifndef AFTERLIGHT_GAME_MODULE_H
 #define AFTERLIGHT_GAME_MODULE_H
 #include <afterlight/afterlight.h>
-#define AF_GAME_ABI_VERSION 8u
+#define AF_GAME_ABI_VERSION 9u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
 #define AF_GAME_EXPORT __declspec(dllexport)
@@ -55,6 +55,15 @@ typedef struct af_game_host {
     bool (*game_camera)(const af_scene*,af_camera*);
     void (*report_gameplay)(af_engine*,af_gameplay_status);
     bool (*play_sound)(af_engine*,const char*,float);
+    bool (*animation_play)(af_engine*,af_object_id,size_t,float);
+    bool (*animation_pause)(af_engine*,af_object_id,bool);
+    bool (*animation_stop)(af_engine*,af_object_id);
+    bool (*animation_seek)(af_engine*,af_object_id,double);
+    bool (*animation_options)(af_engine*,af_object_id,float,bool);
+    af_animation_status (*animation_status)(const af_engine*,af_object_id);
+    bool (*animated_world_matrix)(const af_engine*,af_object_id,af_mat4*);
+    bool (*animation_clip)(const af_engine*,af_object_id,size_t,af_animation_clip_info*);
+    af_object_id (*animation_root)(const af_engine*,af_object_id);
 } af_game_host;
 typedef struct af_game_module {
     uint32_t abi_version,struct_size;

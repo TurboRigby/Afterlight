@@ -114,6 +114,7 @@ struct af_renderer {
     af_shadow_draw *shadow_draws;
     af_shadow_bounds *shadow_bounds;
     size_t shadow_capacity,shadow_count,shadow_draw_calls;
+    const af_scene *posed_scene;const af_mat4 *posed_worlds;size_t posed_count;
     af_skin_instance skins[AF_SKIN_INSTANCES];size_t skin_count;uint64_t skin_revision;
     uint64_t mesh_revision;uint32_t shadow_passes,shadow_cached_passes;
     af_gpu_buffer capture_buffer;
@@ -1102,6 +1103,10 @@ bool af_renderer_upload_overlay_atlas(af_renderer *renderer, const unsigned char
     return true;
 }
 
+static bool object_world(af_renderer *renderer,const af_scene *scene,size_t index,af_mat4 *out){
+    if(scene&&renderer->posed_scene==scene&&renderer->posed_count==af_scene_object_count(scene)&&index<renderer->posed_count){*out=renderer->posed_worlds[index];return true;}
+    const af_scene_object *o=af_scene_object_at(scene,index);return o&&af_scene_interpolated_world_matrix(scene,renderer->previous_scene,o->id,renderer->interpolation_alpha,out);
+}
 static uint32_t skin_base(const af_renderer *renderer,af_object_id object,const af_gpu_mesh *mesh);
 static af_shadow_bounds object_bounds(af_renderer *renderer,af_object_id object,af_mat4 world,const af_gpu_mesh *mesh);
 af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scene,
@@ -1126,7 +1131,7 @@ af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scen
         if (index == renderer->mesh_count) continue;
         af_mat4 inverse;
         af_mat4 world;
-        if (!af_scene_world_matrix(scene,object->id,&world)||!af_mat4_inverse(world, &inverse)) continue;
+        if (!object_world(renderer,scene,i,&world)||!af_mat4_inverse(world, &inverse)) continue;
         af_vec4 origin = af_mat4_transform(inverse,(af_vec4){camera->position.x,camera->position.y,camera->position.z,1});
         af_vec4 direction = af_mat4_transform(inverse,(af_vec4){ray.x,ray.y,ray.z,0});
         af_gpu_mesh *mesh = &renderer->meshes[index].gpu;
@@ -1179,7 +1184,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     for(size_t i=0;(settings.enabled||local_cast)&&i<count;++i){const af_scene_object *object=af_scene_object_at(scene,i);
         if(!object->material.cast_shadows||!af_scene_object_visible(scene,object->id))continue;
         size_t mesh=find_mesh_index(renderer,object->mesh);af_mat4 model;
-        if(mesh==renderer->mesh_count||!af_scene_interpolated_world_matrix(scene,renderer->previous_scene,object->id,renderer->interpolation_alpha,&model))continue;
+        if(mesh==renderer->mesh_count||!object_world(renderer,scene,i,&model))continue;
         size_t n=renderer->shadow_count++;
         renderer->shadow_draws[n]=(af_shadow_draw){model,mesh,skin_base(renderer,object->id,&renderer->meshes[mesh].gpu)};
         renderer->shadow_bounds[n]=object_bounds(renderer,object->id,model,&renderer->meshes[mesh].gpu);
@@ -1363,7 +1368,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             const af_gpu_mesh *mesh = &renderer->meshes[index].gpu;
             af_color base=object->material.base_color;
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
-            af_mat4 world;if(!af_scene_interpolated_world_matrix(scene,renderer->previous_scene,object->id,renderer->interpolation_alpha,&world))continue;
+            af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;
             struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{object->material.unlit?1.0f:0.0f,object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,(float)skin_base(renderer,object->id,mesh)},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
             _Static_assert(sizeof(transform)==128,"Portable draw push constant limit");
             af_vk_texture *texture=renderer->white;
@@ -1569,3 +1574,5 @@ bool af_renderer_set_skin_palette(af_renderer *r,af_object_id object,const af_ma
     if(index==AF_SKIN_INSTANCES)return false;if(index==r->skin_count)++r->skin_count;r->skins[index].object=object;r->skins[index].count=count;memcpy(r->skins[index].matrices,matrices,count*sizeof(*matrices));++r->skin_revision;return true;
 }
 void af_renderer_clear_skin_palettes(af_renderer *r){if(r&&r->skin_count){r->skin_count=0;++r->skin_revision;}}
+
+void af_renderer_set_object_worlds(af_renderer *r,const af_scene *scene,const af_mat4 *world,size_t count){if(r){r->posed_scene=scene;r->posed_worlds=world;r->posed_count=count;}}

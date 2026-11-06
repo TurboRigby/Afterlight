@@ -42,7 +42,7 @@ af_object_id af_scene_add_object(af_scene *scene, const char *name, const char *
     if (!scene || !valid_name(name, AF_OBJECT_NAME_CAPACITY) ||
         !valid_name(mesh, AF_MESH_NAME_CAPACITY) || scene->next_id == AF_OBJECT_NONE) return AF_OBJECT_NONE;
     /* Copy before realloc: callers may use a name from an existing object. */
-    af_scene_object object = {.id = scene->next_id, .transform = af_transform_identity(), .visible = true,.material=af_material_default(),.collider=af_collider_default(),.gameplay=af_gameplay_component_default()};
+    af_scene_object object = {.id = scene->next_id, .transform = af_transform_identity(), .visible = true,.material=af_material_default(),.collider=af_collider_default(),.gameplay=af_gameplay_component_default(),.animation=af_animation_component_default(),.model=af_model_binding_default()};
     memcpy(object.name, name, strlen(name) + 1);
     memcpy(object.mesh, mesh, strlen(mesh) + 1);
     if (scene->count == scene->capacity) {
@@ -139,7 +139,7 @@ const af_scene_asset *af_scene_find_asset(const af_scene *scene,const char *name
     if(scene&&name)for(size_t i=0;i<scene->asset_count;++i)if(!strcmp(scene->assets[i].name,name))return &scene->assets[i];return NULL;
 }
 bool af_scene_set_asset(af_scene *scene,const char *name,af_asset_kind kind,const char *path){
-    if(!scene||!valid_name(name,AF_MESH_NAME_CAPACITY)||!valid_name(path,AF_ASSET_PATH_CAPACITY)||(kind!=AF_ASSET_MESH&&kind!=AF_ASSET_TEXTURE&&kind!=AF_ASSET_NORMAL_MAP&&kind!=AF_ASSET_AUDIO&&kind!=AF_ASSET_METALLIC_ROUGHNESS&&kind!=AF_ASSET_ENVIRONMENT))return false;
+    if(!scene||!valid_name(name,AF_MESH_NAME_CAPACITY)||!valid_name(path,AF_ASSET_PATH_CAPACITY)||(kind!=AF_ASSET_MESH&&kind!=AF_ASSET_TEXTURE&&kind!=AF_ASSET_NORMAL_MAP&&kind!=AF_ASSET_AUDIO&&kind!=AF_ASSET_METALLIC_ROUGHNESS&&kind!=AF_ASSET_ENVIRONMENT&&kind!=AF_ASSET_ANIMATION))return false;
     af_scene_asset asset={.kind=kind};memcpy(asset.name,name,strlen(name)+1);memcpy(asset.path,path,strlen(path)+1);
     for(size_t i=0;i<scene->asset_count;++i)if(!strcmp(scene->assets[i].name,name)){scene->assets[i]=asset;return true;}
     if(scene->asset_count>=AF_SCENE_MAX_ASSETS)return false;
@@ -181,7 +181,9 @@ bool af_scene_set_parent(af_scene *scene,af_object_id child,af_object_id parent)
     af_object_id previous=object->parent;object->parent=parent;
     for(size_t i=0;i<scene->count;++i){const af_scene_object *node=&scene->objects[i];unsigned depth=0;
         while(node->parent){if(++depth>=AF_SCENE_MAX_DEPTH||(node=find_object(scene,node->parent))==NULL){object->parent=previous;return false;}}
-    }return true;
+    }
+    for(size_t i=0;i<scene->count;++i)if(scene->objects[i].model.root&&!af_scene_is_descendant(scene,scene->objects[i].id,scene->objects[i].model.root))scene->objects[i].model=af_model_binding_default();
+    return true;
 }
 bool af_scene_world_matrix(const af_scene *scene,af_object_id id,af_mat4 *out){
     const af_scene_object *object=find_object(scene,id);if(!object||!out)return false;
@@ -250,3 +252,15 @@ bool af_scene_interpolated_world_matrix(const af_scene *scene,const af_scene *pr
 }
 
 bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider collider){af_scene_object *object=find_object(scene,id);if(!object||!af_collider_valid(collider))return false;object->collider=collider;return true;}
+
+af_animation_component af_animation_component_default(void){return (af_animation_component){.speed=1,.loop=true};}
+af_model_binding af_model_binding_default(void){return (af_model_binding){.skin=-1};}
+bool af_scene_set_object_animation(af_scene *scene,af_object_id id,af_animation_component value){
+    af_scene_object *o=find_object(scene,id);if(!o||!memchr(value.asset,0,sizeof(value.asset))||value.clip>=128||!isfinite(value.speed)||fabsf(value.speed)>100)return false;o->animation=value;return true;
+}
+bool af_scene_set_model_binding(af_scene *scene,af_object_id id,af_model_binding value){
+    af_scene_object *o=find_object(scene,id);if(!o||value.node>=16384||value.skin< -1||value.skin>=128)return false;
+    if(value.root&&(!find_object(scene,value.root)||value.root==id||!af_scene_is_descendant(scene,id,value.root)))return false;
+    if(value.root&&!value.primitive)for(size_t i=0;i<scene->count;++i){const af_scene_object *other=&scene->objects[i];if(other->id!=id&&other->model.root==value.root&&!other->model.primitive&&other->model.node==value.node)return false;}
+    o->model=value.root?value:af_model_binding_default();return true;
+}

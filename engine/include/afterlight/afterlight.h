@@ -113,6 +113,24 @@ bool af_engine_upload_mesh(af_engine *engine, const char *name, const af_mesh_da
 /* Up to 128 skinned draw objects / 64 joints each. Copies mesh-local matrices.
    Count zero clears an override. Scene changes clear all palettes. */
 bool af_engine_set_skin_palette(af_engine *engine,af_object_id object,const af_mat4 *matrices,size_t count);
+typedef struct af_animation_status {
+    bool available,playing,loop,finished,fading;uint32_t clip;size_t clip_count;
+    double time,duration;float speed,blend;char name[64];
+} af_animation_status;
+typedef struct af_animation_clip_info {char name[64];double duration;} af_animation_clip_info;
+/* Playback poses do not change authored scene transforms. Gameplay follows
+   fixed simulation time; real_time is intended for editor previews. */
+void af_engine_set_animation_playback(af_engine *engine,bool enabled,bool real_time);
+bool af_engine_load_animation(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+af_object_id af_engine_animation_root(const af_engine *engine,af_object_id object);
+af_animation_status af_engine_animation_status(const af_engine *engine,af_object_id root);
+bool af_engine_animation_clip(const af_engine *engine,af_object_id root,size_t clip,af_animation_clip_info *info);
+bool af_engine_animation_play(af_engine *engine,af_object_id root,size_t clip,float blend_seconds);
+bool af_engine_animation_pause(af_engine *engine,af_object_id root,bool paused);
+bool af_engine_animation_stop(af_engine *engine,af_object_id root);
+bool af_engine_animation_seek(af_engine *engine,af_object_id root,double seconds);
+bool af_engine_animation_options(af_engine *engine,af_object_id root,float speed,bool loop);
+bool af_engine_animated_world_matrix(const af_engine *engine,af_object_id object,af_mat4 *world);
 bool af_engine_upload_texture(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_engine_remove_texture(af_engine *engine,const char *name);
 bool af_engine_load_environment(af_engine *engine,const char *name,const char *path,af_asset_error *error);
@@ -135,6 +153,7 @@ bool af_engine_remove_mesh(af_engine *engine, const char *name);
    alive until engine destruction. Scene mutations appear on the next frame.
    Visible objects with missing assets are skipped and reported in stats. */
 void af_engine_set_scene(af_engine *engine, const af_scene *scene);
+const af_scene *af_engine_get_scene(const af_engine *engine);
 /* Copies a valid camera. Projection aspect follows the scene viewport. */
 bool af_engine_set_camera(af_engine *engine, const af_camera *camera);
 af_camera af_engine_get_camera(const af_engine *engine);

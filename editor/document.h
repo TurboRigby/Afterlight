@@ -41,6 +41,7 @@ bool ed_document_add_cube(ed_document *document);
 bool ed_document_duplicate(ed_document *document);
 bool ed_document_delete(ed_document *document);
 bool ed_document_import_mesh(ed_document *document,const char *name,const char *path);
+bool ed_document_animation(ed_document *d,af_object_id id,af_animation_component component);
 bool ed_document_material(ed_document *document,af_material material);
 bool ed_document_light(ed_document *document,af_directional_light light);
 bool ed_document_import_texture(ed_document *document,const char *name,const char *path);

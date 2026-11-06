@@ -8,6 +8,7 @@
 #include "log.h"
 #include "renderer.h"
 #include "environment_job.h"
+#include "animation_runtime.h"
 #include "render_test.h"
 #include "platform_sdl.h"
 #include <math.h>
@@ -22,6 +23,7 @@ struct af_engine {
     SDL_Window *window;
     af_audio *audio;
     af_environment_job *environment_job;
+    af_animation_runtime *animations;bool animation_enabled,animation_real_time;
     af_renderer *renderer;
     char *base_title;
     bool show_fps;
@@ -161,6 +163,7 @@ af_engine *af_engine_create(const af_engine_config *config)
         af_engine_destroy(engine);
         return NULL;
     }
+    engine->animations=af_animation_runtime_create(engine->renderer);if(!engine->animations){af_engine_destroy(engine);return NULL;}engine->animation_enabled=true;
     engine->clear_color = (af_color){0.035f, 0.025f, 0.07f, 1.0f};
     engine->camera = af_camera_default();
     update_fps_title(engine);
@@ -269,7 +272,8 @@ int af_engine_run(af_engine *engine, const af_game *game)
             af_environment_job_finish(engine->environment_job,uploaded,(double)(SDL_GetPerformanceCounter()-started)*1000/frequency);
         }
         if (game->update) game->update(engine, delta, game->user_data);
-        if(game->fixed_update){unsigned steps=af_fixed_clock_advance(&engine->clock,elapsed,engine->simulation_paused,engine->step_pending);engine->step_pending=false;
+        unsigned animation_steps=0;
+        if(game->fixed_update){unsigned steps=af_fixed_clock_advance(&engine->clock,elapsed,engine->simulation_paused,engine->step_pending);engine->step_pending=false;animation_steps=steps;
             for(unsigned tick=0;tick<steps&&engine->running;++tick){
                 af_scene *snapshot=engine->scene?af_scene_clone(engine->scene):NULL;
                 if(engine->scene&&!snapshot){result=1;engine->running=false;break;}
@@ -292,6 +296,8 @@ int af_engine_run(af_engine *engine, const af_game *game)
         af_camera render_camera=engine->camera;
         if(engine->previous_scene&&engine->has_fixed_camera&&af_vec3_length(af_vec3_sub(engine->camera.position,engine->fixed_camera_position))<0.000001f)render_camera.position=af_vec3_add(engine->previous_camera.position,af_vec3_scale(af_vec3_sub(engine->camera.position,engine->previous_camera.position),alpha));
         af_renderer_set_interpolation(engine->renderer,engine->previous_scene,alpha);
+        double animation_delta=game->fixed_update&&!engine->animation_real_time?(double)animation_steps*AF_FIXED_DELTA:delta;
+        if(!af_animation_runtime_update(engine->animations,engine->previous_scene,alpha,animation_delta,engine->animation_enabled)){result=1;break;}
         if (!af_renderer_draw(engine->renderer, engine->clear_color, engine->scene, &render_camera, engine->viewport, engine->highlighted, &engine->overlay, &rendered)) {
             result = 1;
             break;
@@ -311,7 +317,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
 void af_engine_destroy(af_engine *engine)
 {
     if (!engine) return;
-    af_environment_job_destroy(engine->environment_job);
+    af_environment_job_destroy(engine->environment_job);af_animation_runtime_destroy(engine->animations);
     af_scene_destroy(engine->previous_scene);
     af_audio_destroy(engine->audio);
     af_renderer_destroy(engine->renderer);
@@ -350,8 +356,9 @@ bool af_engine_remove_mesh(af_engine *engine, const char *name)
 
 void af_engine_set_scene(af_engine *engine, const af_scene *scene)
 {
-    if (engine) {if(engine->scene!=scene){af_engine_reset_interpolation(engine);af_renderer_clear_skin_palettes(engine->renderer);}engine->scene = scene;}
+    if (engine) {if(engine->scene!=scene){af_engine_reset_interpolation(engine);af_renderer_clear_skin_palettes(engine->renderer);af_animation_runtime_scene(engine->animations,scene);}engine->scene = scene;}
 }
+const af_scene *af_engine_get_scene(const af_engine *engine){return engine?engine->scene:NULL;}
 
 bool af_engine_set_window_size(af_engine *engine, int width, int height)
 {
@@ -552,6 +559,7 @@ bool af_engine_load_asset(af_engine *engine,const af_scene_asset *asset,af_asset
     switch(asset->kind){case AF_ASSET_MESH:return af_engine_load_mesh(engine,asset->name,asset->path,error);
         case AF_ASSET_TEXTURE:return af_engine_load_texture(engine,asset->name,asset->path,error);
         case AF_ASSET_NORMAL_MAP:case AF_ASSET_METALLIC_ROUGHNESS:return af_engine_load_normal_map(engine,asset->name,asset->path,error);
+        case AF_ASSET_ANIMATION:return af_engine_load_animation(engine,asset->name,asset->path,error);
         case AF_ASSET_ENVIRONMENT:return af_engine_load_environment(engine,asset->name,asset->path,error);
         case AF_ASSET_AUDIO:return af_engine_load_sound(engine,asset->name,asset->path,error);default:return false;}
 }
@@ -565,8 +573,8 @@ bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const
         staged_asset *entry=&staged[count++];entry->asset=*a;do{snprintf(entry->temporary,sizeof(entry->temporary),"__reload_%u_%zu",++sequence,i);}while(af_scene_find_asset(scene,entry->temporary));af_scene_asset temporary=*a;snprintf(temporary.name,sizeof(temporary.name),"%s",entry->temporary);
         if(!af_engine_load_asset(engine,&temporary,error)){ok=false;break;}
     }
-    if(ok)for(size_t i=0;i<count;++i)if(!af_renderer_commit_asset(engine->renderer,staged[i].temporary,staged[i].asset.name,staged[i].asset.kind==AF_ASSET_MESH)){ok=false;break;}
-    for(size_t i=0;i<count;++i){if(staged[i].asset.kind==AF_ASSET_MESH)af_engine_remove_mesh(engine,staged[i].temporary);else af_engine_remove_texture(engine,staged[i].temporary);}
+    if(ok)for(size_t i=0;i<count;++i)if(!(staged[i].asset.kind==AF_ASSET_ANIMATION?af_animation_runtime_commit(engine->animations,staged[i].temporary,staged[i].asset.name):af_renderer_commit_asset(engine->renderer,staged[i].temporary,staged[i].asset.name,staged[i].asset.kind==AF_ASSET_MESH))){ok=false;break;}
+    for(size_t i=0;i<count;++i){if(staged[i].asset.kind==AF_ASSET_ANIMATION)af_animation_runtime_remove(engine->animations,staged[i].temporary);else if(staged[i].asset.kind==AF_ASSET_MESH)af_engine_remove_mesh(engine,staged[i].temporary);else af_engine_remove_texture(engine,staged[i].temporary);}
     if(!matched&&error)snprintf(error->message,sizeof(error->message),"No assets reference this source.");free(staged);return ok&&matched;
 }
 
@@ -584,9 +592,21 @@ bool af_engine_start_environment(af_engine *engine,const char *name,const char *
     af_environment_job_state state=af_environment_job_status_get(engine->environment_job).state;
     if(state==AF_ENV_LOADING||state==AF_ENV_BAKING||state==AF_ENV_UPLOADING){if(error)snprintf(error->message,sizeof(error->message),"An HDR import is already running. Cancel it first.");return false;}
     af_environment_job *job=af_environment_job_create(name,path);if(!job){if(error)snprintf(error->message,sizeof(error->message),"Cannot start HDR worker (invalid name/path or thread allocation).");return false;}
-    af_environment_job_destroy(engine->environment_job);engine->environment_job=job;return true;
+    af_environment_job_destroy(engine->environment_job);af_animation_runtime_destroy(engine->animations);engine->environment_job=job;return true;
 }
 void af_engine_cancel_environment(af_engine *engine){if(engine)af_environment_job_cancel(engine->environment_job);}
 af_environment_job_status af_engine_environment_status(const af_engine *engine){return af_environment_job_status_get(engine?engine->environment_job:NULL);}
 
 bool af_engine_set_skin_palette(af_engine *engine,af_object_id object,const af_mat4 *matrices,size_t count){return engine&&(!count||af_scene_get_object(engine->scene,object))&&af_renderer_set_skin_palette(engine->renderer,object,matrices,count);}
+
+void af_engine_set_animation_playback(af_engine *e,bool enabled,bool real_time){if(e){e->animation_enabled=enabled;e->animation_real_time=real_time;}}
+bool af_engine_load_animation(af_engine *e,const char *name,const char *path,af_asset_error *error){return e&&af_animation_runtime_load(e->animations,name,path,error);}
+af_object_id af_engine_animation_root(const af_engine *e,af_object_id object){return e?af_animation_runtime_root(e->animations,object):0;}
+af_animation_status af_engine_animation_status(const af_engine *e,af_object_id object){return e?af_animation_runtime_status(e->animations,object):(af_animation_status){0};}
+bool af_engine_animation_clip(const af_engine *e,af_object_id object,size_t clip,af_animation_clip_info *info){return e&&af_animation_runtime_clip(e->animations,object,clip,info);}
+bool af_engine_animation_play(af_engine *e,af_object_id object,size_t clip,float blend){return e&&af_animation_runtime_play(e->animations,object,clip,blend);}
+bool af_engine_animation_pause(af_engine *e,af_object_id object,bool paused){return e&&af_animation_runtime_pause(e->animations,object,paused);}
+bool af_engine_animation_stop(af_engine *e,af_object_id object){return e&&af_animation_runtime_stop(e->animations,object);}
+bool af_engine_animation_seek(af_engine *e,af_object_id object,double seconds){return e&&af_animation_runtime_seek(e->animations,object,seconds);}
+bool af_engine_animation_options(af_engine *e,af_object_id object,float speed,bool loop){return e&&af_animation_runtime_options(e->animations,object,speed,loop);}
+bool af_engine_animated_world_matrix(const af_engine *e,af_object_id object,af_mat4 *world){return e&&(af_animation_runtime_world(e->animations,object,world)||af_scene_world_matrix(e->scene,object,world));}

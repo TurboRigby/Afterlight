@@ -214,13 +214,17 @@ bool af_model_image_load(const char *reference,af_image_file *out,af_asset_error
 bool af_scene_import_model(af_scene *scene,const char *prefix,const char *path,af_object_id *root_out,af_asset_error *error){
     if(!scene||!prefix||!prefix[0]||strlen(prefix)>36||!path)return error_message(error,"Model needs a unique prefix (up to 36 bytes) and source path.");
     char absolute[AF_ASSET_PATH_CAPACITY];if(!af_asset_resolve_path(NULL,path,absolute,sizeof(absolute)))return error_message(error,"Model path is too long.");path=absolute;
-    af_model_file model;if(!af_model_file_load(path,&model,error))return false;af_scene *next=af_scene_clone(scene);af_object_id *nodes=calloc(model.node_count,sizeof(*nodes));bool ok=false;af_object_id root=0;
+    af_model_file model;if(!af_model_file_load(path,&model,error))return false;af_animation_file animation;if(!af_animation_file_load(path,&animation,error)){af_model_file_free(&model);return false;}bool animated=animation.clip_count||animation.skin_count;af_scene *next=af_scene_clone(scene);af_object_id *nodes=calloc(model.node_count,sizeof(*nodes));bool ok=false;af_object_id root=0;
     if(!next||!nodes)goto done;root=af_scene_add_object(next,prefix,"__node");if(!root)goto done;
+    if(animated){char name[64];snprintf(name,sizeof(name),"%s_animation",prefix);af_animation_component component=af_animation_component_default();snprintf(component.asset,sizeof(component.asset),"%s",name);component.autoplay=animation.clip_count>0;
+        if(!af_scene_set_asset(next,name,AF_ASSET_ANIMATION,path)||!af_scene_set_object_animation(next,root,component))goto done;}
     for(size_t i=0;i<model.node_count;++i){af_model_node *node=&model.nodes[i];nodes[i]=af_scene_add_object(next,node->name,"__node");if(!nodes[i]||!af_scene_set_object_transform(next,nodes[i],node->transform)||!af_scene_set_parent(next,nodes[i],node->parent<0?root:nodes[node->parent]))goto done;
+        if(animated&&!af_scene_set_model_binding(next,nodes[i],(af_model_binding){.root=root,.node=node->source_node,.skin=-1}))goto done;
         for(size_t j=0;j<model.primitive_count;++j){af_model_primitive *primitive=&model.primitives[j];if(node->mesh<0||primitive->source_mesh!=(unsigned)node->mesh)continue;
             char name[64],reference[AF_ASSET_PATH_CAPACITY];snprintf(name,sizeof(name),"%s_m%u_p%u",prefix,primitive->source_mesh,primitive->source_primitive);
             if(snprintf(reference,sizeof(reference),"%s#mesh=%u,primitive=%u",path,primitive->source_mesh,primitive->source_primitive)>=(int)sizeof(reference))goto done;
             if(!af_scene_set_asset(next,name,AF_ASSET_MESH,reference))goto done;af_object_id object=af_scene_add_object(next,name,name);if(!object||!af_scene_set_parent(next,object,nodes[i]))goto done;
+            if(animated&&!af_scene_set_model_binding(next,object,(af_model_binding){.root=root,.node=node->source_node,.skin=node->skin,.primitive=true}))goto done;
             af_material material=primitive->material;int images[]={primitive->base_image,primitive->normal_image,primitive->surface_image};char *names[]={material.texture,material.normal_map,material.metallic_roughness_map};af_asset_kind kinds[]={AF_ASSET_TEXTURE,AF_ASSET_NORMAL_MAP,AF_ASSET_METALLIC_ROUGHNESS};
             for(unsigned t=0;t<3;++t)if(images[t]>=0){snprintf(names[t],64,"%s_i%d_%u",prefix,images[t],t);if(snprintf(reference,sizeof(reference),"%s#image=%d",path,images[t])>=(int)sizeof(reference)||!af_scene_set_asset(next,names[t],kinds[t],reference))goto done;}
             if(!af_scene_set_object_material(next,object,material))goto done;
@@ -228,7 +232,7 @@ bool af_scene_import_model(af_scene *scene,const char *prefix,const char *path,a
     }
     {af_scene old=*scene;*scene=*next;*next=old;}if(root_out)*root_out=root;ok=true;
 done:
-    af_scene_destroy(next);free(nodes);af_model_file_free(&model);if(!ok)error_message(error,"Cannot instantiate glTF hierarchy/materials (scene/asset limits or invalid values).");return ok;
+    af_scene_destroy(next);free(nodes);af_model_file_free(&model);af_animation_file_free(&animation);if(!ok)error_message(error,"Cannot instantiate glTF hierarchy/materials (scene/asset limits or invalid values).");return ok;
 }
 
 /* Animation data retains source node indices, independent of import preorder. */

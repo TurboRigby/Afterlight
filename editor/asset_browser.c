@@ -20,7 +20,7 @@ bool ed_asset_matches(const af_scene_asset *asset,const char *query,int kind){
 bool ed_document_assign_asset(ed_document *d,const char *name){
     if(!d||!name)return false;const af_scene_asset *asset=af_scene_find_asset(d->scene,name);
     if(!asset)return !strcmp(name,"cube")&&ed_document_mesh(d,"cube");
-    if(asset->kind==AF_ASSET_AUDIO)return false;
+    if(asset->kind==AF_ASSET_AUDIO||asset->kind==AF_ASSET_ANIMATION)return false;
     if(asset->kind==AF_ASSET_ENVIRONMENT){af_render_settings settings=af_scene_get_render_settings(d->scene);snprintf(settings.environment_asset,sizeof(settings.environment_asset),"%s",name);settings.environment_enabled=true;return ed_document_render_settings(d,settings);}
     if(asset->kind==AF_ASSET_MESH)return ed_document_mesh(d,name);
     const af_scene_object *object=af_scene_get_object(d->scene,d->selection);if(!object)return false;

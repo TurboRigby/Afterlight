@@ -71,6 +71,7 @@ static bool mesh_preview(const af_scene_asset *asset,unsigned char *rgba){
 bool ed_thumbnail_generate(const af_scene *scene,const af_scene_asset *asset,const af_material *material,unsigned char rgba[64*64*4]){
     if(!rgba||(!asset&&!material))return false;background(rgba);
     if(material)return material_preview(scene,material,rgba);
+    if(asset->kind==AF_ASSET_ANIMATION){for(unsigned y=15;y<49;++y)for(unsigned x=21;x<45;++x)if(x-21<17-(unsigned)abs((int)y-32)){size_t at=((size_t)y*64+x)*4;rgba[at]=180;rgba[at+1]=160;rgba[at+2]=240;}return true;}
     if(asset->kind==AF_ASSET_ENVIRONMENT){af_hdr_file hdr;af_asset_error error;if(!af_hdr_file_load(asset->path,&hdr,&error))return false;
         for(unsigned y=0;y<32;++y)for(unsigned x=0;x<64;++x){uint32_t sx=x*hdr.width/64,sy=y*hdr.height/32;const float *p=hdr.rgba+((size_t)sy*hdr.width+sx)*4;size_t at=((size_t)(y+16)*64+x)*4;for(unsigned c=0;c<3;++c)rgba[at+c]=encode(p[c]/(1+p[c]));}af_hdr_file_free(&hdr);return true;}
     if(asset->kind==AF_ASSET_MESH)return mesh_preview(asset,rgba);

@@ -22,9 +22,10 @@ bool ed_runtime_start(ed_runtime *r,const af_scene *source,af_engine *engine,con
     af_scene *scene=af_scene_clone(source);void *state=calloc(1,api->state_size?api->state_size:1);
     if(!scene||!state){af_scene_destroy(scene);free(state);snprintf(r->status,sizeof(r->status),"Not enough memory to enter Play.");return false;}
     af_game_host host=af_game_host_create(scene,engine);
+    const af_scene *previous_scene=af_engine_get_scene(engine);af_engine_set_scene(engine,scene);
     af_camera previous=af_engine_get_camera(engine),camera;af_gameplay_status previous_status=af_engine_gameplay_status(engine);if(af_scene_game_camera(scene,&camera))af_engine_set_camera(engine,&camera);
     bool captured=af_engine_mouse_captured(engine);
-    if(!api->init(state,&host)){api->shutdown(state,&host);af_engine_set_camera(engine,&previous);af_engine_set_gameplay_status(engine,previous_status);af_engine_set_mouse_capture(engine,captured);af_scene_destroy(scene);free(state);snprintf(r->status,sizeof(r->status),"C game initialization failed.");return false;}
+    if(!api->init(state,&host)){api->shutdown(state,&host);af_engine_set_scene(engine,previous_scene);af_engine_set_camera(engine,&previous);af_engine_set_gameplay_status(engine,previous_status);af_engine_set_mouse_capture(engine,captured);af_scene_destroy(scene);free(state);snprintf(r->status,sizeof(r->status),"C game initialization failed.");return false;}
     r->scene=scene;r->state=state;r->api=api;r->host=host;r->playing=true;r->paused=false;
     snprintf(r->status,sizeof(r->status),"Playing %s. Stop restores the editor scene.",api->name);return true;
 }
@@ -43,6 +44,7 @@ void ed_runtime_step(ed_runtime *r,double delta){
 }
 void ed_runtime_stop(ed_runtime *r){
     if(r->playing)r->api->shutdown(r->state,&r->host);
+    if(af_engine_get_scene(r->host.engine)==r->scene)af_engine_set_scene(r->host.engine,NULL);
     af_engine_set_gameplay_status(r->host.engine,(af_gameplay_status){0});
     af_engine_stop_sounds(r->host.engine);
     free(r->state);af_scene_destroy(r->scene);

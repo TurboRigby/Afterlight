@@ -45,6 +45,7 @@ add_library(afterlight STATIC
     ${afterlight_shader_headers}
     engine/src/animation.c
     engine/src/animation_player.c
+    engine/src/animation_runtime.c
     engine/src/environment_job.c
     engine/src/asset_watch.c
     engine/src/gltf.c
@@ -347,6 +348,21 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_test(NAME afterlight.editor_animation COMMAND afterlight_editor --animation-tools-test "${PROJECT_SOURCE_DIR}/tests/assets/animated.gltf" --validation)
+    set_tests_properties(afterlight.editor_animation PROPERTIES TIMEOUT 30 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_executable(afterlight_animation_scene_test tests/animation_scene.c)
+    target_include_directories(afterlight_animation_scene_test PRIVATE engine/src)
+    target_link_libraries(afterlight_animation_scene_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_animation_scene_test)
+    add_test(NAME afterlight.animation_scene COMMAND afterlight_animation_scene_test "${PROJECT_SOURCE_DIR}/tests/assets/animated.gltf" "${PROJECT_SOURCE_DIR}/tests/assets/skinned.gltf")
+    set_tests_properties(afterlight.animation_scene PROPERTIES TIMEOUT 60 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_executable(afterlight_animation_runtime_test tests/animation_runtime.c)
+    target_include_directories(afterlight_animation_runtime_test PRIVATE engine/src)
+    target_link_libraries(afterlight_animation_runtime_test PRIVATE afterlight_editor_document SDL3::SDL3)
+    afterlight_warnings(afterlight_animation_runtime_test)
+    add_test(NAME afterlight.animation_runtime COMMAND afterlight_animation_runtime_test "${PROJECT_SOURCE_DIR}/tests/assets/skinned.gltf")
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/animation-tests")
+    set_tests_properties(afterlight.animation_runtime PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/animation-tests")
     add_executable(afterlight_skeleton_test tests/skeleton.c)
     target_link_libraries(afterlight_skeleton_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_skeleton_test)

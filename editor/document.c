@@ -169,7 +169,7 @@ bool ed_document_duplicate(ed_document *d)
         if(source.id!=root&&!af_scene_is_descendant(d->scene,source.id,root))continue;
         if(count+(++duplicates)>AF_SCENE_FILE_MAX_OBJECTS)goto duplicate_failed;
         ids[i]=af_scene_add_object(next,source.name,source.mesh);if(source.id==root){selected=ids[i];source.transform.position.x+=1.5f;}
-        if(!ids[i]||!af_scene_set_object_transform(next,ids[i],source.transform)||!af_scene_set_object_visible(next,ids[i],source.visible)||!af_scene_set_object_material(next,ids[i],source.material)||!af_scene_set_object_collider(next,ids[i],source.collider)||!af_scene_set_object_gameplay(next,ids[i],source.gameplay))goto duplicate_failed;
+        if(!ids[i]||!af_scene_set_object_transform(next,ids[i],source.transform)||!af_scene_set_object_visible(next,ids[i],source.visible)||!af_scene_set_object_material(next,ids[i],source.material)||!af_scene_set_object_collider(next,ids[i],source.collider)||!af_scene_set_object_gameplay(next,ids[i],source.gameplay)||!af_scene_set_object_animation(next,ids[i],source.animation))goto duplicate_failed;
     }
     for(size_t i=0;i<count;++i)if(ids[i]){const af_scene_object *source=af_scene_object_at(d->scene,i);af_object_id parent=source->parent;
         if(source->id!=root)for(size_t j=0;j<count;++j)if(af_scene_object_at(d->scene,j)->id==parent){parent=ids[j];break;}
@@ -177,6 +177,10 @@ bool ed_document_duplicate(ed_document *d)
         af_gameplay_component gameplay=af_scene_get_object(next,ids[i])->gameplay;
         for(size_t j=0;j<count;++j)if(ids[j]&&af_scene_object_at(d->scene,j)->id==gameplay.player.spawn){gameplay.player.spawn=ids[j];break;}
         if(!af_scene_set_object_gameplay(next,ids[i],gameplay))goto duplicate_failed;
+    }
+    for(size_t i=0;i<count;++i)if(ids[i]){const af_scene_object *source=af_scene_object_at(d->scene,i);
+        af_model_binding binding=af_model_binding_default();for(size_t j=0;j<count;++j)if(ids[j]&&af_scene_object_at(d->scene,j)->id==source->model.root){binding=source->model;binding.root=ids[j];break;}
+        if(!af_scene_set_model_binding(next,ids[i],binding))goto duplicate_failed;
     }
     free(ids);return commit(d,next,selected,0);
 duplicate_failed:
@@ -321,4 +325,9 @@ bool ed_document_import_environment(ed_document *d,const char *name,const char *
     af_scene *next=af_scene_clone(d->scene);if(!next)return false;
     af_render_settings settings=af_scene_get_render_settings(next);snprintf(settings.environment_asset,sizeof(settings.environment_asset),"%s",name);settings.environment_enabled=true;settings.skybox=true;
     if(!af_scene_set_asset(next,name,AF_ASSET_ENVIRONMENT,path)||!af_scene_set_render_settings(next,settings)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
+}
+
+bool ed_document_animation(ed_document *d,af_object_id id,af_animation_component component){
+    const af_scene_object *o=af_scene_get_object(d->scene,id);if(!o||!memchr(component.asset,0,sizeof(component.asset)))return false;if(!strcmp(o->animation.asset,component.asset)&&o->animation.clip==component.clip&&o->animation.speed==component.speed&&o->animation.loop==component.loop&&o->animation.autoplay==component.autoplay)return true;
+    af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_object_animation(next,id,component)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
 }
