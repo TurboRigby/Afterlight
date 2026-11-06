@@ -29,7 +29,7 @@ bool ph_emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 n, float 
     ph_contact c = {
         .a = a,
         .b = b,
-        .view = {.a = one->id, .b = two->id, .point = point, .normal = n, .penetration = penetration},
+        .view = {.a = one->id, .b = two->id,.part_a=one->shape.part,.part_b=two->shape.part, .point = point, .normal = n, .penetration = penetration},
         .local_a = ph_local(one, sub(point, one->p)),
         .local_b = ph_local(two, sub(point, two->p))};
     p->contacts[p->contact_count++] = c;
@@ -63,7 +63,7 @@ static size_t clip(af_vec3 *polygon, size_t count, af_vec3 center, af_vec3 norma
     return used;
 }
 static af_vec3 support(const ph_body *b, af_vec3 n) {
-    af_vec3 p = b->p;
+    af_vec3 p = b->shape.center;
     for (unsigned i = 0; i < 3; ++i) {
         float d = dot(b->shape.axes[i], n);
         if (fabsf(d) > 1e-6f)
@@ -95,7 +95,7 @@ static void closest_segments(af_vec3 p, af_vec3 q, af_vec3 a, af_vec3 b, af_vec3
 }
 static bool boxes(af_physics *p, size_t ai, size_t bi) {
     ph_body *a = &p->bodies[ai], *b = &p->bodies[bi];
-    af_vec3 delta = sub(b->p, a->p), normal = {0, 1, 0};
+    af_vec3 delta = sub(b->shape.center, a->shape.center), normal = {0, 1, 0};
     float best = 1e30f;
     unsigned feature = 0;
     for (unsigned i = 0; i < 15; ++i) {
@@ -119,13 +119,13 @@ static bool boxes(af_physics *p, size_t ai, size_t bi) {
         ph_body *ref = feature < 3 ? a : b, *incident = feature < 3 ? b : a;
         unsigned face = feature % 3;
         af_vec3 n = feature < 3 ? normal : mul(normal, -1),
-                center = add(ref->p, mul(n, ph_get(ref->shape.half_extents, face)));
+                center = add(ref->shape.center, mul(n, ph_get(ref->shape.half_extents, face)));
         unsigned incident_face = 0;
         for (unsigned i = 1; i < 3; ++i)
             if (fabsf(dot(incident->shape.axes[i], n)) >
                 fabsf(dot(incident->shape.axes[incident_face], n)))
                 incident_face = i;
-        af_vec3 ic = add(incident->p, mul(incident->shape.axes[incident_face],
+        af_vec3 ic = add(incident->shape.center, mul(incident->shape.axes[incident_face],
                                           -copysignf(ph_get(incident->shape.half_extents, incident_face),
                                                      dot(incident->shape.axes[incident_face], n)))),
                 u = mul(incident->shape.axes[(incident_face + 1) % 3],
@@ -181,22 +181,22 @@ static bool boxes(af_physics *p, size_t ai, size_t bi) {
         unsigned ia = (feature - 6) / 3, ib = (feature - 6) % 3;
         af_vec3 ea = mul(a->shape.axes[ia], ph_get(a->shape.half_extents, ia)),
                 eb = mul(b->shape.axes[ib], ph_get(b->shape.half_extents, ib));
-        one = sub(one, mul(a->shape.axes[ia], dot(sub(one, a->p), a->shape.axes[ia])));
-        two = sub(two, mul(b->shape.axes[ib], dot(sub(two, b->p), b->shape.axes[ib])));
+        one = sub(one, mul(a->shape.axes[ia], dot(sub(one, a->shape.center), a->shape.axes[ia])));
+        two = sub(two, mul(b->shape.axes[ib], dot(sub(two, b->shape.center), b->shape.axes[ib])));
         closest_segments(sub(one, ea), add(one, ea), sub(two, eb), add(two, eb), &one, &two);
     }
     return ph_emit(p, ai, bi, mul(add(one, two), .5f), normal, best);
 }
 static bool sphere_box(af_physics *p, size_t sphere, size_t box, bool reverse) {
     ph_body *s = &p->bodies[sphere], *b = &p->bodies[box];
-    af_vec3 local = ph_local(b, sub(s->p, b->p)), h = b->shape.half_extents,
+    af_vec3 local = ph_shape_local(b, sub(s->shape.center, b->shape.center)), h = b->shape.half_extents,
             closest = {fminf(h.x, fmaxf(-h.x, local.x)), fminf(h.y, fmaxf(-h.y, local.y)),
                        fminf(h.z, fmaxf(-h.z, local.z))};
     af_vec3 difference = sub(local, closest);
     float distance = af_vec3_length(difference), penetration = s->shape.radius - distance;
     af_vec3 outward;
     if (distance > 1e-7f)
-        outward = ph_vector(b, mul(difference, 1 / distance));
+        outward = ph_shape_vector(b, mul(difference, 1 / distance));
     else {
         unsigned axis = 0;
         float depth = h.x - fabsf(local.x);
@@ -209,14 +209,43 @@ static bool sphere_box(af_physics *p, size_t sphere, size_t box, bool reverse) {
         }
         outward = mul(b->shape.axes[axis], ph_get(local, axis) < 0 ? -1.f : 1.f);
         penetration = s->shape.radius + depth;
-        closest = add(local, ph_local(b, mul(outward, depth)));
+        closest = add(local, ph_shape_local(b, mul(outward, depth)));
     }
     if (penetration < -SKIN)
         return true;
     af_vec3 point =
-        mul(add(add(b->p, ph_vector(b, closest)), sub(s->p, mul(outward, s->shape.radius))), .5f);
+        mul(add(add(b->shape.center, ph_shape_vector(b, closest)), sub(s->shape.center, mul(outward, s->shape.radius))), .5f);
     return ph_emit(p, reverse ? box : sphere, reverse ? sphere : box, point,
                    reverse ? outward : mul(outward, -1), penetration);
+}
+static bool shapes(af_physics *p,size_t ai,size_t bi){ph_body *a=&p->bodies[ai],*b=&p->bodies[bi];
+            bool ok;
+            if (a->character_proxy || b->character_proxy) {
+                ph_body *player = a->character_proxy ? a : b, *other = player == a ? b : a;
+                af_collision_hit hit;
+                float separation = af_collision_capsule_distance(
+                    other->shape, player->p, player->shape.radius,
+                    player->shape.half_extents.y - player->shape.radius, &hit);
+                ok = separation > SKIN ||
+                     ph_emit(p, ai, bi, hit.point, player == a ? mul(hit.normal, -1) : hit.normal,
+                             -separation);
+            } else if (a->shape.type == AF_COLLIDER_MESH || b->shape.type == AF_COLLIDER_MESH)
+                ok = ph_mesh_contacts(p, ai, bi);
+            else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
+                ok = boxes(p, ai, bi);
+            else if (a->shape.type != b->shape.type)
+                ok = a->shape.type == AF_COLLIDER_SPHERE ? sphere_box(p, ai, bi, false)
+                                                         : sphere_box(p, bi, ai, true);
+            else {
+                af_vec3 d = sub(b->shape.center,a->shape.center);
+                float length = af_vec3_length(d),
+                      penetration = a->shape.radius + b->shape.radius - length;
+                if(penetration < -SKIN)return true;
+                af_vec3 n = length > 1e-7f ? mul(d, 1 / length) : (af_vec3){0, 1, 0};
+                ok = ph_emit(p, ai, bi, add(a->shape.center, mul(n, a->shape.radius - penetration * .5f)), n,
+                             penetration);
+            }
+    return ok;
 }
 bool ph_detect(af_physics *p) {
     p->cache_count = p->contact_count;
@@ -239,36 +268,9 @@ bool ph_detect(af_physics *p) {
                 continue;
             ++p->stats.broadphase_pairs;
             double stamp = ph_clock(p);
-            bool ok;
-            if (a->character_proxy || b->character_proxy) {
-                ph_body *player = a->character_proxy ? a : b, *other = player == a ? b : a;
-                af_collision_hit hit;
-                float separation = af_collision_capsule_distance(
-                    other->shape, player->p, player->shape.radius,
-                    player->shape.half_extents.y - player->shape.radius, &hit);
-                ok = separation > SKIN ||
-                     ph_emit(p, ai, bi, hit.point, player == a ? mul(hit.normal, -1) : hit.normal,
-                             -separation);
-            } else if (a->shape.type == AF_COLLIDER_MESH || b->shape.type == AF_COLLIDER_MESH)
-                ok = ph_mesh_contacts(p, ai, bi);
-            else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
-                ok = boxes(p, ai, bi);
-            else if (a->shape.type != b->shape.type)
-                ok = a->shape.type == AF_COLLIDER_SPHERE ? sphere_box(p, ai, bi, false)
-                                                         : sphere_box(p, bi, ai, true);
-            else {
-                af_vec3 d = sub(b->p, a->p);
-                float length = af_vec3_length(d),
-                      penetration = a->shape.radius + b->shape.radius - length;
-                if (penetration < -SKIN) {
-                    narrow += ph_clock(p) - stamp;
-                    continue;
-                }
-                af_vec3 n = length > 1e-7f ? mul(d, 1 / length) : (af_vec3){0, 1, 0};
-                ok = ph_emit(p, ai, bi, add(a->p, mul(n, a->shape.radius - penetration * .5f)), n,
-                             penetration);
-            }
-            narrow += ph_clock(p) - stamp;
+            af_world_collider original_a=a->shape,original_b=b->shape;bool ok=true;size_t na=a->part_count?a->part_count:1,nb=b->part_count?b->part_count:1;
+            for(size_t pa=0;pa<na&&ok;++pa)for(size_t pb=0;pb<nb&&ok;++pb){a->shape=ph_part_world(a,pa);b->shape=ph_part_world(b,pb);ok=shapes(p,ai,bi);}a->shape=original_a;b->shape=original_b;
+            narrow+=ph_clock(p)-stamp;
             if (!ok)
                 return false;
         }

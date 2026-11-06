@@ -43,17 +43,18 @@ static ph_body *find(af_physics *p, af_object_id id) {
 }
 af_vec3 ph_vector(const ph_body *b, af_vec3 v) {
     return af_vec3_add(
-        af_vec3_scale(b->shape.axes[0], v.x),
-        af_vec3_add(af_vec3_scale(b->shape.axes[1], v.y), af_vec3_scale(b->shape.axes[2], v.z)));
+        af_vec3_scale(b->axes[0], v.x),
+        af_vec3_add(af_vec3_scale(b->axes[1], v.y), af_vec3_scale(b->axes[2], v.z)));
 }
 af_vec3 ph_local(const ph_body *b, af_vec3 v) {
-    return (af_vec3){af_vec3_dot(v, b->shape.axes[0]), af_vec3_dot(v, b->shape.axes[1]),
-                     af_vec3_dot(v, b->shape.axes[2])};
+    return (af_vec3){af_vec3_dot(v, b->axes[0]), af_vec3_dot(v, b->axes[1]),
+                     af_vec3_dot(v, b->axes[2])};
 }
 af_vec3 ph_inverse_inertia(const ph_body *b, af_vec3 v) {
     if (b->inv_mass == 0 || b->sleeping)
         return (af_vec3){0};
     af_vec3 local = ph_local(b, v);
+    if(b->part_count){af_vec4 value=af_mat4_transform(b->inverse_tensor,(af_vec4){local.x,local.y,local.z,0});return ph_vector(b,(af_vec3){value.x,value.y,value.z});}
     return ph_vector(b,
                      (af_vec3){local.x * b->inertia.x, local.y * b->inertia.y, local.z * b->inertia.z});
 }
@@ -68,11 +69,12 @@ void ph_shape(ph_body *b) {
     b->shape.center = b->p;
     af_mat4 m = af_animation_pose_matrix((af_animation_pose){.rotation = b->q, .scale = {1, 1, 1}});
     for (unsigned i = 0; i < 3; ++i)
-        b->shape.axes[i] = (af_vec3){m.elements[i * 4], m.elements[i * 4 + 1], m.elements[i * 4 + 2]};
+        b->axes[i] = (af_vec3){m.elements[i * 4], m.elements[i * 4 + 1], m.elements[i * 4 + 2]};
+    for(unsigned i=0;i<3;++i)b->shape.axes[i]=b->axes[i];
     b->shape.a = b->shape.b = b->p;
 }
 bool ph_sync(af_physics *p, af_scene *s, float dt) {
-    size_t count = 0;
+    size_t count = 0,part_count=0;
     if (!p || !s)
         return false;
     af_asset_error mesh_error;
@@ -84,7 +86,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             return fail(p, "Invalid rigid body fields.");
         if (o->body.enabled && o->body.type == AF_BODY_DYNAMIC &&
             (o->parent || af_vec3_length(o->collider.center) > 1e-6f || o->collider.trigger ||
-             (o->collider.type != AF_COLLIDER_BOX && o->collider.type != AF_COLLIDER_SPHERE) ||
+             (o->collider.type != AF_COLLIDER_BOX && o->collider.type != AF_COLLIDER_SPHERE&&o->collider.type!=AF_COLLIDER_COMPOUND) ||
              !o->collider.enabled || o->transform.scale.x <= 0 || o->transform.scale.y <= 0 ||
              o->transform.scale.z <= 0))
             return fail(
@@ -108,7 +110,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                 shape.axes[axis] = ph_axis(axis);
         }
         if (shape.type != AF_COLLIDER_BOX && shape.type != AF_COLLIDER_SPHERE &&
-            shape.type != AF_COLLIDER_MESH)
+            shape.type != AF_COLLIDER_MESH&&shape.type!=AF_COLLIDER_COMPOUND)
             continue;
         if (!ph_finite(shape.half_extents) || !isfinite(shape.radius) || shape.radius > 10000 ||
             shape.half_extents.x > 10000 || shape.half_extents.y > 10000 || shape.half_extents.z > 10000)
@@ -179,13 +181,18 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         b.config.type = type;
         if (old && old->shape.mesh != shape.mesh)
             p->contact_count = p->cache_count = 0;
-        b.shape = shape;
+        b.shape = shape;for(unsigned k=0;k<3;++k)b.axes[k]=shape.axes[k];
+        uint64_t geometry=UINT64_C(1469598103934665603);const unsigned char *bytes=(const unsigned char*)&o->collider;for(size_t k=0;k<sizeof(o->collider);++k)geometry=(geometry^bytes[k])*UINT64_C(1099511628211);size_t authored_count=af_scene_collider_part_count(s,o->id);for(size_t k=0;k<authored_count;++k){const af_collider_part *part=af_scene_collider_part_at(s,o->id,k);bytes=(const unsigned char*)part;for(size_t n=0;n<sizeof(*part);++n)geometry=(geometry^bytes[n])*UINT64_C(1099511628211);}
+        if(old&&old->geometry_key!=geometry){p->contact_count=p->cache_count=0;b.sleeping=false;b.sleep_time=0;b.external=true;b.p=shape.center;b.q=af_quaternion_from_euler(o->transform.rotation);}b.geometry_key=geometry;b.com_offset=(af_vec3){0};b.part_count=0;b.parts=NULL;
+        if(shape.type==AF_COLLIDER_COMPOUND){af_mass_properties mass;if(!af_scene_compound_mass(s,o->id,&mass))return fail(p,"Compound mass properties are invalid.");if(type==AF_BODY_DYNAMIC&&(fabsf(o->transform.scale.x-o->transform.scale.y)>.0001f||fabsf(o->transform.scale.x-o->transform.scale.z)>.0001f))return fail(p,"Dynamic compound roots need uniform positive scale.");b.com_offset=mass.center;b.part_start=part_count;size_t n=af_scene_collider_shape_count(s,o->id);if(part_count+n>AF_SCENE_MAX_COLLIDER_PARTS)return fail(p,"Physics compound-part budget exceeded.");for(size_t k=0;k<n;++k){af_world_collider part;if(!af_scene_collider_shape_at(s,o->id,k,&part))return fail(p,"Compound part is sheared or singular.");if(part.type==AF_COLLIDER_SPHERE?part.radius<.01f:(part.half_extents.x<.01f||part.half_extents.y<.01f||part.half_extents.z<.01f))return fail(p,"Compound part dimensions must be at least .01 world units.");part.center=ph_local(&b,af_vec3_sub(part.center,shape.center));for(unsigned axis=0;axis<3;++axis)part.axes[axis]=ph_local(&b,part.axes[axis]);part.a=part.b=part.center;p->part_scratch[part_count++]=part;}b.part_count=n;b.parts=&p->part_scratch[b.part_start];if(type==AF_BODY_DYNAMIC){for(unsigned column=0;column<3;++column)for(unsigned row=0;row<3;++row)mass.inertia.elements[column*4+row]*=o->body.mass/mass.mass;if(!af_mat4_inverse(mass.inertia,&b.inverse_tensor))return fail(p,"Compound inertia is singular.");}}
+
         b.published = o->transform;
         b.inv_mass = type == AF_BODY_DYNAMIC ? 1 / o->body.mass : 0;
         if (b.inv_mass > 0) {
             float mass = o->body.mass;
             af_vec3 h = shape.half_extents;
-            if (shape.type == AF_COLLIDER_SPHERE) {
+            if(shape.type==AF_COLLIDER_COMPOUND){b.inertia=(af_vec3){0};}
+            else if (shape.type == AF_COLLIDER_SPHERE) {
                 float inverse = 2.5f / (mass * shape.radius * shape.radius);
                 b.inertia = (af_vec3){inverse, inverse, inverse};
             } else
@@ -202,6 +209,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         p->stats = (af_physics_stats){0};
     }
     memcpy(p->bodies, p->scratch, count * sizeof(ph_body));
+    memcpy(p->parts,p->part_scratch,part_count*sizeof(*p->parts));for(size_t i=0;i<count;++i)if(p->bodies[i].part_count)p->bodies[i].parts=&p->parts[p->bodies[i].part_start];
     p->count = count;
     p->scene = s;
     if (!ph_joints_sync(p))
@@ -336,7 +344,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
         if (b->sleeping)
             ++p->stats.sleeping;
         af_scene_object *o = (af_scene_object *)af_scene_object_at(s, b->scene_index);
-        o->transform.position = b->p;
+        o->transform.position = af_vec3_sub(b->p,ph_vector(b,b->com_offset));
         o->transform.rotation = euler(b->q);
         o->body.velocity = b->v;
         o->body.angular_velocity = b->w;

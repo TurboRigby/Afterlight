@@ -3,6 +3,7 @@
 #define AF_PHYSICS_INTERNAL_H
 #include <afterlight/animation.h>
 #include <afterlight/joint.h>
+#include <afterlight/compound.h>
 #include <afterlight/physics.h>
 #include <math.h>
 #include <time.h>
@@ -12,7 +13,9 @@ typedef struct ph_body {
     af_rigid_body config;
     af_transform published;
     af_world_collider shape;
-    af_vec3 p, v, w, force, torque, inertia;
+    af_vec3 p, v, w, force, torque, inertia,axes[3],com_offset;
+    af_mat4 inverse_tensor;uint64_t geometry_key;
+    af_world_collider *parts;size_t part_count,part_start;
     af_vec4 q;
     float inv_mass, sleep_time;
     bool sleeping, supported, external, character_proxy;
@@ -45,6 +48,7 @@ struct af_physics {
     size_t count;
     ph_contact contacts[AF_PHYSICS_MAX_CONTACTS], cache[AF_PHYSICS_MAX_CONTACTS];
     size_t contact_count, cache_count;
+    af_world_collider parts[AF_SCENE_MAX_COLLIDER_PARTS],part_scratch[AF_SCENE_MAX_COLLIDER_PARTS];
     ph_bound bounds[AF_PHYSICS_MAX_BODIES], ccd_bounds[AF_PHYSICS_MAX_BODIES];
     uint32_t cache_heads[16384], cache_next[AF_PHYSICS_MAX_CONTACTS];
     ph_joint joints[AF_SCENE_MAX_JOINTS];
@@ -76,6 +80,9 @@ static inline af_vec3 ph_axis(unsigned i) {
     return (af_vec3){i == 0 ? 1.f : 0, i == 1 ? 1.f : 0, i == 2 ? 1.f : 0};
 }
 af_vec3 ph_local(const ph_body *, af_vec3);
+af_vec3 ph_shape_local(const ph_body*,af_vec3);
+af_vec3 ph_shape_vector(const ph_body*,af_vec3);
+af_world_collider ph_part_world(const ph_body*,size_t);
 af_vec3 ph_vector(const ph_body *, af_vec3);
 af_vec3 ph_inverse_inertia(const ph_body *, af_vec3);
 void ph_impulse(ph_body *, af_vec3, af_vec3);

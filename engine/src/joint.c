@@ -37,7 +37,7 @@ static bool endpoint(const af_scene *s, af_object_id id) {
     const af_scene_object *o = af_scene_get_object(s, id);
     return o && o->collider.enabled && !o->collider.trigger &&
            (o->collider.type == AF_COLLIDER_BOX || o->collider.type == AF_COLLIDER_SPHERE ||
-            o->collider.type == AF_COLLIDER_MESH);
+            o->collider.type == AF_COLLIDER_MESH||o->collider.type==AF_COLLIDER_COMPOUND);
 }
 static bool dynamic(const af_scene *s, af_object_id id) {
     const af_scene_object *o = af_scene_get_object(s, id);

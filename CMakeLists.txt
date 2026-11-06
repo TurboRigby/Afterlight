@@ -56,6 +56,7 @@ add_library(afterlight STATIC
     engine/src/body.c
     engine/src/physics.c
     engine/src/physics_bounds.c
+    engine/src/physics_compound.c
     engine/src/physics_contacts.c
     engine/src/physics_mesh.c
     engine/src/physics_solver.c
@@ -508,6 +509,11 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_compound_contacts_test tests/compound_contacts.c)
+    target_include_directories(afterlight_compound_contacts_test PRIVATE engine/src)
+    target_link_libraries(afterlight_compound_contacts_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_compound_contacts_test)
+    add_test(NAME afterlight.compound_contacts COMMAND afterlight_compound_contacts_test )
     add_executable(afterlight_compound_mass_test tests/compound_mass.c)
     target_include_directories(afterlight_compound_mass_test PRIVATE engine/src)
     target_link_libraries(afterlight_compound_mass_test PRIVATE Afterlight::Engine)

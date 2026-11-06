@@ -62,7 +62,7 @@ void ph_solve(af_physics *p, float dt) {
             size_t j = slot - 1;
             ++p->stats.cache_probes;
             ph_contact *old = &p->cache[j];
-            if (old->view.a != c->view.a || old->view.b != c->view.b || dot(old->view.normal, n) < .95f)
+            if (old->view.a != c->view.a || old->view.b != c->view.b ||old->view.part_a!=c->view.part_a||old->view.part_b!=c->view.part_b|| dot(old->view.normal, n) < .95f)
                 continue;
             af_vec3 da = sub(old->local_a, c->local_a), db = sub(old->local_b, c->local_b);
             if (dot(da, da) > .0025f || dot(db, db) > .0025f)

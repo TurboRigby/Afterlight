@@ -3,6 +3,7 @@
 #define AFTERLIGHT_PHYSICS_H
 #include <afterlight/character.h>
 #include <afterlight/joint.h>
+#include <afterlight/compound.h>
 #include <afterlight/scene.h>
 #define AF_PHYSICS_MAX_BODIES 1024u
 #define AF_PHYSICS_MAX_CONTACTS 8192u
@@ -16,6 +17,7 @@ typedef struct af_physics_state {
 } af_physics_state;
 typedef struct af_physics_contact {
     af_object_id a, b;
+    af_collider_part_id part_a,part_b;
     af_vec3 point, normal;
     float penetration, impulse;
 } af_physics_contact;

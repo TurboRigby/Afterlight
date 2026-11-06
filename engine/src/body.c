@@ -39,10 +39,11 @@ bool af_scene_set_body(af_scene *scene, af_object_id id, af_rigid_body body) {
         return false;
     if (body.enabled && body.type == AF_BODY_DYNAMIC &&
         (o->parent || !o->collider.enabled || o->collider.trigger ||
-         (o->collider.type != AF_COLLIDER_BOX && o->collider.type != AF_COLLIDER_SPHERE) ||
+         (o->collider.type != AF_COLLIDER_BOX && o->collider.type != AF_COLLIDER_SPHERE&&o->collider.type!=AF_COLLIDER_COMPOUND) ||
          af_vec3_length(o->collider.center) > 1e-6f || o->transform.scale.x <= 0 ||
          o->transform.scale.y <= 0 || o->transform.scale.z <= 0))
         return false;
+    if(body.enabled&&body.type==AF_BODY_DYNAMIC&&o->collider.type==AF_COLLIDER_COMPOUND){af_mass_properties mass;if(fabsf(o->transform.scale.x-o->transform.scale.y)>.0001f||fabsf(o->transform.scale.x-o->transform.scale.z)>.0001f||!af_scene_compound_mass(scene,id,&mass))return false;}
     af_rigid_body previous=o->body;o->body=body;
     if(!af_scene_joints_valid(scene)){o->body=previous;return false;}
     return true;

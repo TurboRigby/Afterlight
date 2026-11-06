@@ -19,3 +19,10 @@ rotated inertia tensors and the parallel-axis theorem. They are expressed in
 normalized owner axes and physical world units; inertia is about the computed
 center. Overlapping parts contribute additively. Tests verify unequal-density
 centers, fifth-power inertia scaling and off-diagonal rotated-box terms.
+
+Compound rigid bodies share one linear/angular state across parts. The full
+inverse inertia tensor operates in COM axes, while visual transforms retain the
+authored pivot. Dynamic compound roots require positive uniform scale; each
+physical part dimension is at least .01 units. Contacts retain part-pair identity
+for warm starting. Character pushing aggregates contacts and applies its impulse
+budget once per owner. Primitive, mesh, hinge, sleep and landing regressions pass.

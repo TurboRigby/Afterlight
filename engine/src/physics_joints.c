@@ -27,7 +27,7 @@ bool ph_joints_sync(af_physics *p) {
     p->joint_count = 0;
     p->world = (ph_body){.q = {0, 0, 0, 1}};
     for (unsigned k = 0; k < 3; ++k)
-        p->world.shape.axes[k] = ph_axis(k);
+        p->world.axes[k]=p->world.shape.axes[k] = ph_axis(k);
     for (size_t i = 0; i < af_scene_joint_count(p->scene); ++i) {
         af_joint j = *af_scene_joint_at(p->scene, i);
         if (!j.enabled)

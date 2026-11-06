@@ -41,8 +41,8 @@ static ph_body predict(const ph_body *b, float dt) {
 }
 static af_vec3 support(const ph_body *b, af_vec3 n) {
     if (b->shape.type == AF_COLLIDER_SPHERE)
-        return add(b->p, mul(n, b->shape.radius));
-    af_vec3 result = b->p;
+        return add(b->shape.center, mul(n, b->shape.radius));
+    af_vec3 result = b->shape.center;
     for (unsigned i = 0; i < 3; ++i) {
         float d = dot(n, b->shape.axes[i]);
         if (fabsf(d) > 1e-6f)
@@ -72,13 +72,13 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
     }
     if (triangle && a->shape.type == AF_COLLIDER_SPHERE) {
         af_collision_hit hit;
-        float d = tc_capsule_triangle(*triangle, a->p, a->shape.radius, 0, &hit);
+        float d = tc_capsule_triangle(*triangle, a->shape.center, a->shape.radius, 0, &hit);
         *normal = mul(hit.normal, -1);
         *point = hit.point;
         return d;
     }
     if (!triangle && a->shape.type == AF_COLLIDER_SPHERE && b->shape.type == AF_COLLIDER_SPHERE) {
-        af_vec3 d = sub(b->p, a->p);
+        af_vec3 d = sub(b->shape.center, a->shape.center);
         float n = af_vec3_length(d);
         *normal = n > 1e-7f ? mul(d, 1 / n) : (af_vec3){0, 1, 0};
         *point = mul(add(support(a, *normal), support(b, mul(*normal, -1))), .5f);
@@ -86,7 +86,7 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
     }
     if (!triangle && a->shape.type != b->shape.type) {
         const ph_body *sphere = a->shape.type == AF_COLLIDER_SPHERE ? a : b, *box = sphere == a ? b : a;
-        af_vec3 local = ph_local(box, sub(sphere->p, box->p)), h = box->shape.half_extents,
+        af_vec3 local = ph_shape_local(box, sub(sphere->shape.center, box->shape.center)), h = box->shape.half_extents,
                 closest = {fminf(h.x, fmaxf(-h.x, local.x)), fminf(h.y, fmaxf(-h.y, local.y)),
                            fminf(h.z, fmaxf(-h.z, local.z))};
         af_vec3 delta = sub(local, closest);
@@ -94,7 +94,7 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
         af_vec3 outward;
         float d = length - sphere->shape.radius;
         if (length > 1e-7f)
-            outward = ph_vector(box, mul(delta, 1 / length));
+            outward = ph_shape_vector(box, mul(delta, 1 / length));
         else {
             unsigned axis = 0;
             float depth = h.x - fabsf(local.x);
@@ -109,7 +109,7 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
             d = -depth - sphere->shape.radius;
         }
         *normal = sphere == a ? mul(outward, -1) : outward;
-        *point = add(box->p, ph_vector(box, closest));
+        *point = add(box->shape.center, ph_shape_vector(box, closest));
         return d;
     }
     float best = -1e30f;
@@ -136,8 +136,8 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
         axis = mul(axis, 1 / length);
         float positive, negative, r = projected(a, axis);
         if (triangle) {
-            float lo = dot(sub(triangle->a, a->p), axis), hi = lo,
-                  values[] = {dot(sub(triangle->b, a->p), axis), dot(sub(triangle->c, a->p), axis)};
+            float lo = dot(sub(triangle->a, a->shape.center), axis), hi = lo,
+                  values[] = {dot(sub(triangle->b, a->shape.center), axis), dot(sub(triangle->c, a->shape.center), axis)};
             for (unsigned k = 0; k < 2; ++k) {
                 lo = fminf(lo, values[k]);
                 hi = fmaxf(hi, values[k]);
@@ -145,7 +145,7 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
             positive = lo - r;
             negative = -hi - r;
         } else {
-            float center = dot(sub(b->p, a->p), axis), sum = r + projected(b, axis);
+            float center = dot(sub(b->shape.center, a->shape.center), axis), sum = r + projected(b, axis);
             positive = center - sum;
             negative = -center - sum;
         }
