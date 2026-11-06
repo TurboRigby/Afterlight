@@ -13,6 +13,7 @@
 #include "gizmo.h"
 #include "light_gizmo.h"
 #include "collider_view.h"
+#include "joint_gizmo.h"
 #include "runtime.h"
 #include "gui.h"
 #include "play_hud.h"
@@ -61,6 +62,7 @@ typedef struct editor {
     bool refresh_fields;
     bool fields_active;
     bool free_camera,resume_game_capture,maximize_play;
+    af_joint_id edit_joint;ed_joint_part joint_part;af_joint initial_joint;uint64_t joint_drag_revision;
     bool invalid_name;
     bool failed;
     bool show_performance,show_assets,show_colliders,show_input,show_prefab,show_physics;char prefab_path[4096];char input_path[4096];
@@ -241,12 +243,14 @@ static bool should_close(af_engine *engine,void *userdata)
 }
 static void select_object(editor *app,af_object_id id)
 {
+    app->edit_joint=0;
     app->light_selected=false;
     if(app->document.selection!=id){app->document.selection=id;refresh(app);}
 }
 static void focus_selection(editor *app)
 {
     const af_scene_object *object=af_scene_get_object(app->document.scene,app->document.selection);
+
     if(app->light_selected){const af_local_light *light=af_scene_local_light_at(app->document.scene,app->selected_light);if(light)app->camera.position=af_vec3_sub(light->position,af_vec3_scale(af_camera_forward(&app->camera),fmaxf(3,light->range*.3f)));return;}
     if(!object)return;
     af_mat4 world;if(!af_scene_world_matrix(app->document.scene,object->id,&world))return;
@@ -296,12 +300,19 @@ static void keyboard(editor *app,double delta)
         int axis=ed_gizmo_hit(&app->gizmo,mouse);
         const af_scene_object *object=af_scene_get_object(app->document.scene,app->document.selection);
         const af_local_light *light=app->light_selected?af_scene_local_light_at(app->document.scene,app->selected_light):NULL;
-        if(axis>=0&&light){ed_document_end_edit(&app->document);app->initial_light=*light;app->drag_light=app->selected_light;app->light_drag_revision=app->document.revision;app->light_dragging=true;ed_gizmo_begin(&app->gizmo,axis,0,ed_light_transform(*light),mouse);}
+        const af_joint *joint=af_scene_get_joint(app->document.scene,app->edit_joint);
+        if(axis>=0&&joint){af_transform pose;if(ed_joint_edit_pose(app->document.scene,*joint,app->joint_part,&pose)){ed_document_end_edit(&app->document);app->initial_joint=*joint;app->joint_drag_revision=app->document.revision;ed_gizmo_begin(&app->gizmo,axis,0,pose,mouse);}}
+        else if(axis>=0&&light){ed_document_end_edit(&app->document);app->initial_light=*light;app->drag_light=app->selected_light;app->light_drag_revision=app->document.revision;app->light_dragging=true;ed_gizmo_begin(&app->gizmo,axis,0,ed_light_transform(*light),mouse);}
         else if(axis>=0&&object){ed_document_end_edit(&app->document);ed_gizmo_begin(&app->gizmo,axis,object->id,object->transform,mouse);}
         else{int picked=ed_light_pick(app->document.scene,&app->camera,app->viewport,mouse);if(picked>=0){ed_document_end_edit(&app->document);app->selected_light=(size_t)picked;app->light_selected=true;app->document.selection=0;app->gizmo.dragging=false;struct nk_window *inspector_window=nk_window_find(&app->gui.context,"Inspector");if(inspector_window)inspector_window->scrollbar.y=0;}else select_object(app,af_engine_pick_object(engine,mouse));}
     }
     if(inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_RIGHT)){
         ed_gui_unfocus(&app->gui);app->fields_active=false;
+    }
+
+    if(app->gizmo.dragging&&app->edit_joint){
+        if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){if(app->document.revision!=app->joint_drag_revision)ed_document_undo(&app->document);app->gizmo.dragging=false;ed_document_end_edit(&app->document);}
+        else{bool held=af_engine_mouse_down(engine,AF_MOUSE_LEFT);if(held||(SDL_GetWindowFlags(af_engine_sdl_window(engine))&SDL_WINDOW_INPUT_FOCUS)){af_joint next;if(ed_joint_edit_apply(app->document.scene,app->initial_joint,app->joint_part,ed_gizmo_drag(&app->gizmo,mouse),&next))ed_document_joint(&app->document,next);}if(!held){app->gizmo.dragging=false;ed_document_end_edit(&app->document);}}return;
     }
     if(app->gizmo.dragging&&app->light_dragging){
         if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){if(app->document.revision!=app->light_drag_revision)ed_document_undo(&app->document);app->light_dragging=app->gizmo.dragging=false;ed_document_end_edit(&app->document);}
@@ -319,9 +330,9 @@ static void keyboard(editor *app,double delta)
     }
     if(app->fields_active)return;
     if(!app->runtime.playing&&!af_engine_mouse_captured(engine)){
-        if(af_engine_key_pressed(engine,AF_KEY_W))app->gizmo.mode=ED_GIZMO_MOVE;
-        if(af_engine_key_pressed(engine,AF_KEY_E))app->gizmo.mode=ED_GIZMO_ROTATE;
-        if(af_engine_key_pressed(engine,AF_KEY_R))app->gizmo.mode=ED_GIZMO_SCALE;
+        if(!app->edit_joint&&af_engine_key_pressed(engine,AF_KEY_W))app->gizmo.mode=ED_GIZMO_MOVE;
+        if(!app->edit_joint&&af_engine_key_pressed(engine,AF_KEY_E))app->gizmo.mode=ED_GIZMO_ROTATE;
+        if(!app->edit_joint&&af_engine_key_pressed(engine,AF_KEY_R))app->gizmo.mode=ED_GIZMO_SCALE;
     }
     bool navigate=af_engine_mouse_pressed(engine,AF_MOUSE_RIGHT)&&
         (inside(app->viewport,mouse)||(app->runtime.playing&&af_engine_mouse_captured(engine)));
@@ -529,6 +540,8 @@ static void joint_controls(editor *app, af_scene_object object) {
                 }
                 nk_combo_end(ctx);
             }
+
+            if(!app->runtime.playing){nk_layout_row_dynamic(ctx,28,2);const char *buttons[]={"Drag anchor A","Drag anchor B","Rotate axis A","Rotate axis B"};for(unsigned part=0;part<(j.type==AF_JOINT_HINGE?4u:2u);++part)if(nk_button_label(ctx,buttons[part])){ed_document_end_edit(&app->document);app->edit_joint=j.id;app->joint_part=(ed_joint_part)part;app->show_physics=true;app->gizmo.dragging=false;}if(app->edit_joint==j.id){nk_layout_row_dynamic(ctx,24,1);label(ctx,app->joint_part<ED_JOINT_AXIS_A?"Drag an axis handle; Snap uses 0.5 units.":"Drag a rotation ring; Snap uses 15 degrees.",36);nk_layout_row_dynamic(ctx,26,1);if(nk_button_label(ctx,"Finish joint edit")){app->edit_joint=0;ed_document_end_edit(&app->document);}}}
             vector_fields(ctx, "Anchor A (body units)", &j.anchor_a, .1f, .01f);
             vector_fields(ctx, j.b ? "Anchor B (body units)" : "World anchor B", &j.anchor_b, .1f, .01f);
             if (j.type == AF_JOINT_DISTANCE) {
@@ -1354,7 +1367,9 @@ static void update(af_engine *engine,double delta,void *userdata)
     app->viewport=app->runtime.playing&&app->maximize_play?(af_rect){0,64,width,fmaxf(1,height-96)}:(af_rect){252,104,fmaxf(1,width-586),fmaxf(1,height-136)};
     af_engine_set_viewport(engine,&app->viewport);
     const af_scene_object *selected=af_scene_get_object(app->document.scene,app->document.selection);
-    if(app->light_selected){const af_local_light *light=af_scene_local_light_at(app->document.scene,app->selected_light);if(light)ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,light->position,af_mat4_identity(),ed_light_transform(*light).rotation);}
+    const af_joint *editing=af_scene_get_joint(app->document.scene,app->edit_joint);if(app->edit_joint&&(!editing||!selected||(selected->id!=editing->a&&selected->id!=editing->b))){app->edit_joint=0;app->gizmo.dragging=false;}
+    if(app->edit_joint&&!app->runtime.playing){af_transform pose;if(ed_joint_edit_pose(app->document.scene,*editing,app->joint_part,&pose)){app->gizmo.mode=app->joint_part<ED_JOINT_AXIS_A?ED_GIZMO_MOVE:ED_GIZMO_ROTATE;ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,pose.position,af_mat4_identity(),pose.rotation);}else app->gizmo.projected=false;}
+    else if(app->light_selected){const af_local_light *light=af_scene_local_light_at(app->document.scene,app->selected_light);if(light)ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,light->position,af_mat4_identity(),ed_light_transform(*light).rotation);}
     else if(selected){af_mat4 world,parent=af_mat4_identity();
         if(selected->parent)af_scene_world_matrix(app->document.scene,selected->parent,&parent);
         if(af_scene_world_matrix(app->document.scene,selected->id,&world))ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,(af_vec3){world.elements[12],world.elements[13],world.elements[14]},parent,selected->transform.rotation);

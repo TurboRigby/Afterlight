@@ -69,3 +69,13 @@ times substep duration, including warm starts; angular limits take precedence.
 Zero target speed acts as a brake. Running motors keep their island awake.
 Editor controls and C-host joint views/setters expose these settings. Tests cover
 acceleration budgets, speed tracking, braking, limit stalls and persistence.
+
+## Viewport joint tools
+
+In a joint's inspector, choose Drag anchor A/B or Rotate axis A/B. Translation
+handles edit world anchor positions and convert back to unscaled body axes;
+rotation rings update the axis and perpendicular zero reference together. The
+existing Snap toggle uses 0.5 units or 15 degrees. A drag is one undo operation;
+Escape cancels it. Finish joint edit returns to object tools. Tests cover rotated
+and nonuniformly scaled bodies, world endpoints, actual snapped drag results and
+grouped undo/redo, alongside native editor smoke/animation tests.

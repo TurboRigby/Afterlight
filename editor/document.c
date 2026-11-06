@@ -343,6 +343,7 @@ bool ed_document_prefab(ed_document *d,const char *path){af_scene *next=af_scene
 bool ed_document_body(ed_document *d,af_rigid_body body){const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;if(!memcmp(&o->body,&body,sizeof(body)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_body(next,d->selection,body)){af_scene_destroy(next);status(d,"Dynamic bodies need centered root sphere/box colliders and valid mass/settings.");return false;}return commit(d,next,d->selection,47);}
 
 bool ed_document_joint(ed_document *d, af_joint j) {
+    const af_joint *current=af_scene_get_joint(d->scene,j.id);if(current&&!memcmp(current,&j,sizeof(j)))return true;
     af_scene *next = af_scene_clone(d->scene);
     if (!next)
         return false;
