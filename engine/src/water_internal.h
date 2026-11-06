@@ -18,6 +18,9 @@ typedef struct af_water_runtime {
     size_t count;
     af_water_stats stats;
 } af_water_runtime;
+float wa_river_length(const af_water *);
+af_vec3 wa_river_point(const af_water *, float, af_vec3 *);
+bool wa_river_coordinates(const af_water *, af_vec3, float *, float *, float *, af_vec3 *);
 bool wa_owner_valid(const af_scene *, af_object_id, af_water);
 bool wa_decode(af_scene *, const cJSON *);
 bool wa_encode(const af_scene *, cJSON *);

@@ -17,17 +17,48 @@ af_water af_water_default(void) {
                       .absorption = {.7f, .12f, .055f},
                       .scattering = {.03f, .18f, .22f},
                       .roughness = .16f,
-                      .ior = 1.333f};
+                      .ior = 1.333f,
+                      .flow_speed = 1.5f,
+                      .path_count = 2,
+                      .path = {{0, 0, -4}, {0, 0, 4}}};
 }
 static bool range(float v, float a, float b) { return isfinite(v) && v >= a && v <= b; }
 bool af_water_valid(af_water w) {
-    return w.mode == AF_WATER_POOL && w.quality >= AF_WATER_LOW && w.quality <= AF_WATER_HIGH &&
-           range(w.half_size.x, .25f, 1000) && range(w.half_size.y, .25f, 1000) &&
-           range(w.depth, .05f, 100) && range(w.density, .01f, 20000) && range(w.drag, 0, 20) &&
-           range(w.wave_speed, .01f, 20) && range(w.damping, 0, 20) && range(w.wind, 0, 1) &&
-           range(w.roughness, .04f, 1) && range(w.ior, 1, 2.5f) && range(w.absorption.x, 0, 100) &&
-           range(w.absorption.y, 0, 100) && range(w.absorption.z, 0, 100) &&
-           range(w.scattering.x, 0, 1) && range(w.scattering.y, 0, 1) && range(w.scattering.z, 0, 1);
+    if (w.path_count < 2 || w.path_count > AF_WATER_MAX_PATH)
+        return false;
+    for (unsigned i = 0; i < w.path_count; ++i)
+        if (!range(w.path[i].x, -1000, 1000) || !range(w.path[i].y, -100, 100) ||
+            !range(w.path[i].z, -1000, 1000))
+            return false;
+    if (w.mode == AF_WATER_RIVER) {
+        if (w.path_count < 2 || w.path_count > AF_WATER_MAX_PATH)
+            return false;
+        for (unsigned i = 0; i < w.path_count; ++i) {
+            af_vec3 p = w.path[i];
+            if (!range(p.x, -1000, 1000) || !range(p.y, -100, 100) || !range(p.z, -1000, 1000))
+                return false;
+            if (i) {
+                af_vec3 d = af_vec3_sub(p, w.path[i - 1]);
+                float length = hypotf(d.x, d.z);
+                if (length < .5f || fabsf(d.y) > length * .5f)
+                    return false;
+                if (i > 1) {
+                    af_vec3 old = af_vec3_sub(w.path[i - 1], w.path[i - 2]);
+                    float dot = (d.x * old.x + d.z * old.z) / (length * hypotf(old.x, old.z));
+                    if (dot < .5f)
+                        return false;
+                }
+            }
+        }
+    }
+    return (w.mode == AF_WATER_POOL || w.mode == AF_WATER_RIVER) && range(w.flow_speed, 0, 20) &&
+           w.quality >= AF_WATER_LOW && w.quality <= AF_WATER_HIGH && range(w.half_size.x, .25f, 1000) &&
+           range(w.half_size.y, .25f, 1000) && range(w.depth, .05f, 100) &&
+           range(w.density, .01f, 20000) && range(w.drag, 0, 20) && range(w.wave_speed, .01f, 20) &&
+           range(w.damping, 0, 20) && range(w.wind, 0, 1) && range(w.roughness, .04f, 1) &&
+           range(w.ior, 1, 2.5f) && range(w.absorption.x, 0, 100) && range(w.absorption.y, 0, 100) &&
+           range(w.absorption.z, 0, 100) && range(w.scattering.x, 0, 1) && range(w.scattering.y, 0, 1) &&
+           range(w.scattering.z, 0, 1);
 }
 size_t af_scene_water_count(const af_scene *s) { return s ? s->water_count : 0; }
 const af_water *af_scene_water_at(const af_scene *s, size_t i) {

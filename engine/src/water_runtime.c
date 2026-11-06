@@ -42,6 +42,8 @@ bool wa_sync(af_water_runtime *r, const af_scene *s) {
         wa_slot *a = &r->slots[i];
         if (k == r->count || a->config.owner != w.owner || a->config.quality != w.quality ||
             a->config.half_size.x != w.half_size.x || a->config.half_size.y != w.half_size.y ||
+            a->config.mode != w.mode || a->config.path_count != w.path_count ||
+            memcmp(a->config.path, w.path, sizeof(w.path)) ||
             memcmp(&a->transform, &o->transform, sizeof(o->transform))) {
             memset(a, 0, sizeof(*a));
             a->config = w;
@@ -59,9 +61,12 @@ bool wa_sync(af_water_runtime *r, const af_scene *s) {
             r->stats.cells += (size_t)r->slots[i].n * r->slots[i].n;
     return true;
 }
+static float length(const af_water *w) {
+    return w->mode == AF_WATER_RIVER ? wa_river_length(w) * .5f : w->half_size.y;
+}
 static float grid(const wa_slot *a, float x, float z, float alpha) {
     float gx = clamp((x / a->config.half_size.x + 1) * .5f * (float)(a->n - 1), 0, (float)a->n - 1);
-    float gz = clamp((z / a->config.half_size.y + 1) * .5f * (float)(a->n - 1), 0, (float)a->n - 1);
+    float gz = clamp((z / length(&a->config) + 1) * .5f * (float)(a->n - 1), 0, (float)a->n - 1);
     unsigned ix = (unsigned)gx, iz = (unsigned)gz, jx = ix + 1 < a->n ? ix + 1 : ix,
              jz = iz + 1 < a->n ? iz + 1 : iz;
     unsigned ids[] = {iz * a->n + ix, iz * a->n + jx, jz * a->n + ix, jz * a->n + jx};
@@ -78,9 +83,10 @@ void wa_step(af_water_runtime *r, float dt) {
         if (!w.enabled)
             continue;
         unsigned n = a->n;
-        float dx = 2 * w.half_size.x / (float)(n - 1), dz = 2 * w.half_size.y / (float)(n - 1);
+        float dx = 2 * w.half_size.x / (float)(n - 1), dz = 2 * length(&w) / (float)(n - 1);
         float c = fminf(w.wave_speed, sqrtf(9.81f * w.depth)), c2 = c * c;
-        unsigned steps = (unsigned)ceilf(dt * c / (.35f * fminf(dx, dz)));
+        unsigned steps = (unsigned)ceilf(
+            dt * (c / fminf(dx, dz) + (w.mode == AF_WATER_RIVER ? w.flow_speed / dz : 0)) / .35f);
         if (!steps)
             steps = 1;
         float h = dt / (float)steps;
@@ -95,16 +101,33 @@ void wa_step(af_water_runtime *r, float dt) {
                         (a->h[(z ? z - 1 : z) * n + x] - 2 * v + a->h[(z + 1 < n ? z + 1 : z) * n + x]) /
                             (dz * dz);
                     float wind = w.wind * sinf((float)x * .37f + (float)z * .19f + a->time * 1.7f);
-                    a->v[k] = (a->v[k] + (c2 * lap + wind) * h) * expf(-w.damping * h);
+                    float advect = w.mode == AF_WATER_RIVER
+                                       ? w.flow_speed * (a->v[k] - a->v[(z ? z - 1 : z) * n + x]) / dz
+                                       : 0;
+                    a->v[k] = (a->v[k] + (c2 * lap + wind - advect) * h) * expf(-w.damping * h);
                 }
+            float next[AF_WATER_GRID_MAX * AF_WATER_GRID_MAX];
             float mean = 0;
             for (unsigned k = 0; k < n * n; ++k) {
-                a->h[k] = clamp(a->h[k] + a->v[k] * h, -w.depth * .25f, fminf(.5f, w.depth * .25f));
-                mean += a->h[k];
+                unsigned z = k / n;
+                float advect = w.mode == AF_WATER_RIVER
+                                   ? w.flow_speed * (a->h[k] - a->h[(z ? z - 1 : z) * n + k % n]) / dz
+                                   : 0;
+                next[k] =
+                    clamp(a->h[k] + (a->v[k] - advect) * h, -w.depth * .25f, fminf(.5f, w.depth * .25f));
+                if (w.mode == AF_WATER_RIVER) {
+                    float edge = fminf((float)z, (float)(n - 1 - z));
+                    if (edge < 3) {
+                        float damping = expf(-(3 - edge) * 2 * h);
+                        next[k] *= damping;
+                        a->v[k] *= damping;
+                    }
+                }
+                mean += next[k];
             }
             mean /= (float)(n * n);
             for (unsigned k = 0; k < n * n; ++k)
-                a->h[k] -= mean;
+                a->h[k] = next[k] - (w.mode == AF_WATER_POOL ? mean : 0);
             a->time += h;
         }
         for (unsigned k = 0; k < n * n; ++k)
@@ -121,26 +144,46 @@ static af_water_sample sample_id(const af_water_runtime *r, const af_scene *s, a
         if (!o)
             continue;
         af_vec3 q = local(o->transform, p);
-        if (fabsf(q.x) > w.half_size.x + 1e-4f || fabsf(q.z) > w.half_size.y + 1e-4f)
+        float base = 0;
+        af_vec3 tangent = {0, 0, 1};
+        if (w.mode == AF_WATER_RIVER) {
+            float side, along;
+            if (!wa_river_coordinates(&w, q, &side, &along, &base, &tangent))
+                continue;
+            q.x = side;
+            q.z = along - length(&w);
+        } else if (fabsf(q.x) > w.half_size.x + 1e-4f || fabsf(q.z) > w.half_size.y + 1e-4f)
             continue;
         const wa_slot *a = slot(r, w.owner);
         float height = 0, v = 0;
         af_vec3 normal = {0, 1, 0};
         if (a && a->n) {
             height = grid(a, q.x, q.z, alpha);
-            float dx = 2 * w.half_size.x / (float)(a->n - 1), dz = 2 * w.half_size.y / (float)(a->n - 1);
+            float dx = 2 * w.half_size.x / (float)(a->n - 1), dz = 2 * length(&w) / (float)(a->n - 1);
             normal = af_vec3_normalize(
                 (af_vec3){-(grid(a, q.x + dx, q.z, alpha) - grid(a, q.x - dx, q.z, alpha)) / (2 * dx), 1,
                           -(grid(a, q.x, q.z + dz, alpha) - grid(a, q.x, q.z - dz, alpha)) / (2 * dz)});
             unsigned x = (unsigned)clamp((q.x / w.half_size.x + 1) * .5f * (float)(a->n - 1), 0,
                                          (float)a->n - 1),
-                     z = (unsigned)clamp((q.z / w.half_size.y + 1) * .5f * (float)(a->n - 1), 0,
+                     z = (unsigned)clamp((q.z / length(&w) + 1) * .5f * (float)(a->n - 1), 0,
                                          (float)a->n - 1);
             v = a->v[z * a->n + x];
         }
+        if (w.mode == AF_WATER_RIVER) {
+            float across = -normal.x, down = -normal.z + tangent.y;
+            normal = af_vec3_normalize((af_vec3){-across * tangent.z - down * tangent.x, 1,
+                                                 across * tangent.x - down * tangent.z});
+        }
         return (af_water_sample){
-            true,      w.owner,   o->transform.position.y + height, o->transform.position.y - w.depth,
-            w.density, {0, v, 0}, rotate(o->transform, normal)};
+            true,
+            w.owner,
+            o->transform.position.y + base + height,
+            o->transform.position.y + base - w.depth,
+            w.density,
+            rotate(o->transform, (af_vec3){w.mode == AF_WATER_RIVER ? tangent.x * w.flow_speed : 0,
+                                           v + (w.mode == AF_WATER_RIVER ? tangent.y * w.flow_speed : 0),
+                                           w.mode == AF_WATER_RIVER ? tangent.z * w.flow_speed : 0}),
+            rotate(o->transform, normal)};
     }
     return (af_water_sample){0};
 }
@@ -160,12 +203,19 @@ bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3
     if (!a || !o || !a->config.enabled)
         return false;
     af_vec3 q = local(o->transform, p);
-    if (fabsf(q.x) > a->config.half_size.x || fabsf(q.z) > a->config.half_size.y)
+    if (a->config.mode == AF_WATER_RIVER) {
+        float side, along, height;
+        af_vec3 tangent;
+        if (!wa_river_coordinates(&a->config, q, &side, &along, &height, &tangent))
+            return false;
+        q.x = side;
+        q.z = along - length(&a->config);
+    } else if (fabsf(q.x) > a->config.half_size.x || fabsf(q.z) > a->config.half_size.y)
         return false;
     for (unsigned z = 0; z < a->n; ++z)
         for (unsigned x = 0; x < a->n; ++x) {
             float dx = ((float)x / (float)(a->n - 1) * 2 - 1) * a->config.half_size.x - q.x,
-                  dz = ((float)z / (float)(a->n - 1) * 2 - 1) * a->config.half_size.y - q.z;
+                  dz = ((float)z / (float)(a->n - 1) * 2 - 1) * length(&a->config) - q.z;
             float f = fmaxf(0, 1 - (dx * dx + dz * dz) / (radius * radius));
             a->v[z * a->n + x] = clamp(a->v[z * a->n + x] + velocity * f * f, -10, 10);
         }
@@ -191,7 +241,11 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
     for (unsigned z = 0; z < n; ++z)
         for (unsigned x = 0; x < n; ++x) {
             af_vec3 p = {((float)x / (float)(n - 1) * 2 - 1) * w->half_size.x, 0,
-                         ((float)z / (float)(n - 1) * 2 - 1) * w->half_size.y};
+                         ((float)z / (float)(n - 1) * 2 - 1) * length(w)};
+            if (w->mode == AF_WATER_RIVER) {
+                af_vec3 tangent, center = wa_river_point(w, p.z + length(w), &tangent);
+                p = af_vec3_add(center, (af_vec3){p.x * tangent.z, 0, -p.x * tangent.x});
+            }
             af_vec3 wp = af_vec3_add(o->transform.position, rotate(o->transform, p));
             af_water_sample sample = sample_id(r, s, wp, alpha, id);
             p.y = sample.height - o->transform.position.y;

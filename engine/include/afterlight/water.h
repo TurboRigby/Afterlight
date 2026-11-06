@@ -4,7 +4,7 @@
 #include <afterlight/scene.h>
 #define AF_SCENE_MAX_WATERS 8u
 #define AF_WATER_MAX_PATH 8u
-typedef enum af_water_mode { AF_WATER_POOL } af_water_mode;
+typedef enum af_water_mode { AF_WATER_POOL, AF_WATER_RIVER } af_water_mode;
 typedef enum af_water_quality { AF_WATER_LOW, AF_WATER_MEDIUM, AF_WATER_HIGH } af_water_quality;
 /* Metres, kilograms, seconds. Surface owner: root node, unit scale, yaw only.
    Definitions are saved; waves belong to the physics world and reset on Stop. */
@@ -17,6 +17,9 @@ typedef struct af_water {
     float depth, density, drag, wave_speed, damping, wind;
     af_vec3 absorption, scattering;
     float roughness, ior;
+    float flow_speed;
+    unsigned path_count;
+    af_vec3 path[AF_WATER_MAX_PATH];
 } af_water;
 typedef struct af_water_sample {
     bool inside;

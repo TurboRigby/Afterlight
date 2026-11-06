@@ -10,6 +10,7 @@ typedef struct state {
     af_scene *scene;
     af_object_id water;
     unsigned ticks, phase;
+    uint64_t kick_ticks;
     bool failed;
     unsigned char green[4], red[4], clear[4];
 } state;
@@ -56,6 +57,8 @@ static void update(af_engine *e, double dt, void *data) {
     (void)dt;
     state *s = data;
     if (++s->ticks < 4)
+        return;
+    if (s->phase == 9 && af_engine_get_stats(e).simulation_ticks <= s->kick_ticks)
         return;
     unsigned char p[4] = {0};
     if (s->phase)
@@ -115,6 +118,7 @@ static void update(af_engine *e, double dt, void *data) {
     case 8:
         CHECK(p[0] + 70 < p[2]);
         CHECK(af_engine_disturb_water(e, s->water, (af_vec3){0}, 1, 1));
+        s->kick_ticks = af_engine_get_stats(e).simulation_ticks;
         break;
     case 9:
         CHECK(af_engine_water_stats(e).cells == 4096 && af_engine_water_stats(e).max_wave > 0);

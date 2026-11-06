@@ -30,3 +30,24 @@ def create(name,hard):
     (root/'sandbox/scenes'/(name+'.afterlight.json')).write_text(json.dumps(s,indent=2)+'\n')
 create('water-pool',False)
 create('water-lake',True)
+
+def river(name,hard):
+    import math
+    s=json.loads((root/'sandbox/scenes/water-pool.afterlight.json').read_text());s.update(version=18,objects=[],water=[],next_id='1')
+    def obj(name,p,half=None,density=0,color=(.3,.4,.35,1)):
+        o=copy.deepcopy(template);o.update(id=s['next_id'],name=name,mesh='cube' if half else '__node',parent='0',position=p,rotation=[0,0,0],scale=[h/.65 for h in half] if half else [1,1,1]);s['next_id']=str(int(s['next_id'])+1)
+        o['collider'].update(type='box' if half else 'none',enabled=bool(half),half_extents=[.65]*3,center=[0,0,0]);o['body'].update(enabled=density>0,type='dynamic' if density else 'static',mass=density*8*half[0]*half[1]*half[2] if density else 1,velocity=[0,0,0],angular_velocity=[0,0,0],continuous=True,restitution=.05);o['material']['base_color']=list(color);s['objects'].append(o);return o
+    points=[[-4,.8,-5],[-2,.4,-1],[1,0,3],[4,-.4,6]] if hard else [[0,.5,-5],[0,-.5,5]]
+    width=1.3;depth=1.5
+    obj('Riverbed ground',[0,-3,0],[14,.2,14])
+    for a,b in zip(points,points[1:]):
+        dx,dy,dz=[b[k]-a[k] for k in range(3)];length=math.hypot(dx,dz);yaw=math.atan2(dx,dz);pitch=-math.atan2(dy,length);middle=[(a[k]+b[k])/2 for k in range(3)];middle[1]-=depth+.08
+        floor=obj('Channel bed',middle,[width+.18,.08,math.hypot(length,dy)/2+.15]);floor['rotation']=[pitch,yaw,0]
+        for sign in (-1,1):
+            pos=[middle[0]+sign*(width+.15)*dz/length,middle[1]+depth*.5,middle[2]-sign*(width+.15)*dx/length];wall=obj('River bank',pos,[.15,depth*.5+.1,length/2+.2]);wall['rotation']=[pitch,yaw,0]
+    surface=obj('River bend' if hard else 'Stream',[0,0,0]);w=json.loads((root/'sandbox/scenes/water-pool.afterlight.json').read_text())['water'][0];w.update(owner=surface['id'],mode='river',half_size=[width,6],depth=depth,quality=2 if hard else 1,flow_speed=1.1,path=points);s['water'].append(w)
+    for i in range(8 if hard else 3):
+        a,b=points[:2];f=.12+.08*i;pos=[a[k]+(b[k]-a[k])*f for k in range(3)];pos[0]+=(i%2-.5)*.6;pos[1]+=.4+(i//2)*.5;obj('River wood '+str(i),pos,[.22,.22,.22],500,(.62,.3,.12,1))
+    (root/'sandbox/scenes'/(name+'.afterlight.json')).write_text(json.dumps(s,indent=2)+'\n')
+river('water-stream',False)
+river('water-river-bend',True)

@@ -56,6 +56,7 @@ add_library(afterlight STATIC
     engine/src/body.c
     engine/src/water.c
     engine/src/water_io.c
+    engine/src/water_river.c
     engine/src/water_runtime.c
     engine/src/physics_water.c
     engine/src/physics.c
@@ -388,7 +389,7 @@ else()
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${animations_scene}" "${PROJECT_BINARY_DIR}/scenes/animations.afterlight.json")
     add_dependencies(afterlight_editor afterlight_animation_scene_copy)
 endif()
-foreach(sample demo playground mechanism animations character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake)
+foreach(sample demo playground mechanism animations character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake water-stream water-river-bend)
     if(sample STREQUAL "demo")
         set(project_scene "${sandbox_scene}")
         set(project_module afterlight_game)
@@ -457,7 +458,7 @@ add_custom_target(run_lighting_editor COMMAND $<TARGET_FILE:afterlight_editor> -
 add_custom_target(run_mechanism_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/mechanism.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
 add_custom_target(run_animation_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/animations.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
 add_custom_target(run_animation_player COMMAND $<TARGET_FILE:afterlight_player> --project "${PROJECT_BINARY_DIR}/animations.afterlight.project" DEPENDS afterlight_player afterlight_animation_game USES_TERMINAL VERBATIM)
-foreach(sample character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake)
+foreach(sample character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake water-stream water-river-bend)
     add_custom_target(run_${sample}_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/${sample}.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
     if(sample MATCHES "^water-")
         set(sample_game afterlight_water_game)
@@ -546,6 +547,16 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_water_channel_test tests/water_channel.c)
+    target_include_directories(afterlight_water_channel_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_channel_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_channel_test)
+    add_test(NAME afterlight.water_channel COMMAND afterlight_water_channel_test "${PROJECT_SOURCE_DIR}/sandbox/scenes/water-stream.afterlight.json" "${PROJECT_SOURCE_DIR}/sandbox/scenes/water-river-bend.afterlight.json")
+    add_executable(afterlight_water_river_test tests/water_river.c)
+    target_include_directories(afterlight_water_river_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_river_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_river_test)
+    add_test(NAME afterlight.water_river COMMAND afterlight_water_river_test )
     add_executable(afterlight_water_scenes_test tests/water_scenes.c)
     target_include_directories(afterlight_water_scenes_test PRIVATE engine/src)
     target_link_libraries(afterlight_water_scenes_test PRIVATE Afterlight::Engine)

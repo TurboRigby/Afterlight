@@ -29,3 +29,15 @@ Right-click captures the fly camera, WASD/QE moves, Space makes ripples, R reloa
 N changes rooms, F6 pauses. CPU tests check all qualities, floating/sinking,
 settling, wave bounds, ownership/history and both authored scenes. Vulkan pixel
 tests verify light color/intensity and wavelength-dependent absorption.
+
+The second stage adds rivers with two to eight centerline points, slope, width
+and current speed. Ripples advect along the strip, and open ends damp outgoing
+waves. Buoyancy queries use the nearest segment's height and tangent, including
+vertical flow on slopes. The current is configured, without a global riverbed
+pressure/erosion solve. Author gently bending paths with distinct points; the
+validator rejects short segments, slopes over 1:2 and turns over 60 degrees.
+Scene format 18 stores the path/current; format 17 pools still load. C ABI is 17.
+
+Run `run_water-stream_editor` before `run_water-river-bend_editor`. The N key
+switches within the pool or river demo pair. River tests check slope, banks and
+ends, downstream drift at every quality, bends, persistence, and both full scenes.

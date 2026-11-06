@@ -10,7 +10,14 @@ typedef struct water_game {
 static bool init(void *memory, const af_game_host *h) {
     water_game *s = memory;
     s->hard = h->object_count(h->scene) > 15;
-    strcpy(s->scene, s->hard ? "water-lake" : "water-pool");
+    bool river = false;
+    for (size_t i = 0; i < h->object_count(h->scene); ++i) {
+        const af_water *w = h->get_water(h->scene, h->object_at(h->scene, i)->id);
+        if (w)
+            river |= w->mode == AF_WATER_RIVER;
+    }
+    strcpy(s->scene, river ? (s->hard ? "water-river-bend" : "water-stream")
+                           : (s->hard ? "water-lake" : "water-pool"));
     s->camera = (af_camera){.position = {0, 5, 9},
                             .yaw = -AF_PI / 2,
                             .pitch = -.48f,
@@ -37,7 +44,9 @@ static void update(void *memory, const af_game_host *h, double dt) {
         if (h->key_pressed(h, AF_KEY_R))
             h->request_scene(h, s->scene);
         if (h->key_pressed(h, AF_KEY_N))
-            h->request_scene(h, s->hard ? "water-pool" : "water-lake");
+            h->request_scene(h, strstr(s->scene, "stream") || strstr(s->scene, "bend")
+                                    ? (s->hard ? "water-stream" : "water-river-bend")
+                                    : (s->hard ? "water-pool" : "water-lake"));
     }
 }
 static void frame(void *memory, const af_game_host *h, double dt) {

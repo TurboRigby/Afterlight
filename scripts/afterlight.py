@@ -181,7 +181,7 @@ def export_project(project_path, destination, player_path, icd=None):
         startup_name=None
         for index,source in enumerate(scenes):
             document=read_json(source)
-            if document.get('format')!='afterlight.scene' or document.get('version') not in range(1,18):raise ValueError(f'Unsupported scene: {source}')
+            if document.get('format')!='afterlight.scene' or document.get('version') not in range(1,19):raise ValueError(f'Unsupported scene: {source}')
             for asset in document.get('assets',[]):
                 original,separator,selector=asset['path'].partition('#');packed=copy_asset(source.parent/original)
                 asset['path']='../assets/'+packed.name+(separator+selector if separator else '')
