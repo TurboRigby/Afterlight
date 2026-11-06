@@ -22,4 +22,6 @@ bool af_scene_remove_collider_part(af_scene*,af_collider_part_id);
 size_t af_scene_collider_part_count(const af_scene*,af_object_id);
 const af_collider_part *af_scene_collider_part_at(const af_scene*,af_object_id,size_t);
 const af_collider_part *af_scene_get_collider_part(const af_scene*,af_collider_part_id);
+size_t af_scene_collider_shape_count(const af_scene*,af_object_id);
+bool af_scene_collider_shape_at(const af_scene*,af_object_id,size_t,af_world_collider*);
 #endif

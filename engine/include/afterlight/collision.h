@@ -21,9 +21,9 @@ typedef struct af_collider {
     uint32_t layer;
 } af_collider;
 typedef struct af_query_filter {uint64_t ignore,ignore_also;uint32_t mask;bool include_triggers;} af_query_filter;
-typedef struct af_collision_hit {uint64_t object;af_vec3 point,normal;float distance,fraction,penetration;bool trigger;} af_collision_hit;
+typedef struct af_collision_hit {uint64_t object,part;af_vec3 point,normal;float distance,fraction,penetration;bool trigger;} af_collision_hit;
 typedef struct af_world_collider {
-    uint64_t object;af_collider_type type;bool trigger;uint32_t layer;
+    uint64_t object,part;af_collider_type type;bool trigger;uint32_t layer;
     af_vec3 center,axes[3],half_extents,a,b;float radius;
     const af_collision_mesh *mesh;af_mat4 matrix,inverse;
 } af_world_collider;
