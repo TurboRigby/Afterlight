@@ -28,7 +28,8 @@ typedef struct ph_bound {
     af_vec3 low, high;
     float key_low,key_high;
 } ph_bound;
-typedef struct ph_joint {af_joint config;size_t a,b;} ph_joint;
+typedef struct ph_joint_row {af_vec3 n,ra,rb;float inverse,bias,lambda,lo,hi;} ph_joint_row;
+typedef struct ph_joint {af_joint config;size_t a,b;ph_joint_row rows[7];} ph_joint;
 struct af_physics {
     af_object_id held;
     af_vec3 grab_local, grab_target;
@@ -74,6 +75,7 @@ void ph_wake_island(af_physics*,size_t);
 void ph_sleep(af_physics *, float);
 bool ph_joints_sync(af_physics *);
 bool ph_collision_allowed(const af_physics*,af_object_id,af_object_id);
+void ph_joints_warm_start(af_physics*,float);
 void ph_joints_solve(af_physics*,float,bool);
 void ph_solve(af_physics *, float);
 bool ph_emit(af_physics*,size_t,size_t,af_vec3,af_vec3,float);

@@ -34,7 +34,7 @@ static void impulse(ph_body *a, ph_body *b, af_vec3 point, af_vec3 j) {
 }
 static unsigned bucket(af_object_id a,af_object_id b){uint64_t hash=(a*UINT64_C(0x9e3779b97f4a7c15))^(b*UINT64_C(0xbf58476d1ce4e5b9));hash^=hash>>32;return (unsigned)hash&16383u;}
 void ph_solve(af_physics *p, float dt) {
-    ph_islands_build(p);
+    ph_islands_build(p);ph_joints_warm_start(p,dt);
     memset(p->cache_heads,0,sizeof(p->cache_heads));for(size_t i=p->cache_count;i>0;--i){unsigned key=bucket(p->cache[i-1].view.a,p->cache[i-1].view.b);p->cache_next[i-1]=p->cache_heads[key];p->cache_heads[key]=(uint32_t)i;}
     for (size_t i = 0; i < p->contact_count; ++i) {
         ph_contact *c = &p->contacts[i];

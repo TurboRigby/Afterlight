@@ -41,3 +41,12 @@ supporting contacts allow quiet groups to sleep; removed supports, moved
 kinematic anchors, impulses and held bodies wake the affected group. Counters
 report island count, awake count and largest group. Tests cover a sleeping chain,
 impulse propagation and removal of its world support, alongside stack sleeping.
+
+## Joint warm starting
+
+Distance, point-anchor, hinge alignment and unilateral limit rows retain bounded
+impulses between substeps. Warm starts scale with the substep duration and reset
+when endpoints or settings change. Position correction remains separate from
+velocity impulses. A twelve-link chain with a 16:1 bottom mass ratio stays below
+0.14 world units of length error at 30/60/144 Hz, including a later impulse.
+Sleeping groups skip joint rows until woken.
