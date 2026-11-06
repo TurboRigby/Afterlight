@@ -51,8 +51,9 @@ typedef struct af_frame_uniform {
     af_vec4 light_count;
     af_mat4 local_shadow_matrices[AF_LOCAL_SHADOW_LAYERS];
     af_mat4 inverse_view_projection;af_vec4 sky_params;
+    af_vec4 water_absorption,water_scattering,water_bounds,water_axes;
 } af_frame_uniform;
-_Static_assert(sizeof(af_frame_uniform)==3104,"Shader frame layout");
+_Static_assert(sizeof(af_frame_uniform)==3168,"Shader frame layout");
 typedef struct af_blend_draw {size_t index;float depth;} af_blend_draw;
 static int blend_compare(const void *a,const void *b){const af_blend_draw *x=a,*y=b;if(x->depth!=y->depth)return x->depth>y->depth?-1:1;return (x->index>y->index)-(x->index<y->index);}
 typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;af_vk_texture *texture;float alpha,cutoff;uint32_t alpha_mode;} af_shadow_draw;
@@ -114,6 +115,7 @@ typedef struct af_mesh_asset {
 } af_mesh_asset;
 
 struct af_renderer {
+    const af_physics *water_physics;
     af_water water_configs[AF_SCENE_MAX_WATERS];af_transform water_transforms[AF_SCENE_MAX_WATERS];float water_times[AF_SCENE_MAX_WATERS],water_alphas[AF_SCENE_MAX_WATERS];
     SDL_Window *window;
     const af_scene *previous_scene;float interpolation_alpha;
@@ -693,6 +695,7 @@ bool af_renderer_remove_mesh(af_renderer *renderer, const char *name)
 
 static void water_name(af_object_id id,char name[AF_MESH_NAME_CAPACITY]){snprintf(name,AF_MESH_NAME_CAPACITY,"__water_%llu",(unsigned long long)id);}
 bool af_renderer_update_water(af_renderer *r,const af_physics *physics,const af_scene *s,float alpha){
+    r->water_physics=physics;
     const af_water_runtime *runtime=ph_water_runtime(physics);
     for(size_t i=r->mesh_count;i>0;--i){const char *name=r->meshes[i-1].name;if(strncmp(name,"__water_",8))continue;bool keep=false;for(size_t k=0;k<af_scene_water_count(s);++k){char expected[64];water_name(af_scene_water_at(s,k)->owner,expected);if(!strcmp(name,expected))keep=true;}if(!r->meshes[i-1].retired&&!keep&&!af_renderer_remove_mesh(r,name))return false;}
     for(size_t i=0;i<af_scene_water_count(s);++i){af_water w=*af_scene_water_at(s,i);const af_scene_object *o=af_scene_get_object(s,w.owner);if(!o)return false;float time=0;bool live=false;
@@ -1239,6 +1242,11 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     af_render_settings render_settings=af_scene_get_render_settings(scene);uniform->render_params=(af_vec4){exp2f(render_settings.exposure),render_settings.tone_mapping?1.0f:0.0f,render_settings.environment_enabled?render_settings.environment_intensity:0,render_settings.environment_rotation};
     if(!af_mat4_inverse(uniform->view_projection,&uniform->inverse_view_projection))return false;
     uniform->sky_params=(af_vec4){render_settings.skybox_intensity,0,0,0};
+    af_water_sample underwater=af_physics_sample_water(renderer->water_physics,scene,camera->position);const af_water *water=af_scene_get_water(scene,underwater.owner);
+    if(render_settings.underwater&&water&&underwater.inside&&camera->position.y>underwater.bottom&&camera->position.y<underwater.height+.1f){const af_scene_object *o=af_scene_get_object(scene,water->owner);float blend=fmaxf(0,fminf(1,(underwater.height+.1f-camera->position.y)/.2f));blend=blend*blend*(3-2*blend);float yaw=o->transform.rotation.y;af_vec3 origin=o->transform.position;af_vec2 size=water->half_size;
+        if(water->mode==AF_WATER_RIVER){float c=cosf(yaw),s=sinf(yaw);af_vec3 d=af_vec3_sub(camera->position,origin),local={c*d.x-s*d.z,d.y,s*d.x+c*d.z},tangent;float side,along,height;if(wa_river_coordinates(water,local,&side,&along,&height,&tangent)){float length=wa_river_length(water);local=af_vec3_add(local,af_vec3_add((af_vec3){-side*tangent.z,0,side*tangent.x},af_vec3_scale(tangent,length*.5f-along)));origin.x+=c*local.x+s*local.z;origin.z+=-s*local.x+c*local.z;yaw+=atan2f(tangent.x,tangent.z);size.y=length*.5f;}}
+        af_vec3 illumination=af_vec3_add((af_vec3){light.ambient,light.ambient,light.ambient},af_vec3_scale(light.color,light.intensity*.12f));uniform->water_absorption=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,blend};uniform->water_scattering=(af_vec4){water->scattering.x*illumination.x,water->scattering.y*illumination.y,water->scattering.z*illumination.z,underwater.height};uniform->water_bounds=(af_vec4){origin.x,origin.z,size.x,size.y};uniform->water_axes=(af_vec4){cosf(yaw),sinf(yaw),underwater.bottom,0};
+    }
     uint32_t local_layers=0,shadow_lights=0;unsigned requested=0,selected[AF_LOCAL_SHADOW_LIGHTS];
     af_local_light local_lights[AF_SCENE_MAX_LOCAL_LIGHTS];size_t local_count=af_scene_local_light_count(scene);for(size_t i=0;i<local_count;++i)local_lights[i]=*af_scene_local_light_at(scene,i);
     unsigned selected_count=af_local_shadow_select(local_lights,local_count,camera,area.width/area.height,selected,&requested);

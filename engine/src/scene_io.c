@@ -205,7 +205,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != 13 && version->valuedouble != 14 && version->valuedouble != 15 && version->valuedouble != 16 && version->valuedouble != 17 && version->valuedouble != 18 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != 13 && version->valuedouble != 14 && version->valuedouble != 15 && version->valuedouble != 16 && version->valuedouble != 17 && version->valuedouble != 18 && version->valuedouble != 19 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -347,9 +347,9 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         if(!af_scene_set_shadows(scene,settings)){set_error(error,AF_SCENE_ERROR_FORMAT,"Shadow settings outside supported ranges.");goto fail;}
     }
     if(version->valuedouble>=4){
-        static const char *const render_fields[]={"exposure","tone_mapping","bloom","bloom_strength","bloom_threshold","bloom_radius","environment_enabled","environment_profile","environment_intensity","environment_rotation","local_shadow_resolution","environment_asset","skybox","skybox_intensity"};const cJSON *render=cJSON_GetObjectItemCaseSensitive(root,"render"),*tone=cJSON_GetObjectItemCaseSensitive(render,"tone_mapping");
+        static const char *const render_fields[]={"exposure","tone_mapping","bloom","bloom_strength","bloom_threshold","bloom_radius","environment_enabled","environment_profile","environment_intensity","environment_rotation","local_shadow_resolution","environment_asset","skybox","skybox_intensity","underwater"};const cJSON *render=cJSON_GetObjectItemCaseSensitive(root,"render"),*tone=cJSON_GetObjectItemCaseSensitive(render,"tone_mapping");
         af_render_settings settings=af_render_settings_default();
-        if(!exact_fields(render,render_fields,version->valuedouble>=9?14:version->valuedouble>=8?11:2)||!read_float_field(render,"exposure",&settings.exposure)||!cJSON_IsBool(tone)){
+        if(!exact_fields(render,render_fields,version->valuedouble>=20?15:version->valuedouble>=9?14:version->valuedouble>=8?11:2)||!read_float_field(render,"exposure",&settings.exposure)||!cJSON_IsBool(tone)){
             set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid exposure/tone mapping settings.");goto fail;}
         if(version->valuedouble>=8){float profile,resolution;const cJSON *bloom=cJSON_GetObjectItemCaseSensitive(render,"bloom"),*environment=cJSON_GetObjectItemCaseSensitive(render,"environment_enabled");
             if(!cJSON_IsBool(bloom)||!cJSON_IsBool(environment)||!read_float_field(render,"bloom_strength",&settings.bloom_strength)||!read_float_field(render,"bloom_threshold",&settings.bloom_threshold)||!read_float_field(render,"bloom_radius",&settings.bloom_radius)||
@@ -361,6 +361,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             if(!cJSON_IsString(asset)||strlen(asset->valuestring)>=sizeof(settings.environment_asset)||!cJSON_IsBool(sky)||!read_float_field(render,"skybox_intensity",&settings.skybox_intensity)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid skybox/environment asset settings.");goto fail;}
             snprintf(settings.environment_asset,sizeof(settings.environment_asset),"%s",asset->valuestring);settings.skybox=cJSON_IsTrue(sky)!=0;
         }
+        if(version->valuedouble>=20){const cJSON *u=cJSON_GetObjectItemCaseSensitive(render,"underwater");if(!cJSON_IsBool(u)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid underwater toggle.");goto fail;}settings.underwater=cJSON_IsTrue(u)!=0;}
         settings.tone_mapping=cJSON_IsTrue(tone)!=0;if(!af_scene_set_render_settings(scene,settings)){set_error(error,AF_SCENE_ERROR_FORMAT,"Exposure outside supported range.");goto fail;}
         const cJSON *lights=cJSON_GetObjectItemCaseSensitive(root,"local_lights");
         if(!cJSON_IsArray(lights)||cJSON_GetArraySize(lights)>AF_SCENE_MAX_LOCAL_LIGHTS){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid local light array.");goto fail;}
@@ -504,6 +505,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
     cJSON *render=cJSON_AddObjectToObject(root,"render");
     if(!render||!cJSON_AddNumberToObject(render,"exposure",scene->render_settings.exposure)||!cJSON_AddBoolToObject(render,"tone_mapping",scene->render_settings.tone_mapping))goto fail;
     const af_render_settings *rs=&scene->render_settings;
+    if(!cJSON_AddBoolToObject(render,"underwater",rs->underwater))goto fail;
     if(!cJSON_AddBoolToObject(render,"bloom",rs->bloom)||!cJSON_AddNumberToObject(render,"bloom_strength",rs->bloom_strength)||!cJSON_AddNumberToObject(render,"bloom_threshold",rs->bloom_threshold)||!cJSON_AddNumberToObject(render,"bloom_radius",rs->bloom_radius)||
        !cJSON_AddBoolToObject(render,"environment_enabled",rs->environment_enabled)||!cJSON_AddNumberToObject(render,"environment_profile",rs->environment_profile)||!cJSON_AddNumberToObject(render,"environment_intensity",rs->environment_intensity)||!cJSON_AddNumberToObject(render,"environment_rotation",rs->environment_rotation)||!cJSON_AddNumberToObject(render,"local_shadow_resolution",rs->local_shadow_resolution))goto fail;
     if(!cJSON_AddStringToObject(render,"environment_asset",rs->environment_asset)||!cJSON_AddBoolToObject(render,"skybox",rs->skybox)||!cJSON_AddNumberToObject(render,"skybox_intensity",rs->skybox_intensity))goto fail;

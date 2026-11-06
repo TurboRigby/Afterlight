@@ -43,6 +43,7 @@ typedef struct af_local_light {
 af_local_light af_local_light_default(af_light_type type);
 typedef struct af_render_settings {
     float exposure; bool tone_mapping;
+    bool underwater;
     bool bloom; float bloom_strength,bloom_threshold,bloom_radius;
     uint32_t local_shadow_resolution; /* 256, 512, 1024; zero selects 512. */
     bool environment_enabled;

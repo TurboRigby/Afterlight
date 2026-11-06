@@ -30,7 +30,7 @@ with zipfile.ZipFile(args.archive) as archive:
         assert archive.read(name) == (root / name).read_bytes(), f'Stale source: {name}'
     for folder in ('engine', 'editor', 'game', 'player', 'playground', 'sandbox', 'tests', 'scripts', 'cmake'):
         for path in (root / folder).rglob('*'):
-            if path.suffix in {'.c', '.h', '.vert', '.frag', '.py', '.cmake'}:
+            if path.suffix in {'.c', '.h', '.vert', '.frag', '.glsl', '.py', '.cmake'}:
                 assert b'SPDX-License-Identifier: MPL-2.0' in path.read_bytes()[:2048], path
                 assert path.relative_to(root).as_posix() in names, path
 for folder, upstream in (('cgltf', 'cgltf'), ('cjson', 'cjson'), ('nuklear', 'nuklear'), ('stb', 'stb')):

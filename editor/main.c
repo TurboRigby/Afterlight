@@ -769,6 +769,7 @@ static void inspector(editor *app,float width,float height)
         nk_layout_row_dynamic(context,30,1);bool render_changed=nk_property_float(context,"Exposure (stops)",-10,&render.exposure,10,0.25f,0.025f)!=0;
         nk_layout_row_dynamic(context,26,1);nk_bool tone=render.tone_mapping;
         if(nk_checkbox_label(context,"Tone mapping",&tone)){render.tone_mapping=tone!=0;render_changed=true;}
+        nk_bool submerged=render.underwater;if(nk_checkbox_label(context,"Underwater absorption",&submerged)){render.underwater=submerged!=0;render_changed=true;}
         label(context,"Environment lighting",30);nk_layout_row_dynamic(context,26,1);nk_bool environment=render.environment_enabled;
         if(nk_checkbox_label(context,"Image-based lighting",&environment)){render.environment_enabled=environment!=0;render_changed=true;}
         nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import HDR environment"))start_import(app,AF_ASSET_ENVIRONMENT);

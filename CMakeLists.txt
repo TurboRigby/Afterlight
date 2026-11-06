@@ -25,7 +25,7 @@ foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fulls
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
         COMMAND Vulkan::glslangValidator --target-env vulkan1.1 --spirv-val
             --vn af_${shader_name} -o "${shader_header}" "${shader_source}"
-        DEPENDS "${shader_source}" Vulkan::glslangValidator
+        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" Vulkan::glslangValidator
         COMMENT "Compiling Afterlight ${shader} shader"
         VERBATIM
     )
@@ -558,6 +558,12 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_underwater_test tests/underwater.c)
+    target_include_directories(afterlight_underwater_test PRIVATE engine/src)
+    target_link_libraries(afterlight_underwater_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_underwater_test)
+    add_test(NAME afterlight.underwater COMMAND afterlight_underwater_test)
+    set_tests_properties(afterlight.underwater PROPERTIES TIMEOUT 40 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     add_executable(afterlight_swimming_test tests/swimming.c)
     target_link_libraries(afterlight_swimming_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_swimming_test)

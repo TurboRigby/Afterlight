@@ -73,3 +73,13 @@ water current. It excludes pourable particles. `swim_config_default` and
 `swim_character` are available through the C host. Tests compare 30/60/144 Hz
 surface equilibrium, diving, ascending, surface jump, walls, currents, dry exits
 and transactional rejection of invalid input.
+
+Underwater rendering clips the camera-to-fragment path to the active water
+region, applies RGB absorption/scattering, and blends through a 20 cm surface
+band. Sky and geometry use the same treatment; UI remains separate. River fog
+uses the local tangent region near the camera, so distant bends remain an
+approximation. Scene format 20 saves an `underwater` rendering toggle; old scenes
+receive the enabled default. Pixel tests verify absorption, disable, surface
+continuity, dry-region exclusion and persistence; existing water, environment
+and material data/pixel regressions pass. Shared GLSL includes are now included
+in corresponding-source archives and license-header verification.

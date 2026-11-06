@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 /* SPDX-License-Identifier: MPL-2.0
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -26,6 +27,7 @@ layout(set=0,binding=0) uniform Frame {
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;vec4 sky_params;
+    vec4 water_absorption,water_scattering,water_bounds,water_axes;
 } frame;
 layout(set=0,binding=1) uniform sampler2DArray local_shadow_map;
 layout(set=0,binding=2) uniform sampler2D environment_map;
@@ -121,6 +123,7 @@ vec3 environment_light(vec3 base,vec3 n,vec3 v,float roughness,float metal){
     vec2 brdf=texture(brdf_lut,vec2(nv,rough)).rg;
     return ((vec3(1)-fresnel)*(1.0-metal)*diffuse*base+radiance*(f0*brdf.x+brdf.y))*frame.render_params.z;
 }
+#include "water_fog.glsl"
 void main(){
     vec3 geometric=cross(dFdx(world_position),dFdy(world_position));
     vec3 n=dot(world_normal,world_normal)>1e-12?normalize(world_normal):(dot(geometric,geometric)>1e-12?normalize(geometric):vec3(0,1,0));
@@ -167,6 +170,7 @@ void main(){
         const vec3 colors[4]=vec3[4](vec3(1,0.25,0.25),vec3(0.25,1,0.25),vec3(0.25,0.5,1),vec3(1,0.85,0.25));
         output_rgb*=mix(vec3(1),colors[cascade_index(depth)],0.65);
     }
+    output_rgb=underwater_color(output_rgb,world_position);
     output_rgb=clamp(output_rgb,vec3(0),vec3(60000));
     out_color=vec4(output_rgb,base.a);
 }
