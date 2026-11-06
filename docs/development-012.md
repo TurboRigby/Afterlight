@@ -66,3 +66,13 @@ The player/editor load an optional `input.json` beside the project. Exports reta
 scene filenames (and therefore aliases), package that input map and copy the
 project's `prefabs/` subtree with rewritten asset paths. Source removal and
 relocation remain supported.
+
+## Spatial audio and overlapping voices
+
+WAV clips decode to finite stereo float PCM at 48 kHz within the 64 MiB cache.
+Up to 32 independent voices can play the same clip simultaneously. Positional
+emitters use equal-power stereo panning and quadratic distance attenuation;
+listener movement updates gains in the main-thread mixer. The device queue is
+kept to roughly 43 ms. `play_sound_at` is available to C modules; character
+footsteps use it. The CPU gain/mixing tests use SDL's dummy audio driver. This
+adds positioned one-shots, not streaming music, occlusion, reverb or Doppler.

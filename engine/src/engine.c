@@ -280,6 +280,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
             Uint64 started=SDL_GetPerformanceCounter();bool uploaded=af_renderer_upload_environment_baked(engine->renderer,environment_name,environment_source,environment_images);
             af_environment_job_finish(engine->environment_job,uploaded,(double)(SDL_GetPerformanceCounter()-started)*1000/frequency);
         }
+        af_audio_update(engine->audio,engine->camera.position,af_camera_forward(&engine->camera));
         update_actions(engine,delta);
         if (game->update) game->update(engine, delta, game->user_data);
         unsigned animation_steps=0;
@@ -641,3 +642,5 @@ bool af_engine_action_pressed(const af_engine *e,const char *name){if(e&&name)fo
 
 af_input_map af_engine_input_map(const af_engine *e){return e?e->input_map:(af_input_map){0};}
 bool af_engine_save_input_map(const af_engine *e,const char *path,af_asset_error *error){return e&&af_input_map_save(path,&e->input_map,error);}
+
+bool af_engine_play_sound_at(af_engine *e,const char *name,af_sound_emitter emitter){return e&&af_audio_play_at(e->audio,name,emitter);}

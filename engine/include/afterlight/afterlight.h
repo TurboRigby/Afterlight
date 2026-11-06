@@ -215,6 +215,7 @@ bool af_engine_texture_info(const af_engine *engine,const char *name,af_texture_
 bool af_engine_upload_normal_map(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_engine_load_normal_map(af_engine *engine,const char *name,const char *path,af_asset_error *error);
 bool af_engine_load_sound(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+bool af_engine_play_sound_at(af_engine*,const char*,af_sound_emitter);
 bool af_engine_play_sound(af_engine *engine,const char *name,float gain);
 void af_engine_stop_sounds(af_engine *engine);
 af_audio_stats af_engine_audio_stats(const af_engine *engine);

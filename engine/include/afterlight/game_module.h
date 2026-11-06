@@ -63,6 +63,7 @@ typedef struct af_game_host {
     bool (*world_matrix)(const af_scene*,af_object_id,af_mat4*);
     bool (*game_camera)(const af_scene*,af_camera*);
     void (*report_gameplay)(af_engine*,af_gameplay_status);
+    bool (*play_sound_at)(af_engine*,const char*,af_sound_emitter);
     bool (*play_sound)(af_engine*,const char*,float);
     bool (*animation_play)(af_engine*,af_object_id,size_t,float);
     bool (*animation_pause)(af_engine*,af_object_id,bool);

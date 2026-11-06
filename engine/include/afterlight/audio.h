@@ -9,8 +9,14 @@
 #include <afterlight/asset.h>
 typedef struct af_audio af_audio;
 typedef struct af_audio_stats {size_t clips,playing;uint64_t plays;bool device_ready;} af_audio_stats;
+typedef struct af_sound_emitter {af_vec3 position;float gain,min_distance,max_distance;} af_sound_emitter;
+bool af_audio_play_at(af_audio*,const char*,af_sound_emitter);
+bool af_audio_spatial_gains(af_vec3 listener,af_vec3 forward,af_sound_emitter,float *left,float *right);
+/* Interleaved stereo 48 kHz floats. Main-thread mixer, at most 4096 frames. */
+bool af_audio_mix(af_audio*,af_vec3 listener,af_vec3 forward,float *samples,size_t frames);
+void af_audio_update(af_audio*,af_vec3 listener,af_vec3 forward);
 /* Main-thread API. WAV decoding works without a device; playback opens the
-   default SDL device lazily. Different clips mix; replay restarts the same clip. */
+   default SDL device lazily. Up to 32 independent voices mix, including overlapping instances of one clip. */
 af_audio *af_audio_create(void);
 void af_audio_destroy(af_audio *audio);
 bool af_audio_load(af_audio *audio,const char *name,const char *path,af_asset_error *error);

@@ -90,7 +90,7 @@ static void update(void *memory,const af_game_host *host,double delta){
         host->locomotion_step(host->engine,s->actor,animation,(float)delta,NULL);
     }
     if(grounded&&input.jump&&!s->player.body.grounded)host->play_sound(host->engine,"jump",.45f);
-    af_animation_events events;if(host->animation_events(host->engine,s->actor,&events))for(size_t i=0;i<events.count;++i){const char *name=events.items[i].name;if(name[0]=='f')host->play_sound(host->engine,"land",.055f);else if(name[0]=='l')host->play_sound(host->engine,"land",.35f);}
+    af_animation_events events;if(host->animation_events(host->engine,s->actor,&events))for(size_t i=0;i<events.count;++i){const char *name=events.items[i].name;if(name[0]=='f')host->play_sound_at(host->engine,"land",(af_sound_emitter){.position=s->player.body.position,.gain=.15f,.min_distance=1,.max_distance=18});else if(name[0]=='l')host->play_sound(host->engine,"land",.35f);}
     filter.include_triggers=true;af_collision_hit hits[64];size_t count=host->overlap_capsule(host->scene,s->player.body.position,s->config.radius,s->config.half_height,filter,hits,64);bool in_goal=false;
     for(size_t i=0;i<count&&i<64&&!s->status.finished;++i){const af_scene_object *o=host->get_object(host->scene,hits[i].object);if(!o)continue;
         if(o->gameplay.role==AF_ROLE_CHECKPOINT&&o->gameplay.checkpoint_order==s->status.checkpoint+1){af_mat4 world;if(host->world_matrix(host->scene,o->id,&world)){s->status.checkpoint=o->gameplay.checkpoint_order;s->checkpoint=(af_vec3){world.elements[12],world.elements[13],world.elements[14]};host->log("Checkpoint reached.");host->play_sound(host->engine,"checkpoint",.45f);}}
