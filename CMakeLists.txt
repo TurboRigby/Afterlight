@@ -54,6 +54,7 @@ add_library(afterlight STATIC
     engine/src/gameplay.c
     engine/src/rig.c
     engine/src/body.c
+    engine/src/physics.c
     engine/src/prefab.c
     engine/src/input.c
     engine/src/project.c
@@ -443,6 +444,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_motion_test tests/physics_motion.c)
+    target_include_directories(afterlight_physics_motion_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_motion_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_motion_test)
+    add_test(NAME afterlight.physics_motion COMMAND afterlight_physics_motion_test )
     add_executable(afterlight_physics_body_test tests/physics_body.c)
     target_include_directories(afterlight_physics_body_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_body_test PRIVATE Afterlight::Engine)

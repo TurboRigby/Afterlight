@@ -24,6 +24,7 @@
 struct af_engine {
     SDL_Gamepad *gamepad;af_input_map input_map;float action_values[32];bool action_pressed[32],fixed_actions[32];
     SDL_Window *window;
+    af_physics *physics;double cpu_physics_ms;bool fixed_active;
     af_audio *audio;
     af_environment_job *environment_job;
     af_animation_runtime *animations;bool animation_enabled,animation_real_time;
@@ -166,6 +167,7 @@ af_engine *af_engine_create(const af_engine_config *config)
         af_engine_destroy(engine);
         return NULL;
     }
+    engine->physics=af_physics_create();if(!engine->physics){af_engine_destroy(engine);return NULL;}
     engine->input_map=af_input_map_default();
     engine->animations=af_animation_runtime_create(engine->renderer);if(!engine->animations){af_engine_destroy(engine);return NULL;}engine->animation_enabled=true;
     engine->clear_color = (af_color){0.035f, 0.025f, 0.07f, 1.0f};
@@ -286,12 +288,15 @@ int af_engine_run(af_engine *engine, const af_game *game)
         update_actions(engine,delta);
         if (game->update) game->update(engine, delta, game->user_data);
         unsigned animation_steps=0;
-        if(game->fixed_update){unsigned steps=af_fixed_clock_advance(&engine->clock,elapsed,engine->simulation_paused,engine->step_pending);engine->step_pending=false;animation_steps=steps;
+        engine->fixed_active=game->fixed_update||af_physics_active(engine->scene);engine->cpu_physics_ms=0;
+        if(engine->fixed_active){unsigned steps=af_fixed_clock_advance(&engine->clock,elapsed,engine->simulation_paused,engine->step_pending);engine->step_pending=false;animation_steps=steps;
             for(unsigned tick=0;tick<steps&&engine->running;++tick){
                 af_scene *snapshot=engine->scene?af_scene_clone(engine->scene):NULL;
                 if(engine->scene&&!snapshot){result=1;engine->running=false;break;}
                 af_scene_destroy(engine->previous_scene);engine->previous_scene=snapshot;engine->previous_camera=engine->camera;
-                engine->in_fixed=true;game->fixed_update(engine,AF_FIXED_DELTA,game->user_data);engine->in_fixed=false;++engine->fixed_ticks;engine->fixed_camera_position=engine->camera.position;engine->has_fixed_camera=true;
+                engine->in_fixed=true;if(game->fixed_update)game->fixed_update(engine,AF_FIXED_DELTA,game->user_data);
+                if(af_physics_active(engine->scene)){Uint64 physics_start=SDL_GetPerformanceCounter();if(!af_physics_step(engine->physics,(af_scene*)engine->scene,(float)AF_FIXED_DELTA)){af_log("error","Physics: %s",af_physics_error(engine->physics));engine->running=false;result=1;}engine->cpu_physics_ms+=(double)(SDL_GetPerformanceCounter()-physics_start)*1000/frequency;}
+                engine->in_fixed=false;++engine->fixed_ticks;engine->fixed_camera_position=engine->camera.position;engine->has_fixed_camera=true;
                 memset(engine->fixed_pressed,0,sizeof(engine->fixed_pressed));memset(engine->fixed_actions,0,sizeof(engine->fixed_actions));
             }
         }
@@ -305,7 +310,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
             continue;
         }
         bool rendered = false;
-        float alpha=game->fixed_update&&!engine->simulation_paused?(float)engine->clock.alpha:1;
+        float alpha=engine->fixed_active&&!engine->simulation_paused?(float)engine->clock.alpha:1;
         af_camera render_camera=engine->camera;
         if(engine->previous_scene&&engine->has_fixed_camera&&af_vec3_length(af_vec3_sub(engine->camera.position,engine->fixed_camera_position))<0.000001f)render_camera.position=af_vec3_add(engine->previous_camera.position,af_vec3_scale(af_vec3_sub(engine->camera.position,engine->previous_camera.position),alpha));
         af_renderer_set_interpolation(engine->renderer,engine->previous_scene,alpha);
@@ -334,7 +339,7 @@ void af_engine_destroy(af_engine *engine)
     if (!engine) return;
     af_environment_job_destroy(engine->environment_job);af_animation_runtime_destroy(engine->animations);
     af_scene_destroy(engine->previous_scene);
-    af_audio_destroy(engine->audio);
+    af_physics_destroy(engine->physics);af_audio_destroy(engine->audio);
     af_renderer_destroy(engine->renderer);
     SDL_CloseGamepad(engine->gamepad);
     SDL_DestroyWindow(engine->window);
@@ -372,7 +377,7 @@ bool af_engine_remove_mesh(af_engine *engine, const char *name)
 
 void af_engine_set_scene(af_engine *engine, const af_scene *scene)
 {
-    if (engine) {if(engine->scene!=scene){af_engine_reset_interpolation(engine);af_renderer_clear_skin_palettes(engine->renderer);af_animation_runtime_scene(engine->animations,scene);}engine->scene = scene;}
+    if (engine) {if(engine->scene!=scene){af_engine_reset_interpolation(engine);af_physics_reset(engine->physics);af_renderer_clear_skin_palettes(engine->renderer);af_animation_runtime_scene(engine->animations,scene);}engine->scene = scene;}
 }
 const af_scene *af_engine_get_scene(const af_engine *engine){return engine?engine->scene:NULL;}
 
@@ -436,7 +441,7 @@ af_engine_stats af_engine_get_stats(const af_engine *engine)
     stats.frames_per_second = engine->frames_per_second;
     stats.average_frame_ms = engine->average_frame_ms;
     stats.simulation_ticks=engine->fixed_ticks;stats.simulation_steps=engine->clock.steps;stats.simulation_alpha=engine->clock.alpha;stats.simulation_dropped_seconds=engine->clock.dropped_seconds;stats.simulation_paused=engine->simulation_paused;
-    stats.cpu_events_ms=engine->cpu_events_ms;stats.cpu_update_ms=engine->cpu_update_ms;stats.cpu_animation_ms=engine->cpu_animation_ms;stats.cpu_render_ms=engine->cpu_render_ms;
+    stats.cpu_physics_ms=engine->cpu_physics_ms;stats.cpu_events_ms=engine->cpu_events_ms;stats.cpu_update_ms=engine->cpu_update_ms;stats.cpu_animation_ms=engine->cpu_animation_ms;stats.cpu_render_ms=engine->cpu_render_ms;
     return stats;
 }
 
@@ -648,3 +653,10 @@ bool af_engine_save_input_map(const af_engine *e,const char *path,af_asset_error
 bool af_engine_play_sound_at(af_engine *e,const char *name,af_sound_emitter emitter){return e&&af_audio_play_at(e->audio,name,emitter);}
 
 bool af_engine_spawn_prefab(af_engine *e,af_scene *s,const char *path,af_object_id parent,af_transform placement,af_object_id *out,af_scene_error *error){if(out)*out=0;if(!e||!s)return false;af_scene *next=af_scene_clone(s);if(!next)return false;af_object_id root;bool ok=af_prefab_instantiate(next,path,parent,placement,&root,error);af_asset_error asset_error;if(ok&&!af_engine_load_scene_assets(e,next,&asset_error)){ok=false;if(error){error->code=AF_SCENE_ERROR_IO;snprintf(error->message,sizeof(error->message),"%.255s",asset_error.message);}}if(ok){af_scene previous=*s;*s=*next;*next=previous;if(out)*out=root;}af_scene_destroy(next);return ok;}
+
+bool af_engine_apply_force(af_engine *e,af_object_id id,af_vec3 force,af_vec3 point){return e&&af_physics_apply_force(e->physics,(af_scene*)e->scene,id,force,point);}
+bool af_engine_apply_impulse(af_engine *e,af_object_id id,af_vec3 impulse,af_vec3 point){return e&&af_physics_apply_impulse(e->physics,(af_scene*)e->scene,id,impulse,point);}
+bool af_engine_wake_body(af_engine *e,af_object_id id){return e&&af_physics_wake(e->physics,id);}
+af_physics_state af_engine_body_state(const af_engine *e,af_object_id id){return af_physics_get_state(e?e->physics:NULL,id);}
+af_physics_stats af_engine_physics_stats(const af_engine *e){return af_physics_get_stats(e?e->physics:NULL);}
+size_t af_engine_physics_contacts(const af_engine *e,af_physics_contact *out,size_t cap){return af_physics_contacts(e?e->physics:NULL,out,cap);}

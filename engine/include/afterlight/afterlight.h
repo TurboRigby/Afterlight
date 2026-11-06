@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <afterlight/math.h>
 #include <afterlight/input.h>
+#include <afterlight/physics.h>
 #include <afterlight/camera.h>
 #include <afterlight/mesh.h>
 #include <afterlight/scene.h>
@@ -56,6 +57,7 @@ typedef struct af_engine_stats {
        second. Zero before the first sample. Includes pacing/vsync, not GPU time. */
     double frames_per_second;
     double average_frame_ms;
+    double cpu_physics_ms;
     double cpu_animation_ms; /* Pose/world/palette update; also included in render total. */
     double cpu_events_ms,cpu_update_ms,cpu_render_ms; /* Last completed CPU iteration; render includes waits/present. */
     double gpu_frame_ms,gpu_shadow_ms,gpu_scene_ms,gpu_post_ms,gpu_overlay_ms;
@@ -69,6 +71,12 @@ typedef struct af_engine_stats {
     bool validation_enabled;
 } af_engine_stats;
 
+bool af_engine_apply_force(af_engine*,af_object_id,af_vec3,af_vec3);
+bool af_engine_apply_impulse(af_engine*,af_object_id,af_vec3,af_vec3);
+bool af_engine_wake_body(af_engine*,af_object_id);
+af_physics_state af_engine_body_state(const af_engine*,af_object_id);
+af_physics_stats af_engine_physics_stats(const af_engine*);
+size_t af_engine_physics_contacts(const af_engine*,af_physics_contact*,size_t);
 af_input_map af_engine_input_map(const af_engine*);
 bool af_engine_save_input_map(const af_engine*,const char*,af_asset_error*);
 bool af_engine_spawn_prefab(af_engine*,af_scene*,const char*,af_object_id,af_transform,af_object_id*,af_scene_error*);

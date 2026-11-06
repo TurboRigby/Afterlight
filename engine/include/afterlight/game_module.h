@@ -31,6 +31,10 @@ typedef struct af_game_host {
     bool (*load_scene_assets)(af_engine*,const af_scene*,af_asset_error*);
     float (*action_value)(const struct af_game_host*,const char*);
     bool (*action_pressed)(const struct af_game_host*,const char*);
+    bool (*apply_force)(af_engine*,af_object_id,af_vec3,af_vec3);
+    bool (*apply_impulse)(af_engine*,af_object_id,af_vec3,af_vec3);
+    af_physics_state (*body_state)(const af_engine*,af_object_id);
+    bool (*set_body)(af_scene*,af_object_id,af_rigid_body);
     bool (*key_down)(const struct af_game_host*,af_key);
     size_t (*object_count)(const af_scene*);
     const af_scene_object *(*object_at)(const af_scene*,size_t);
