@@ -2,6 +2,7 @@
 #ifndef AFTERLIGHT_PHYSICS_H
 #define AFTERLIGHT_PHYSICS_H
 #include <afterlight/scene.h>
+#include <afterlight/character.h>
 #define AF_PHYSICS_MAX_BODIES 1024u
 #define AF_PHYSICS_MAX_CONTACTS 8192u
 typedef struct af_physics af_physics;
@@ -17,6 +18,11 @@ bool af_physics_active(const af_scene*);
 bool af_physics_step(af_physics*,af_scene*,float delta);
 bool af_physics_apply_force(af_physics*,af_scene*,af_object_id,af_vec3 force,af_vec3 world_point);
 bool af_physics_apply_impulse(af_physics*,af_scene*,af_object_id,af_vec3 impulse,af_vec3 world_point);
+size_t af_physics_push_character(af_physics*,af_scene*,af_object_id ignore,const af_character*,af_character_config,af_vec3 desired_velocity,float force,float delta);
+bool af_physics_grab(af_physics*,af_scene*,af_object_id,af_vec3 point);
+bool af_physics_move_grab(af_physics*,af_vec3 target);
+bool af_physics_release(af_physics*,af_scene*,af_vec3 throw_velocity);
+af_object_id af_physics_held(const af_physics*);
 bool af_physics_wake(af_physics*,af_object_id);
 af_physics_state af_physics_get_state(const af_physics*,af_object_id);
 af_physics_stats af_physics_get_stats(const af_physics*);

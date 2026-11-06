@@ -52,3 +52,15 @@ conservative center-path guard; full rotating-box or dynamic/dynamic TOI is not
 implemented. Internal substeps and contact response handle ordinary dynamic pairs.
 Regression checks cover sleep/wake, removed support and a 180-unit/s sphere
 against a .02-unit-thick wall.
+
+## Character and object interaction
+
+C hosts expose bounded capsule pushing, grab targets and release/throw impulses.
+Grabs use a critically damped, force-limited spring on the picked local point;
+held objects keep their mass and collisions. Objects over 50 mass units cannot
+be grabbed. Throw velocity is capped at 40. Removing a held object releases it.
+Player capsules enter the rigid-body world as conservative upright box proxies,
+so falling objects meet a kinematic obstruction; the exact capsule controller
+still handles player movement. This is one-way kinematic character interaction,
+not a dynamic/ragdoll character. CPU tests cover pushing, holding, throwing and
+an object settling on the player proxy.

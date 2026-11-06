@@ -71,6 +71,11 @@ typedef struct af_engine_stats {
     bool validation_enabled;
 } af_engine_stats;
 
+size_t af_engine_push_character(af_engine*,af_object_id,const af_character*,af_character_config,af_vec3,float,float);
+bool af_engine_grab_body(af_engine*,af_object_id,af_vec3);
+bool af_engine_move_grab(af_engine*,af_vec3);
+bool af_engine_release_body(af_engine*,af_vec3);
+af_object_id af_engine_held_body(const af_engine*);
 bool af_engine_apply_force(af_engine*,af_object_id,af_vec3,af_vec3);
 bool af_engine_apply_impulse(af_engine*,af_object_id,af_vec3,af_vec3);
 bool af_engine_wake_body(af_engine*,af_object_id);

@@ -58,6 +58,7 @@ add_library(afterlight STATIC
     engine/src/physics_contacts.c
     engine/src/physics_solver.c
     engine/src/physics_sleep.c
+    engine/src/physics_interaction.c
     engine/src/prefab.c
     engine/src/input.c
     engine/src/project.c
@@ -447,6 +448,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_interaction_test tests/physics_interaction.c)
+    target_include_directories(afterlight_physics_interaction_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_interaction_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_interaction_test)
+    add_test(NAME afterlight.physics_interaction COMMAND afterlight_physics_interaction_test )
     add_executable(afterlight_physics_sleep_test tests/physics_sleep.c)
     target_include_directories(afterlight_physics_sleep_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_sleep_test PRIVATE Afterlight::Engine)

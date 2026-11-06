@@ -660,3 +660,9 @@ bool af_engine_wake_body(af_engine *e,af_object_id id){return e&&af_physics_wake
 af_physics_state af_engine_body_state(const af_engine *e,af_object_id id){return af_physics_get_state(e?e->physics:NULL,id);}
 af_physics_stats af_engine_physics_stats(const af_engine *e){return af_physics_get_stats(e?e->physics:NULL);}
 size_t af_engine_physics_contacts(const af_engine *e,af_physics_contact *out,size_t cap){return af_physics_contacts(e?e->physics:NULL,out,cap);}
+
+size_t af_engine_push_character(af_engine *e,af_object_id id,const af_character *c,af_character_config config,af_vec3 velocity,float force,float dt){return e?af_physics_push_character(e->physics,(af_scene*)e->scene,id,c,config,velocity,force,dt):0;}
+bool af_engine_grab_body(af_engine *e,af_object_id id,af_vec3 point){return e&&af_physics_grab(e->physics,(af_scene*)e->scene,id,point);}
+bool af_engine_move_grab(af_engine *e,af_vec3 point){return e&&af_physics_move_grab(e->physics,point);}
+bool af_engine_release_body(af_engine *e,af_vec3 velocity){return e&&af_physics_release(e->physics,(af_scene*)e->scene,velocity);}
+af_object_id af_engine_held_body(const af_engine *e){return af_physics_held(e?e->physics:NULL);}

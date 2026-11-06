@@ -94,6 +94,12 @@ static void update(void *memory,const af_game_host *host,double delta){
         animation=(af_locomotion_input){.speed=sqrtf(s->player.body.velocity.x*s->player.body.velocity.x+s->player.body.velocity.z*s->player.body.velocity.z)/s->rig_scale,.vertical_speed=s->player.body.velocity.y,.grounded=s->player.body.grounded};
         host->locomotion_step(host->engine,s->actor,animation,(float)delta,NULL);
     }
+#ifdef AF_PHYSICS_GAME
+    af_vec3 desired={cosf(s->player.orbit.yaw)*input.move.y-sinf(s->player.orbit.yaw)*input.move.x,0,sinf(s->player.orbit.yaw)*input.move.y+cosf(s->player.orbit.yaw)*input.move.x};float amount=sqrtf(desired.x*desired.x+desired.z*desired.z);if(amount>1){desired.x/=amount;desired.z/=amount;}float speed=input.run?s->third.run_speed:s->third.walk_speed;desired.x*=speed;desired.z*=speed;host->push_character(host->engine,s->body,&s->player.body,s->config,desired,120,(float)delta);
+    af_vec3 forward={cosf(s->player.orbit.yaw)*cosf(s->player.orbit.pitch),sinf(s->player.orbit.pitch),sinf(s->player.orbit.yaw)*cosf(s->player.orbit.pitch)};
+    if(controls&&host->action_pressed(host,"Grab")){if(host->held_body(host->engine))host->release_body(host->engine,(af_vec3){0});else{af_collision_hit hit;if(host->raycast(host->scene,s->camera.position,forward,9,(af_query_filter){.ignore=s->body,.mask=UINT32_MAX},&hit))host->grab_body(host->engine,hit.object,hit.point);}}
+    if(host->held_body(host->engine)){af_vec3 target=s->player.body.position;target.y+=.8f;target.x+=forward.x*2.2f;target.y+=forward.y*2.2f;target.z+=forward.z*2.2f;host->move_grab(host->engine,target);if(controls&&host->action_pressed(host,"Throw"))host->release_body(host->engine,(af_vec3){forward.x*12,forward.y*12+2,forward.z*12});}
+#endif
     if(grounded&&input.jump&&!s->player.body.grounded)host->play_sound(host->engine,"jump",.45f);
     af_animation_events events;if(host->animation_events(host->engine,s->actor,&events))for(size_t i=0;i<events.count;++i){const char *name=events.items[i].name;if(name[0]=='f')host->play_sound_at(host->engine,"land",(af_sound_emitter){.position=s->player.body.position,.gain=.15f,.min_distance=1,.max_distance=18});else if(name[0]=='l')host->play_sound(host->engine,"land",.35f);}
     filter.include_triggers=true;af_collision_hit hits[64];size_t count=host->overlap_capsule(host->scene,s->player.body.position,s->config.radius,s->config.half_height,filter,hits,64);bool in_goal=false;

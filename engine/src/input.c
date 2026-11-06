@@ -14,6 +14,7 @@ af_input_map af_input_map_default(void){af_input_map m={0};af_action_binding b={
     BIND("LookX",-1,-1,-1,2,0,1);BIND("LookY",-1,-1,-1,3,1,1);
     BIND("Jump",-1,AF_KEY_SPACE,0,-1,-1,1);BIND("Run",-1,AF_KEY_LEFT_SHIFT,7,-1,-1,1);BIND("Interact",-1,AF_KEY_E,2,-1,-1,1);BIND("Restart",-1,AF_KEY_R,3,-1,-1,1);BIND("Release",-1,AF_KEY_ESCAPE,6,-1,-1,1);
     BIND("NextScene",-1,AF_KEY_N,14,-1,-1,1);BIND("Spawn",-1,AF_KEY_Q,12,-1,-1,1);
+    BIND("Grab",-1,AF_KEY_F,1,-1,-1,1);BIND("Throw",-1,AF_KEY_V,10,-1,-1,1);
 #undef BIND
     return m;
 }
