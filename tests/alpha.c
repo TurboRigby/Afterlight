@@ -18,6 +18,8 @@ static void update(af_engine *e,double dt,void *data){(void)dt;state *s=data;++s
     if(s->tick==5){CHECK(af_engine_test_read_pixel(e,p)&&p[2]>p[0]+80);m.alpha_cutoff=.25f;CHECK(af_scene_set_object_material(s->scene,s->front,m));capture(e,s);}
     if(s->tick==6){CHECK(af_engine_test_read_pixel(e,p)&&p[0]>p[2]+80);m.alpha_mode=AF_ALPHA_BLEND;CHECK(af_scene_set_object_material(s->scene,s->front,m));af_material back=af_scene_get_object(s->scene,s->back)->material;back.alpha_mode=AF_ALPHA_BLEND;back.base_color.a=.5f;CHECK(af_scene_set_object_material(s->scene,s->back,back));capture(e,s);}
     if(s->tick==7){CHECK(af_engine_test_read_pixel(e,p)&&p[0]>p[2]);CHECK(af_engine_set_window_size(e,720,480));}
+    if(s->tick==8){m.alpha_mode=AF_ALPHA_MASK;m.alpha_cutoff=.5f;CHECK(af_scene_set_object_material(s->scene,s->front,m));capture(e,s);}
+    if(s->tick==9)CHECK(af_engine_test_read_pixel(e,p)&&p[0]>p[2]+80);
     if(s->tick==10){CHECK(!af_engine_get_stats(e).validation_errors);af_engine_request_quit(e);}}
 static void shutdown(af_engine *e,void *data){state *s=data;af_engine_set_scene(e,NULL);af_scene_destroy(s->scene);}
 int main(void){af_engine_config config=af_engine_config_default();config.title="Afterlight alpha pixels";config.width=640;config.height=480;config.enable_validation=true;af_engine *e=af_engine_create(&config);if(!e)return 1;state s={0};af_game game={.init=init,.update=update,.shutdown=shutdown,.user_data=&s};int result=af_engine_run(e,&game);af_engine_destroy(e);if(result||s.failed||s.tick!=10)return 1;puts("Alpha pixels: opaque-before-blend, cutoff discard, sorted blended layers and resize passed.");return 0;}

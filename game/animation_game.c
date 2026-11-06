@@ -23,5 +23,5 @@ static void update(void *memory,const af_game_host *host,double dt){
 }
 static void shutdown(void *memory,const af_game_host *host){(void)memory;host->log("Animation demo stopped.");}
 AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t version){
-    static const af_game_module module={AF_GAME_ABI_VERSION,sizeof(af_game_module),sizeof(af_game_host),sizeof(af_scene_object),"Afterlight animation demos",sizeof(state),init,update,shutdown,frame_update};return version==AF_GAME_ABI_VERSION?&module:NULL;
+    static const af_game_module module={AF_GAME_ABI_VERSION,sizeof(af_game_module),sizeof(af_game_host),sizeof(af_scene_object),"Afterlight animation demos",sizeof(state),init,update,shutdown,frame_update,0,NULL,NULL};return version==AF_GAME_ABI_VERSION?&module:NULL;
 }

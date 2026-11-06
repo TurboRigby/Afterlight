@@ -52,6 +52,6 @@ static void shutdown(void *memory, const af_game_host *host) {
     host->log("C game stopped.");
 }
 AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t version) {
-    static const af_game_module module = {AF_GAME_ABI_VERSION, sizeof(af_game_module), sizeof(af_game_host), sizeof(af_scene_object), "Afterlight C demo", sizeof(game_state), init, update, shutdown, NULL};
+    static const af_game_module module = {AF_GAME_ABI_VERSION, sizeof(af_game_module), sizeof(af_game_host), sizeof(af_scene_object), "Afterlight C demo", sizeof(game_state), init, update, shutdown, NULL, 0, NULL, NULL};
     return version == AF_GAME_ABI_VERSION ? &module : NULL;
 }

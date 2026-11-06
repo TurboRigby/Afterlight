@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **9** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **11** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 9 modules.
+to use newly built ABI 11 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -72,14 +72,13 @@ The host validates ABI and structure sizes, then initializes the candidate with
 a clone of the current runtime scene and fresh state. Failure destroys only the
 candidate. Success shuts down/unloads the old module and adopts the candidate.
 The old runtime scene is preserved in the clone; private C module state is
-**reinitialized**, with no binary state migration. The sample takes current
+**reinitialized** unless the module supplies the versioned state callbacks added in 0.12. The sample takes current
 transforms as its new animation base. Stop always restores the original edit
 scene. Shadow copies are removed on normal unload.
 
 This runs native C code in-process. An arbitrary crash in game code is not
 isolated from the editor. The ABI is an early interface; rebuild modules with the
-current headers/compiler/architecture when it changes. There is no module state
-migration, multithreaded gameplay, debugger integration or automatic compiler
+current headers/compiler/architecture when it changes. There is no automatic migration of arbitrary module layouts, multithreaded gameplay, debugger integration or automatic compiler
 invocation yet. Build failures leave the previous module active because the
 editor watches successful output changes, not source edits.
 
@@ -112,3 +111,10 @@ starts or crossfades a clip; `animation_options`, `animation_pause`,
 the last computed visual pose for attachments. These calls work in game `init`:
 the runtime scene is attached before the callback. See
 [playback, timing and collider limits](development-010.md).
+
+## Reusable tools (0.12)
+
+Game ABI 11 adds named actions, prefab instantiation/spawning, positioned audio,
+optional versioned state save/load and deferred scene requests. The host owns
+its runtime context and project directory; borrowed values must not be retained
+across transitions/reloads. See [the complete contract and limits](development-012.md).

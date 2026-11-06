@@ -7,6 +7,7 @@
 #include <afterlight/game_module.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 typedef struct platform_state {af_object_id id;af_transform base;} platform_state;
 typedef struct character_state {
     af_third_person player;af_third_person_config third;float rig_scale;af_character_rig rig;af_object_id actor,crowd[63];unsigned crowd_count;bool root_motion;
@@ -47,7 +48,7 @@ static bool init(void *memory,const af_game_host *host){
     s->spawn=body->transform.position;const af_scene_object *spawn=host->get_object(host->scene,body->gameplay.player.spawn);af_mat4 world;
     if(body->gameplay.player.spawn&&(!spawn||spawn->gameplay.role!=AF_ROLE_SPAWN)){host->log("The player's spawn reference must select a Spawn component.");return false;}
     if(spawn&&host->world_matrix(host->scene,spawn->id,&world))s->spawn=(af_vec3){world.elements[12],world.elements[13],world.elements[14]};
-    s->checkpoint=s->spawn;s->player=host->third_person_default(s->spawn);s->third=host->third_person_config_default();s->third.controller=s->config;const af_scene_object *actor=host->get_object(host->scene,s->actor);if(!actor||!actor->rig.enabled||actor->parent!=s->body)return false;s->rig=actor->rig;s->rig_scale=actor->transform.scale.x;if(s->rig_scale<=0||fabsf(s->rig_scale-actor->transform.scale.y)>.0001f||fabsf(s->rig_scale-actor->transform.scale.z)>.0001f)return false;s->third.walk_speed=s->rig.walk_speed*s->rig_scale;s->third.run_speed=s->rig.run_speed*s->rig_scale;s->third.camera_distance=s->rig.camera_distance;s->third.camera_height=s->rig.camera_height;s->third.turn_speed=s->rig.turn_speed;s->third.mouse_sensitivity=s->sensitivity;s->root_motion=s->rig.root_motion;
+    s->checkpoint=s->spawn;s->player=host->third_person_default(s->spawn);s->third=host->third_person_config_default();s->third.controller=s->config;const af_scene_object *actor=host->get_object(host->scene,s->actor);if(!actor||!actor->rig.enabled||actor->parent!=s->body)return false;s->rig=actor->rig;s->rig_scale=actor->transform.scale.x;if(s->rig_scale<=0||fabsf(s->rig_scale-actor->transform.scale.y)>.0001f||fabsf(s->rig_scale-actor->transform.scale.z)>.0001f)return false;s->third.walk_speed=s->rig.walk_speed*s->rig_scale;s->third.run_speed=s->rig.run_speed*s->rig_scale;s->third.camera_distance=s->rig.camera_distance;s->third.camera_height=s->rig.camera_height;s->third.turn_speed=s->rig.turn_speed;s->third.mouse_sensitivity=s->sensitivity;if(!isfinite(s->third.run_speed)||s->third.run_speed>100){host->log("Scaled character speed exceeds the controller limit.");return false;}s->root_motion=s->rig.root_motion;
     if(!host->game_camera(host->scene,&s->camera))return false;s->initial_camera=s->camera;s->initial_camera.pitch=-.25f;
     s->player.orbit=s->initial_camera;s->player.orbit.pitch=-.25f;
     if(!s->actor||!host->locomotion_root_motion(host->engine,s->actor,s->rig.root_node,s->root_motion)||!host->locomotion_step(host->engine,s->actor,(af_locomotion_input){0},1.f/60,NULL))return false;
@@ -68,6 +69,10 @@ static void frame(void *memory,const af_game_host *host,double delta){
 static void update(void *memory,const af_game_host *host,double delta){
     character_state *s=memory;af_third_person_input input={0};bool controls=host->input_enabled&&host->mouse_captured(host->engine);
     if(controls&&host->action_pressed(host,"Restart")){restart(s,host,true);present(s,host);return;}
+#ifdef AF_TOOLBOX_GAME
+    if(controls&&host->action_pressed(host,"NextScene")){if(host->request_scene)host->request_scene(host,s->status.checkpoint_count?"toolbox":"toolbox-course");return;}
+    if(controls&&host->action_pressed(host,"Spawn")&&host->project_directory){char path[4096];if(snprintf(path,sizeof(path),"%sprefabs/crate.afterlight.prefab",host->project_directory)<(int)sizeof(path)){af_transform placement=host->get_object(host->scene,s->body)->transform;placement.position.x+=2;placement.position.y+=.25f;af_object_id root;af_scene_error error;if(!host->spawn_prefab(host->engine,host->scene,path,0,placement,&root,&error))host->log(error.message);}}
+#endif
     s->time+=delta;
     for(unsigned i=0;i<s->crowd_count;++i)host->locomotion_step(host->engine,s->crowd[i],(af_locomotion_input){.speed=(float)(i%3)*2.5f,.grounded=true},(float)delta,NULL);
     for(unsigned i=0;i<s->platform_count;++i){platform_state *p=&s->platforms[i];if(host->get_object(host->scene,p->id)){af_transform t=p->base;t.position.x+=2*sinf((float)s->time*.9f);host->set_transform(host->scene,p->id,t);}}

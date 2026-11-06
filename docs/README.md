@@ -25,6 +25,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.12: reusable tools and integration demos](development-012.md)
 - [0.11: playable animated characters](development-011.md)
 - [0.10: animation and rendering performance](development-010.md)
 - [0.9: assets and environments](assets-09.md)

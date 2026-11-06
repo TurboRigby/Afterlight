@@ -47,6 +47,7 @@ void ed_runtime_step(ed_runtime *r,double delta){
     if(!r->playing)return;bool paused=r->paused;r->paused=false;ed_runtime_update(r,delta,false);r->paused=paused;
 }
 void ed_runtime_stop(ed_runtime *r){
+    r->pending_scene[0]=0;
     if(r->playing)r->api->shutdown(r->state,&r->host);
     if(af_engine_get_scene(r->host.engine)==r->scene)af_engine_set_scene(r->host.engine,NULL);
     af_engine_set_gameplay_status(r->host.engine,(af_gameplay_status){0});

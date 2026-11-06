@@ -11,6 +11,8 @@
 #include "animation_runtime.h"
 #include "render_test.h"
 #include "platform_sdl.h"
+#include "scene_internal.h"
+#include <afterlight/prefab.h>
 #include <math.h>
 
 #define SDL_MAIN_HANDLED
@@ -644,3 +646,5 @@ af_input_map af_engine_input_map(const af_engine *e){return e?e->input_map:(af_i
 bool af_engine_save_input_map(const af_engine *e,const char *path,af_asset_error *error){return e&&af_input_map_save(path,&e->input_map,error);}
 
 bool af_engine_play_sound_at(af_engine *e,const char *name,af_sound_emitter emitter){return e&&af_audio_play_at(e->audio,name,emitter);}
+
+bool af_engine_spawn_prefab(af_engine *e,af_scene *s,const char *path,af_object_id parent,af_transform placement,af_object_id *out,af_scene_error *error){if(out)*out=0;if(!e||!s)return false;af_scene *next=af_scene_clone(s);if(!next)return false;af_object_id root;bool ok=af_prefab_instantiate(next,path,parent,placement,&root,error);af_asset_error asset_error;if(ok&&!af_engine_load_scene_assets(e,next,&asset_error)){ok=false;if(error){error->code=AF_SCENE_ERROR_IO;snprintf(error->message,sizeof(error->message),"%.255s",asset_error.message);}}if(ok){af_scene previous=*s;*s=*next;*next=previous;if(out)*out=root;}af_scene_destroy(next);return ok;}

@@ -1364,11 +1364,11 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         vkCmdSetScissor(frame->command, 0, 1, &scissor);
         af_blend_draw *blended=object_count?malloc(object_count*sizeof(*blended)):NULL;size_t blend_count=0;if(object_count&&!blended)return false;
         for(size_t i=0;i<object_count;++i){const af_scene_object *o=af_scene_object_at(scene,i);if(o->material.alpha_mode!=AF_ALPHA_BLEND)continue;af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;af_vec3 position={world.elements[12],world.elements[13],world.elements[14]};blended[blend_count++]=(af_blend_draw){i,af_vec3_dot(af_vec3_sub(position,camera->position),af_camera_forward(camera))};}if(blend_count>1)qsort(blended,blend_count,sizeof(*blended),blend_compare);
-        for(unsigned pass=0;pass<2;++pass){vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,pass?renderer->swapchain.blend_pipeline:renderer->swapchain.pipeline);
-        for (size_t order = 0; order < (pass?blend_count:object_count); ++order) {size_t i=pass?blended[order].index:order;
+        for(unsigned alpha_pass=0;alpha_pass<2;++alpha_pass){vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,alpha_pass?renderer->swapchain.blend_pipeline:renderer->swapchain.pipeline);
+        for (size_t order = 0; order < (alpha_pass?blend_count:object_count); ++order) {size_t i=alpha_pass?blended[order].index:order;
 
             const af_scene_object *object = af_scene_object_at(scene, i);
-            if(!pass&&object->material.alpha_mode==AF_ALPHA_BLEND)continue;
+            if(!alpha_pass&&object->material.alpha_mode==AF_ALPHA_BLEND)continue;
             if (!af_scene_object_visible(scene,object->id)||!strcmp(object->mesh,"__node")) continue;
             size_t index = find_mesh_index(renderer, object->mesh);
             if (index == renderer->mesh_count) {

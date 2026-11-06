@@ -132,7 +132,7 @@ void main(){
             if(dot(mapped,mapped)>1e-12)n=normalize(mat3(tangent,cross(n,tangent)*handedness,n)*normalize(mapped));
         }
     }
-    vec4 base=texture(base_texture,uv)*vertex_color;uint mode=(uint(draw.params.x)>>1u)&3u;float cutoff=float(uint(draw.params.x)>>3u)/65535.0;if(mode==1u&&base.a<cutoff)discard;if(mode!=2u)base.a=1;
+    vec4 base=texture(base_texture,uv)*vertex_color;uint mode=(uint(draw.params.x)>>1u)&3u;uint cutoff=uint(draw.params.x)>>3u;if(mode==1u&&uint(round(clamp(base.a,0,1)*65535.0))<cutoff)discard;if(mode!=2u)base.a=1;
     vec3 eye=frame.camera_position.xyz-world_position;
     vec3 v=dot(eye,eye)>1e-12?normalize(eye):n;
     vec4 mr=texture(metallic_roughness_texture,uv);

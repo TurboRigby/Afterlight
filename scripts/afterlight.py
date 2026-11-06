@@ -195,11 +195,11 @@ def export_project(project_path, destination, player_path, icd=None):
             if len(files)>128:raise ValueError('Too many prefabs (maximum 128).')
             for source in files:
                 document=read_json(source)
+                target=resources/'prefabs'/source.relative_to(prefabs);target.parent.mkdir(parents=True,exist_ok=True)
                 for asset in document.get('assets',[]):
                     original,separator,selector=asset['path'].partition('#');packed=copy_asset(source.parent/original)
-                    target=resources/'prefabs'/source.relative_to(prefabs)
                     asset['path']=os.path.relpath(packed,target.parent)+(separator+selector if separator else '')
-                write_json(resources/'prefabs'/source.relative_to(prefabs),document)
+                write_json(target,document)
         game_module=resources/'game'/('game'+module.suffix);shutil.copy2(module,game_module)
         write_json(resources/'game.afterlight.project',{'format':'afterlight.project','version':1,'name':project['name'],'startup_scene':'scenes/'+startup_name,'game_module':'game/'+game_module.name})
         libraries=[]

@@ -36,7 +36,8 @@ Instances are independent editable copies; source changes do not propagate.
 External spawn/rig references are rejected, and a failed instance changes nothing.
 Use the editor Prefabs panel to save or instantiate through undo history. C games
 can instantiate through the host and then call `load_scene_assets` before drawing.
-The CPU limit is 4096 objects per prefab. This is explicit instancing, not a live
+For runtime spawning, prefer `spawn_prefab`, which stages CPU objects and assets
+before committing. The CPU limit is 4096 objects per prefab. This is explicit instancing, not a live
 prefab override/inheritance system.
 
 ## State-preserving hot reload
@@ -91,3 +92,37 @@ directional/local shadow passes. Blended objects do not cast opaque shadows.
 Texture uploads and alpha edits invalidate the shadow cache. Portable draw pushes
 remain within 128 bytes. Pixel tests check discard, compositing, sorted layers,
 resize, cutout shadows and texture-reload invalidation with Vulkan validation.
+
+## Simple-to-complex integration demos
+
+Run `run_toolbox_editor` first, then `run_toolbox-course_editor`, and press Play.
+The matching `_player` targets launch standalone play. Existing character and
+animation demos remain available. WASD/Shift/Space move/run/jump; E toggles root
+motion, Q spawns an independent crate prefab, N switches practice/course scenes,
+R restarts and Escape releases the mouse. The prefab combines a solid collider,
+textured cutout screen and blended glass. Input bindings are in `sandbox/input.json`.
+The fixture generator is `python3 scripts/generate_toolbox_assets.py`.
+
+The real-module Vulkan integration exercises movement, root motion, prefab asset
+loading, state-preserving reload, two deferred transitions, shadows and resize.
+Export tests copy both scenes, input bindings and prefab assets, remove the source
+project, relocate the output and run each startup scene. Scene format is 12,
+project format remains 1 and C game ABI is 11: rebuild custom C modules and restart
+older editors. `spawn_prefab` stages CPU changes and assets before committing.
+
+Controller mappings are covered with deterministic CPU samples; physical
+controller hardware and native Windows/Linux interactive graphics remain untested.
+
+## Verification results
+
+On Apple M4/MoltenVK, all 82 checks passed (the complete ASan/UBSan suite plus
+final targeted Debug/sanitizer reruns after fixes). Vulkan tests require
+synchronization validation. Linux Clang 18 ASan/UBSan passed all 50 CPU tests.
+Static analysis of the new rig/input/prefab/audio/runtime/game code found no
+issues. Physical controller hardware was not available for verification.
+
+Both Debug and Release exports were relocated after their source project was
+removed. The real-module integration test then spawned a textured prefab,
+restored state during reload and switched practice/course scenes in both
+directions from those relocated resources. Source archives and license coverage
+were rebuilt and checked after the documentation changes.

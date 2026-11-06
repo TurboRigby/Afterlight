@@ -66,7 +66,7 @@ objects use the reserved mesh name `__node` and produce no draw or missing-asset
 warning. Changing a parent's transform moves its imported children normally.
 Import is one undoable document action. Invalid input adds no CPU nodes/assets.
 
-Core opaque metallic/roughness materials import base-color factors/images,
+Core opaque/cutout/blended metallic/roughness materials import base-color factors/images,
 normal maps/strength, metallic and roughness factors/maps, unlit flags and
 emissive factors. Color images upload as sRGB; normal and packed surface images
 are linear. Surface map **G** multiplies roughness and **B** multiplies metallic.
@@ -83,7 +83,7 @@ existing callers; the editor uses the richer path.
 
 Current limits: triangle meshes, one UV set (UV0), repeat wrapping and no
 texture transforms. Core TRS animation and four-influence skins are supported
-within the [0.10 budgets](development-010.md). Alpha masking/blending, morphs,
+within the [0.10 budgets](development-010.md). Morphs,
 mesh compression, material texture extensions, emissive textures and imported
 cameras/lights are not implemented. Unsupported required features are rejected. Sampler
 filtering uses the engine's trilinear/anisotropic policy. Node-local shear and
@@ -155,3 +155,6 @@ The end-to-end regression creates/builds a starter C module, runs it, imports a
 textured multi-material model, exports, deletes source data, moves the output and
 runs its player. Separate Vulkan tests compare rendered metallic/roughness maps
 and verify dependency reload/last-good recovery. See [testing](testing.md).
+
+Scene names are preserved in exports for deferred transitions. Optional project
+`input.json` and `prefabs/` resources are bundled; see [0.12](development-012.md).

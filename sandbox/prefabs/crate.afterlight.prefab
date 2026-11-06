@@ -1,0 +1,542 @@
+{
+  "objects": [
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "0",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": false,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
+        "layer": 1
+      },
+      "parent": "0",
+      "id": "1",
+      "name": "Reusable crate",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "0",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          0.4,
+          0.5,
+          0.65,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
+        "layer": 1
+      },
+      "parent": "1",
+      "id": "2",
+      "name": "Crate",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "0",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          0.3,
+          1,
+          0.6,
+          1
+        ],
+        "texture": "cutout",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "mask",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": false,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
+        "layer": 1
+      },
+      "parent": "1",
+      "id": "3",
+      "name": "Cutout screen",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        1,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        0.5,
+        0.08
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "0",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          0.25,
+          0.7,
+          1,
+          0.35
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "blend",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": false,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.65,
+          0.65,
+          0.65
+        ],
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
+        "layer": 1
+      },
+      "parent": "1",
+      "id": "4",
+      "name": "Glass panel",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        0,
+        0,
+        0.75
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        0.08
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      }
+    }
+  ],
+  "format": "afterlight.scene",
+  "version": 12,
+  "next_id": "5",
+  "render": {
+    "exposure": 0,
+    "tone_mapping": false,
+    "bloom": false,
+    "bloom_strength": 0.119999997317791,
+    "bloom_threshold": 1,
+    "bloom_radius": 1.5,
+    "environment_enabled": false,
+    "environment_profile": 0,
+    "environment_intensity": 1,
+    "environment_rotation": 0,
+    "local_shadow_resolution": 512,
+    "environment_asset": "",
+    "skybox": false,
+    "skybox_intensity": 1
+  },
+  "local_lights": [],
+  "shadows": {
+    "enabled": true,
+    "mode": "cascaded",
+    "resolution": 1024,
+    "distance": 45,
+    "constant_bias": 1.25,
+    "slope_bias": 1.75,
+    "normal_bias": 0.014999999664723873,
+    "filter_radius": 1,
+    "split_lambda": 0.649999976158142,
+    "blend_fraction": 0.10000000149011612,
+    "debug_cascades": false
+  },
+  "light": {
+    "direction": [
+      -0.600000023841858,
+      -1,
+      -0.4000000059604645
+    ],
+    "color": [
+      1,
+      0.949999988079071,
+      0.8600000143051147
+    ],
+    "intensity": 1.2000000476837158,
+    "ambient": 0.2199999988079071
+  },
+  "assets": [
+    {
+      "name": "cutout",
+      "kind": "texture",
+      "path": "../assets/cutout.tga"
+    }
+  ]
+}

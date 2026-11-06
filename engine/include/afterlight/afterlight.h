@@ -71,6 +71,7 @@ typedef struct af_engine_stats {
 
 af_input_map af_engine_input_map(const af_engine*);
 bool af_engine_save_input_map(const af_engine*,const char*,af_asset_error*);
+bool af_engine_spawn_prefab(af_engine*,af_scene*,const char*,af_object_id,af_transform,af_object_id*,af_scene_error*);
 bool af_engine_bind_action(af_engine*,af_action_binding);
 bool af_engine_load_input_map(af_engine*,const char*,af_asset_error*);
 float af_engine_action_value(const af_engine*,const char*);

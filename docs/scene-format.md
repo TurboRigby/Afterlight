@@ -494,3 +494,12 @@ its glTF/GLB source and shares the usual relative-path/dependency packaging rule
 Versions 1–9 receive empty configurations and unbound defaults. Current saves
 write v10. Playback time, fade buffers and posed matrices are transient runtime
 state; collision remains based on authored transforms.
+
+## Versions 11 and 12: rigs and alpha
+
+Version 11 adds a `rig` object to every scene object, with `enabled`,
+`root_motion`, source `root_node`, five `clips` indices in Idle/Walk/Run/Jump/Fall
+order, model-space `walk_speed`/`run_speed`, `camera_distance`, `camera_height`
+and `turn_speed`. Version 12 adds material `alpha_mode` (opaque/mask/blend) and
+`alpha_cutoff` in [0,1]. Earlier versions read with a disabled rig and opaque
+material defaults. Saving writes version 12. See [0.12](development-012.md).

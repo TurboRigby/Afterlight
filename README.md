@@ -3,8 +3,8 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.11** includes an editor, glTF skeletal animation, third-person
-controls, speed blending, animation events, optional root motion and shadows.
+Afterlight **0.12** adds configurable character rigs, input actions/controllers,
+prefabs, stateful hot reload, level switching, spatial audio and alpha materials.
 Start with the practice scene, then try the animated obstacle course.
 
 ## Build and run
@@ -15,14 +15,15 @@ first, then run from the repository root:
 
 ```sh
 cmake --preset debug
-cmake --build --preset debug --target run_character_editor
+cmake --build --preset debug --target run_toolbox_editor
 ```
 
 Press **Play**. **WASD** walks, **Shift** runs, **Space** jumps, **E** toggles
 root motion, **R** restarts and **Escape** releases the mouse.
+In the toolbox demo, **Q** spawns a prefab and **N** switches levels.
 
-Use `run_character-course_editor` for the obstacle course or
-`run_character_player` for standalone play. See the [character guide](docs/development-011.md)
+Use `run_toolbox-course_editor` for the obstacle course or
+`run_toolbox_player` for standalone play. See the [toolbox guide](docs/development-012.md)
 for the other demos, debugging tools and current limits.
 
 ## Documentation

@@ -13,6 +13,11 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
+Afterlight 0.12 adds configurable rigs, named input/controller bindings, prefabs,
+stateful C reload, scene transitions, spatial audio and alpha materials. Start
+with `run_toolbox_editor`, then `run_toolbox-course_editor`. Q spawns a prefab;
+N switches levels. See [the 0.12 workflow](development-012.md).
+
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
@@ -329,9 +334,9 @@ by named assets and scene objects.
 projection using the current viewport aspect ratio. Math uses column-major
 matrices, column vectors, a right-handed Y-up world, and radians. Object transforms
 compose as `T * Rz * Ry * Rx * S`. Vulkan projection maps depth to [0, 1] and flips
-clip Y. The color pipeline is opaque and uses materials, textures, normals and ambient/
+clip Y. The color pipeline supports opaque, cutout and sorted alpha-blended materials with textures, normals and ambient/
 directional diffuse lighting, with an unlit material option. It has depth testing
-and no alpha blending. Mesh uploads wait for GPU work; transform and camera edits do not.
+and straight-alpha blending. Mesh uploads wait for GPU work; transform and camera edits do not.
 
 GLSL sources in `engine/shaders/` compile to validated SPIR-V headers during the
 build and are embedded in the engine. Editing a shader rebuilds its header and
@@ -357,7 +362,7 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](game-code.md).
 
-The scene format is version 10 and still reads versions 1–9. Asset bytes stay in
+The scene format is version 12 and still reads versions 1–11. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](assets.md),
 [scene format](scene-format.md) and [editor controls](editor.md).
 
@@ -365,7 +370,7 @@ source files referenced by the manifest. See [assets/materials](assets.md),
 
 - Morph animation, richer character rigs and material extensions.
 - Reflection probes, multiscale bloom and adaptive local shadows.
-- Rigid-body dynamics, spatial/streaming audio and module state migration.
+- Rigid-body dynamics, streaming music, audio occlusion and richer state migrations.
 
 The engine remains a small prototype. These next items are not implemented.
 The editor uses vendored [Nuklear](../third_party/nuklear/README.md) under MIT and

@@ -61,5 +61,5 @@ Completed in order for Afterlight 0.6:
 
 All own engine/editor/game code remains C17. See [gameplay](gameplay.md) for the
 controller/course, [assets](assets.md) for model/audio limits, and
-[testing](testing.md) for verification. Scene format is 10 and C game ABI is 10;
+[testing](testing.md) for verification. Scene format is 12 and C game ABI is 11;
 restart older editors and rebuild custom modules against the current headers.

@@ -1,0 +1,112 @@
+[
+  {
+    "name": "MoveX",
+    "negative_key": 4,
+    "positive_key": 6,
+    "pad_button": -1,
+    "pad_axis": 0,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "MoveY",
+    "negative_key": 5,
+    "positive_key": 3,
+    "pad_button": -1,
+    "pad_axis": 1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": -1
+  },
+  {
+    "name": "LookX",
+    "negative_key": -1,
+    "positive_key": -1,
+    "pad_button": -1,
+    "pad_axis": 2,
+    "mouse_axis": 0,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "LookY",
+    "negative_key": -1,
+    "positive_key": -1,
+    "pad_button": -1,
+    "pad_axis": 3,
+    "mouse_axis": 1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "Jump",
+    "negative_key": -1,
+    "positive_key": 1,
+    "pad_button": 0,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "Run",
+    "negative_key": -1,
+    "positive_key": 9,
+    "pad_button": 7,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "Interact",
+    "negative_key": -1,
+    "positive_key": 8,
+    "pad_button": 2,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "Restart",
+    "negative_key": -1,
+    "positive_key": 2,
+    "pad_button": 3,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "Release",
+    "negative_key": -1,
+    "positive_key": 0,
+    "pad_button": 6,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "NextScene",
+    "negative_key": -1,
+    "positive_key": 27,
+    "pad_button": 14,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "Spawn",
+    "negative_key": -1,
+    "positive_key": 7,
+    "pad_button": 12,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  }
+]

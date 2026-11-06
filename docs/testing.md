@@ -179,3 +179,13 @@ The animation-data regression also rejects malformed marker metadata.
 `character_demo_play`, `character_simple`, `character_course`, `character_crowd`
 and `character_export` cover the real C module, camera, renderer and relocated
 exports. `afterlight.dco` runs the seven sign-off-checker regressions.
+
+## 0.12 reusable tool checks
+
+New CPU checks cover named input/deadzones/persistence, prefab ID/spawn remapping,
+state serialization/rejection and deferred scene changes. Alpha pixel tests cover
+opaque-before-blend ordering, cutoff discard, sorted glass and resize; shadow
+pixels also verify texture/material-alpha cutouts and cache invalidation. The
+`afterlight.toolbox` real-module test combines the systems. `toolbox_export`
+verifies portable input maps, scene aliases and prefab dependencies after source
+removal. See [the workflow and known limits](development-012.md).

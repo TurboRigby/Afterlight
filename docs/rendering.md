@@ -44,7 +44,7 @@ Emission adds linear RGB times strength independently of lights, including for
 unlit materials. It does not illuminate neighboring geometry. When enabled, bloom filters bright
 HDR emission before presentation.
 Color textures, vertex colors and material base color multiply before lighting.
-Selection tint remains transient editor state. Geometry is opaque.
+Selection tint remains transient editor state. Geometry supports opaque, cutout and sorted alpha blending; see [0.12](development-012.md).
 
 Exposure multiplies scene geometry by 2^stops (range -10 to +10). Optional tone
 mapping uses the Reinhard curve c/(1+c). Scene color first goes to an RGBA16F target, then bloom, exposure and tone mapping
