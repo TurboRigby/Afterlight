@@ -59,6 +59,7 @@ add_library(afterlight STATIC
     engine/src/physics_mesh.c
     engine/src/physics_solver.c
     engine/src/physics_sleep.c
+    engine/src/physics_ccd.c
     engine/src/physics_interaction.c
     engine/src/prefab.c
     engine/src/input.c
@@ -468,6 +469,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_ccd_test tests/physics_ccd.c)
+    target_include_directories(afterlight_physics_ccd_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_ccd_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_ccd_test)
+    add_test(NAME afterlight.physics_ccd COMMAND afterlight_physics_ccd_test )
     add_executable(afterlight_physics_mesh_test tests/physics_mesh.c)
     target_include_directories(afterlight_physics_mesh_test PRIVATE engine/src)
     target_link_libraries(afterlight_physics_mesh_test PRIVATE Afterlight::Engine)

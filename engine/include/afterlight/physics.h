@@ -20,7 +20,7 @@ typedef struct af_physics_contact {
 } af_physics_contact;
 typedef struct af_physics_stats {
     size_t bodies, dynamic_bodies, kinematic_bodies, sleeping, contacts, broadphase_pairs;
-    unsigned substeps, iterations, ccd_hits;
+    unsigned substeps, iterations, ccd_hits,ccd_clamped;
     uint64_t ticks;
 } af_physics_stats;
 af_physics *af_physics_create(void);

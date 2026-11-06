@@ -1,47 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "physics_internal.h"
-void ph_move(af_physics *p, size_t at, float dt) {
-    ph_body *b = &p->bodies[at];
-    if (!b->config.continuous) {
-        b->p = af_vec3_add(b->p, af_vec3_scale(b->v, dt));
-        return;
-    }
-    float radius =
-        b->shape.type == AF_COLLIDER_SPHERE
-            ? b->shape.radius
-            : fminf(b->shape.half_extents.x, fminf(b->shape.half_extents.y, b->shape.half_extents.z));
-    float remaining = dt;
-    for (unsigned pass = 0; pass < 4 && remaining > 1e-7f; ++pass) {
-        af_vec3 move = af_vec3_scale(b->v, remaining);
-        if (af_vec3_length(move) < 1e-7f)
-            break;
-        float nearest = 1;
-        af_collision_hit hit = {0};
-        ph_body *target = NULL;
-        for (size_t i = 0; i < p->count; ++i) {
-            ph_body *other = &p->bodies[i];
-            if (i == at || other->inv_mass > 0 || !(b->shape.layer & other->shape.layer))
-                continue;
-            af_collision_hit candidate;
-            if (af_collider_sweep_sphere(other->shape, b->p, radius, move, .001f, &candidate) &&
-                candidate.fraction < nearest) {
-                nearest = candidate.fraction;
-                hit = candidate;
-                target = other;
-            }
-        }
-        b->p = af_vec3_add(b->p, af_vec3_scale(move, nearest));
-        if (!target)
-            break;
-        float closing = af_vec3_dot(af_vec3_sub(b->v, target->v), hit.normal);
-        if (closing < 0)
-            b->v = af_vec3_sub(b->v, af_vec3_scale(hit.normal, (1 + fmaxf(b->config.restitution,
-                                                                          target->config.restitution)) *
-                                                                   closing));
-        ++p->stats.ccd_hits;
-        remaining *= 1 - nearest;
-    }
-}
 void ph_sleep(af_physics *p, float dt) {
     for (size_t i = 0; i < p->count; ++i)
         p->bodies[i].supported = p->bodies[i].config.gravity_scale == 0;

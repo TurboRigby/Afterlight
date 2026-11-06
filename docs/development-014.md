@@ -37,3 +37,14 @@ The BVH filters world-space candidate triangles before narrowphase. Dropped boxe
 spheres and a three-box stack settle on an imported two-triangle floor; existing
 primitive stack/friction/sleep tests remain in place. Triangle surfaces are static;
 convex decomposition or dynamic concave mesh bodies are not provided.
+
+## Continuous collision
+
+Full box extents, angular velocity bounds and relative body motion now participate
+in conservative advancement, including BVH-filtered triangles. Regression cases
+cover thin walls, two approaching fast spheres and a rotating box corner. Low-speed
+resting contacts stay in the discrete solver. Work is bounded to 80 distance samples
+and 16 impact events per substep; exhaustion conservatively truncates motion and
+reports `ccd_clamped`. A pair receives at most one CCD impulse per substep, so
+multiple rebounds between the same pair remain an approximation. This is bounded
+CCD for small scenes, not an exact general time-of-impact solver.

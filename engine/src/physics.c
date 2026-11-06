@@ -260,14 +260,6 @@ size_t af_physics_contacts(const af_physics *p, af_physics_contact *out, size_t 
         out[i] = p->contacts[i].view;
     return p->contact_count;
 }
-static void rotate(ph_body *b, float dt) {
-    af_vec4 q = b->q;
-    af_vec3 v = {q.x, q.y, q.z}, cross = af_vec3_cross(b->w, v);
-    af_vec3 xyz = af_vec3_add(af_vec3_scale(b->w, q.w), cross);
-    b->q = af_quaternion_normalize((af_vec4){q.x + xyz.x * dt * .5f, q.y + xyz.y * dt * .5f,
-                                             q.z + xyz.z * dt * .5f,
-                                             q.w - af_vec3_dot(b->w, v) * dt * .5f});
-}
 bool af_physics_step(af_physics *p, af_scene *s, float dt) {
     if (!p || !s || !isfinite(dt) || dt <= 0 || dt > .1f)
         return false;
@@ -295,10 +287,9 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
                 af_vec3_scale(af_vec3_add(b->w, af_vec3_scale(ph_inverse_inertia(b, b->torque), h)),
                               expf(-b->config.angular_damping * h)),
                 100);
-            ph_move(p, i, h);
-            rotate(b, h);
             ph_shape(b);
         }
+        ph_advance(p,h);
         if (!ph_detect(p))
             return fail(p, "Physics exceeds 8192 contact points.");
         ph_solve(p, h);
