@@ -68,6 +68,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
     size_t count = 0;
     if (!p || !s)
         return false;
+    af_asset_error mesh_error;if(!af_scene_prepare_collision_meshes(s,&mesh_error))return fail(p,mesh_error.message);
     for (size_t i = 0; i < af_scene_object_count(s); ++i) {
         const af_scene_object *o = af_scene_object_at(s, i);
         if (o->body.enabled && !af_rigid_body_valid(o->body))
@@ -81,7 +82,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                 p, "Dynamic bodies require centered root sphere/box colliders with positive scale.");
         af_world_collider shape;
         if (!af_scene_world_collider(s, o->id, &shape)) {
-            if (o->body.enabled && o->body.type == AF_BODY_DYNAMIC)
+            if ((o->body.enabled && o->body.type == AF_BODY_DYNAMIC)||o->collider.type==AF_COLLIDER_MESH)
                 return fail(p, "Dynamic collider has no valid world shape.");
             continue;
         }

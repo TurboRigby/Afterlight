@@ -204,7 +204,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != 13 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -258,8 +258,8 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             if(!exact_fields(c,fields,8)||!cJSON_IsString(type)||!cJSON_IsBool(enabled)||!cJSON_IsBool(trigger)||!read_vector(cJSON_GetObjectItemCaseSensitive(c,"center"),&value.center)||
                 !read_vector(cJSON_GetObjectItemCaseSensitive(c,"half_extents"),&value.half_extents)||!read_float_field(c,"radius",&value.radius)||!read_float_field(c,"half_height",&value.half_height)||
                 !cJSON_IsNumber(layer)||!isfinite(layer->valuedouble)||layer->valuedouble<1||layer->valuedouble>UINT32_MAX||floor(layer->valuedouble)!=layer->valuedouble){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid collider fields.");goto fail;}
-            static const char *const types[]={"none","box","sphere","capsule"};bool known=false;
-            for(unsigned shape=0;shape<4;++shape)if(!strcmp(type->valuestring,types[shape])){value.type=(af_collider_type)shape;known=true;break;}
+            static const char *const types[]={"none","box","sphere","capsule","mesh"};bool known=false;
+            for(unsigned shape=0;shape<(version->valuedouble>=14?5u:4u);++shape)if(!strcmp(type->valuestring,types[shape])){value.type=(af_collider_type)shape;known=true;break;}
             value.enabled=cJSON_IsTrue(enabled)!=0;value.trigger=cJSON_IsTrue(trigger)!=0;value.layer=(uint32_t)layer->valuedouble;
             if(!known||!af_collider_valid(value)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid collider shape or dimensions.");goto fail;}object->collider=value;
         }
@@ -516,7 +516,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
         if(!cJSON_AddBoolToObject(material,"physically_based",source->material.physically_based)||!cJSON_AddNumberToObject(material,"roughness",source->material.roughness)||!cJSON_AddNumberToObject(material,"metallic",source->material.metallic)||
             !add_vector(material,"emission",source->material.emission)||!cJSON_AddNumberToObject(material,"emission_strength",source->material.emission_strength)||
             !cJSON_AddStringToObject(material,"normal_map",source->material.normal_map)||!cJSON_AddNumberToObject(material,"normal_strength",source->material.normal_strength)||!cJSON_AddStringToObject(material,"metallic_roughness_map",source->material.metallic_roughness_map))goto fail;
-        const af_collider *value=&source->collider;static const char *const types[]={"none","box","sphere","capsule"};
+        const af_collider *value=&source->collider;static const char *const types[]={"none","box","sphere","capsule","mesh"};
         cJSON *collider=cJSON_AddObjectToObject(object,"collider");
         if(!collider||!cJSON_AddStringToObject(collider,"type",types[value->type])||!cJSON_AddBoolToObject(collider,"enabled",value->enabled)||!cJSON_AddBoolToObject(collider,"trigger",value->trigger)||
             !add_vector(collider,"center",value->center)||!add_vector(collider,"half_extents",value->half_extents)||!cJSON_AddNumberToObject(collider,"radius",value->radius)||

@@ -7,8 +7,10 @@
 #ifndef AF_SCENE_INTERNAL_H
 #define AF_SCENE_INTERNAL_H
 #include <afterlight/scene.h>
+#include "collision_mesh_internal.h"
 
 struct af_scene {
+    cm_slot collision_meshes[AF_COLLISION_MESH_MAX_ASSETS];size_t collision_mesh_count;
     af_scene_object *objects;
     size_t count;
     size_t capacity;

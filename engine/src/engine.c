@@ -527,6 +527,7 @@ bool af_engine_load_mesh(af_engine *engine,const char *name,const char *path,af_
     if(!result&&error)snprintf(error->message,sizeof(error->message),"GPU mesh upload failed.");return result;
 }
 bool af_engine_load_scene_assets(af_engine *engine,const af_scene *scene,af_asset_error *error){
+    if(!af_scene_prepare_collision_meshes((af_scene*)scene,error))return false;
     if(!engine||!scene){if(error)snprintf(error->message,sizeof(error->message),"An engine and scene are required.");return false;}
     for(size_t i=0;i<af_scene_asset_count(scene);++i)if(!af_engine_load_asset(engine,af_scene_asset_at(scene,i),error))return false;return true;
 }

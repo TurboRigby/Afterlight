@@ -10,8 +10,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <afterlight/math.h>
+#include <afterlight/collision_mesh.h>
 struct af_scene;
-typedef enum af_collider_type {AF_COLLIDER_NONE,AF_COLLIDER_BOX,AF_COLLIDER_SPHERE,AF_COLLIDER_CAPSULE} af_collider_type;
+typedef enum af_collider_type {AF_COLLIDER_NONE,AF_COLLIDER_BOX,AF_COLLIDER_SPHERE,AF_COLLIDER_CAPSULE,AF_COLLIDER_MESH} af_collider_type;
 typedef struct af_collider {
     af_collider_type type;
     bool enabled,trigger;
@@ -24,6 +25,7 @@ typedef struct af_collision_hit {uint64_t object;af_vec3 point,normal;float dist
 typedef struct af_world_collider {
     uint64_t object;af_collider_type type;bool trigger;uint32_t layer;
     af_vec3 center,axes[3],half_extents,a,b;float radius;
+    const af_collision_mesh *mesh;af_mat4 matrix,inverse;
 } af_world_collider;
 af_collider af_collider_default(void);
 bool af_collider_valid(af_collider collider);

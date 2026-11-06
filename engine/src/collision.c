@@ -16,7 +16,8 @@ static af_vec3 safe_normal(af_vec3 v){float length=af_vec3_length(v);return leng
 af_collider af_collider_default(void){return (af_collider){.enabled=true,.half_extents={0.5f,0.5f,0.5f},.radius=0.5f,.half_height=0.5f,.layer=1};}
 af_query_filter af_query_filter_default(void){return (af_query_filter){.mask=UINT32_MAX};}
 bool af_collider_valid(af_collider c){
-    if(c.type<AF_COLLIDER_NONE||c.type>AF_COLLIDER_CAPSULE||!finite3(c.center)||!finite3(c.half_extents)||!isfinite(c.radius)||!isfinite(c.half_height)||!c.layer)return false;
+    if(c.type==AF_COLLIDER_MESH&&af_vec3_length(c.center)>1e-6f)return false;
+    if(c.type<AF_COLLIDER_NONE||c.type>AF_COLLIDER_MESH||!finite3(c.center)||!finite3(c.half_extents)||!isfinite(c.radius)||!isfinite(c.half_height)||!c.layer)return false;
     if(c.half_extents.x<0||c.half_extents.y<0||c.half_extents.z<0||c.radius<0||c.half_height<0||c.radius>10000||c.half_height>10000||c.half_extents.x>10000||c.half_extents.y>10000||c.half_extents.z>10000)return false;
     if(c.type==AF_COLLIDER_BOX&&(c.half_extents.x<=0||c.half_extents.y<=0||c.half_extents.z<=0))return false;
     return (c.type!=AF_COLLIDER_SPHERE&&c.type!=AF_COLLIDER_CAPSULE)||c.radius>0;
@@ -28,6 +29,7 @@ bool af_scene_world_collider(const af_scene *scene,uint64_t id,af_world_collider
     for(unsigned i=0;i<3;++i){w.axes[i]=(af_vec3){model.elements[i*4],model.elements[i*4+1],model.elements[i*4+2]};scale[i]=af_vec3_length(w.axes[i]);
         if(!isfinite(scale[i])||scale[i]<1e-6f)return false;w.axes[i]=af_vec3_scale(w.axes[i],1/scale[i]);}
     for(unsigned i=0;i<3;++i)for(unsigned j=i+1;j<3;++j)if(fabsf(af_vec3_dot(w.axes[i],w.axes[j]))>0.001f)return false;
+    if(w.type==AF_COLLIDER_MESH){w.mesh=af_scene_collision_mesh(scene,o->mesh);af_vec3 low,high;if(!w.mesh||!af_collision_mesh_bounds(w.mesh,&low,&high)||!af_mat4_inverse(model,&w.inverse))return false;w.matrix=model;af_vec3 center=af_vec3_scale(af_vec3_add(low,high),.5f),half=af_vec3_scale(af_vec3_sub(high,low),.5f);w.center=point(model,center);w.half_extents=(af_vec3){half.x*scale[0],half.y*scale[1],half.z*scale[2]};w.a=w.b=w.center;*out=w;return finite3(w.center);}
     w.center=point(model,o->collider.center);if(!finite3(w.center))return false;
     w.half_extents=(af_vec3){o->collider.half_extents.x*scale[0],o->collider.half_extents.y*scale[1],o->collider.half_extents.z*scale[2]};
     w.radius=o->collider.radius*fmaxf(scale[0],fmaxf(scale[1],scale[2]));

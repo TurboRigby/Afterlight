@@ -32,6 +32,7 @@ af_scene *af_scene_create(void)
 void af_scene_destroy(af_scene *scene)
 {
     if (!scene) return;
+    for(size_t i=0;i<scene->collision_mesh_count;++i)cm_release(scene->collision_meshes[i].mesh);
     free(scene->objects);
     free(scene->assets);
     free(scene);
@@ -131,6 +132,7 @@ af_scene *af_scene_clone(const af_scene *source)
         memcpy(copy->assets,source->assets,source->asset_count*sizeof(*copy->assets));
         copy->asset_count=copy->asset_capacity=source->asset_count;
     }
+    memcpy(copy->collision_meshes,source->collision_meshes,sizeof(copy->collision_meshes));copy->collision_mesh_count=source->collision_mesh_count;for(size_t i=0;i<copy->collision_mesh_count;++i)cm_retain(copy->collision_meshes[i].mesh);
     return copy;
 }
 
@@ -253,7 +255,7 @@ bool af_scene_interpolated_world_matrix(const af_scene *scene,const af_scene *pr
     }return false;
 }
 
-bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider collider){af_scene_object *object=find_object(scene,id);if(!object||!af_collider_valid(collider))return false;af_collider previous=object->collider;object->collider=collider;if(!af_scene_set_body(scene,id,object->body)){object->collider=previous;return false;}return true;}
+bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider collider){af_scene_object *object=find_object(scene,id);if(!object||!af_collider_valid(collider)||(collider.type==AF_COLLIDER_MESH&&(af_vec3_length(collider.center)>1e-6f||(object->body.enabled&&object->body.type!=AF_BODY_STATIC))))return false;af_collider previous=object->collider;object->collider=collider;if(!af_scene_set_body(scene,id,object->body)){object->collider=previous;return false;}return true;}
 
 af_animation_component af_animation_component_default(void){return (af_animation_component){.speed=1,.loop=true};}
 af_model_binding af_model_binding_default(void){return (af_model_binding){.skin=-1};}
