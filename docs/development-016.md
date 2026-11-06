@@ -13,3 +13,9 @@ the total mass used by the solver. Game modules use ABI 15.
 Queries flatten compound parts into transformed primitives, returning both owner
 and part IDs. Empty space between parts stays empty. Owner filters ignore all
 parts together, and the existing capsule controller consumes these queries.
+
+Compound mass properties use scaled box/sphere volumes, density-weighted centers,
+rotated inertia tensors and the parallel-axis theorem. They are expressed in
+normalized owner axes and physical world units; inertia is about the computed
+center. Overlapping parts contribute additively. Tests verify unequal-density
+centers, fifth-power inertia scaling and off-diagonal rotated-box terms.
