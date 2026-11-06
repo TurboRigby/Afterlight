@@ -174,6 +174,8 @@ bool ed_document_duplicate(ed_document *d)
         ids[i]=af_scene_add_object(next,source.name,source.mesh);if(source.id==root){selected=ids[i];source.transform.position.x+=1.5f;}
         if(!ids[i]||!af_scene_set_object_transform(next,ids[i],source.transform)||!af_scene_set_object_visible(next,ids[i],source.visible)||!af_scene_set_object_material(next,ids[i],source.material)||!af_scene_set_object_collider(next,ids[i],source.collider)||!af_scene_set_object_gameplay(next,ids[i],source.gameplay)||!af_scene_set_object_animation(next,ids[i],source.animation))goto duplicate_failed;
     }
+
+    for(size_t i=0;i<count;++i)if(ids[i]){af_object_id old=af_scene_object_at(d->scene,i)->id;for(size_t k=0;k<af_scene_collider_part_count(d->scene,old);++k){af_collider_part part=*af_scene_collider_part_at(d->scene,old,k);if(!af_scene_add_collider_part(next,ids[i],part))goto duplicate_failed;}}
     for(size_t i=0;i<count;++i)if(ids[i]){const af_scene_object *source=af_scene_object_at(d->scene,i);af_object_id parent=source->parent;
         if(source->id!=root)for(size_t j=0;j<count;++j)if(af_scene_object_at(d->scene,j)->id==parent){parent=ids[j];break;}
         if(!af_scene_set_parent(next,ids[i],parent)||!af_scene_set_body(next,ids[i],source->body))goto duplicate_failed;

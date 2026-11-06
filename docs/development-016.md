@@ -37,3 +37,8 @@ The editor adds box/sphere parts, fits bounds over rigid mesh descendants, edits
 local poses/density, and exposes computed material mass. Move/rotate/scale tools
 reuse the snapped viewport gizmo and grouped undo/cancel. Collider overlays draw
 individual parts. Dynamic owners stay rooted with uniform positive scale.
+
+Prefab saving keeps only owned parts inside the saved hierarchy. Instantiation
+and editor duplication assign new part IDs and remap owners before validating
+bodies. Removing an owner removes its parts; removing the last active shape from
+a dynamic compound rolls back. C host calls expose part views and mutations.

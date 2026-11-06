@@ -576,6 +576,7 @@ bool af_scene_save(const af_scene *scene, const char *path, af_scene_error *erro
     }
     if(!af_scene_joints_valid(scene)){set_error(error,AF_SCENE_ERROR_FORMAT,"Joint endpoints must remain valid physics bodies.");return false;}
     for(size_t i=0;i<scene->joint_count;++i)if(!valid_utf8((const unsigned char*)scene->joints[i].name,strlen(scene->joints[i].name))){set_error(error,AF_SCENE_ERROR_FORMAT,"Joint names must be UTF-8.");return false;}
+    for(size_t i=0;i<scene->part_count;++i)if(!valid_utf8((const unsigned char*)scene->parts[i].name,strlen(scene->parts[i].name))){set_error(error,AF_SCENE_ERROR_FORMAT,"Collider part names must be UTF-8.");return false;}
     /* Scene names are byte strings in memory; JSON on disk must be UTF-8. */
     for (size_t i = 0; i < scene->count; ++i) {
         const af_scene_object *object = &scene->objects[i];

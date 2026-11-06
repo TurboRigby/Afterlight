@@ -10,6 +10,7 @@
 #include <afterlight/third_person.h>
 #include <afterlight/prefab.h>
 #include <afterlight/joint.h>
+#include <afterlight/compound.h>
 #define AF_GAME_ABI_VERSION 15u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
@@ -42,6 +43,12 @@ typedef struct af_game_host {
     af_physics_state (*body_state)(const af_engine*,af_object_id);
     af_physics_joint_state (*joint_state)(const af_engine*,af_joint_id);
     bool (*set_body)(af_scene*,af_object_id,af_rigid_body);
+    af_collider_part_id (*add_part)(af_scene*,af_object_id,af_collider_part);
+    bool (*set_part)(af_scene*,af_collider_part_id,af_collider_part);
+    bool (*remove_part)(af_scene*,af_collider_part_id);
+    const af_collider_part *(*get_part)(const af_scene*,af_collider_part_id);
+    const af_collider_part *(*part_at)(const af_scene*,af_object_id,size_t);
+    size_t (*part_count)(const af_scene*,af_object_id);
     af_joint_id (*add_joint)(af_scene*,af_joint);
     bool (*set_joint)(af_scene*,af_joint_id,af_joint);
     bool (*remove_joint)(af_scene*,af_joint_id);
