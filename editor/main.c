@@ -63,6 +63,7 @@ typedef struct editor {
     bool invalid_name;
     bool failed;
     bool show_performance,show_assets,show_colliders;
+    bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
     char asset_search[128],selected_asset[AF_MESH_NAME_CAPACITY];
     int asset_filter;
     size_t selected_light;bool light_selected,light_dragging;size_t drag_light;af_local_light initial_light;uint64_t light_drag_revision;
@@ -201,7 +202,7 @@ static void poll_dialog(editor *app)
             else if(af_engine_load_mesh(app->engine,name,path,&asset_error)){ed_document_import_mesh(&app->document,name,path);refresh(app);}
             else set_status(app,asset_error.message);
         }else if(app->dialog_asset==9){
-            if(af_engine_load_environment(app->engine,name,path,&asset_error)){ed_document_import_environment(&app->document,name,path);refresh(app);}else set_status(app,asset_error.message);
+            if(af_engine_start_environment(app->engine,name,path,&asset_error)){app->environment_pending=true;snprintf(app->environment_name,sizeof(app->environment_name),"%s",name);snprintf(app->environment_path,sizeof(app->environment_path),"%s",path);app->environment_document_revision=app->document.revision;}else set_status(app,asset_error.message);
         }else if(app->dialog_asset==7){
             if(af_engine_load_sound(app->engine,name,path,&asset_error)){ed_document_import_sound(&app->document,name,path);refresh(app);}
             else set_status(app,asset_error.message);
@@ -864,6 +865,13 @@ static void build_ui(editor *app,float width,float height)
     }nk_end(context);
     }
     play_hud(app);
+    if(app->environment_pending){af_environment_job_status job=af_engine_environment_status(app->engine);
+        if(nk_begin(context,"HDR import",nk_rect(fmaxf(20,(width-480)/2),120,480,150),NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR)){
+            char progress[128];snprintf(progress,sizeof(progress),"%s: %.0f%%",job.state==AF_ENV_LOADING?"Reading panorama":job.state==AF_ENV_BAKING?"Baking environment":"Publishing environment",job.progress*100);
+            nk_layout_row_dynamic(context,30,1);nk_label(context,progress,NK_TEXT_LEFT);
+            nk_layout_row_dynamic(context,32,1);if(nk_button_label(context,"Cancel import"))af_engine_cancel_environment(app->engine);
+        }nk_end(context);
+    }
     if(nk_begin(context,"Status",nk_rect(0,height-32,width,32),NK_WINDOW_NO_SCROLLBAR|NK_WINDOW_NO_INPUT)){
         nk_layout_row_dynamic(context,18,1);nk_label(context,app->document.status,NK_TEXT_LEFT);
     }nk_end(context);
@@ -1085,6 +1093,12 @@ static void update(af_engine *engine,double delta,void *userdata)
         if(app->play_controls_test||app->wizard_test||app->thumbnail_test||app->light_test){app->failed=true;fputs("Editor test did not complete within its frame budget.\n",stderr);}
         af_engine_request_quit(engine);return;}
     poll_dialog(app);poll_project_tool(app);play_controls_smoke(app);smoke(app);
+    if(app->environment_pending){af_environment_job_status job=af_engine_environment_status(engine);
+        if(job.state==AF_ENV_COMPLETE){
+            if(app->document.revision==app->environment_document_revision&&!app->runtime.playing){if(ed_document_import_environment(&app->document,app->environment_name,app->environment_path))refresh(app);}
+            else set_status(app,"HDR prepared, but the document changed; import again to assign it.");app->environment_pending=false;
+        }else if(job.state==AF_ENV_FAILED||job.state==AF_ENV_CANCELED){set_status(app,job.state==AF_ENV_FAILED?job.error:"HDR import canceled; previous environment retained.");app->environment_pending=false;}
+    }
     if(app->thumbnail_test){app->show_assets=true;if(app->updates==12)app->asset_filter=2;}
     if(app->wizard_test){
         if(app->updates==3){app->show_project=true;snprintf(app->wizard_name,sizeof(app->wizard_name),"Editor wizard check");start_project_tool(app,false);if(!app->tool_process){app->failed=true;af_engine_request_quit(engine);}}

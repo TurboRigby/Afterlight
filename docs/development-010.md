@@ -39,3 +39,24 @@ blur combines adjacent taps through linear sampling (five reads instead of
 nine). Exposure/tone mapping still run and the UI remains after composition.
 The existing GPU pixel checks cover bloom on/off, threshold, viewport clipping,
 resize and exposure-independent overlay images.
+
+## 2. HDR import jobs
+
+The import dialog starts one owned SDL worker for RGBE decoding and convolution.
+The editor shows the current stage and percentage with a Cancel button. Bake
+cancellation is checked once per output row; decoding finishes its bounded input
+before observing cancellation. No worker accesses the live document or Vulkan.
+An acquire-published immutable result is uploaded between main-thread updates.
+GPU resource creation/transfer still uses the synchronous asset upload path;
+`upload_ms` reports that remaining cost. Background baking is the expensive CPU
+portion removed from editor frames, not a promise of zero upload latency.
+
+Failure/cancellation preserves the previous named resource. Assignment is an
+atomic undoable document edit only after successful publication; if the document
+changed or entered Play meanwhile, automatic assignment is withheld. Existing
+startup and transactional watched-reload paths remain synchronous. Engine
+destruction cancels/joins the worker and releases every result. C callers use
+`af_engine_start_environment`, `af_engine_environment_status` and
+`af_engine_cancel_environment`. CPU tests cover successful completion, invalid
+input, early/late cancellation and shutdown; GPU sky/IBL checks start through
+the asynchronous engine API.

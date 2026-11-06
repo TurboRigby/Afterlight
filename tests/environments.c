@@ -5,17 +5,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-typedef struct state {const char *path;af_scene *scene;unsigned phase,ticks;bool failed;unsigned char sky[4],dark[4],surface[4];af_object_id object;} state;
+typedef struct state {const char *path;af_scene *scene;unsigned phase,ticks,waiting;bool failed,loaded;unsigned char sky[4],dark[4],surface[4];af_object_id object;} state;
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Environment phase %u line %d: %s\n",s->phase,__LINE__,#c);s->failed=true;af_engine_request_quit(engine);return;}}while(0)
 static bool init(af_engine *engine,void *data){
-    state *s=data;s->scene=af_scene_create();af_asset_error error;if(!s->scene||!af_scene_set_asset(s->scene,"panorama",AF_ASSET_ENVIRONMENT,s->path)||!af_engine_load_scene_assets(engine,s->scene,&error))return false;
+    state *s=data;s->scene=af_scene_create();af_asset_error error;if(!s->scene||!af_scene_set_asset(s->scene,"panorama",AF_ASSET_ENVIRONMENT,s->path)||!af_engine_start_environment(engine,"panorama",s->path,&error))return false;
     af_render_settings render=af_render_settings_default();strcpy(render.environment_asset,"panorama");render.skybox=true;render.environment_enabled=true;render.tone_mapping=true;if(!af_scene_set_render_settings(s->scene,render))return false;
     af_shadow_settings shadow=af_shadow_settings_default();shadow.enabled=false;shadow.resolution=512;af_scene_set_shadows(s->scene,shadow);
     af_camera camera=af_camera_default();camera.position=(af_vec3){0,0,4};camera.pitch=0;camera.yaw=-AF_PI/2;af_engine_set_camera(engine,&camera);
     af_engine_set_scene(engine,s->scene);af_engine_set_clear_color(engine,(af_color){0,0,0,1});return true;
 }
 static void update(af_engine *engine,double delta,void *data){
-    (void)delta;state *s=data;if(++s->ticks<3)return;unsigned char p[4]={0};if(s->phase)CHECK(af_engine_test_read_pixel(engine,p));
+    (void)delta;state *s=data;
+    if(!s->loaded){af_environment_job_status job=af_engine_environment_status(engine);CHECK(++s->waiting<1200&&job.state!=AF_ENV_FAILED&&job.state!=AF_ENV_CANCELED);if(job.state!=AF_ENV_COMPLETE)return;s->loaded=true;}
+    if(++s->ticks<3)return;unsigned char p[4]={0};if(s->phase)CHECK(af_engine_test_read_pixel(engine,p));
     af_render_settings render=af_scene_get_render_settings(s->scene);af_camera camera=af_engine_get_camera(engine);af_vec2 point={200,150};af_asset_error error;
     switch(s->phase){
     case 0:break;

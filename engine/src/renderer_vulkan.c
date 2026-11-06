@@ -1495,10 +1495,15 @@ bool af_renderer_upload_environment(af_renderer *renderer,const char *name,const
     if(!renderer||!name||!name[0]||strlen(name)>=AF_MESH_NAME_CAPACITY)return false;
     size_t index=0;while(index<renderer->environment_count&&strcmp(renderer->environments[index].name,name))++index;
     if(index==16)return false;af_ibl_images images;if(!af_ibl_bake_hdr(rgba,width,height,&images))return false;
+    bool result=af_renderer_upload_environment_baked(renderer,name,&(af_hdr_file){(float*)rgba,width,height},&images);af_ibl_free(&images);return result;
+}
+bool af_renderer_upload_environment_baked(af_renderer *renderer,const char *name,const af_hdr_file *source,const af_ibl_images *baked){
+    size_t index=0;while(index<renderer->environment_count&&strcmp(renderer->environments[index].name,name))++index;if(index==16)return false;
+    af_ibl_images images=*baked;const float *rgba=source->rgba;uint32_t width=source->width,height=source->height;
     af_environment_asset asset={0};snprintf(asset.name,sizeof(asset.name),"%s",name);
     asset.specular=af_vk_texture_create_hdr(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,images.specular,AF_IBL_WIDTH,AF_IBL_HEIGHT,AF_IBL_LEVELS,true);
     asset.diffuse=af_vk_texture_create_hdr(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,images.diffuse,AF_IBL_DIFFUSE_WIDTH,AF_IBL_DIFFUSE_HEIGHT,1,true);
-    asset.sky=af_vk_texture_create_hdr(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,rgba,width,height,1,true);af_ibl_free(&images);
+    asset.sky=af_vk_texture_create_hdr(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,rgba,width,height,1,true);
     if(!asset.specular||!asset.diffuse||!asset.sky||!af_renderer_wait_idle(renderer)){af_vk_texture_destroy(asset.specular);af_vk_texture_destroy(asset.diffuse);af_vk_texture_destroy(asset.sky);return false;}
     if(index<renderer->environment_count){af_vk_texture_destroy(renderer->environments[index].specular);af_vk_texture_destroy(renderer->environments[index].diffuse);af_vk_texture_destroy(renderer->environments[index].sky);}else ++renderer->environment_count;
     renderer->environments[index]=asset;update_environment_descriptors(renderer);return true;

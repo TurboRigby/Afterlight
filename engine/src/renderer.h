@@ -8,6 +8,7 @@
 #define AF_RENDERER_H
 #include <afterlight/afterlight.h>
 #include <SDL3/SDL.h>
+#include "ibl.h"
 
 typedef struct af_renderer af_renderer;
 af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation);
@@ -30,5 +31,6 @@ bool af_renderer_texture_info(const af_renderer *renderer,const char *name,af_te
 bool af_renderer_upload_environment(af_renderer *renderer,const char *name,const float *rgba,uint32_t width,uint32_t height);
 bool af_renderer_upload_normal_map(af_renderer *renderer,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_renderer_commit_asset(af_renderer *renderer,const char *staged,const char *target,bool mesh);
+bool af_renderer_upload_environment_baked(af_renderer *renderer,const char *name,const af_hdr_file *source,const af_ibl_images *images);
 void af_renderer_set_interpolation(af_renderer *renderer,const af_scene *previous,float alpha);
 #endif

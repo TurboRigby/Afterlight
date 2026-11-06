@@ -43,6 +43,7 @@ target_include_directories(afterlight_image PRIVATE third_party/stb)
 
 add_library(afterlight STATIC
     ${afterlight_shader_headers}
+    engine/src/environment_job.c
     engine/src/asset_watch.c
     engine/src/gltf.c
     engine/src/audio.c
@@ -344,6 +345,12 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_environment_job_test tests/environment_jobs.c)
+    target_include_directories(afterlight_environment_job_test PRIVATE engine/src)
+    target_link_libraries(afterlight_environment_job_test PRIVATE Afterlight::Engine SDL3::SDL3)
+    afterlight_warnings(afterlight_environment_job_test)
+    add_test(NAME afterlight.environment_jobs COMMAND afterlight_environment_job_test "${PROJECT_SOURCE_DIR}/tests/assets/panorama.hdr")
+    set_tests_properties(afterlight.environment_jobs PROPERTIES TIMEOUT 30)
     add_test(NAME afterlight.editor_light_tools COMMAND afterlight_editor --light-tools-test --validation)
     set_tests_properties(afterlight.editor_light_tools PROPERTIES TIMEOUT 30 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     add_executable(afterlight_environment_test tests/environments.c)

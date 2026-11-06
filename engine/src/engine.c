@@ -7,6 +7,7 @@
 #include <afterlight/afterlight.h>
 #include "log.h"
 #include "renderer.h"
+#include "environment_job.h"
 #include "render_test.h"
 #include "platform_sdl.h"
 #include <math.h>
@@ -20,6 +21,7 @@
 struct af_engine {
     SDL_Window *window;
     af_audio *audio;
+    af_environment_job *environment_job;
     af_renderer *renderer;
     char *base_title;
     bool show_fps;
@@ -261,6 +263,11 @@ int af_engine_run(af_engine *engine, const af_game *game)
         if (delta > 0.1) delta = 0.1;
         Uint64 update_start=SDL_GetPerformanceCounter();
         engine->cpu_events_ms=(double)(update_start-event_start)*1000/frequency;
+        const char *environment_name;const af_hdr_file *environment_source;const af_ibl_images *environment_images;
+        if(af_environment_job_result(engine->environment_job,&environment_name,&environment_source,&environment_images)){
+            Uint64 started=SDL_GetPerformanceCounter();bool uploaded=af_renderer_upload_environment_baked(engine->renderer,environment_name,environment_source,environment_images);
+            af_environment_job_finish(engine->environment_job,uploaded,(double)(SDL_GetPerformanceCounter()-started)*1000/frequency);
+        }
         if (game->update) game->update(engine, delta, game->user_data);
         if(game->fixed_update){unsigned steps=af_fixed_clock_advance(&engine->clock,elapsed,engine->simulation_paused,engine->step_pending);engine->step_pending=false;
             for(unsigned tick=0;tick<steps&&engine->running;++tick){
@@ -304,6 +311,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
 void af_engine_destroy(af_engine *engine)
 {
     if (!engine) return;
+    af_environment_job_destroy(engine->environment_job);
     af_scene_destroy(engine->previous_scene);
     af_audio_destroy(engine->audio);
     af_renderer_destroy(engine->renderer);
@@ -570,3 +578,13 @@ bool af_engine_load_environment(af_engine *engine,const char *name,const char *p
     bool result=af_renderer_upload_environment(engine->renderer,name,image.rgba,image.width,image.height);af_hdr_file_free(&image);
     if(!result&&error)snprintf(error->message,sizeof(error->message),"Environment upload/convolution failed; previous data retained.");return result;
 }
+
+bool af_engine_start_environment(af_engine *engine,const char *name,const char *path,af_asset_error *error){
+    if(error)*error=(af_asset_error){0};if(!engine)return false;
+    af_environment_job_state state=af_environment_job_status_get(engine->environment_job).state;
+    if(state==AF_ENV_LOADING||state==AF_ENV_BAKING||state==AF_ENV_UPLOADING){if(error)snprintf(error->message,sizeof(error->message),"An HDR import is already running. Cancel it first.");return false;}
+    af_environment_job *job=af_environment_job_create(name,path);if(!job){if(error)snprintf(error->message,sizeof(error->message),"Cannot start HDR worker (invalid name/path or thread allocation).");return false;}
+    af_environment_job_destroy(engine->environment_job);engine->environment_job=job;return true;
+}
+void af_engine_cancel_environment(af_engine *engine){if(engine)af_environment_job_cancel(engine->environment_job);}
+af_environment_job_status af_engine_environment_status(const af_engine *engine){return af_environment_job_status_get(engine?engine->environment_job:NULL);}

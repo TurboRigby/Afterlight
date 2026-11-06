@@ -40,15 +40,16 @@ af_vec3 af_ibl_sample(const float *rgba,uint32_t width,uint32_t height,af_vec3 d
     return result;
 }
 static af_vec3 radiance(const float *source,uint32_t width,uint32_t height,af_vec3 direction,uint32_t profile){return source?af_ibl_sample(source,width,height,direction):af_ibl_radiance(direction,profile);}
-static bool bake(uint32_t profile,const float *source,uint32_t width,uint32_t height,af_ibl_images *out){
+static bool bake(uint32_t profile,const float *source,uint32_t width,uint32_t height,af_ibl_images *out,af_ibl_progress progress,void *user){
     if(!out)return false;*out=(af_ibl_images){0};if(profile>2)return false;
     size_t pixels=0;uint32_t w=AF_IBL_WIDTH,h=AF_IBL_HEIGHT;
     for(unsigned level=0;level<AF_IBL_LEVELS;++level){pixels+=(size_t)w*h;w=w>1?w/2:1;h=h>1?h/2:1;}
     out->specular=calloc(pixels*4,sizeof(float));out->diffuse=calloc(AF_IBL_DIFFUSE_WIDTH*AF_IBL_DIFFUSE_HEIGHT*4,sizeof(float));out->brdf=calloc(AF_IBL_LUT_SIZE*AF_IBL_LUT_SIZE*4,sizeof(float));
     if(!out->specular||!out->diffuse||!out->brdf){af_ibl_free(out);return false;}
+    unsigned rows=0,total_rows=AF_IBL_DIFFUSE_HEIGHT+AF_IBL_LUT_SIZE;for(unsigned level=0,hh=AF_IBL_HEIGHT;level<AF_IBL_LEVELS;++level,hh=hh>1?hh/2:1)total_rows+=hh;
     size_t offset=0;w=AF_IBL_WIDTH;h=AF_IBL_HEIGHT;
     for(unsigned level=0;level<AF_IBL_LEVELS;++level){float roughness=(float)level/(float)(AF_IBL_LEVELS-1);
-        for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){af_vec3 n=af_ibl_direction(((float)x+.5f)/(float)w,((float)y+.5f)/(float)h),value={0};float weight=0;
+        for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){if(!x&&progress&&!progress(user,(float)rows++/(float)total_rows)){af_ibl_free(out);return false;}af_vec3 n=af_ibl_direction(((float)x+.5f)/(float)w,((float)y+.5f)/(float)h),value={0};float weight=0;
             if(level==0)value=radiance(source,width,height,n,profile);
             else for(uint32_t sample=0;sample<128;++sample){af_vec3 half=hemisphere(n,(float)sample/128,radical_inverse(sample),roughness,true);
                 af_vec3 l=af_vec3_sub(af_vec3_scale(half,2*af_vec3_dot(n,half)),n);float nl=fmaxf(0,af_vec3_dot(n,l));
@@ -57,11 +58,11 @@ static bool bake(uint32_t profile,const float *source,uint32_t width,uint32_t he
         }
         offset+=(size_t)w*h;w=w>1?w/2:1;h=h>1?h/2:1;
     }
-    for(uint32_t y=0;y<AF_IBL_DIFFUSE_HEIGHT;++y)for(uint32_t x=0;x<AF_IBL_DIFFUSE_WIDTH;++x){af_vec3 n=af_ibl_direction(((float)x+.5f)/(float)AF_IBL_DIFFUSE_WIDTH,((float)y+.5f)/(float)AF_IBL_DIFFUSE_HEIGHT),value={0};
+    for(uint32_t y=0;y<AF_IBL_DIFFUSE_HEIGHT;++y)for(uint32_t x=0;x<AF_IBL_DIFFUSE_WIDTH;++x){if(!x&&progress&&!progress(user,(float)rows++/(float)total_rows)){af_ibl_free(out);return false;}af_vec3 n=af_ibl_direction(((float)x+.5f)/(float)AF_IBL_DIFFUSE_WIDTH,((float)y+.5f)/(float)AF_IBL_DIFFUSE_HEIGHT),value={0};
         for(uint32_t sample=0;sample<256;++sample)value=af_vec3_add(value,radiance(source,width,height,hemisphere(n,(float)sample/256,radical_inverse(sample),1,false),profile));
         store(out->diffuse,(size_t)y*AF_IBL_DIFFUSE_WIDTH+x,af_vec3_scale(value,1.0f/256));
     }
-    for(uint32_t y=0;y<AF_IBL_LUT_SIZE;++y)for(uint32_t x=0;x<AF_IBL_LUT_SIZE;++x){float nv=((float)x+.5f)/(float)AF_IBL_LUT_SIZE,roughness=((float)y+.5f)/(float)AF_IBL_LUT_SIZE;
+    for(uint32_t y=0;y<AF_IBL_LUT_SIZE;++y)for(uint32_t x=0;x<AF_IBL_LUT_SIZE;++x){if(!x&&progress&&!progress(user,(float)rows++/(float)total_rows)){af_ibl_free(out);return false;}float nv=((float)x+.5f)/(float)AF_IBL_LUT_SIZE,roughness=((float)y+.5f)/(float)AF_IBL_LUT_SIZE;
         af_vec3 n={0,0,1},v={sqrtf(1-nv*nv),0,nv};float scale=0,bias=0;
         for(uint32_t sample=0;sample<256;++sample){af_vec3 half=hemisphere(n,(float)sample/256,radical_inverse(sample),roughness,true);
             float vh=fmaxf(0,af_vec3_dot(v,half));af_vec3 l=af_vec3_sub(af_vec3_scale(half,2*vh),v);float nl=fmaxf(0,l.z),nh=fmaxf(half.z,.00001f);
@@ -71,9 +72,10 @@ static bool bake(uint32_t profile,const float *source,uint32_t width,uint32_t he
     return true;
 }
 
-bool af_ibl_bake(uint32_t profile,af_ibl_images *out){return bake(profile,NULL,0,0,out);}
-bool af_ibl_bake_hdr(const float *rgba,uint32_t width,uint32_t height,af_ibl_images *out){
+bool af_ibl_bake(uint32_t profile,af_ibl_images *out){return bake(profile,NULL,0,0,out,NULL,NULL);}
+bool af_ibl_bake_hdr(const float *rgba,uint32_t width,uint32_t height,af_ibl_images *out){return af_ibl_bake_hdr_progress(rgba,width,height,out,NULL,NULL);}
+bool af_ibl_bake_hdr_progress(const float *rgba,uint32_t width,uint32_t height,af_ibl_images *out,af_ibl_progress progress,void *user){
     if(!out)return false;*out=(af_ibl_images){0};if(!rgba||!width||!height||width>4096||height>2048)return false;
     for(size_t i=0;i<(size_t)width*height*4;++i)if(!isfinite(rgba[i])||rgba[i]<0||rgba[i]>65504)return false;
-    return bake(0,rgba,width,height,out);
+    return bake(0,rgba,width,height,out,progress,user);
 }

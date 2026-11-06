@@ -111,6 +111,14 @@ bool af_engine_upload_mesh(af_engine *engine, const char *name, const af_mesh_da
 bool af_engine_upload_texture(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_engine_remove_texture(af_engine *engine,const char *name);
 bool af_engine_load_environment(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+typedef enum af_environment_job_state {AF_ENV_IDLE,AF_ENV_LOADING,AF_ENV_BAKING,AF_ENV_UPLOADING,AF_ENV_COMPLETE,AF_ENV_FAILED,AF_ENV_CANCELED} af_environment_job_state;
+typedef struct af_environment_job_status {af_environment_job_state state;float progress;double upload_ms;char error[256];} af_environment_job_status;
+/* One background HDR decode/bake at a time. GPU publication runs on the main
+   thread between updates. Failure/cancellation retains the previous GPU asset.
+   Poll status from update; COMPLETE means the named environment can be used. */
+bool af_engine_start_environment(af_engine *engine,const char *name,const char *path,af_asset_error *error);
+void af_engine_cancel_environment(af_engine *engine);
+af_environment_job_status af_engine_environment_status(const af_engine *engine);
 bool af_engine_load_texture(af_engine *engine,const char *name,const char *path,af_asset_error *error);
 bool af_engine_load_mesh(af_engine *engine,const char *name,const char *path,af_asset_error *error);
 bool af_engine_load_asset(af_engine *engine,const af_scene_asset *asset,af_asset_error *error);
