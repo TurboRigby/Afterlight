@@ -512,7 +512,7 @@ Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
 and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
 200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
 positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
-body defaults. Saving writes version 15. Physics runtime limits and diagnostics
+body defaults. Saving writes version 16. Physics runtime limits and diagnostics
 are documented in [0.13](development-013.md).
 
 ## Version 14: mesh colliders and scene joints
@@ -553,3 +553,20 @@ substep duration. A zero speed target is a brake. Versions 1–14 remain readabl
 version-14 joints default to motors disabled, speed zero and torque 10 Nm.
 Runtime islands, cached impulses and diagnostics are reconstructed from saved
 components. Game ABI 14 modules must be rebuilt with the matching headers.
+
+## Version 16: compound collider parts
+
+`collider.type` additionally accepts `compound`. Two root fields are required:
+`collider_parts` (up to 1024 records, 16 per owner) and `next_part` (a decimal
+string ID counter; zero means exhausted). Each part has exactly `id`, `owner`,
+`name`, `position`, `rotation`, `scale`, `type`, `enabled`, `half_extents`,
+`radius` and `density`. IDs/owners are decimal strings. Part type is `box` or
+`sphere`; local scale is positive and local Euler angles are radians. Densities
+are kg/m3. Root layer/trigger settings apply to all its parts.
+
+Dynamic compounds require root objects, uniform positive world scale and enabled
+nontrigger shapes. Volumes, density-weighted COM and full inertia derive from
+parts; explicit `body.mass` rescales the mass distribution. Overlaps contribute
+additively. Parts do not need separate visual objects. Query hits carry owner
+and part IDs; body forces use owners. Prefabs/duplication remap both identities.
+Versions 1–15 remain readable with an empty part table. Game ABI is 15.

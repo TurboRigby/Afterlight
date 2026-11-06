@@ -3,9 +3,9 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.15** adds sleeping constraint islands, joint warm starting,
-torque-limited hinge motors, physics diagnostics and viewport joint tools.
-Start with the powered-door room, then try the machinery playground.
+Afterlight **0.16** adds compound collider parts, computed centers of mass and
+inertia, per-part contacts/CCD and editor fitting/transform tools. Start with the
+imported L-prop room, then try the prop workshop.
 
 ## Build and run
 
@@ -15,15 +15,15 @@ first, then run from the repository root:
 
 ```sh
 cmake --preset debug
-cmake --build --preset debug --target run_motor-room_editor
+cmake --build --preset debug --target run_prop-room_editor
 ```
 
 Press **Play**. **WASD** walks, **Shift** runs, **Space** jumps, **E** toggles
 root motion, **R** restarts and **Escape** releases the mouse.
 In the physics demo, **F** grabs/releases, **V** throws, **Q** spawns a dynamic crate and **N** switches rooms. In machinery demos, **Z** brakes/resumes motors and **X** reverses them.
 
-Use `run_machinery-playground_editor` for powered hinges, chains and a rotating platform or
-`run_motor-room_player` for standalone play. See the [physics and machinery guide](docs/development-015.md)
+Use `run_prop-workshop_editor` for compound steps, an open container and powered mechanisms or
+`run_prop-room_player` for standalone play. See the [compound props guide](docs/development-016.md)
 for the other demos, debugging tools and current limits.
 
 ## Documentation

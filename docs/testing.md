@@ -233,3 +233,14 @@ actual C module through brake/reverse/reset, pause/single-step and hot reload.
 `machinery_export` removes sources, relocates both exports and repeats Play.
 The standalone Release `afterlight_physics_benchmark` reports 64/128/256 bodies
 without enabling the whole test suite; timings are diagnostics, not CI gates.
+
+## 0.16 compound checks
+
+CPU regressions cover bounded part tables/IDs, transformed per-part queries and
+empty space, density/COM/rotated inertia, shared-body contacts, pivot publication,
+angular and offset-tip CCD, editor fitting/history, prefab owner remapping and
+transactional deletion. Prop scenes run simple-first and exercise an imported
+L-prop, compound steps and an open five-part cup with falling payloads. Native
+C Play checks compound prefab spawning, COM consistency, interaction, motor
+controls, reset and hot reload. Exports remove their source, relocate and repeat
+Play. Vulkan validation and sanitizer suites retain all earlier regressions.

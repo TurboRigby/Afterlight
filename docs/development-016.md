@@ -42,3 +42,23 @@ Prefab saving keeps only owned parts inside the saved hierarchy. Instantiation
 and editor duplication assign new part IDs and remap owners before validating
 bodies. Removing an owner removes its parts; removing the last active shape from
 a dynamic compound rolls back. C host calls expose part views and mutations.
+
+## Prop demos
+
+`run_prop-room_editor` starts with one imported two-part L prop. Then use
+`run_prop-workshop_editor` for six compounds: imported L props, three-part steps
+and a hollow five-part cup with falling payloads, alongside powered machinery.
+The standalone `_player` targets use the same C module. Q spawns an L prefab;
+F/V grab/throw; Z/X brake/reverse mechanisms; R resets; N switches rooms.
+
+Parts are an approximation of imported geometry, without automatic convex
+decomposition. Mass uses additive volumes and supports explicit gameplay mass
+overrides. Collider shapes and material mass can therefore be tuned separately.
+The next feature stages are pools/lakes, rivers and finally pourable fluids,
+with buoyancy, quality settings and light-dependent water optics.
+
+Validation: all 124 macOS Debug tests pass after fixing the toolbox export fixture;
+all 124 address/undefined-behavior sanitizer tests pass. Both Release compound
+exports run after source removal and relocation, with Vulkan validation enabled.
+Static analysis of the compound physics and demo sources reports no findings.
+Linux sanitizer coverage is scheduled with the following water milestone.

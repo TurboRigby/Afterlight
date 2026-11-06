@@ -26,7 +26,7 @@ def run(args, cwd, success=True):
 with tempfile.TemporaryDirectory(prefix='afterlight-animation-export-') as temporary:
     root = Path(temporary);source = root / 'source project'
     for folder in ('assets', 'scenes', 'game'): (source / folder).mkdir(parents=True, exist_ok=True)
-    for name in ('locomotion.gltf','jump.wav','land.wav','checkpoint.wav','finish.wav','beacon.glb','cutout.tga'): shutil.copy2(a.root / 'sandbox/assets' / name, source / 'assets' / name)
+    for name in ('locomotion.gltf','jump.wav','land.wav','checkpoint.wav','finish.wav','beacon.glb','cutout.tga','compound-l.obj'): shutil.copy2(a.root / 'sandbox/assets' / name, source / 'assets' / name)
     shutil.copy2(a.module, source / 'game' / a.module.name)
     shutil.copytree(a.root/'sandbox/prefabs',source/'prefabs')
     shutil.copy2(a.root/'sandbox/input.json',source/'input.json')

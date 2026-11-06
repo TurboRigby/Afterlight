@@ -17,9 +17,10 @@ p.add_argument('--module', type=Path, required=True)
 p.add_argument('--sanitized', action='store_true')
 p.add_argument('--mechanical', action='store_true')
 p.add_argument('--machinery', action='store_true')
+p.add_argument('--compound', action='store_true')
 p.add_argument('--play-test', type=Path)
 a = p.parse_args()
-scenes=("motor-room","machinery-playground") if a.machinery else ("mesh-room","mechanical-playground") if a.mechanical else ("physics-drop","physics-playground")
+scenes=("prop-room","prop-workshop") if a.compound else ("motor-room","machinery-playground") if a.machinery else ("mesh-room","mechanical-playground") if a.mechanical else ("physics-drop","physics-playground")
 def run(args, cwd, success=True):
     env = os.environ.copy();env['SDL_AUDIO_DRIVER'] = 'dummy';env['VK_LAYER_VALIDATE_SYNC'] = '1'
     result = subprocess.run([str(x) for x in args], cwd=cwd, env=env, capture_output=True, text=True, timeout=90)
@@ -29,7 +30,7 @@ def run(args, cwd, success=True):
 with tempfile.TemporaryDirectory(prefix='afterlight-physics-export-') as temporary:
     root = Path(temporary);source = root / 'source project'
     for folder in ('assets', 'scenes', 'game'): (source / folder).mkdir(parents=True, exist_ok=True)
-    for name in ('locomotion.gltf','jump.wav','land.wav','checkpoint.wav','finish.wav','beacon.glb','cutout.tga','sphere.obj','mesh-room.obj'): shutil.copy2(a.root / 'sandbox/assets' / name, source / 'assets' / name)
+    for name in ('locomotion.gltf','jump.wav','land.wav','checkpoint.wav','finish.wav','beacon.glb','cutout.tga','sphere.obj','mesh-room.obj','compound-l.obj'): shutil.copy2(a.root / 'sandbox/assets' / name, source / 'assets' / name)
     shutil.copy2(a.module, source / 'game' / a.module.name)
     shutil.copytree(a.root/'sandbox/prefabs',source/'prefabs')
     shutil.copy2(a.root/'sandbox/input.json',source/'input.json')
@@ -52,9 +53,10 @@ with tempfile.TemporaryDirectory(prefix='afterlight-physics-export-') as tempora
         resources = output / 'Game.app/Contents/Resources' if sys.platform == 'darwin' else output
         packed_project = json.loads((resources / 'game.afterlight.project').read_text())
         packed_scene = json.loads((resources / packed_project['startup_scene']).read_text())
-        assert packed_scene['version'] == (15 if a.machinery else 14 if a.mechanical else 13)
-        if a.machinery: assert any(j['motor_enabled'] for j in packed_scene['joints'])
-        if a.mechanical or a.machinery: assert packed_scene['joints'] and any(o['collider']['type']=='mesh' for o in packed_scene['objects'])
+        assert packed_scene['version'] == (16 if a.compound else 15 if a.machinery else 14 if a.mechanical else 13)
+        if a.compound: assert packed_scene['collider_parts'] and any(o['collider']['type']=='compound' for o in packed_scene['objects'])
+        if a.machinery or a.compound: assert any(j['motor_enabled'] for j in packed_scene['joints'])
+        if a.mechanical or a.machinery or a.compound: assert packed_scene['joints'] and any(o['collider']['type']=='mesh' for o in packed_scene['objects'])
         assert (resources/'input.json').is_file()
         prefab=json.loads((resources/'prefabs/physics-crate.afterlight.prefab').read_text())
         assert prefab['objects'][0]['body']['enabled'] and prefab['objects'][0]['body']['type']=='dynamic'

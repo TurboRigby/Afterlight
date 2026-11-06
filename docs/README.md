@@ -25,6 +25,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.16: compound physics props](development-016.md)
 - [0.15: physics performance and powered mechanisms](development-015.md)
 - [0.14: mesh collision and constraints](development-014.md)
 - [0.13: physics and interaction](development-013.md)

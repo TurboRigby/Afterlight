@@ -90,7 +90,9 @@ static void update(void *memory,const af_game_host *host,double delta){
 #endif
         restart(s,host,true);present(s,host);return;}
 #ifdef AF_TOOLBOX_GAME
-#ifdef AF_MACHINERY_GAME
+#ifdef AF_COMPOUND_GAME
+    const char *simple_scene="prop-room",*course_scene="prop-workshop",*prefab="compound-l";
+#elif defined(AF_MACHINERY_GAME)
     const char *simple_scene="motor-room",*course_scene="machinery-playground",*prefab="physics-crate";
 #elif defined(AF_MECHANICAL_GAME)
     const char *simple_scene="mesh-room",*course_scene="mechanical-playground",*prefab="physics-crate";

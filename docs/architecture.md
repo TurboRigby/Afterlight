@@ -499,3 +499,14 @@ The character capsule is a passive, accurately rounded obstacle to rigid bodies.
 Pose deltas do not inject kinematic landing energy. Character pushing remains
 explicitly force limited. Center/edge/corner landing regressions guard against
 self-propelled crates.
+
+## Compound rigid bodies (0.16)
+
+Scene-owned collider-part tables have stable owner/part IDs. Queries flatten
+parts into actual box/sphere shapes. Physics bakes local part frames and keeps
+body COM axes separate from shape axes. A full inverse inertia tensor handles
+rotated/offset masses. The authored pivot is recovered when publishing poses.
+
+Broadphase bounds encompass all parts. Narrowphase contacts and warm starts
+retain part-pair identity, and CCD predicts each part from one shared body motion.
+Editor transforms, prefab cloning and host APIs operate on the same definitions.

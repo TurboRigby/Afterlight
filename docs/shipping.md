@@ -173,3 +173,7 @@ project and relocating the export. See [0.14](development-014.md).
 exports contain scene-15 motor fields, the machinery C module, input bindings
 and original mesh assets, together with covered source and dependency notices.
 Source removal/relocation tests exercise both scenes and the motor controls.
+
+0.16 adds `prop-room` / `prop-workshop`, an original imported L mesh and a compound
+prefab. Exports preserve scene-16 part tables/owners and cover their C source.
+Both scene-only asset references and build-folder prefab copies include the mesh.

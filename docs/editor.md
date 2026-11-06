@@ -233,3 +233,17 @@ collider axes, including on scaled objects; world endpoints use world units.
 Start with `run_motor-room_editor`, then `run_machinery-playground_editor`. In
 Play, Z brakes/resumes motors, X reverses them, R restores authored poses/targets
 and N switches rooms. The usual movement, pushing, grabbing and throwing remain.
+
+## Compound collider authoring (0.16)
+
+Select an imported rigid model root or an ordinary object and add box/sphere
+parts in Collider parts. Each part has a local pose, dimensions and density.
+Fit mesh bounds encloses rigid geometry on the owner and its descendants;
+concave props use multiple manually fitted/edited parts. Computed material mass
+can be applied to the body's explicit total mass.
+
+Move/rotate/scale buttons activate snapped viewport handles for that part. A drag
+is grouped into one undo operation; Escape cancels it. Collider debug outlines
+actual shapes. Dynamic owners require root placement and positive uniform scale;
+individual parts can have different positive scales and orientations. Keep one
+active shape on a dynamic compound. Prefabs and duplication retain ownership.

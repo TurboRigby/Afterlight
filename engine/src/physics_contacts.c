@@ -26,12 +26,17 @@ bool ph_emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 n, float 
     if (p->contact_count == AF_PHYSICS_MAX_CONTACTS)
         return false;
     ph_body *one = &p->bodies[a], *two = &p->bodies[b];
-    ph_contact c = {
-        .a = a,
-        .b = b,
-        .view = {.a = one->id, .b = two->id,.part_a=one->shape.part,.part_b=two->shape.part, .point = point, .normal = n, .penetration = penetration},
-        .local_a = ph_local(one, sub(point, one->p)),
-        .local_b = ph_local(two, sub(point, two->p))};
+    ph_contact c = {.a = a,
+                    .b = b,
+                    .view = {.a = one->id,
+                             .b = two->id,
+                             .part_a = one->shape.part,
+                             .part_b = two->shape.part,
+                             .point = point,
+                             .normal = n,
+                             .penetration = penetration},
+                    .local_a = ph_local(one, sub(point, one->p)),
+                    .local_b = ph_local(two, sub(point, two->p))};
     p->contacts[p->contact_count++] = c;
     return true;
 }
@@ -125,9 +130,10 @@ static bool boxes(af_physics *p, size_t ai, size_t bi) {
             if (fabsf(dot(incident->shape.axes[i], n)) >
                 fabsf(dot(incident->shape.axes[incident_face], n)))
                 incident_face = i;
-        af_vec3 ic = add(incident->shape.center, mul(incident->shape.axes[incident_face],
-                                          -copysignf(ph_get(incident->shape.half_extents, incident_face),
-                                                     dot(incident->shape.axes[incident_face], n)))),
+        af_vec3 ic = add(incident->shape.center,
+                         mul(incident->shape.axes[incident_face],
+                             -copysignf(ph_get(incident->shape.half_extents, incident_face),
+                                        dot(incident->shape.axes[incident_face], n)))),
                 u = mul(incident->shape.axes[(incident_face + 1) % 3],
                         ph_get(incident->shape.half_extents, (incident_face + 1) % 3)),
                 v = mul(incident->shape.axes[(incident_face + 2) % 3],
@@ -213,38 +219,39 @@ static bool sphere_box(af_physics *p, size_t sphere, size_t box, bool reverse) {
     }
     if (penetration < -SKIN)
         return true;
-    af_vec3 point =
-        mul(add(add(b->shape.center, ph_shape_vector(b, closest)), sub(s->shape.center, mul(outward, s->shape.radius))), .5f);
+    af_vec3 point = mul(add(add(b->shape.center, ph_shape_vector(b, closest)),
+                            sub(s->shape.center, mul(outward, s->shape.radius))),
+                        .5f);
     return ph_emit(p, reverse ? box : sphere, reverse ? sphere : box, point,
                    reverse ? outward : mul(outward, -1), penetration);
 }
-static bool shapes(af_physics *p,size_t ai,size_t bi){ph_body *a=&p->bodies[ai],*b=&p->bodies[bi];
-            bool ok;
-            if (a->character_proxy || b->character_proxy) {
-                ph_body *player = a->character_proxy ? a : b, *other = player == a ? b : a;
-                af_collision_hit hit;
-                float separation = af_collision_capsule_distance(
-                    other->shape, player->p, player->shape.radius,
-                    player->shape.half_extents.y - player->shape.radius, &hit);
-                ok = separation > SKIN ||
-                     ph_emit(p, ai, bi, hit.point, player == a ? mul(hit.normal, -1) : hit.normal,
-                             -separation);
-            } else if (a->shape.type == AF_COLLIDER_MESH || b->shape.type == AF_COLLIDER_MESH)
-                ok = ph_mesh_contacts(p, ai, bi);
-            else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
-                ok = boxes(p, ai, bi);
-            else if (a->shape.type != b->shape.type)
-                ok = a->shape.type == AF_COLLIDER_SPHERE ? sphere_box(p, ai, bi, false)
-                                                         : sphere_box(p, bi, ai, true);
-            else {
-                af_vec3 d = sub(b->shape.center,a->shape.center);
-                float length = af_vec3_length(d),
-                      penetration = a->shape.radius + b->shape.radius - length;
-                if(penetration < -SKIN)return true;
-                af_vec3 n = length > 1e-7f ? mul(d, 1 / length) : (af_vec3){0, 1, 0};
-                ok = ph_emit(p, ai, bi, add(a->shape.center, mul(n, a->shape.radius - penetration * .5f)), n,
-                             penetration);
-            }
+static bool shapes(af_physics *p, size_t ai, size_t bi) {
+    ph_body *a = &p->bodies[ai], *b = &p->bodies[bi];
+    bool ok;
+    if (a->character_proxy || b->character_proxy) {
+        ph_body *player = a->character_proxy ? a : b, *other = player == a ? b : a;
+        af_collision_hit hit;
+        float separation =
+            af_collision_capsule_distance(other->shape, player->p, player->shape.radius,
+                                          player->shape.half_extents.y - player->shape.radius, &hit);
+        ok = separation > SKIN ||
+             ph_emit(p, ai, bi, hit.point, player == a ? mul(hit.normal, -1) : hit.normal, -separation);
+    } else if (a->shape.type == AF_COLLIDER_MESH || b->shape.type == AF_COLLIDER_MESH)
+        ok = ph_mesh_contacts(p, ai, bi);
+    else if (a->shape.type == AF_COLLIDER_BOX && b->shape.type == AF_COLLIDER_BOX)
+        ok = boxes(p, ai, bi);
+    else if (a->shape.type != b->shape.type)
+        ok = a->shape.type == AF_COLLIDER_SPHERE ? sphere_box(p, ai, bi, false)
+                                                 : sphere_box(p, bi, ai, true);
+    else {
+        af_vec3 d = sub(b->shape.center, a->shape.center);
+        float length = af_vec3_length(d), penetration = a->shape.radius + b->shape.radius - length;
+        if (penetration < -SKIN)
+            return true;
+        af_vec3 n = length > 1e-7f ? mul(d, 1 / length) : (af_vec3){0, 1, 0};
+        ok = ph_emit(p, ai, bi, add(a->shape.center, mul(n, a->shape.radius - penetration * .5f)), n,
+                     penetration);
+    }
     return ok;
 }
 bool ph_detect(af_physics *p) {
@@ -268,9 +275,18 @@ bool ph_detect(af_physics *p) {
                 continue;
             ++p->stats.broadphase_pairs;
             double stamp = ph_clock(p);
-            af_world_collider original_a=a->shape,original_b=b->shape;bool ok=true;size_t na=a->part_count?a->part_count:1,nb=b->part_count?b->part_count:1;
-            for(size_t pa=0;pa<na&&ok;++pa)for(size_t pb=0;pb<nb&&ok;++pb){a->shape=ph_part_world(a,pa);b->shape=ph_part_world(b,pb);ok=shapes(p,ai,bi);}a->shape=original_a;b->shape=original_b;
-            narrow+=ph_clock(p)-stamp;
+            af_world_collider original_a = a->shape, original_b = b->shape;
+            bool ok = true;
+            size_t na = a->part_count ? a->part_count : 1, nb = b->part_count ? b->part_count : 1;
+            for (size_t pa = 0; pa < na && ok; ++pa)
+                for (size_t pb = 0; pb < nb && ok; ++pb) {
+                    a->shape = ph_part_world(a, pa);
+                    b->shape = ph_part_world(b, pb);
+                    ok = shapes(p, ai, bi);
+                }
+            a->shape = original_a;
+            b->shape = original_b;
+            narrow += ph_clock(p) - stamp;
             if (!ok)
                 return false;
         }

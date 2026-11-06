@@ -80,19 +80,25 @@ static bool emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 norma
         if (new_spread <= old_spread + .00001f && depth <= p->contacts[nearest].view.penetration + .01f)
             return true;
         ph_body *one = &p->bodies[a], *two = &p->bodies[b];
-        p->contacts[nearest] = (ph_contact){
-            .a = a,
-            .b = b,
-            .view = {.a = one->id, .b = two->id,.part_a=one->shape.part,.part_b=two->shape.part, .point = point, .normal = normal, .penetration = depth},
-            .local_a = ph_local(one, sub(point, one->p)),
-            .local_b = ph_local(two, sub(point, two->p))};
+        p->contacts[nearest] = (ph_contact){.a = a,
+                                            .b = b,
+                                            .view = {.a = one->id,
+                                                     .b = two->id,
+                                                     .part_a = one->shape.part,
+                                                     .part_b = two->shape.part,
+                                                     .point = point,
+                                                     .normal = normal,
+                                                     .penetration = depth},
+                                            .local_a = ph_local(one, sub(point, one->p)),
+                                            .local_b = ph_local(two, sub(point, two->p))};
         return true;
     }
     return ph_emit(p, a, b, point, normal, depth);
 }
 static bool box_triangle(af_physics *p, size_t a, size_t b, size_t box, af_triangle t, size_t first) {
     ph_body *body = &p->bodies[box];
-    af_vec3 v[3] = {sub(t.a, body->shape.center), sub(t.b, body->shape.center), sub(t.c, body->shape.center)},
+    af_vec3 v[3] = {sub(t.a, body->shape.center), sub(t.b, body->shape.center),
+                    sub(t.c, body->shape.center)},
             edges[3] = {sub(t.b, t.a), sub(t.c, t.b), sub(t.a, t.c)},
             face = af_vec3_cross(edges[0], edges[1]), normal = {0};
     float best = 1e30f;
@@ -119,7 +125,8 @@ static bool box_triangle(af_physics *p, size_t a, size_t b, size_t box, af_trian
             normal = mul(axis, positive < negative ? 1.f : -1.f);
         }
     }
-    af_vec3 local[16] = {ph_shape_local(body, v[0]), ph_shape_local(body, v[1]), ph_shape_local(body, v[2])};
+    af_vec3 local[16] = {ph_shape_local(body, v[0]), ph_shape_local(body, v[1]),
+                         ph_shape_local(body, v[2])};
     size_t count = 3;
     for (unsigned axis = 0; axis < 3; ++axis) {
         count = clip(local, count, axis, 1, ph_get(body->shape.half_extents, axis) + .006f);
@@ -153,8 +160,8 @@ bool ph_mesh_contacts(af_physics *p, size_t a, size_t b) {
     extent = add(extent, (af_vec3){.006f, .006f, .006f});
     uint32_t scratch[128], *indices;
     size_t count;
-    if (!tc_candidates(target, sub(body->shape.center, extent), add(body->shape.center, extent), &indices, &count, scratch,
-                       128))
+    if (!tc_candidates(target, sub(body->shape.center, extent), add(body->shape.center, extent),
+                       &indices, &count, scratch, 128))
         return false;
     size_t first = p->contact_count;
     bool ok = true;

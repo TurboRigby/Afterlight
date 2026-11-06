@@ -4,7 +4,80 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x) do{if(!(x)){fprintf(stderr,"Compound CCD %d: %s (%s)\n",__LINE__,#x,af_physics_error(p));return 1;}}while(0)
-static af_object_id prop(af_scene *s,af_vec3 position,af_vec3 velocity,bool gap){af_object_id id=af_scene_add_object(s,"CCD compound","__node");af_collider_part part=af_collider_part_default();part.collider.type=AF_COLLIDER_SPHERE;part.collider.radius=.15f;part.local.position.x=gap?-1:0;af_scene_add_collider_part(s,id,part);part.local.position.x=gap?1:1.3f;af_scene_add_collider_part(s,id,part);af_collider c=af_collider_default();c.type=AF_COLLIDER_COMPOUND;af_scene_set_object_collider(s,id,c);af_transform t=af_transform_identity();t.position=position;af_scene_set_object_transform(s,id,t);af_rigid_body body=af_rigid_body_default();body.enabled=true;body.type=AF_BODY_DYNAMIC;body.gravity_scale=0;body.velocity=velocity;body.continuous=true;body.restitution=0;af_scene_set_body(s,id,body);return id;}
-static void wall(af_scene *s,af_vec3 center,af_vec3 half){af_object_id id=af_scene_add_object(s,"Thin wall","cube");af_transform t=af_transform_identity();t.position=center;af_collider c=af_collider_default();c.type=AF_COLLIDER_BOX;c.half_extents=half;af_scene_set_object_transform(s,id,t);af_scene_set_object_collider(s,id,c);}
-int main(void){af_physics *p=af_physics_create();af_scene *s=af_scene_create();wall(s,(af_vec3){0},(af_vec3){.01f,4,4});af_object_id id=prop(s,(af_vec3){-3,0,0},(af_vec3){180,0,0},false);CHECK(af_physics_step(p,s,1.f/60)&&af_physics_get_stats(p).ccd_hits>0);for(size_t i=0;i<2;++i){af_world_collider w;CHECK(af_scene_collider_shape_at(s,id,i,&w)&&w.center.x+w.radius<.005f);}af_scene_destroy(s);af_physics_reset(p);s=af_scene_create();wall(s,(af_vec3){0},(af_vec3){.1f,.1f,5});id=prop(s,(af_vec3){0,0,-1},(af_vec3){0,0,100},true);CHECK(af_physics_step(p,s,1.f/60)&&af_physics_get_state(p,id).position.z>.5f&&af_physics_get_stats(p).ccd_hits==0);af_scene_destroy(s);af_physics_reset(p);s=af_scene_create();wall(s,(af_vec3){0,1,0},(af_vec3){4,.01f,4});id=prop(s,(af_vec3){0},(af_vec3){0},true);af_rigid_body body=af_scene_get_object(s,id)->body;body.angular_velocity.z=100;CHECK(af_scene_set_body(s,id,body)&&af_physics_step(p,s,1.f/60)&&af_physics_get_stats(p).ccd_hits>0);for(size_t i=0;i<2;++i){af_world_collider w;CHECK(af_scene_collider_shape_at(s,id,i,&w)&&w.center.y+w.radius<1.03f);}af_scene_destroy(s);af_physics_destroy(p);puts("Compound CCD: offset tip/thin wall, empty-gap passage and rotating protrusions passed.");return 0;}
+#define CHECK(x)                                                                                        \
+    do {                                                                                                \
+        if (!(x)) {                                                                                     \
+            fprintf(stderr, "Compound CCD %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));           \
+            return 1;                                                                                   \
+        }                                                                                               \
+    } while (0)
+static af_object_id prop(af_scene *s, af_vec3 position, af_vec3 velocity, bool gap) {
+    af_object_id id = af_scene_add_object(s, "CCD compound", "__node");
+    af_collider_part part = af_collider_part_default();
+    part.collider.type = AF_COLLIDER_SPHERE;
+    part.collider.radius = .15f;
+    part.local.position.x = gap ? -1 : 0;
+    af_scene_add_collider_part(s, id, part);
+    part.local.position.x = gap ? 1 : 1.3f;
+    af_scene_add_collider_part(s, id, part);
+    af_collider c = af_collider_default();
+    c.type = AF_COLLIDER_COMPOUND;
+    af_scene_set_object_collider(s, id, c);
+    af_transform t = af_transform_identity();
+    t.position = position;
+    af_scene_set_object_transform(s, id, t);
+    af_rigid_body body = af_rigid_body_default();
+    body.enabled = true;
+    body.type = AF_BODY_DYNAMIC;
+    body.gravity_scale = 0;
+    body.velocity = velocity;
+    body.continuous = true;
+    body.restitution = 0;
+    af_scene_set_body(s, id, body);
+    return id;
+}
+static void wall(af_scene *s, af_vec3 center, af_vec3 half) {
+    af_object_id id = af_scene_add_object(s, "Thin wall", "cube");
+    af_transform t = af_transform_identity();
+    t.position = center;
+    af_collider c = af_collider_default();
+    c.type = AF_COLLIDER_BOX;
+    c.half_extents = half;
+    af_scene_set_object_transform(s, id, t);
+    af_scene_set_object_collider(s, id, c);
+}
+int main(void) {
+    af_physics *p = af_physics_create();
+    af_scene *s = af_scene_create();
+    wall(s, (af_vec3){0}, (af_vec3){.01f, 4, 4});
+    af_object_id id = prop(s, (af_vec3){-3, 0, 0}, (af_vec3){180, 0, 0}, false);
+    CHECK(af_physics_step(p, s, 1.f / 60) && af_physics_get_stats(p).ccd_hits > 0);
+    for (size_t i = 0; i < 2; ++i) {
+        af_world_collider w;
+        CHECK(af_scene_collider_shape_at(s, id, i, &w) && w.center.x + w.radius < .005f);
+    }
+    af_scene_destroy(s);
+    af_physics_reset(p);
+    s = af_scene_create();
+    wall(s, (af_vec3){0}, (af_vec3){.1f, .1f, 5});
+    id = prop(s, (af_vec3){0, 0, -1}, (af_vec3){0, 0, 100}, true);
+    CHECK(af_physics_step(p, s, 1.f / 60) && af_physics_get_state(p, id).position.z > .5f &&
+          af_physics_get_stats(p).ccd_hits == 0);
+    af_scene_destroy(s);
+    af_physics_reset(p);
+    s = af_scene_create();
+    wall(s, (af_vec3){0, 1, 0}, (af_vec3){4, .01f, 4});
+    id = prop(s, (af_vec3){0}, (af_vec3){0}, true);
+    af_rigid_body body = af_scene_get_object(s, id)->body;
+    body.angular_velocity.z = 100;
+    CHECK(af_scene_set_body(s, id, body) && af_physics_step(p, s, 1.f / 60) &&
+          af_physics_get_stats(p).ccd_hits > 0);
+    for (size_t i = 0; i < 2; ++i) {
+        af_world_collider w;
+        CHECK(af_scene_collider_shape_at(s, id, i, &w) && w.center.y + w.radius < 1.03f);
+    }
+    af_scene_destroy(s);
+    af_physics_destroy(p);
+    puts("Compound CCD: offset tip/thin wall, empty-gap passage and rotating protrusions passed.");
+    return 0;
+}

@@ -86,7 +86,8 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
     }
     if (!triangle && a->shape.type != b->shape.type) {
         const ph_body *sphere = a->shape.type == AF_COLLIDER_SPHERE ? a : b, *box = sphere == a ? b : a;
-        af_vec3 local = ph_shape_local(box, sub(sphere->shape.center, box->shape.center)), h = box->shape.half_extents,
+        af_vec3 local = ph_shape_local(box, sub(sphere->shape.center, box->shape.center)),
+                h = box->shape.half_extents,
                 closest = {fminf(h.x, fmaxf(-h.x, local.x)), fminf(h.y, fmaxf(-h.y, local.y)),
                            fminf(h.z, fmaxf(-h.z, local.z))};
         af_vec3 delta = sub(local, closest);
@@ -137,7 +138,8 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
         float positive, negative, r = projected(a, axis);
         if (triangle) {
             float lo = dot(sub(triangle->a, a->shape.center), axis), hi = lo,
-                  values[] = {dot(sub(triangle->b, a->shape.center), axis), dot(sub(triangle->c, a->shape.center), axis)};
+                  values[] = {dot(sub(triangle->b, a->shape.center), axis),
+                              dot(sub(triangle->c, a->shape.center), axis)};
             for (unsigned k = 0; k < 2; ++k) {
                 lo = fminf(lo, values[k]);
                 hi = fmaxf(hi, values[k]);
@@ -145,7 +147,8 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
             positive = lo - r;
             negative = -hi - r;
         } else {
-            float center = dot(sub(b->shape.center, a->shape.center), axis), sum = r + projected(b, axis);
+            float center = dot(sub(b->shape.center, a->shape.center), axis),
+                  sum = r + projected(b, axis);
             positive = center - sum;
             negative = -center - sum;
         }
@@ -166,15 +169,17 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
 static af_vec3 velocity(const ph_body *b, af_vec3 at) {
     return add(b->v, af_vec3_cross(b->w, sub(at, b->p)));
 }
-static bool toi(const ph_body *a, const ph_body *b, const af_triangle *triangle,size_t part_a,size_t part_b, float limit,
-                float *time, af_vec3 *normal, af_vec3 *point) {
+static bool toi(const ph_body *a, const ph_body *b, const af_triangle *triangle, size_t part_a,
+                size_t part_b, float limit, float *time, af_vec3 *normal, af_vec3 *point) {
     float speed = (moving(a) ? af_vec3_length(a->v) + af_vec3_length(a->w) * extent(a) : 0) +
                   (moving(b) ? af_vec3_length(b->v) + af_vec3_length(b->w) * extent(b) : 0);
     if (speed < 1e-7f)
         return false;
     float t = 0;
     for (unsigned iteration = 0; iteration < 80; ++iteration) {
-        ph_body one = predict(a, t), two = predict(b, t);one.shape=ph_part_world(&one,part_a);two.shape=ph_part_world(&two,part_b);
+        ph_body one = predict(a, t), two = predict(b, t);
+        one.shape = ph_part_world(&one, part_a);
+        two.shape = ph_part_world(&two, part_b);
         float d = distance(&one, &two, triangle, normal, point);
         if (d <= .00101f) {
             float closing = dot(sub(velocity(&two, *point), velocity(&one, *point)), *normal);
@@ -206,12 +211,74 @@ static bool candidates(const ph_body *a, const ph_body *b, float dt) {
     return true;
 }
 
-typedef struct ph_ccd_event {size_t a,b,pa,pb;} ph_ccd_event;
-static bool ignored(const ph_ccd_event *events,size_t count,size_t a,size_t b,size_t pa,size_t pb){for(size_t i=0;i<count;++i)if(events[i].a==a&&events[i].b==b&&events[i].pa==pa&&events[i].pb==pb)return true;return false;}
-static bool pair_toi(ph_body *a,ph_body *b,float limit,float *time,af_vec3 *normal,af_vec3 *point,size_t ai,size_t bi,const ph_ccd_event *events,size_t event_count,size_t *out_pa,size_t *out_pb){bool found=false;float best=limit;size_t na=a->part_count?a->part_count:1,nb=b->part_count?b->part_count:1;
-    if(a->shape.type!=AF_COLLIDER_MESH&&b->shape.type!=AF_COLLIDER_MESH){for(size_t pa=0;pa<na;++pa)for(size_t pb=0;pb<nb;++pb){if(ignored(events,event_count,ai,bi,pa,pb))continue;float t;af_vec3 n,p;if(toi(a,b,NULL,pa,pb,best,&t,&n,&p)){best=t;*time=t;*normal=n;*point=p;*out_pa=pa;*out_pb=pb;found=true;}}return found;}
-    ph_body *body=a->shape.type==AF_COLLIDER_MESH?b:a,*mesh=body==a?b:a;af_vec3 end=add(body->p,mul(body->v,limit));float r=extent(body)+.002f;af_vec3 low={fminf(body->p.x,end.x)-r,fminf(body->p.y,end.y)-r,fminf(body->p.z,end.z)-r},high={fmaxf(body->p.x,end.x)+r,fmaxf(body->p.y,end.y)+r,fmaxf(body->p.z,end.z)+r};uint32_t scratch[128],*list;size_t count;if(!tc_candidates(mesh->shape,low,high,&list,&count,scratch,128))return false;
-    size_t parts=body->part_count?body->part_count:1;for(size_t part=0;part<parts;++part){size_t pa=body==a?part:0,pb=body==b?part:0;if(ignored(events,event_count,ai,bi,pa,pb))continue;for(size_t i=0;i<count;++i){af_triangle triangle=tc_world_triangle(mesh->shape,list[i]);float t;af_vec3 n,p;if(toi(body,mesh,&triangle,part,0,best,&t,&n,&p)){best=t;*time=t;*normal=body==a?n:mul(n,-1);*point=p;*out_pa=pa;*out_pb=pb;found=true;}}}if(list!=scratch)free(list);return found;
+typedef struct ph_ccd_event {
+    size_t a, b, pa, pb;
+} ph_ccd_event;
+static bool ignored(const ph_ccd_event *events, size_t count, size_t a, size_t b, size_t pa, size_t pb) {
+    for (size_t i = 0; i < count; ++i)
+        if (events[i].a == a && events[i].b == b && events[i].pa == pa && events[i].pb == pb)
+            return true;
+    return false;
+}
+static bool pair_toi(ph_body *a, ph_body *b, float limit, float *time, af_vec3 *normal, af_vec3 *point,
+                     size_t ai, size_t bi, const ph_ccd_event *events, size_t event_count,
+                     size_t *out_pa, size_t *out_pb) {
+    bool found = false;
+    float best = limit;
+    size_t na = a->part_count ? a->part_count : 1, nb = b->part_count ? b->part_count : 1;
+    if (a->shape.type != AF_COLLIDER_MESH && b->shape.type != AF_COLLIDER_MESH) {
+        for (size_t pa = 0; pa < na; ++pa)
+            for (size_t pb = 0; pb < nb; ++pb) {
+                if (ignored(events, event_count, ai, bi, pa, pb))
+                    continue;
+                float t;
+                af_vec3 n, p;
+                if (toi(a, b, NULL, pa, pb, best, &t, &n, &p)) {
+                    best = t;
+                    *time = t;
+                    *normal = n;
+                    *point = p;
+                    *out_pa = pa;
+                    *out_pb = pb;
+                    found = true;
+                }
+            }
+        return found;
+    }
+    ph_body *body = a->shape.type == AF_COLLIDER_MESH ? b : a, *mesh = body == a ? b : a;
+    af_vec3 end = add(body->p, mul(body->v, limit));
+    float r = extent(body) + .002f;
+    af_vec3 low = {fminf(body->p.x, end.x) - r, fminf(body->p.y, end.y) - r,
+                   fminf(body->p.z, end.z) - r},
+            high = {fmaxf(body->p.x, end.x) + r, fmaxf(body->p.y, end.y) + r,
+                    fmaxf(body->p.z, end.z) + r};
+    uint32_t scratch[128], *list;
+    size_t count;
+    if (!tc_candidates(mesh->shape, low, high, &list, &count, scratch, 128))
+        return false;
+    size_t parts = body->part_count ? body->part_count : 1;
+    for (size_t part = 0; part < parts; ++part) {
+        size_t pa = body == a ? part : 0, pb = body == b ? part : 0;
+        if (ignored(events, event_count, ai, bi, pa, pb))
+            continue;
+        for (size_t i = 0; i < count; ++i) {
+            af_triangle triangle = tc_world_triangle(mesh->shape, list[i]);
+            float t;
+            af_vec3 n, p;
+            if (toi(body, mesh, &triangle, part, 0, best, &t, &n, &p)) {
+                best = t;
+                *time = t;
+                *normal = body == a ? n : mul(n, -1);
+                *point = p;
+                *out_pa = pa;
+                *out_pb = pb;
+                found = true;
+            }
+        }
+    }
+    if (list != scratch)
+        free(list);
+    return found;
 }
 static void advance_all(af_physics *p, float time) {
     for (size_t i = 0; i < p->count; ++i)
@@ -219,7 +286,8 @@ static void advance_all(af_physics *p, float time) {
             p->bodies[i] = predict(&p->bodies[i], time);
 }
 void ph_advance(af_physics *p, float dt) {
-    ph_ccd_event events[16];size_t ignored_count=0,hit_pa=0,hit_pb=0;
+    ph_ccd_event events[16];
+    size_t ignored_count = 0, hit_pa = 0, hit_pb = 0;
     float remaining = dt;
     for (unsigned event = 0; event < 16 && remaining > 1e-8f; ++event) {
         size_t ai = 0, bi = 0;
@@ -253,13 +321,16 @@ void ph_advance(af_physics *p, float dt) {
                 ++p->stats.ccd_pairs;
                 float t;
                 af_vec3 n, pos;
-                size_t pa=0,pb=0;
-                if (pair_toi(a,b,earliest,&t,&n,&pos,i,j,events,ignored_count,&pa,&pb) && t <= earliest) {
+                size_t pa = 0, pb = 0;
+                if (pair_toi(a, b, earliest, &t, &n, &pos, i, j, events, ignored_count, &pa, &pb) &&
+                    t <= earliest) {
                     earliest = t;
                     normal = n;
                     point = pos;
                     ai = i;
-                    bi = j;hit_pa=pa;hit_pb=pb;
+                    bi = j;
+                    hit_pa = pa;
+                    hit_pb = pb;
                     hit = true;
                 }
             }
@@ -289,7 +360,7 @@ void ph_advance(af_physics *p, float dt) {
             ph_impulse(b, impulse, point);
         }
         ++p->stats.ccd_hits;
-        events[ignored_count++]=(ph_ccd_event){ai,bi,hit_pa,hit_pb};
+        events[ignored_count++] = (ph_ccd_event){ai, bi, hit_pa, hit_pb};
         if (earliest < 1e-8f) {
             float consume =
                 fminf(remaining, 1e-6f); /* Stay at contact while consuming a bounded zero-time event. */
