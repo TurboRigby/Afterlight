@@ -25,6 +25,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.14: mesh collision and constraints](development-014.md)
 - [0.13: physics and interaction](development-013.md)
 - [0.12: reusable tools and integration demos](development-012.md)
 - [0.11: playable animated characters](development-011.md)

@@ -479,14 +479,97 @@ static void collider_controls(editor *app,af_scene_object object){
     if(memcmp(&value,&before,sizeof(value)))ed_document_collider(&app->document,value);
 }
 
-static void joint_controls(editor *app,af_scene_object object){struct nk_context *ctx=&app->gui.context;label(ctx,"Joints",28);
-    if(object.body.enabled&&object.body.type==AF_BODY_DYNAMIC){nk_layout_row_dynamic(ctx,28,2);for(unsigned type=0;type<2;++type)if(nk_button_label(ctx,type?"Add hinge":"Add distance")){af_joint j=af_joint_default();j.a=object.id;j.type=(af_joint_type)type;snprintf(j.name,sizeof(j.name),"%s joint",type?"Hinge":"Distance");af_world_collider c;if(af_scene_world_collider(app->document.scene,object.id,&c))j.anchor_b=af_vec3_add(c.center,(af_vec3){0,type?0:1,0});ed_document_end_edit(&app->document);ed_document_joint(&app->document,j);ed_document_end_edit(&app->document);return;}}
-    for(size_t i=0;i<af_scene_joint_count(app->document.scene);++i){af_joint j=*af_scene_joint_at(app->document.scene,i);if(j.a!=object.id&&j.b!=object.id)continue;char title[96];snprintf(title,sizeof(title),"%s [%llu]",j.name,(unsigned long long)j.id);
-        if(nk_tree_push_id(ctx,NK_TREE_NODE,title,NK_MINIMIZED,(int)j.id)){af_joint before=j;nk_layout_row_dynamic(ctx,26,2);nk_bool enabled=j.enabled,collide=j.collide_connected;nk_checkbox_label(ctx,"Enabled",&enabled);nk_checkbox_label(ctx,"Collide bodies",&collide);j.enabled=enabled!=0;j.collide_connected=collide!=0;
-            label(ctx,"Body B (zero means world)",22);const af_scene_object *other=af_scene_get_object(app->document.scene,j.b);nk_layout_row_dynamic(ctx,28,1);if(nk_combo_begin_label(ctx,other?other->name:"World",nk_vec2(280,200))){nk_layout_row_dynamic(ctx,25,1);if(nk_combo_item_label(ctx,"World",NK_TEXT_LEFT))j.b=0;for(size_t k=0;k<af_scene_object_count(app->document.scene);++k){const af_scene_object *o=af_scene_object_at(app->document.scene,k);if(o->id!=j.a&&o->collider.enabled&&!o->collider.trigger&&o->collider.type!=AF_COLLIDER_NONE&&nk_combo_item_label(ctx,o->name,NK_TEXT_LEFT))j.b=o->id;}nk_combo_end(ctx);}
-            vector_fields(ctx,"Anchor A (body units)",&j.anchor_a,.1f,.01f);vector_fields(ctx,j.b?"Anchor B (body units)":"World anchor B",&j.anchor_b,.1f,.01f);
-            if(j.type==AF_JOINT_DISTANCE){nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Distance",0,&j.distance,10000,.1f,.01f);}else{bool axes=vector_fields(ctx,"Axis A",&j.axis_a,.1f,.01f);axes|=vector_fields(ctx,"Axis B",&j.axis_b,.1f,.01f);axes|=vector_fields(ctx,"Zero reference A",&j.reference_a,.1f,.01f);axes|=vector_fields(ctx,"Zero reference B",&j.reference_b,.1f,.01f);if(axes){j.axis_a=af_vec3_normalize(j.axis_a);j.axis_b=af_vec3_normalize(j.axis_b);j.reference_a=af_vec3_normalize(af_vec3_sub(j.reference_a,af_vec3_scale(j.axis_a,af_vec3_dot(j.axis_a,j.reference_a))));j.reference_b=af_vec3_normalize(af_vec3_sub(j.reference_b,af_vec3_scale(j.axis_b,af_vec3_dot(j.axis_b,j.reference_b))));}nk_bool limits=j.limits_enabled;nk_layout_row_dynamic(ctx,26,1);nk_checkbox_label(ctx,"Angular limits",&limits);j.limits_enabled=limits!=0;float low=j.lower_limit*180/AF_PI,high=j.upper_limit*180/AF_PI;nk_layout_row_dynamic(ctx,28,2);nk_property_float(ctx,"Min deg",-180,&low,high,5,.5f);nk_property_float(ctx,"Max deg",low,&high,180,5,.5f);j.lower_limit=low*AF_PI/180;j.upper_limit=high*AF_PI/180;}
-            bool remove;nk_layout_row_dynamic(ctx,28,1);remove=nk_button_label(ctx,"Delete joint")!=0;nk_tree_pop(ctx);if(remove){ed_document_remove_joint(&app->document,j.id);return;}if(memcmp(&before,&j,sizeof(j))){ed_document_joint(&app->document,j);return;}
+static void joint_controls(editor *app, af_scene_object object) {
+    struct nk_context *ctx = &app->gui.context;
+    label(ctx, "Joints", 28);
+    if (object.body.enabled && object.body.type == AF_BODY_DYNAMIC) {
+        nk_layout_row_dynamic(ctx, 28, 2);
+        for (unsigned type = 0; type < 2; ++type)
+            if (nk_button_label(ctx, type ? "Add hinge" : "Add distance")) {
+                af_joint j = af_joint_default();
+                j.a = object.id;
+                j.type = (af_joint_type)type;
+                snprintf(j.name, sizeof(j.name), "%s joint", type ? "Hinge" : "Distance");
+                af_world_collider c;
+                if (af_scene_world_collider(app->document.scene, object.id, &c))
+                    j.anchor_b = af_vec3_add(c.center, (af_vec3){0, type ? 0 : 1, 0});
+                ed_document_end_edit(&app->document);
+                ed_document_joint(&app->document, j);
+                ed_document_end_edit(&app->document);
+                return;
+            }
+    }
+    for (size_t i = 0; i < af_scene_joint_count(app->document.scene); ++i) {
+        af_joint j = *af_scene_joint_at(app->document.scene, i);
+        if (j.a != object.id && j.b != object.id)
+            continue;
+        char title[96];
+        snprintf(title, sizeof(title), "%s [%llu]", j.name, (unsigned long long)j.id);
+        if (nk_tree_push_id(ctx, NK_TREE_NODE, title, NK_MINIMIZED, (int)j.id)) {
+            af_joint before = j;
+            nk_layout_row_dynamic(ctx, 26, 2);
+            nk_bool enabled = j.enabled, collide = j.collide_connected;
+            nk_checkbox_label(ctx, "Enabled", &enabled);
+            nk_checkbox_label(ctx, "Collide bodies", &collide);
+            j.enabled = enabled != 0;
+            j.collide_connected = collide != 0;
+            label(ctx, "Body B (zero means world)", 22);
+            const af_scene_object *other = af_scene_get_object(app->document.scene, j.b);
+            nk_layout_row_dynamic(ctx, 28, 1);
+            if (nk_combo_begin_label(ctx, other ? other->name : "World", nk_vec2(280, 200))) {
+                nk_layout_row_dynamic(ctx, 25, 1);
+                if (nk_combo_item_label(ctx, "World", NK_TEXT_LEFT))
+                    j.b = 0;
+                for (size_t k = 0; k < af_scene_object_count(app->document.scene); ++k) {
+                    const af_scene_object *o = af_scene_object_at(app->document.scene, k);
+                    if (o->id != j.a && o->collider.enabled && !o->collider.trigger &&
+                        o->collider.type != AF_COLLIDER_NONE &&
+                        nk_combo_item_label(ctx, o->name, NK_TEXT_LEFT))
+                        j.b = o->id;
+                }
+                nk_combo_end(ctx);
+            }
+            vector_fields(ctx, "Anchor A (body units)", &j.anchor_a, .1f, .01f);
+            vector_fields(ctx, j.b ? "Anchor B (body units)" : "World anchor B", &j.anchor_b, .1f, .01f);
+            if (j.type == AF_JOINT_DISTANCE) {
+                nk_layout_row_dynamic(ctx, 28, 1);
+                nk_property_float(ctx, "Distance", 0, &j.distance, 10000, .1f, .01f);
+            } else {
+                bool axes = vector_fields(ctx, "Axis A", &j.axis_a, .1f, .01f);
+                axes |= vector_fields(ctx, "Axis B", &j.axis_b, .1f, .01f);
+                axes |= vector_fields(ctx, "Zero reference A", &j.reference_a, .1f, .01f);
+                axes |= vector_fields(ctx, "Zero reference B", &j.reference_b, .1f, .01f);
+                if (axes) {
+                    j.axis_a = af_vec3_normalize(j.axis_a);
+                    j.axis_b = af_vec3_normalize(j.axis_b);
+                    j.reference_a = af_vec3_normalize(af_vec3_sub(
+                        j.reference_a, af_vec3_scale(j.axis_a, af_vec3_dot(j.axis_a, j.reference_a))));
+                    j.reference_b = af_vec3_normalize(af_vec3_sub(
+                        j.reference_b, af_vec3_scale(j.axis_b, af_vec3_dot(j.axis_b, j.reference_b))));
+                }
+                nk_bool limits = j.limits_enabled;
+                nk_layout_row_dynamic(ctx, 26, 1);
+                nk_checkbox_label(ctx, "Angular limits", &limits);
+                j.limits_enabled = limits != 0;
+                float low = j.lower_limit * 180 / AF_PI, high = j.upper_limit * 180 / AF_PI;
+                nk_layout_row_dynamic(ctx, 28, 2);
+                if (nk_property_float(ctx, "Min deg", -180, &low, high, 5, .5f))
+                    j.lower_limit = low * AF_PI / 180;
+                if (nk_property_float(ctx, "Max deg", low, &high, 180, 5, .5f))
+                    j.upper_limit = high * AF_PI / 180;
+            }
+            bool remove;
+            nk_layout_row_dynamic(ctx, 28, 1);
+            remove = nk_button_label(ctx, "Delete joint") != 0;
+            nk_tree_pop(ctx);
+            if (remove) {
+                ed_document_remove_joint(&app->document, j.id);
+                return;
+            }
+            if (memcmp(&before, &j, sizeof(j))) {
+                ed_document_joint(&app->document, j);
+                return;
+            }
         }
     }
 }

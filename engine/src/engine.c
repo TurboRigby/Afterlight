@@ -588,8 +588,13 @@ bool af_engine_load_asset(af_engine *engine,const af_scene_asset *asset,af_asset
 bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const char *source,af_asset_error *error){
     if(!engine||!scene||!source)return false;
     typedef struct staged_asset {char temporary[64];af_scene_asset asset;} staged_asset;
-    staged_asset *staged=calloc(af_scene_asset_count(scene)?af_scene_asset_count(scene):1,sizeof(*staged));if(!staged)return false;size_t count=0;bool ok=true,matched=false;static unsigned sequence;
-    for(size_t i=0;i<af_scene_asset_count(scene);++i){const af_scene_asset *a=af_scene_asset_at(scene,i);size_t size=strcspn(a->path,"#");if(strlen(source)!=size||strncmp(source,a->path,size))continue;
+
+    af_scene *collision_stage=af_scene_clone(scene);if(!collision_stage)return false;
+    for(size_t i=0;i<collision_stage->collision_mesh_count;++i){cm_slot *slot=&collision_stage->collision_meshes[i];size_t length=strcspn(slot->path,"#");if(strlen(source)==length&&!strncmp(source,slot->path,length))slot->path[0]=0;}
+    if(!af_scene_prepare_collision_meshes(collision_stage,error)){af_scene_destroy(collision_stage);return false;}
+    const size_t asset_count=af_scene_asset_count(scene);
+    staged_asset *staged=calloc(asset_count?asset_count:1,sizeof(*staged));if(!staged){af_scene_destroy(collision_stage);return false;}size_t count=0;bool ok=true,matched=false;static unsigned sequence;
+    for(size_t i=0;i<asset_count;++i){const af_scene_asset *a=af_scene_asset_at(scene,i);size_t size=strcspn(a->path,"#");if(strlen(source)!=size||strncmp(source,a->path,size))continue;
         matched=true;
         if(a->kind==AF_ASSET_AUDIO){ok=af_engine_load_asset(engine,a,error);if(!ok)break;continue;}
         staged_asset *entry=&staged[count++];entry->asset=*a;do{snprintf(entry->temporary,sizeof(entry->temporary),"__reload_%u_%zu",++sequence,i);}while(af_scene_find_asset(scene,entry->temporary));af_scene_asset temporary=*a;snprintf(temporary.name,sizeof(temporary.name),"%s",entry->temporary);
@@ -597,6 +602,9 @@ bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const
     }
     if(ok)for(size_t i=0;i<count;++i)if(!(staged[i].asset.kind==AF_ASSET_ANIMATION?af_animation_runtime_commit(engine->animations,staged[i].temporary,staged[i].asset.name):af_renderer_commit_asset(engine->renderer,staged[i].temporary,staged[i].asset.name,staged[i].asset.kind==AF_ASSET_MESH))){ok=false;break;}
     for(size_t i=0;i<count;++i){if(staged[i].asset.kind==AF_ASSET_ANIMATION)af_animation_runtime_remove(engine->animations,staged[i].temporary);else if(staged[i].asset.kind==AF_ASSET_MESH)af_engine_remove_mesh(engine,staged[i].temporary);else af_engine_remove_texture(engine,staged[i].temporary);}
+
+    if(ok&&matched){af_scene *target=(af_scene*)scene;for(size_t i=0;i<target->collision_mesh_count;++i)cm_release(target->collision_meshes[i].mesh);memcpy(target->collision_meshes,collision_stage->collision_meshes,sizeof(target->collision_meshes));target->collision_mesh_count=collision_stage->collision_mesh_count;collision_stage->collision_mesh_count=0;}
+    af_scene_destroy(collision_stage);
     if(!matched&&error)snprintf(error->message,sizeof(error->message),"No assets reference this source.");free(staged);return ok&&matched;
 }
 

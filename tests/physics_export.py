@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
-"""Export both animation demos, remove sources, relocate and run their C game."""
+"""Export a physics scene pair, remove sources, relocate and run the C game."""
 import argparse
 import json
 import os
@@ -15,25 +15,27 @@ p.add_argument('--root', type=Path, required=True)
 p.add_argument('--player', type=Path, required=True)
 p.add_argument('--module', type=Path, required=True)
 p.add_argument('--sanitized', action='store_true')
+p.add_argument('--mechanical', action='store_true')
 p.add_argument('--play-test', type=Path)
 a = p.parse_args()
+scenes=("mesh-room","mechanical-playground") if a.mechanical else ("physics-drop","physics-playground")
 def run(args, cwd, success=True):
     env = os.environ.copy();env['SDL_AUDIO_DRIVER'] = 'dummy';env['VK_LAYER_VALIDATE_SYNC'] = '1'
     result = subprocess.run([str(x) for x in args], cwd=cwd, env=env, capture_output=True, text=True, timeout=90)
     assert (result.returncode == 0) == success, f'{args}: {result.stdout}\n{result.stderr}'
     return result.stdout + result.stderr
 
-with tempfile.TemporaryDirectory(prefix='afterlight-animation-export-') as temporary:
+with tempfile.TemporaryDirectory(prefix='afterlight-physics-export-') as temporary:
     root = Path(temporary);source = root / 'source project'
     for folder in ('assets', 'scenes', 'game'): (source / folder).mkdir(parents=True, exist_ok=True)
-    for name in ('locomotion.gltf','jump.wav','land.wav','checkpoint.wav','finish.wav','beacon.glb','cutout.tga','sphere.obj'): shutil.copy2(a.root / 'sandbox/assets' / name, source / 'assets' / name)
+    for name in ('locomotion.gltf','jump.wav','land.wav','checkpoint.wav','finish.wav','beacon.glb','cutout.tga','sphere.obj','mesh-room.obj'): shutil.copy2(a.root / 'sandbox/assets' / name, source / 'assets' / name)
     shutil.copy2(a.module, source / 'game' / a.module.name)
     shutil.copytree(a.root/'sandbox/prefabs',source/'prefabs')
     shutil.copy2(a.root/'sandbox/input.json',source/'input.json')
-    for scene_name in ('physics-drop','physics-playground'):
+    for scene_name in scenes:
         shutil.copy2(a.root/'sandbox/scenes'/(scene_name+'.afterlight.json'),source/'scenes'/(scene_name+'.afterlight.json'))
     outputs = []
-    for name in ('physics-drop', 'physics-playground'):
+    for name in scenes:
         shutil.copy2(a.root / 'sandbox/scenes' / (name + '.afterlight.json'), source / 'scenes' / (name + '.afterlight.json'))
         scene = json.loads((source / 'scenes' / (name + '.afterlight.json')).read_text())
         assert all(not Path(asset['path'].partition('#')[0]).is_absolute() for asset in scene['assets'])
@@ -49,7 +51,8 @@ with tempfile.TemporaryDirectory(prefix='afterlight-animation-export-') as tempo
         resources = output / 'Game.app/Contents/Resources' if sys.platform == 'darwin' else output
         packed_project = json.loads((resources / 'game.afterlight.project').read_text())
         packed_scene = json.loads((resources / packed_project['startup_scene']).read_text())
-        assert packed_scene['version'] == 13
+        assert packed_scene['version'] == (14 if a.mechanical else 13)
+        if a.mechanical: assert packed_scene['joints'] and any(o['collider']['type']=='mesh' for o in packed_scene['objects'])
         assert (resources/'input.json').is_file()
         prefab=json.loads((resources/'prefabs/physics-crate.afterlight.prefab').read_text())
         assert prefab['objects'][0]['body']['enabled'] and prefab['objects'][0]['body']['type']=='dynamic'
@@ -70,6 +73,6 @@ with tempfile.TemporaryDirectory(prefix='afterlight-animation-export-') as tempo
         if a.play_test:
             resources=moved/'Game.app/Contents/Resources' if sys.platform=='darwin' else moved
             project=json.loads((resources/'game.afterlight.project').read_text())
-            run([a.play_test,resources/'scenes/physics-drop.afterlight.json',resources/'scenes/physics-playground.afterlight.json',resources/project['game_module'],resources/'game.afterlight.project'],root)
+            run([a.play_test,resources/('scenes/'+scenes[0]+'.afterlight.json'),resources/('scenes/'+scenes[1]+'.afterlight.json'),resources/project['game_module'],resources/'game.afterlight.project'],root)
 
 print('Physics export: both demos preserve clip/binding assets and covered C source; relocated play after source removal passed.' if not a.sanitized else 'Physics export: sanitizer runtimes correctly rejected for both demos.')

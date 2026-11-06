@@ -468,3 +468,16 @@ render interpolation uses quaternion SLERP for dynamic roots. Scene identity
 changes reset contact caches and grabs. CPU worlds can be used independently.
 Broadphase, narrowphase, solver, sleep/CCD and interaction live in separate C files.
 Scene version is 13 and game ABI is 12; see [the physics notes](development-013.md).
+
+## Static mesh collision and constraints (0.14)
+
+Immutable triangle arrays and median-split BVHs are shared by scene clones with
+main-thread reference counts. CPU ray/capsule queries and rigid-body SAT use the
+same geometry. Asset reload stages collision cooking with GPU uploads and keeps
+the prior cache on malformed input. Contact warm starts clear when a mesh is
+replaced. Conservative CCD considers relative linear and angular motion.
+
+Scene-owned distance/hinge joints bind stable object IDs into the physics solver.
+Anchor rows include angular inertia; hinges add two alignment rows and optional
+twist-limit rows. Connected collision filtering is shared by discrete and CCD
+paths. Joint bodies remain awake pending constraint-island sleeping.

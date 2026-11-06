@@ -1,6 +1,59 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <afterlight/physics.h>
-#include <stdio.h>
 #include <math.h>
-#define CHECK(x) do{if(!(x)){fprintf(stderr,"Mesh physics %d: %s\n",__LINE__,#x);return 1;}}while(0)
-int main(void){af_scene *s=af_scene_create();af_physics *p=af_physics_create();af_vertex v[4]={0};v[0].position=(af_vec3){-10,0,-10};v[1].position=(af_vec3){10,0,-10};v[2].position=(af_vec3){10,0,10};v[3].position=(af_vec3){-10,0,10};uint32_t indices[]={0,2,1,0,3,2};af_mesh_data mesh={v,4,indices,6};af_asset_error error;CHECK(af_scene_set_collision_mesh(s,"level",&mesh,&error));af_object_id floor=af_scene_add_object(s,"Mesh floor","level");af_collider c=af_collider_default();c.type=AF_COLLIDER_MESH;CHECK(af_scene_set_object_collider(s,floor,c));af_object_id ids[4];for(unsigned i=0;i<4;++i){ids[i]=af_scene_add_object(s,"Dropped body","cube");c.type=i==3?AF_COLLIDER_SPHERE:AF_COLLIDER_BOX;c.radius=.5f;CHECK(af_scene_set_object_collider(s,ids[i],c));af_transform t=af_transform_identity();t.position=(af_vec3){i==3?3:0,1+(float)i*1.1f,0};CHECK(af_scene_set_object_transform(s,ids[i],t));af_rigid_body b=af_rigid_body_default();b.enabled=true;b.type=AF_BODY_DYNAMIC;b.restitution=0;b.continuous=true;CHECK(af_scene_set_body(s,ids[i],b));}for(unsigned i=0;i<360;++i)CHECK(af_physics_step(p,s,1.f/60));for(unsigned i=0;i<4;++i){af_physics_state b=af_physics_get_state(p,ids[i]);printf("Mesh rest %u: %.3f %.3f speed %.4f\n",i,b.position.x,b.position.y,af_vec3_length(b.velocity));CHECK(fabsf(b.position.y-(i==3?.5f:.5f+(float)i))<.1f&&af_vec3_length(b.velocity)<.15f);}CHECK(af_physics_get_stats(p).contacts>0);af_physics_destroy(p);af_scene_destroy(s);puts("Mesh rigid bodies: dropped spheres/boxes, clipped contact footprints and a sleeping stack passed.");return 0;}
+#include <stdio.h>
+#define CHECK(x)                                                                                        \
+    do {                                                                                                \
+        if (!(x)) {                                                                                     \
+            fprintf(stderr, "Mesh physics %d: %s\n", __LINE__, #x);                                     \
+            return 1;                                                                                   \
+        }                                                                                               \
+    } while (0)
+int main(void) {
+    af_scene *s = af_scene_create();
+    af_physics *p = af_physics_create();
+    af_vertex v[4] = {0};
+    v[0].position = (af_vec3){-10, 0, -10};
+    v[1].position = (af_vec3){10, 0, -10};
+    v[2].position = (af_vec3){10, 0, 10};
+    v[3].position = (af_vec3){-10, 0, 10};
+    uint32_t indices[] = {0, 2, 1, 0, 3, 2};
+    af_mesh_data mesh = {v, 4, indices, 6};
+    af_asset_error error;
+    CHECK(af_scene_set_collision_mesh(s, "level", &mesh, &error));
+    af_object_id floor = af_scene_add_object(s, "Mesh floor", "level");
+    af_collider c = af_collider_default();
+    c.type = AF_COLLIDER_MESH;
+    CHECK(af_scene_set_object_collider(s, floor, c));
+    af_object_id ids[4];
+    for (unsigned i = 0; i < 4; ++i) {
+        ids[i] = af_scene_add_object(s, "Dropped body", "cube");
+        c.type = i == 3 ? AF_COLLIDER_SPHERE : AF_COLLIDER_BOX;
+        c.radius = .5f;
+        CHECK(af_scene_set_object_collider(s, ids[i], c));
+        af_transform t = af_transform_identity();
+        t.position = (af_vec3){i == 3 ? 3 : 0, 1 + (float)i * 1.1f, 0};
+        CHECK(af_scene_set_object_transform(s, ids[i], t));
+        af_rigid_body b = af_rigid_body_default();
+        b.enabled = true;
+        b.type = AF_BODY_DYNAMIC;
+        b.restitution = 0;
+        b.continuous = true;
+        CHECK(af_scene_set_body(s, ids[i], b));
+    }
+    for (unsigned i = 0; i < 360; ++i)
+        CHECK(af_physics_step(p, s, 1.f / 60));
+    for (unsigned i = 0; i < 4; ++i) {
+        af_physics_state b = af_physics_get_state(p, ids[i]);
+        printf("Mesh rest %u: %.3f %.3f speed %.4f\n", i, b.position.x, b.position.y,
+               af_vec3_length(b.velocity));
+        CHECK(fabsf(b.position.y - (i == 3 ? .5f : .5f + (float)i)) < .1f &&
+              af_vec3_length(b.velocity) < .15f);
+    }
+    CHECK(af_physics_get_stats(p).contacts > 0);
+    af_physics_destroy(p);
+    af_scene_destroy(s);
+    puts("Mesh rigid bodies: dropped spheres/boxes, clipped contact footprints and a sleeping stack "
+         "passed.");
+    return 0;
+}

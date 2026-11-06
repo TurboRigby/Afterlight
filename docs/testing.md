@@ -201,3 +201,18 @@ without turning the long way. `afterlight.physics_demo` exercises a real C modul
 with Vulkan validation, pause/single-step, reload and both physics rooms.
 `physics_export` runs the same sequence from relocated exports after deleting
 the source project. See [the supported physics scope](development-013.md).
+
+## 0.14 mesh and constraint checks
+
+CPU regressions cover BVH bounds/ownership, transformed mesh rays and capsule
+sweeps, rigid mesh stacks, box/pair/angular CCD, distance pendulums, hinge limits,
+joint save/load/remapping and editor history. `mechanical_scene` runs the simple
+mesh room before the 10-joint mechanical playground and checks finite bodies,
+anchor lengths and hinge alignment/limits. Native `mesh_reload` checks successful
+and rejected CPU/GPU geometry replacement. `mechanical_demo` uses the real C
+module for pushing/grabbing/throwing, pause/step, reload and edit isolation.
+`mechanical_export` checks relocated play of both scenes after source removal.
+
+Run the full native Debug and ASan/UBSan suites serially for window focus, and
+Linux ASan/UBSan CPU tests with `ctest --test-dir BUILD -LE graphics`. Physics
+timing samples are machine-specific diagnostics, not performance gates.

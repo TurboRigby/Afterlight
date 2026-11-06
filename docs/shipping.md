@@ -163,3 +163,8 @@ Physics scenes save body components in scene format 13. Exports include the
 original dynamic crate prefab, input actions and the same C physics module used
 by the editor. The integration test runs both rooms after source deletion and
 relocation; see [0.13 supported physics and controls](development-013.md).
+
+0.14 adds `mesh-room` and `mechanical-playground` project/run targets. Exports
+include imported collision OBJ assets, scene joints, the C mechanical game module
+and corresponding source. Both scenes are exercised after removing their source
+project and relocating the export. See [0.14](development-014.md).

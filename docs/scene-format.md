@@ -512,5 +512,33 @@ Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
 and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
 200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
 positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
-body defaults. Saving writes version 13. Physics runtime limits and diagnostics
+body defaults. Saving writes version 14. Physics runtime limits and diagnostics
 are documented in [0.13](development-013.md).
+
+## Version 14: mesh colliders and scene joints
+
+`collider.type` additionally accepts `mesh`, using the object's mesh asset for
+static triangle collision. Its center must be zero and any enabled body must be
+static. Imported OBJ/glTF triangles are cooked into an immutable BVH cache; the
+file stores references, not cooked data. Invertible, nonsheared transforms
+including mirrored/nonuniform scale are supported. Dynamic bodies remain boxes
+or spheres.
+
+Version 14 requires two additional root fields: `next_joint` (a decimal string
+ID counter, zero when exhausted) and `joints` (up to 128 entries). Each joint has
+exactly these fields:
+
+- `id`, `a`, `b`: decimal string IDs. `a` is required; `b: "0"` is the world.
+- `name`, `type` (`distance` or `hinge`), `enabled`, `collide_connected`.
+- `anchor_a`, `anchor_b`: three-element vectors in unscaled body axes about the
+  collider center. A world endpoint uses world coordinates.
+- `distance`: nonnegative rest length (zero constrains a point).
+- `axis_a`, `axis_b`, `reference_a`, `reference_b`: unit vectors, with each
+  reference perpendicular to its axis.
+- `limits_enabled`, `lower_limit`, `upper_limit`: hinge twist bounds in radians
+  within [-pi, pi], measured from A's reference toward B's reference.
+
+IDs are unique and below the nonzero next counter. At least one endpoint must
+be dynamic; endpoints need enabled, nontrigger sphere/box/static-mesh colliders.
+Body deletion removes attached joints. Versions 1–13 load with no joints.
+Prefabs remap internal joint endpoints and reject external/world constraints.

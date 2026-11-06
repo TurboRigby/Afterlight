@@ -44,8 +44,9 @@ Full box extents, angular velocity bounds and relative body motion now participa
 in conservative advancement, including BVH-filtered triangles. Regression cases
 cover thin walls, two approaching fast spheres and a rotating box corner. Low-speed
 resting contacts stay in the discrete solver. Work is bounded to 80 distance samples
-and 16 impact events per substep; exhaustion conservatively truncates motion and
-reports `ccd_clamped`. A pair receives at most one CCD impulse per substep, so
+and 16 impact events per substep. The event cap truncates remaining motion and
+reports `ccd_clamped`; a nonconverging pair uses its last safe sample as an
+approximate impact. A pair receives at most one CCD impulse per substep, so
 multiple rebounds between the same pair remain an approximation. This is bounded
 CCD for small scenes, not an exact general time-of-impact solver.
 
@@ -80,3 +81,32 @@ with the duplicate; joints to external bodies are omitted.
 
 Free hinge motion, angular alignment, bounded twist, persistence, editor undo/redo
 and duplicate reference regressions pass alongside the distance tests.
+
+## Simple-to-complex demos
+
+`run_mesh-room_editor` starts an original imported triangle room with a ramp,
+stairs, dropped bodies and a distance pendulum. Then use
+`run_mechanical-playground_editor` for a six-body chain with varying masses, a
+limited door, swinging beam, seesaw, ramp balls, a fast mesh projectile and a
+spinning box. The room has enclosing walls to keep energetic bodies in bounds.
+The standalone `_player` targets use the same C gameplay.
+
+WASD/Shift/Space move/run/jump; E toggles root motion; F grabs/releases, V throws,
+Q spawns a crate, R resets bodies/player and N switches these two rooms.
+**Physics** shows joints and contacts. Source scenes stay unchanged during Play.
+
+Scene format 14 reads versions 1–13; game modules use ABI 13 and must be rebuilt
+with current headers. Assets remain external references and export relocatably.
+
+## Verification
+
+All 104 native macOS ASan/UBSan tests pass with Vulkan validation. All 67 Linux
+Clang ASan/UBSan CPU tests pass with leak detection. Debug regressions, relocated
+Debug exports and optimized Release builds are also checked. The legacy v7/v8
+render fixture removes the new root fields when downgrading its version.
+
+A local Apple M4 Debug sample after these changes measured 5.33 ms mean / 5.49 ms
+p95 for 16 bodies and 18.92 / 19.53 ms for 64 bodies. Maximum penetration was
+0.00364 / 0.00659 units; contacts and pairs were 64 / 256. These CPU-only samples
+are diagnostics, not a frame-rate promise. Optimization and larger-island stress
+remain future work.

@@ -2,32 +2,300 @@
 #include "physics_internal.h"
 #include "triangle_collision.h"
 #include <stdlib.h>
-static af_vec3 add(af_vec3 a,af_vec3 b){return af_vec3_add(a,b);}static af_vec3 sub(af_vec3 a,af_vec3 b){return af_vec3_sub(a,b);}static af_vec3 mul(af_vec3 a,float b){return af_vec3_scale(a,b);}static float dot(af_vec3 a,af_vec3 b){return af_vec3_dot(a,b);}
-static bool moving(const ph_body *b){return b->inv_mass>0&&!b->sleeping;}static float extent(const ph_body *b){return b->shape.type==AF_COLLIDER_SPHERE?b->shape.radius:af_vec3_length(b->shape.half_extents);}
-static af_vec4 rotate(af_vec4 q,af_vec3 w,float dt){float length=af_vec3_length(w);if(length<1e-8f)return q;float angle=length*dt*.5f;af_vec3 v=mul(w,sinf(angle)/length),u={q.x,q.y,q.z};af_vec3 xyz=add(add(mul(u,cosf(angle)),mul(v,q.w)),af_vec3_cross(v,u));return af_quaternion_normalize((af_vec4){xyz.x,xyz.y,xyz.z,cosf(angle)*q.w-dot(v,u)});}
-static ph_body predict(const ph_body *b,float dt){ph_body next=*b;if(moving(b)){next.p=add(b->p,mul(b->v,dt));next.q=rotate(b->q,b->w,dt);ph_shape(&next);}return next;}
-static af_vec3 support(const ph_body *b,af_vec3 n){if(b->shape.type==AF_COLLIDER_SPHERE)return add(b->p,mul(n,b->shape.radius));af_vec3 result=b->p;for(unsigned i=0;i<3;++i){float d=dot(n,b->shape.axes[i]);if(fabsf(d)>1e-6f)result=add(result,mul(b->shape.axes[i],copysignf(ph_get(b->shape.half_extents,i),d)));}return result;}
-static float projected(const ph_body *b,af_vec3 n){if(b->shape.type==AF_COLLIDER_SPHERE)return b->shape.radius;float r=0;for(unsigned i=0;i<3;++i)r+=ph_get(b->shape.half_extents,i)*fabsf(dot(n,b->shape.axes[i]));return r;}
-static float distance(const ph_body *a,const ph_body *b,const af_triangle *triangle,af_vec3 *normal,af_vec3 *point){
-    if(triangle&&a->shape.type==AF_COLLIDER_SPHERE){af_collision_hit hit;float d=tc_capsule_triangle(*triangle,a->p,a->shape.radius,0,&hit);*normal=mul(hit.normal,-1);*point=hit.point;return d;}
-    if(!triangle&&a->shape.type==AF_COLLIDER_SPHERE&&b->shape.type==AF_COLLIDER_SPHERE){af_vec3 d=sub(b->p,a->p);float n=af_vec3_length(d);*normal=n>1e-7f?mul(d,1/n):(af_vec3){0,1,0};*point=mul(add(support(a,*normal),support(b,mul(*normal,-1))),.5f);return n-a->shape.radius-b->shape.radius;}
-    if(!triangle&&a->shape.type!=b->shape.type){const ph_body *sphere=a->shape.type==AF_COLLIDER_SPHERE?a:b,*box=sphere==a?b:a;af_vec3 local=ph_local(box,sub(sphere->p,box->p)),h=box->shape.half_extents,closest={fminf(h.x,fmaxf(-h.x,local.x)),fminf(h.y,fmaxf(-h.y,local.y)),fminf(h.z,fmaxf(-h.z,local.z))};af_vec3 delta=sub(local,closest);float length=af_vec3_length(delta);af_vec3 outward;float d=length-sphere->shape.radius;if(length>1e-7f)outward=ph_vector(box,mul(delta,1/length));else{unsigned axis=0;float depth=h.x-fabsf(local.x);for(unsigned i=1;i<3;++i){float value=ph_get(h,i)-fabsf(ph_get(local,i));if(value<depth){depth=value;axis=i;}}outward=mul(box->shape.axes[axis],ph_get(local,axis)<0?-1.f:1.f);d=-depth-sphere->shape.radius;}*normal=sphere==a?mul(outward,-1):outward;*point=add(box->p,ph_vector(box,closest));return d;}
-    float best=-1e30f;af_vec3 n={0,1,0};af_vec3 edges[3];if(triangle){edges[0]=sub(triangle->b,triangle->a);edges[1]=sub(triangle->c,triangle->b);edges[2]=sub(triangle->a,triangle->c);}
-    for(unsigned i=0;i<(triangle?13u:15u);++i){af_vec3 axis;if(triangle)axis=i<3?a->shape.axes[i]:i==3?af_vec3_cross(edges[0],edges[1]):af_vec3_cross(a->shape.axes[(i-4)/3],edges[(i-4)%3]);else axis=i<3?a->shape.axes[i]:i<6?b->shape.axes[i-3]:af_vec3_cross(a->shape.axes[(i-6)/3],b->shape.axes[(i-6)%3]);float length=af_vec3_length(axis);if(length<1e-7f)continue;axis=mul(axis,1/length);float positive,negative,r=projected(a,axis);if(triangle){float lo=dot(sub(triangle->a,a->p),axis),hi=lo,values[]={dot(sub(triangle->b,a->p),axis),dot(sub(triangle->c,a->p),axis)};for(unsigned k=0;k<2;++k){lo=fminf(lo,values[k]);hi=fmaxf(hi,values[k]);}positive=lo-r;negative=-hi-r;}else{float center=dot(sub(b->p,a->p),axis),sum=r+projected(b,axis);positive=center-sum;negative=-center-sum;}float separation=fmaxf(positive,negative);if(separation>best){best=separation;n=mul(axis,positive>=negative?1.f:-1.f);}}
-    *normal=n;if(triangle){af_vec3 one=support(a,n);*point=tc_closest_triangle(*triangle,one);}else *point=mul(add(support(a,n),support(b,mul(n,-1))),.5f);return best;
+static af_vec3 add(af_vec3 a, af_vec3 b) {
+    return af_vec3_add(a, b);
 }
-static af_vec3 velocity(const ph_body *b,af_vec3 at){return add(b->v,af_vec3_cross(b->w,sub(at,b->p)));}
-static bool toi(const ph_body *a,const ph_body *b,const af_triangle *triangle,float limit,float *time,af_vec3 *normal,af_vec3 *point){float speed=(moving(a)?af_vec3_length(a->v)+af_vec3_length(a->w)*extent(a):0)+(moving(b)?af_vec3_length(b->v)+af_vec3_length(b->w)*extent(b):0);if(speed<1e-7f)return false;float t=0;
-    for(unsigned iteration=0;iteration<80;++iteration){ph_body one=predict(a,t),two=predict(b,t);float d=distance(&one,&two,triangle,normal,point);if(d<=.00101f){float closing=dot(sub(velocity(&two,*point),velocity(&one,*point)),*normal);if(t==0&&(closing>=-1.f||d<-.006f))return false;*time=t;return true;}float advance=fmaxf((d-.001f)/speed*.9f,1e-8f);t+=advance;if(t>limit)return false;}
+static af_vec3 sub(af_vec3 a, af_vec3 b) {
+    return af_vec3_sub(a, b);
+}
+static af_vec3 mul(af_vec3 a, float b) {
+    return af_vec3_scale(a, b);
+}
+static float dot(af_vec3 a, af_vec3 b) {
+    return af_vec3_dot(a, b);
+}
+static bool moving(const ph_body *b) {
+    return b->inv_mass > 0 && !b->sleeping;
+}
+static float extent(const ph_body *b) {
+    return b->shape.type == AF_COLLIDER_SPHERE ? b->shape.radius : af_vec3_length(b->shape.half_extents);
+}
+static af_vec4 rotate(af_vec4 q, af_vec3 w, float dt) {
+    float length = af_vec3_length(w);
+    if (length < 1e-8f)
+        return q;
+    float angle = length * dt * .5f;
+    af_vec3 v = mul(w, sinf(angle) / length), u = {q.x, q.y, q.z};
+    af_vec3 xyz = add(add(mul(u, cosf(angle)), mul(v, q.w)), af_vec3_cross(v, u));
+    return af_quaternion_normalize((af_vec4){xyz.x, xyz.y, xyz.z, cosf(angle) * q.w - dot(v, u)});
+}
+static ph_body predict(const ph_body *b, float dt) {
+    ph_body next = *b;
+    if (moving(b)) {
+        next.p = add(b->p, mul(b->v, dt));
+        next.q = rotate(b->q, b->w, dt);
+        ph_shape(&next);
+    }
+    return next;
+}
+static af_vec3 support(const ph_body *b, af_vec3 n) {
+    if (b->shape.type == AF_COLLIDER_SPHERE)
+        return add(b->p, mul(n, b->shape.radius));
+    af_vec3 result = b->p;
+    for (unsigned i = 0; i < 3; ++i) {
+        float d = dot(n, b->shape.axes[i]);
+        if (fabsf(d) > 1e-6f)
+            result = add(result, mul(b->shape.axes[i], copysignf(ph_get(b->shape.half_extents, i), d)));
+    }
+    return result;
+}
+static float projected(const ph_body *b, af_vec3 n) {
+    if (b->shape.type == AF_COLLIDER_SPHERE)
+        return b->shape.radius;
+    float r = 0;
+    for (unsigned i = 0; i < 3; ++i)
+        r += ph_get(b->shape.half_extents, i) * fabsf(dot(n, b->shape.axes[i]));
+    return r;
+}
+static float distance(const ph_body *a, const ph_body *b, const af_triangle *triangle, af_vec3 *normal,
+                      af_vec3 *point) {
+    if (triangle && a->shape.type == AF_COLLIDER_SPHERE) {
+        af_collision_hit hit;
+        float d = tc_capsule_triangle(*triangle, a->p, a->shape.radius, 0, &hit);
+        *normal = mul(hit.normal, -1);
+        *point = hit.point;
+        return d;
+    }
+    if (!triangle && a->shape.type == AF_COLLIDER_SPHERE && b->shape.type == AF_COLLIDER_SPHERE) {
+        af_vec3 d = sub(b->p, a->p);
+        float n = af_vec3_length(d);
+        *normal = n > 1e-7f ? mul(d, 1 / n) : (af_vec3){0, 1, 0};
+        *point = mul(add(support(a, *normal), support(b, mul(*normal, -1))), .5f);
+        return n - a->shape.radius - b->shape.radius;
+    }
+    if (!triangle && a->shape.type != b->shape.type) {
+        const ph_body *sphere = a->shape.type == AF_COLLIDER_SPHERE ? a : b, *box = sphere == a ? b : a;
+        af_vec3 local = ph_local(box, sub(sphere->p, box->p)), h = box->shape.half_extents,
+                closest = {fminf(h.x, fmaxf(-h.x, local.x)), fminf(h.y, fmaxf(-h.y, local.y)),
+                           fminf(h.z, fmaxf(-h.z, local.z))};
+        af_vec3 delta = sub(local, closest);
+        float length = af_vec3_length(delta);
+        af_vec3 outward;
+        float d = length - sphere->shape.radius;
+        if (length > 1e-7f)
+            outward = ph_vector(box, mul(delta, 1 / length));
+        else {
+            unsigned axis = 0;
+            float depth = h.x - fabsf(local.x);
+            for (unsigned i = 1; i < 3; ++i) {
+                float value = ph_get(h, i) - fabsf(ph_get(local, i));
+                if (value < depth) {
+                    depth = value;
+                    axis = i;
+                }
+            }
+            outward = mul(box->shape.axes[axis], ph_get(local, axis) < 0 ? -1.f : 1.f);
+            d = -depth - sphere->shape.radius;
+        }
+        *normal = sphere == a ? mul(outward, -1) : outward;
+        *point = add(box->p, ph_vector(box, closest));
+        return d;
+    }
+    float best = -1e30f;
+    af_vec3 n = {0, 1, 0};
+    af_vec3 edges[3];
+    if (triangle) {
+        edges[0] = sub(triangle->b, triangle->a);
+        edges[1] = sub(triangle->c, triangle->b);
+        edges[2] = sub(triangle->a, triangle->c);
+    }
+    for (unsigned i = 0; i < (triangle ? 13u : 15u); ++i) {
+        af_vec3 axis;
+        if (triangle)
+            axis = i < 3    ? a->shape.axes[i]
+                   : i == 3 ? af_vec3_cross(edges[0], edges[1])
+                            : af_vec3_cross(a->shape.axes[(i - 4) / 3], edges[(i - 4) % 3]);
+        else
+            axis = i < 3   ? a->shape.axes[i]
+                   : i < 6 ? b->shape.axes[i - 3]
+                           : af_vec3_cross(a->shape.axes[(i - 6) / 3], b->shape.axes[(i - 6) % 3]);
+        float length = af_vec3_length(axis);
+        if (length < 1e-7f)
+            continue;
+        axis = mul(axis, 1 / length);
+        float positive, negative, r = projected(a, axis);
+        if (triangle) {
+            float lo = dot(sub(triangle->a, a->p), axis), hi = lo,
+                  values[] = {dot(sub(triangle->b, a->p), axis), dot(sub(triangle->c, a->p), axis)};
+            for (unsigned k = 0; k < 2; ++k) {
+                lo = fminf(lo, values[k]);
+                hi = fmaxf(hi, values[k]);
+            }
+            positive = lo - r;
+            negative = -hi - r;
+        } else {
+            float center = dot(sub(b->p, a->p), axis), sum = r + projected(b, axis);
+            positive = center - sum;
+            negative = -center - sum;
+        }
+        float separation = fmaxf(positive, negative);
+        if (separation > best) {
+            best = separation;
+            n = mul(axis, positive >= negative ? 1.f : -1.f);
+        }
+    }
+    *normal = n;
+    if (triangle) {
+        af_vec3 one = support(a, n);
+        *point = tc_closest_triangle(*triangle, one);
+    } else
+        *point = mul(add(support(a, n), support(b, mul(n, -1))), .5f);
+    return best;
+}
+static af_vec3 velocity(const ph_body *b, af_vec3 at) {
+    return add(b->v, af_vec3_cross(b->w, sub(at, b->p)));
+}
+static bool toi(const ph_body *a, const ph_body *b, const af_triangle *triangle, float limit,
+                float *time, af_vec3 *normal, af_vec3 *point) {
+    float speed = (moving(a) ? af_vec3_length(a->v) + af_vec3_length(a->w) * extent(a) : 0) +
+                  (moving(b) ? af_vec3_length(b->v) + af_vec3_length(b->w) * extent(b) : 0);
+    if (speed < 1e-7f)
+        return false;
+    float t = 0;
+    for (unsigned iteration = 0; iteration < 80; ++iteration) {
+        ph_body one = predict(a, t), two = predict(b, t);
+        float d = distance(&one, &two, triangle, normal, point);
+        if (d <= .00101f) {
+            float closing = dot(sub(velocity(&two, *point), velocity(&one, *point)), *normal);
+            if (t == 0 && (closing >= -1.f || d < -.006f))
+                return false;
+            *time = t;
+            return true;
+        }
+        float advance = fmaxf((d - .001f) / speed * .9f, 1e-8f);
+        t += advance;
+        if (t > limit)
+            return false;
+    }
     /* Conservatively stop at the last safe sample on nonconvergence. */
-    *time=fminf(t,limit);return true;
+    *time = fminf(t, limit);
+    return true;
 }
-static bool candidates(const ph_body *a,const ph_body *b,float dt){if(a->shape.type==AF_COLLIDER_MESH||b->shape.type==AF_COLLIDER_MESH)return true;af_vec3 ea= moving(a)?mul(a->v,dt):(af_vec3){0},eb=moving(b)?mul(b->v,dt):(af_vec3){0};float ra=extent(a),rb=extent(b);for(unsigned i=0;i<3;++i){float ca=ph_get(a->p,i),cb=ph_get(b->p,i),va=ph_get(ea,i),vb=ph_get(eb,i);if(fminf(ca,ca+va)-ra>fmaxf(cb,cb+vb)+rb+.002f||fminf(cb,cb+vb)-rb>fmaxf(ca,ca+va)+ra+.002f)return false;}return true;}
-static bool pair_toi(ph_body *a,ph_body *b,float limit,float *time,af_vec3 *normal,af_vec3 *point){if(a->shape.type!=AF_COLLIDER_MESH&&b->shape.type!=AF_COLLIDER_MESH)return toi(a,b,NULL,limit,time,normal,point);ph_body *body=a->shape.type==AF_COLLIDER_MESH?b:a,*mesh=body==a?b:a;af_vec3 end=add(body->p,mul(body->v,limit));float r=extent(body)+.002f;af_vec3 low={fminf(body->p.x,end.x)-r,fminf(body->p.y,end.y)-r,fminf(body->p.z,end.z)-r},high={fmaxf(body->p.x,end.x)+r,fmaxf(body->p.y,end.y)+r,fmaxf(body->p.z,end.z)+r};uint32_t scratch[128],*list;size_t count;if(!tc_candidates(mesh->shape,low,high,&list,&count,scratch,128))return false;bool found=false;float best=limit;for(size_t i=0;i<count;++i){af_triangle triangle=tc_world_triangle(mesh->shape,list[i]);float t;af_vec3 n,p;if(toi(body,mesh,&triangle,best,&t,&n,&p)){best=t;*time=t;*normal=body==a?n:mul(n,-1);*point=p;found=true;}}if(list!=scratch)free(list);return found;}
-static void advance_all(af_physics *p,float time){for(size_t i=0;i<p->count;++i)if(moving(&p->bodies[i]))p->bodies[i]=predict(&p->bodies[i],time);}
-void ph_advance(af_physics *p,float dt){size_t ignored_a[16],ignored_b[16],ignored_count=0;float remaining=dt;for(unsigned event=0;event<16&&remaining>1e-8f;++event){size_t ai=0,bi=0;float earliest=remaining;af_vec3 normal={0},point={0};bool hit=false;
-    for(size_t i=0;i<p->count;++i)for(size_t j=i+1;j<p->count;++j){ph_body *a=&p->bodies[i],*b=&p->bodies[j];bool ignored=false;for(size_t k=0;k<ignored_count;++k)ignored|=ignored_a[k]==i&&ignored_b[k]==j;if(ignored)continue;if((!moving(a)&&!moving(b))||(!a->config.continuous&&!b->config.continuous)||!(a->shape.layer&b->shape.layer)||!ph_collision_allowed(p,a->id,b->id)||!candidates(a,b,earliest))continue;float t;af_vec3 n,pos;if(pair_toi(a,b,earliest,&t,&n,&pos)&&t<=earliest){earliest=t;normal=n;point=pos;ai=i;bi=j;hit=true;}}
-    advance_all(p,earliest);remaining-=earliest;if(!hit)return;ph_body *a=&p->bodies[ai],*b=&p->bodies[bi];if(a->inv_mass>0){a->sleeping=false;a->sleep_time=0;}if(b->inv_mass>0){b->sleeping=false;b->sleep_time=0;}af_vec3 ra=sub(point,a->p),rb=sub(point,b->p);float mass=a->inv_mass+b->inv_mass+dot(normal,add(af_vec3_cross(ph_inverse_inertia(a,af_vec3_cross(ra,normal)),ra),af_vec3_cross(ph_inverse_inertia(b,af_vec3_cross(rb,normal)),rb))),closing=dot(sub(velocity(b,point),velocity(a,point)),normal);if(mass>1e-12f&&closing<0){float bounce=closing< -1?fmaxf(a->config.restitution,b->config.restitution):0;af_vec3 impulse=mul(normal,-(1+bounce)*closing/mass);ph_impulse(a,mul(impulse,-1),point);ph_impulse(b,impulse,point);}++p->stats.ccd_hits;ignored_a[ignored_count]=ai;ignored_b[ignored_count++]=bi;
-    if(earliest<1e-8f){float consume=fminf(remaining,1e-6f);/* Stay at contact while consuming a bounded zero-time event. */remaining-=consume;}
-    }if(remaining>1e-8f)++p->stats.ccd_clamped;
+static bool candidates(const ph_body *a, const ph_body *b, float dt) {
+    if (a->shape.type == AF_COLLIDER_MESH || b->shape.type == AF_COLLIDER_MESH)
+        return true;
+    af_vec3 ea = moving(a) ? mul(a->v, dt) : (af_vec3){0}, eb = moving(b) ? mul(b->v, dt) : (af_vec3){0};
+    float ra = extent(a), rb = extent(b);
+    for (unsigned i = 0; i < 3; ++i) {
+        float ca = ph_get(a->p, i), cb = ph_get(b->p, i), va = ph_get(ea, i), vb = ph_get(eb, i);
+        if (fminf(ca, ca + va) - ra > fmaxf(cb, cb + vb) + rb + .002f ||
+            fminf(cb, cb + vb) - rb > fmaxf(ca, ca + va) + ra + .002f)
+            return false;
+    }
+    return true;
+}
+static bool pair_toi(ph_body *a, ph_body *b, float limit, float *time, af_vec3 *normal, af_vec3 *point) {
+    if (a->shape.type != AF_COLLIDER_MESH && b->shape.type != AF_COLLIDER_MESH)
+        return toi(a, b, NULL, limit, time, normal, point);
+    ph_body *body = a->shape.type == AF_COLLIDER_MESH ? b : a, *mesh = body == a ? b : a;
+    af_vec3 end = add(body->p, mul(body->v, limit));
+    float r = extent(body) + .002f;
+    af_vec3 low = {fminf(body->p.x, end.x) - r, fminf(body->p.y, end.y) - r,
+                   fminf(body->p.z, end.z) - r},
+            high = {fmaxf(body->p.x, end.x) + r, fmaxf(body->p.y, end.y) + r,
+                    fmaxf(body->p.z, end.z) + r};
+    uint32_t scratch[128], *list;
+    size_t count;
+    if (!tc_candidates(mesh->shape, low, high, &list, &count, scratch, 128))
+        return false;
+    bool found = false;
+    float best = limit;
+    for (size_t i = 0; i < count; ++i) {
+        af_triangle triangle = tc_world_triangle(mesh->shape, list[i]);
+        float t;
+        af_vec3 n, p;
+        if (toi(body, mesh, &triangle, best, &t, &n, &p)) {
+            best = t;
+            *time = t;
+            *normal = body == a ? n : mul(n, -1);
+            *point = p;
+            found = true;
+        }
+    }
+    if (list != scratch)
+        free(list);
+    return found;
+}
+static void advance_all(af_physics *p, float time) {
+    for (size_t i = 0; i < p->count; ++i)
+        if (moving(&p->bodies[i]))
+            p->bodies[i] = predict(&p->bodies[i], time);
+}
+void ph_advance(af_physics *p, float dt) {
+    size_t ignored_a[16], ignored_b[16], ignored_count = 0;
+    float remaining = dt;
+    for (unsigned event = 0; event < 16 && remaining > 1e-8f; ++event) {
+        size_t ai = 0, bi = 0;
+        float earliest = remaining;
+        af_vec3 normal = {0}, point = {0};
+        bool hit = false;
+        for (size_t i = 0; i < p->count; ++i)
+            for (size_t j = i + 1; j < p->count; ++j) {
+                ph_body *a = &p->bodies[i], *b = &p->bodies[j];
+                bool ignored = false;
+                for (size_t k = 0; k < ignored_count; ++k)
+                    ignored |= ignored_a[k] == i && ignored_b[k] == j;
+                if (ignored)
+                    continue;
+                if ((!moving(a) && !moving(b)) || (!a->config.continuous && !b->config.continuous) ||
+                    !(a->shape.layer & b->shape.layer) || !ph_collision_allowed(p, a->id, b->id) ||
+                    !candidates(a, b, earliest))
+                    continue;
+                float t;
+                af_vec3 n, pos;
+                if (pair_toi(a, b, earliest, &t, &n, &pos) && t <= earliest) {
+                    earliest = t;
+                    normal = n;
+                    point = pos;
+                    ai = i;
+                    bi = j;
+                    hit = true;
+                }
+            }
+        advance_all(p, earliest);
+        remaining -= earliest;
+        if (!hit)
+            return;
+        ph_body *a = &p->bodies[ai], *b = &p->bodies[bi];
+        if (a->inv_mass > 0) {
+            a->sleeping = false;
+            a->sleep_time = 0;
+        }
+        if (b->inv_mass > 0) {
+            b->sleeping = false;
+            b->sleep_time = 0;
+        }
+        af_vec3 ra = sub(point, a->p), rb = sub(point, b->p);
+        float mass =
+                  a->inv_mass + b->inv_mass +
+                  dot(normal, add(af_vec3_cross(ph_inverse_inertia(a, af_vec3_cross(ra, normal)), ra),
+                                  af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(rb, normal)), rb))),
+              closing = dot(sub(velocity(b, point), velocity(a, point)), normal);
+        if (mass > 1e-12f && closing < 0) {
+            float bounce = closing < -1 ? fmaxf(a->config.restitution, b->config.restitution) : 0;
+            af_vec3 impulse = mul(normal, -(1 + bounce) * closing / mass);
+            ph_impulse(a, mul(impulse, -1), point);
+            ph_impulse(b, impulse, point);
+        }
+        ++p->stats.ccd_hits;
+        ignored_a[ignored_count] = ai;
+        ignored_b[ignored_count++] = bi;
+        if (earliest < 1e-8f) {
+            float consume =
+                fminf(remaining, 1e-6f); /* Stay at contact while consuming a bounded zero-time event. */
+            remaining -= consume;
+        }
+    }
+    if (remaining > 1e-8f)
+        ++p->stats.ccd_clamped;
 }

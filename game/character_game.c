@@ -80,7 +80,9 @@ static void update(void *memory,const af_game_host *host,double delta){
 #endif
         restart(s,host,true);present(s,host);return;}
 #ifdef AF_TOOLBOX_GAME
-#ifdef AF_PHYSICS_GAME
+#ifdef AF_MECHANICAL_GAME
+    const char *simple_scene="mesh-room",*course_scene="mechanical-playground",*prefab="physics-crate";
+#elif defined(AF_PHYSICS_GAME)
     const char *simple_scene="physics-drop",*course_scene="physics-playground",*prefab="physics-crate";
 #else
     const char *simple_scene="toolbox",*course_scene="toolbox-course",*prefab="crate";

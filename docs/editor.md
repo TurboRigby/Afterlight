@@ -202,3 +202,16 @@ the viewport toolbar to see awake/sleeping bodies, velocity vectors and contact
 normals. Performance shows physics CPU time and counts. Pause and **Step 1/60**
 advance the actual solver. Stop restores the authored scene. See
 [the physics rooms and limits](development-013.md).
+
+## Mesh collision and joints (0.14)
+
+For a static imported model primitive, choose **Imported mesh** in Collider. The
+editor prepares its CPU BVH and retains the prior collider if cooking fails.
+Collider debug displays the first 256 triangles.
+
+Select a dynamic box/sphere, expand **Joints**, and add a distance or hinge
+constraint. Body A is the selected creator; Body B can be another collider or
+world. Edit anchors in body units, hinge axes and perpendicular zero references,
+and optional degree limits. **Physics** overlays draw anchors, axes, reference
+rays and limit arcs in Edit and Play. Edits/deletion support undo and redo.
+See [the full physics contract](development-014.md).

@@ -83,7 +83,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         af_world_collider shape;
         if (!af_scene_world_collider(s, o->id, &shape)) {
             if ((o->body.enabled && o->body.type == AF_BODY_DYNAMIC)||o->collider.type==AF_COLLIDER_MESH)
-                return fail(p, "Dynamic collider has no valid world shape.");
+                return fail(p, "Collider has no prepared, valid world shape.");
             continue;
         }
         if (shape.trigger)
@@ -158,6 +158,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         }
         b.config = o->body;
         b.config.type = type;
+        if(old&&old->shape.mesh!=shape.mesh)p->cache_count=0;
         b.shape = shape;
         b.published = o->transform;
         b.inv_mass = type == AF_BODY_DYNAMIC ? 1 / o->body.mass : 0;

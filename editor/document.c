@@ -7,6 +7,7 @@
 #include "document.h"
 #include <afterlight/prefab.h>
 #include <afterlight/model.h>
+#include <afterlight/collision_mesh.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -299,7 +300,7 @@ bool ed_document_create_mesh_object(ed_document *d,const char *mesh){
 bool ed_document_collider(ed_document *d,af_collider collider){
     const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;
     af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_object_collider(next,d->selection,collider)){af_scene_destroy(next);status(d,"Invalid collider dimensions or layer.");return false;}return commit(d,next,d->selection,30);
+    if(!af_scene_set_object_collider(next,d->selection,collider)){af_scene_destroy(next);status(d,"Invalid collider dimensions or layer.");return false;}if(collider.type==AF_COLLIDER_MESH){af_asset_error e;if(!af_scene_prepare_collision_meshes(next,&e)){af_scene_destroy(next);status(d,e.message);return false;}}return commit(d,next,d->selection,30);
 }
 
 bool ed_document_gameplay(ed_document *d,af_gameplay_component component){
@@ -341,5 +342,26 @@ bool ed_document_prefab(ed_document *d,const char *path){af_scene *next=af_scene
 
 bool ed_document_body(ed_document *d,af_rigid_body body){const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;if(!memcmp(&o->body,&body,sizeof(body)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_body(next,d->selection,body)){af_scene_destroy(next);status(d,"Dynamic bodies need centered root sphere/box colliders and valid mass/settings.");return false;}return commit(d,next,d->selection,47);}
 
-bool ed_document_joint(ed_document *d,af_joint j){af_scene *next=af_scene_clone(d->scene);if(!next)return false;bool ok=j.id?af_scene_set_joint(next,j.id,j):af_scene_add_joint(next,j)!=0;if(!ok){af_scene_destroy(next);status(d,"Joint needs valid collider endpoints, one dynamic body and perpendicular unit axes.");return false;}return commit(d,next,d->selection,48);}
-bool ed_document_remove_joint(ed_document *d,af_joint_id id){af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_remove_joint(next,id)){af_scene_destroy(next);return false;}ed_document_end_edit(d);return commit(d,next,d->selection,49);}
+bool ed_document_joint(ed_document *d, af_joint j) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    bool ok = j.id ? af_scene_set_joint(next, j.id, j) : af_scene_add_joint(next, j) != 0;
+    if (!ok) {
+        af_scene_destroy(next);
+        status(d, "Joint needs valid collider endpoints, one dynamic body and perpendicular unit axes.");
+        return false;
+    }
+    return commit(d, next, d->selection, 48);
+}
+bool ed_document_remove_joint(ed_document *d, af_joint_id id) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_remove_joint(next, id)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    ed_document_end_edit(d);
+    return commit(d, next, d->selection, 49);
+}
