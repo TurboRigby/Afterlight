@@ -8,6 +8,7 @@
 #include <afterlight/scene.h>
 #include <math.h>
 #include <float.h>
+#include "triangle_collision.h"
 static float clamp(float x,float a,float b){return fminf(b,fmaxf(a,x));}
 static bool finite3(af_vec3 v){return isfinite(v.x)&&isfinite(v.y)&&isfinite(v.z);}
 static af_vec3 point(af_mat4 m,af_vec3 p){af_vec4 q=af_mat4_transform(m,(af_vec4){p.x,p.y,p.z,1});return (af_vec3){q.x,q.y,q.z};}
@@ -63,6 +64,7 @@ static void segment_box(af_vec3 a,af_vec3 b,af_vec3 half,af_vec3 *segment,af_vec
 static af_vec3 box_local(af_world_collider box,af_vec3 p){p=af_vec3_sub(p,box.center);return (af_vec3){af_vec3_dot(p,box.axes[0]),af_vec3_dot(p,box.axes[1]),af_vec3_dot(p,box.axes[2])};}
 static af_vec3 box_vector(af_world_collider box,af_vec3 p){return af_vec3_add(af_vec3_scale(box.axes[0],p.x),af_vec3_add(af_vec3_scale(box.axes[1],p.y),af_vec3_scale(box.axes[2],p.z)));}
 static float capsule_distance(af_world_collider target,af_vec3 center,float radius,float half_height,af_collision_hit *hit){
+    if(target.type==AF_COLLIDER_MESH)return tc_mesh_distance(target,center,radius,half_height,hit);
     af_vec3 a=af_vec3_add(center,(af_vec3){0,-half_height,0}),b=af_vec3_add(center,(af_vec3){0,half_height,0}),one,two,normal;float separation;
     if(target.type==AF_COLLIDER_BOX){
         af_vec3 la=box_local(target,a),lb=box_local(target,b);segment_box(la,lb,target.half_extents,&one,&two);af_vec3 delta=af_vec3_sub(one,two);float distance=af_vec3_length(delta);
@@ -87,12 +89,13 @@ size_t af_scene_overlap_capsule(const af_scene *scene,af_vec3 center,float radiu
     return count;
 }
 size_t af_scene_overlap_sphere(const af_scene *scene,af_vec3 center,float radius,af_query_filter filter,af_collision_hit *hits,size_t capacity){return af_scene_overlap_capsule(scene,center,radius,0,filter,hits,capacity);}
-bool af_collider_sweep_sphere(af_world_collider target,af_vec3 center,float radius,af_vec3 displacement,float skin,af_collision_hit *out){float speed=af_vec3_length(displacement);if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(skin)||skin<0)return false;float t=0;af_collision_hit hit={0};for(unsigned i=0;i<40&&t<=1;++i){float distance=capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,0,&hit),approach=-af_vec3_dot(displacement,hit.normal);if(distance<=skin+.00001f){if(t==0&&approach<=1e-7f)return false;hit.fraction=t;hit.distance=t*speed;*out=hit;return true;}if(approach<=1e-8f)return false;t+=fmaxf((distance-skin)/approach,.000001f);}return false;}
+bool af_collider_sweep_sphere(af_world_collider target,af_vec3 center,float radius,af_vec3 displacement,float skin,af_collision_hit *out){float speed=af_vec3_length(displacement);if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(skin)||skin<0)return false;if(target.type==AF_COLLIDER_MESH)return tc_mesh_sweep(target,center,radius,0,displacement,skin,out);float t=0;af_collision_hit hit={0};for(unsigned i=0;i<40&&t<=1;++i){float distance=capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,0,&hit),approach=-af_vec3_dot(displacement,hit.normal);if(distance<=skin+.00001f){if(t==0&&approach<=1e-7f)return false;hit.fraction=t;hit.distance=t*speed;*out=hit;return true;}if(approach<=1e-8f)return false;t+=fmaxf((distance-skin)/approach,.000001f);}return false;}
 bool af_scene_sweep_capsule(const af_scene *scene,af_vec3 center,float radius,float half_height,af_vec3 displacement,float skin,af_query_filter filter,af_collision_hit *out){
     float speed=af_vec3_length(displacement);
     if(!out||!finite3(center)||!finite3(displacement)||!isfinite(speed)||speed<1e-8f||!isfinite(radius)||radius<=0||!isfinite(half_height)||half_height<0||!isfinite(skin)||skin<0)return false;
     bool found=false;float closest=1.00001f;af_collision_hit best={0};
     for(size_t i=0;i<af_scene_object_count(scene);++i){af_world_collider target;if(!af_scene_world_collider(scene,af_scene_object_at(scene,i)->id,&target)||!matches(target,filter))continue;
+        if(target.type==AF_COLLIDER_MESH){af_collision_hit hit;if(tc_mesh_sweep(target,center,radius,half_height,displacement,skin,&hit)&&hit.fraction<closest){best=hit;closest=hit.fraction;found=true;}continue;}
         float t=0;af_collision_hit hit={0};
         for(unsigned iteration=0;iteration<40&&t<=1&&t<closest;++iteration){
             float separation=capsule_distance(target,af_vec3_add(center,af_vec3_scale(displacement,t)),radius,half_height,&hit),approach=-af_vec3_dot(displacement,hit.normal);
@@ -108,6 +111,7 @@ bool af_scene_raycast(const af_scene *scene,af_vec3 origin,af_vec3 direction,flo
     float length=af_vec3_length(direction);if(!out||!finite3(origin)||!finite3(direction)||!isfinite(length)||length<1e-7f||!isfinite(maximum)||maximum<0)return false;direction=af_vec3_scale(direction,1/length);bool found=false;
     for(size_t i=0;i<af_scene_object_count(scene);++i){af_world_collider target;if(!af_scene_world_collider(scene,af_scene_object_at(scene,i)->id,&target)||!matches(target,filter))continue;
         float t=FLT_MAX;af_vec3 normal=af_vec3_scale(direction,-1);bool hit=false;
+        if(target.type==AF_COLLIDER_MESH){af_collision_hit mesh_hit;if(tc_mesh_ray(target,origin,direction,maximum,&mesh_hit)){maximum=mesh_hit.distance;*out=mesh_hit;found=true;}continue;}
         if(target.type==AF_COLLIDER_BOX){af_vec3 p=box_local(target,origin);float o[]={p.x,p.y,p.z},d[]={af_vec3_dot(direction,target.axes[0]),af_vec3_dot(direction,target.axes[1]),af_vec3_dot(direction,target.axes[2])},h[]={target.half_extents.x,target.half_extents.y,target.half_extents.z};float near=0,far=maximum;hit=true;
             for(unsigned k=0;k<3;++k){if(fabsf(d[k])<1e-9f){if(o[k]< -h[k]||o[k]>h[k])hit=false;continue;}float a=(-h[k]-o[k])/d[k],b=(h[k]-o[k])/d[k];af_vec3 n=af_vec3_scale(target.axes[k],d[k]>0?-1:1);if(a>b){float temp=a;a=b;b=temp;}if(a>near){near=a;normal=n;}far=fminf(far,b);if(near>far)hit=false;}t=near;
         }else if(target.type==AF_COLLIDER_SPHERE){hit=ray_sphere(origin,direction,target.center,target.radius,&t);if(hit&&t>0)normal=safe_normal(af_vec3_sub(af_vec3_add(origin,af_vec3_scale(direction,t)),target.center));}

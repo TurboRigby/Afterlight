@@ -69,6 +69,7 @@ add_library(afterlight STATIC
     engine/src/locomotion_player.c
     engine/src/collision.c
     engine/src/collision_mesh.c
+    engine/src/triangle_collision.c
     engine/src/simulation.c
     engine/src/mipmap.c
     engine/src/asset.c
@@ -466,6 +467,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_mesh_queries_test tests/mesh_queries.c)
+    target_include_directories(afterlight_mesh_queries_test PRIVATE engine/src)
+    target_link_libraries(afterlight_mesh_queries_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_mesh_queries_test)
+    add_test(NAME afterlight.mesh_queries COMMAND afterlight_mesh_queries_test )
     add_executable(afterlight_collision_mesh_test tests/collision_mesh.c)
     target_include_directories(afterlight_collision_mesh_test PRIVATE engine/src)
     target_link_libraries(afterlight_collision_mesh_test PRIVATE Afterlight::Engine)
