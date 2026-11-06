@@ -5,6 +5,7 @@
  */
 
 #include "document.h"
+#include <afterlight/prefab.h>
 #include <afterlight/model.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -333,3 +334,5 @@ bool ed_document_animation(ed_document *d,af_object_id id,af_animation_component
 }
 
 bool ed_document_rig(ed_document *d,af_object_id id,af_character_rig rig){const af_scene_object *o=af_scene_get_object(d->scene,id);if(!o||!af_character_rig_valid(rig))return false;if(!memcmp(&o->rig,&rig,sizeof(rig)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_character_rig(next,id,rig)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);}
+
+bool ed_document_prefab(ed_document *d,const char *path){af_scene *next=af_scene_clone(d->scene);if(!next)return false;af_scene_error e;af_object_id root;if(!af_prefab_instantiate(next,path,0,af_transform_identity(),&root,&e)){snprintf(d->status,sizeof(d->status),"%s",e.message);af_scene_destroy(next);return false;}return commit(d,next,root,0);}

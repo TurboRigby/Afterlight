@@ -38,6 +38,7 @@ bool ed_document_name(ed_document *document, const char *name);
 bool ed_document_mesh(ed_document *document, const char *mesh);
 bool ed_document_visible(ed_document *document, bool visible);
 bool ed_document_add_cube(ed_document *document);
+bool ed_document_prefab(ed_document*,const char*);
 bool ed_document_duplicate(ed_document *document);
 bool ed_document_delete(ed_document *document);
 bool ed_document_import_mesh(ed_document *document,const char *name,const char *path);

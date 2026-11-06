@@ -53,6 +53,7 @@ add_library(afterlight STATIC
     engine/src/audio.c
     engine/src/gameplay.c
     engine/src/rig.c
+    engine/src/prefab.c
     engine/src/input.c
     engine/src/project.c
     engine/src/game_host.c
@@ -418,6 +419,10 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_prefab_test tests/prefab.c)
+    target_link_libraries(afterlight_prefab_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_prefab_test)
+    add_test(NAME afterlight.prefab COMMAND afterlight_prefab_test)
     add_executable(afterlight_input_test tests/input.c)
     target_link_libraries(afterlight_input_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_input_test)

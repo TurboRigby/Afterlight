@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
+#include <afterlight/prefab.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,7 +63,7 @@ typedef struct editor {
     bool free_camera,resume_game_capture,maximize_play;
     bool invalid_name;
     bool failed;
-    bool show_performance,show_assets,show_colliders,show_input;char input_path[4096];
+    bool show_performance,show_assets,show_colliders,show_input,show_prefab;char prefab_path[4096];char input_path[4096];
     bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
     bool show_animation,animation_preview,show_skeleton;af_object_id animation_target;float animation_blend;
     const char *animation_test_path;unsigned animation_test_step;uint64_t animation_test_revision;double animation_test_time;af_rect animation_buttons[3];
@@ -284,8 +285,8 @@ static void keyboard(editor *app,double delta)
     }
     if(modifier)return;
     af_vec2 mouse=af_engine_mouse_position(engine);
-    const char *floating[]={"Performance","Assets","Project","Animation","HDR import","Input actions"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_animation,app->environment_pending,app->show_input};
-    for(unsigned i=0;i<5;++i)if(open[i]){struct nk_window *panel=nk_window_find(&app->gui.context,floating[i]);
+    const char *floating[]={"Performance","Assets","Project","Animation","HDR import","Input actions","Prefabs"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_animation,app->environment_pending,app->show_input,app->show_prefab};
+    for(size_t i=0;i<sizeof(open)/sizeof(open[0]);++i)if(open[i]){struct nk_window *panel=nk_window_find(&app->gui.context,floating[i]);
         if(panel&&nk_input_is_mouse_hovering_rect(&app->gui.context.input,panel->bounds))return;}
     if(!app->runtime.playing&&inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_LEFT)&&!af_engine_mouse_captured(engine)){
         ed_gui_unfocus(&app->gui);app->fields_active=false;
@@ -925,6 +926,10 @@ static void input_panel(editor *app){if(!app->show_input)return;struct nk_contex
     if(!app->input_path[0])snprintf(app->input_path,sizeof(app->input_path),"input.json");nk_layout_row_dynamic(ctx,28,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->input_path,sizeof(app->input_path),nk_filter_default);
     nk_layout_row_dynamic(ctx,30,3);af_asset_error error;if(nk_button_label(ctx,"Save bindings")){bool ok=af_engine_save_input_map(app->engine,app->input_path,&error);snprintf(app->document.status,sizeof(app->document.status),"%s",ok?"Input bindings saved.":error.message);}if(nk_button_label(ctx,"Load bindings")){bool ok=af_engine_load_input_map(app->engine,app->input_path,&error);snprintf(app->document.status,sizeof(app->document.status),"%s",ok?"Input bindings loaded.":error.message);}if(nk_button_label(ctx,"Close"))app->show_input=false;
 }nk_end(ctx);}
+static void prefab_panel(editor *app){if(!app->show_prefab)return;struct nk_context *ctx=&app->gui.context;if(nk_begin(ctx,"Prefabs",nk_rect(280,160,550,220),NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MOVABLE)){
+    if(!app->prefab_path[0])snprintf(app->prefab_path,sizeof(app->prefab_path),"object.afterlight.prefab");label(ctx,"Save a selected hierarchy or add an independent instance.",26);nk_layout_row_dynamic(ctx,28,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->prefab_path,sizeof(app->prefab_path),nk_filter_default);
+    nk_layout_row_dynamic(ctx,32,2);if(app->runtime.playing)nk_widget_disable_begin(ctx);if(nk_button_label(ctx,"Save selected hierarchy")){af_scene_error e;bool ok=af_prefab_save(app->document.scene,app->document.selection,app->document.path[0]?app->document.path:NULL,app->prefab_path,&e);set_status(app,ok?"Prefab saved.":e.message);}if(nk_button_label(ctx,"Instantiate prefab")&&ed_document_prefab(&app->document,app->prefab_path)){load_assets(app);refresh(app);}if(app->runtime.playing)nk_widget_disable_end(ctx);nk_layout_row_dynamic(ctx,28,1);if(nk_button_label(ctx,"Close"))app->show_prefab=false;
+}nk_end(ctx);}
 static void build_ui(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
@@ -935,12 +940,13 @@ static void build_ui(editor *app,float width,float height)
     nk_style_push_vec2(context,&context->style.window.padding,nk_vec2(14,5));
     if(!app->runtime.playing||!app->maximize_play){
     if(nk_begin(context,"Viewport tools",nk_rect(252,64,width-586,40),panel_flags(app)|NK_WINDOW_NO_SCROLLBAR)){
-        nk_layout_row_dynamic(context,22,8);
+        nk_layout_row_dynamic(context,22,9);
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_MOVE?"[Move]":"Move"))app->gizmo.mode=ED_GIZMO_MOVE;
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_ROTATE?"[Rotate]":"Rotate"))app->gizmo.mode=ED_GIZMO_ROTATE;
         if(nk_button_label(context,app->gizmo.mode==ED_GIZMO_SCALE?"[Scale]":"Scale"))app->gizmo.mode=ED_GIZMO_SCALE;
         nk_bool snap=app->gizmo.snap;nk_checkbox_label(context,"Snap",&snap);app->gizmo.snap=snap!=0;
         if(nk_button_label(context,app->show_colliders?"[Colliders]":"Colliders"))app->show_colliders=!app->show_colliders;
+        if(nk_button_label(context,"Prefabs"))app->show_prefab=!app->show_prefab;
         if(nk_button_label(context,"Input"))app->show_input=!app->show_input;
         if(nk_button_label(context,"Reset view"))reset_camera(app);
         if(nk_button_label(context,"Project"))app->show_project=!app->show_project;
@@ -960,7 +966,7 @@ static void build_ui(editor *app,float width,float height)
     nk_style_pop_vec2(context);
     performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);
     af_engine_set_scene(app->engine,app->runtime.playing?app->runtime.scene:app->document.scene);
-    animation_panel(app,width,height);input_panel(app);
+    animation_panel(app,width,height);input_panel(app);prefab_panel(app);
     if(app->modal){
         if(nk_begin(context,"Unsaved changes",nk_rect((width-500)/2,(height-205)/2,500,205),NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR)){
             nk_layout_row_dynamic(context,58,1);nk_label_wrap(context,"Save your changes before continuing? Discard keeps the last saved file unchanged.");

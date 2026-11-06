@@ -8,6 +8,7 @@
 #define AFTERLIGHT_GAME_MODULE_H
 #include <afterlight/afterlight.h>
 #include <afterlight/third_person.h>
+#include <afterlight/prefab.h>
 #define AF_GAME_ABI_VERSION 11u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
@@ -22,6 +23,8 @@ typedef struct af_game_host {
     af_scene *scene;
     af_engine *engine;
     bool input_enabled,camera_enabled;
+    bool (*instantiate_prefab)(af_scene*,const char*,af_object_id,af_transform,af_object_id*,af_scene_error*);
+    bool (*load_scene_assets)(af_engine*,const af_scene*,af_asset_error*);
     float (*action_value)(const struct af_game_host*,const char*);
     bool (*action_pressed)(const struct af_game_host*,const char*);
     bool (*key_down)(const struct af_game_host*,af_key);

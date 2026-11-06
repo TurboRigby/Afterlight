@@ -25,3 +25,16 @@ The editor Input panel changes bindings and saves/loads JSON maps. Games can
 load maps with `af_engine_load_input_map`; custom actions use `af_engine_bind_action`.
 Stick look is converted into per-frame pixel-equivalent motion. Physical
 controller hardware is not required for the CPU mapping regressions.
+
+## Prefabs
+
+`prefab.h` saves a selected hierarchy and referenced assets as a single-root
+scene file (`.afterlight.prefab`). Instantiation allocates fresh IDs and remaps
+parents, spawn references and rig bindings. Conflicting asset names are aliased;
+matching absolute assets are shared. Placement overrides the instance root TRS.
+Instances are independent editable copies; source changes do not propagate.
+External spawn/rig references are rejected, and a failed instance changes nothing.
+Use the editor Prefabs panel to save or instantiate through undo history. C games
+can instantiate through the host and then call `load_scene_assets` before drawing.
+The CPU limit is 4096 objects per prefab. This is explicit instancing, not a live
+prefab override/inheritance system.

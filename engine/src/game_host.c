@@ -13,7 +13,7 @@ static bool key_pressed(const af_game_host *host,af_key key){return host->input_
 static void log_message(const char *text){if(text)fprintf(stdout,"[game] %s\n",text);}
 af_game_host af_game_host_create(af_scene *scene,af_engine *engine){
     return (af_game_host){.abi_version=AF_GAME_ABI_VERSION,.struct_size=sizeof(af_game_host),.scene=scene,.engine=engine,.camera_enabled=true,
-        .action_value=action_value,.action_pressed=action_pressed,.key_down=key_down,.object_count=af_scene_object_count,.object_at=af_scene_object_at,.get_object=af_scene_get_object,.add_object=af_scene_add_object,
+        .instantiate_prefab=af_prefab_instantiate,.load_scene_assets=af_engine_load_scene_assets,.action_value=action_value,.action_pressed=action_pressed,.key_down=key_down,.object_count=af_scene_object_count,.object_at=af_scene_object_at,.get_object=af_scene_get_object,.add_object=af_scene_add_object,
         .remove_object=af_scene_remove_object,.set_transform=af_scene_set_object_transform,.set_material=af_scene_set_object_material,.set_parent=af_scene_set_parent,.log=log_message,
         .local_light_count=af_scene_local_light_count,.local_light_at=af_scene_local_light_at,.add_local_light=af_scene_add_local_light,.set_local_light=af_scene_set_local_light,.remove_local_light=af_scene_remove_local_light,.set_light=af_scene_set_light,.set_render_settings=af_scene_set_render_settings,
         .key_pressed=key_pressed,.mouse_delta=af_engine_mouse_delta,.mouse_pressed=af_engine_mouse_pressed,.mouse_in_viewport=af_engine_mouse_in_viewport,.mouse_captured=af_engine_mouse_captured,.capture_mouse=af_engine_set_mouse_capture,.set_camera=af_engine_set_camera,.reset_interpolation=af_engine_reset_interpolation,
