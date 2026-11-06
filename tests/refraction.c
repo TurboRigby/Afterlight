@@ -138,15 +138,46 @@ static void update(af_engine *e, double dt, void *data) {
             af_scene_destroy(copy);
             remove("refraction.json");
         }
+        {
+            const af_rect viewport = {20, 20, 240, 180};
+            af_engine_set_viewport(e, &viewport);
+        }
+        break;
+    case 7:
+        CHECK(p[1] > 150 && p[0] < 80);
+        w.ior = 1;
+        break;
+    case 8:
+        CHECK(p[0] > 150 && p[1] < 80);
+        w.ior = 1.5f;
+        r.refraction = false;
+        break;
+    case 9:
+        CHECK(p[0] > 150 && p[1] < 80);
+        r.refraction = true;
+        {
+            const af_rect viewport = {210, 120, 240, 180};
+            af_engine_set_viewport(e, &viewport);
+        }
+        break;
+    case 10:
+        CHECK(p[1] > 150 && p[0] < 80);
+        w.ior = 1;
+        break;
+    case 11:
+        CHECK(p[0] > 150 && p[1] < 80);
         puts("Refraction: submerged stripes shift with IOR, foreground rejection, toggle/strength, "
-             "resize and persistence pass.");
+             "resize, inset/moved viewports and persistence pass.");
         af_engine_request_quit(e);
         return;
     default:
         CHECK(false);
     }
     CHECK(af_scene_set_water(s->scene, s->owner, w) && af_scene_set_render_settings(s->scene, r));
-    af_vec2 point = s->phase >= 5 ? (af_vec2){240, 160} : (af_vec2){200, 150};
+    af_vec2 point = s->phase >= 9   ? (af_vec2){330, 210}
+                    : s->phase >= 6 ? (af_vec2){140, 110}
+                    : s->phase >= 5 ? (af_vec2){240, 160}
+                                    : (af_vec2){200, 150};
     CHECK(af_engine_test_capture_pixel(e, point));
     ++s->phase;
 }
@@ -169,5 +200,5 @@ int main(void) {
     int result = af_engine_run(e, &g);
     af_engine_stats stats = af_engine_get_stats(e);
     af_engine_destroy(e);
-    return result || s.failed || s.phase != 6 || stats.validation_errors ? 1 : 0;
+    return result || s.failed || s.phase != 11 || stats.validation_errors ? 1 : 0;
 }

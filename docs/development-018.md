@@ -99,6 +99,11 @@ transmitted color. Pixel tests verify shifted underwater stripes, IOR, foregroun
 rejection, strength/toggle, resize and saved settings. Water/underwater, alpha and
 material regressions pass with Vulkan synchronization validation.
 
+Editor refraction maps projected viewport coordinates into the full-window
+snapshot before computing the distortion offset. This fixes displaced/duplicated
+geometry when the 3D view is inset between editor panels. Pixel regressions cover
+full-window, inset and moved viewports, including straight transmission at IOR 1.
+
 `run_water-course_editor` starts the first-person swim/raft course;
 `run_water-expedition_editor` adds a river, cargo, another raft and a lab where
 50 litres must reach the receiving cup before finishing. `_player` variants are

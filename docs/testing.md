@@ -268,7 +268,9 @@ allow splashes and account for escaped volume. `swimming` compares 30/60/144 Hz
 entry, surface balance, diving, jumping, walls and currents. `underwater` and
 `refraction` inspect actual Vulkan pixels for medium transitions, region bounds,
 IOR-dependent geometry shifts, foreground rejection, strength, resize and saved
-settings. Existing water Play also verifies streaming without mesh-wide waits.
+settings. Refraction also covers inset and moved editor-style viewports, with
+IOR 1 preserving the undistorted image. Existing water Play verifies streaming
+without mesh-wide waits.
 
 `water_course_scene` runs both authored maps and transfers real particle volume
 through the expedition chute. `water_course` drives the C module through actual

@@ -167,7 +167,24 @@ void main(){
     if(((uint(draw.params.x)&1u)==0u))output_rgb+=environment_light(base.rgb,n,v,roughness,metal);
     if(water&&frame.render_params.z>0)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*textureLod(irradiance_map,environment_uv(n),0).rgb*frame.render_params.z;
     vec3 transmitted_scene=vec3(0);
-    if(water&&(uint(draw.params.x)&(1u<<22u))!=0u){vec2 screen=gl_FragCoord.xy/frame.water_screen.xy;vec3 ray=refract(-v,n,1.0/max(draw.emission.w,1.0001));vec4 projected=frame.view_projection*vec4(world_position+ray*draw.surface.z,1);vec2 offset=projected.w>0?(projected.xy/projected.w*.5+.5-screen)*frame.water_screen.z:vec2(0);vec2 pixel=.5/frame.water_screen.xy;vec2 lo=frame.water_viewport.xy+pixel,hi=frame.water_viewport.zw-pixel;vec2 coordinate=clamp(screen+offset,min(lo,hi),max(lo,hi));if(texture(opaque_depth,coordinate).r+0.0001<gl_FragCoord.z)coordinate=screen;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);transmitted_scene=texture(refracted_scene,coordinate).rgb*water_transmission(n,v)*(1.0-f);}
+    if(water&&(uint(draw.params.x)&(1u<<22u))!=0u){
+        vec2 screen=gl_FragCoord.xy/frame.water_screen.xy;
+        vec3 ray=refract(-v,n,1.0/max(draw.emission.w,1.0001));
+        vec4 projected=frame.view_projection*vec4(world_position+ray*draw.surface.z,1);
+        vec2 offset=vec2(0);
+        if(projected.w>0){
+            // Projection UVs cover the 3D viewport; snapshot UVs cover the whole window.
+            vec2 viewport_uv=projected.xy/projected.w*.5+.5;
+            vec2 projected_screen=mix(frame.water_viewport.xy,frame.water_viewport.zw,viewport_uv);
+            offset=(projected_screen-screen)*frame.water_screen.z;
+        }
+        vec2 pixel=.5/frame.water_screen.xy;
+        vec2 lo=frame.water_viewport.xy+pixel,hi=frame.water_viewport.zw-pixel;
+        vec2 coordinate=clamp(screen+offset,min(lo,hi),max(lo,hi));
+        if(texture(opaque_depth,coordinate).r+0.0001<gl_FragCoord.z)coordinate=screen;
+        float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);
+        transmitted_scene=texture(refracted_scene,coordinate).rgb*water_transmission(n,v)*(1.0-f);
+    }
     if(!water)output_rgb+=draw.emission.rgb*draw.emission.w;
     float depth=dot(world_position-frame.camera_position.xyz,frame.camera_forward.xyz);
     if(frame.cascade_params.w>0.5&&frame.shadow_params.x>0.5&&depth>=0&&depth<=frame.cascade_splits[int(frame.cascade_params.x)-1]){
