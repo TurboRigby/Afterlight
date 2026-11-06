@@ -33,4 +33,21 @@ af_vec4 af_quaternion_slerp(af_vec4 a,af_vec4 b,float t);
 af_vec4 af_quaternion_from_euler(af_vec3 radians);
 af_mat4 af_animation_pose_matrix(af_animation_pose pose);
 bool af_animation_world_matrices(const af_animation_file *file,const af_animation_pose *poses,af_mat4 *world,size_t capacity);
+/* Owned playback buffers; initialize with default and destroy once. Do not
+   copy a live player by value. File data remains borrowed for each call. */
+typedef struct af_animation_player {
+    size_t clip,previous_clip;
+    double time,previous_time;
+    float speed,fade_duration,fade_elapsed;
+    bool playing,loop,finished,fading;
+    af_animation_pose *blend_pose,*frozen_pose;size_t pose_capacity,frozen_count;
+} af_animation_player;
+af_animation_player af_animation_player_default(void);
+void af_animation_player_destroy(af_animation_player *player);
+bool af_animation_player_play(af_animation_player *player,const af_animation_file *file,size_t clip,float blend_seconds);
+bool af_animation_player_seek(af_animation_player *player,const af_animation_file *file,double seconds);
+bool af_animation_player_update(af_animation_player *player,const af_animation_file *file,double delta);
+bool af_animation_player_sample(af_animation_player *player,const af_animation_file *file,af_animation_pose *out,size_t capacity);
+void af_animation_player_pause(af_animation_player *player,bool paused);
+void af_animation_player_stop(af_animation_player *player);
 #endif

@@ -103,3 +103,18 @@ and a cubic translation curve; `scripts/generate_animation_assets.py` rebuilds
 it. Tests verify quaternion/Euler convention agreement, parent accumulation,
 clamping, invalid buffers, nonfinite inputs and duplicate tracks. Sampling
 follows [glTF animation interpolation](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-c-animation-sampler-interpolation-modes).
+
+## 5. Playback
+
+`af_animation_player` owns its reusable blend buffers and borrows animation data
+per call. Initialize with `af_animation_player_default`, then play, pause, seek,
+update and sample; destroy once when finished. Looping wraps in either direction,
+negative speed starts a clip at its end, and non-looping clips hold their endpoint.
+Speed zero holds the current pose. Speed is bounded to [-100,100], transition
+time to [0,10] seconds and a single update to one day of finite nonnegative time.
+
+Crossfades advance both clips and use quaternion SLERP for rotation. Interrupting
+a fade captures its current mixed pose to avoid snapping back to a source clip.
+A short destination clip holds its endpoint while the remaining fade finishes.
+Seeking/stopping clears transitions. Runtime time/temporary buffers are separate
+from saved animation configuration and must not be copied by value.
