@@ -681,3 +681,5 @@ af_object_id af_engine_held_body(const af_engine *e){return af_physics_held(e?e-
 af_water_sample af_engine_sample_water(const af_engine *e,af_vec3 p){return af_physics_sample_water(e?e->physics:NULL,e?e->scene:NULL,p);}
 bool af_engine_disturb_water(af_engine *e,af_object_id id,af_vec3 p,float radius,float velocity){return e&&af_physics_disturb_water(e->physics,e->scene,id,p,radius,velocity);}
 af_water_stats af_engine_water_stats(const af_engine *e){return af_physics_water_stats(e?e->physics:NULL);}
+
+size_t af_engine_water_particles(const af_engine *e,af_object_id id,af_water_particle *out,size_t cap){return af_physics_water_particles(e?e->physics:NULL,id,out,cap);}

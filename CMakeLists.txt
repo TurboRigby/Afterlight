@@ -56,6 +56,8 @@ add_library(afterlight STATIC
     engine/src/body.c
     engine/src/water.c
     engine/src/water_io.c
+    engine/src/water_particles.c
+    engine/src/water_particle_mesh.c
     engine/src/water_river.c
     engine/src/water_runtime.c
     engine/src/physics_water.c
@@ -389,7 +391,7 @@ else()
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${animations_scene}" "${PROJECT_BINARY_DIR}/scenes/animations.afterlight.json")
     add_dependencies(afterlight_editor afterlight_animation_scene_copy)
 endif()
-foreach(sample demo playground mechanism animations character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake water-stream water-river-bend)
+foreach(sample demo playground mechanism animations character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake water-stream water-river-bend water-pour water-pour-lab)
     if(sample STREQUAL "demo")
         set(project_scene "${sandbox_scene}")
         set(project_module afterlight_game)
@@ -458,7 +460,7 @@ add_custom_target(run_lighting_editor COMMAND $<TARGET_FILE:afterlight_editor> -
 add_custom_target(run_mechanism_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/mechanism.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
 add_custom_target(run_animation_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/animations.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
 add_custom_target(run_animation_player COMMAND $<TARGET_FILE:afterlight_player> --project "${PROJECT_BINARY_DIR}/animations.afterlight.project" DEPENDS afterlight_player afterlight_animation_game USES_TERMINAL VERBATIM)
-foreach(sample character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake water-stream water-river-bend)
+foreach(sample character character-course character-stress toolbox toolbox-course physics-drop physics-playground mesh-room mechanical-playground motor-room machinery-playground prop-room prop-workshop water-pool water-lake water-stream water-river-bend water-pour water-pour-lab)
     add_custom_target(run_${sample}_editor COMMAND $<TARGET_FILE:afterlight_editor> --project "${PROJECT_BINARY_DIR}/${sample}.afterlight.project" DEPENDS afterlight_editor USES_TERMINAL VERBATIM)
     if(sample MATCHES "^water-")
         set(sample_game afterlight_water_game)
@@ -547,6 +549,28 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_water_coupling_test tests/water_coupling.c)
+    target_include_directories(afterlight_water_coupling_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_coupling_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_coupling_test)
+    add_test(NAME afterlight.water_coupling COMMAND afterlight_water_coupling_test )
+    add_executable(afterlight_water_demo_test tests/water_demo.c editor/runtime.c)
+    target_include_directories(afterlight_water_demo_test PRIVATE editor sandbox)
+    target_link_libraries(afterlight_water_demo_test PRIVATE Afterlight::Engine SDL3::SDL3)
+    afterlight_warnings(afterlight_water_demo_test)
+    add_dependencies(afterlight_water_demo_test afterlight_water_game)
+    add_test(NAME afterlight.water_demo COMMAND afterlight_water_demo_test "${PROJECT_SOURCE_DIR}/sandbox/scenes" "$<TARGET_FILE:afterlight_water_game>" "${PROJECT_BINARY_DIR}/water-pool.afterlight.project")
+    set_tests_properties(afterlight.water_demo PROPERTIES TIMEOUT 90 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_executable(afterlight_water_particle_limits_test tests/water_particle_limits.c)
+    target_include_directories(afterlight_water_particle_limits_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_particle_limits_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_particle_limits_test)
+    add_test(NAME afterlight.water_particle_limits COMMAND afterlight_water_particle_limits_test )
+    add_executable(afterlight_water_particles_test tests/water_particles.c)
+    target_include_directories(afterlight_water_particles_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_particles_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_particles_test)
+    add_test(NAME afterlight.water_particles COMMAND afterlight_water_particles_test )
     add_executable(afterlight_water_channel_test tests/water_channel.c)
     target_include_directories(afterlight_water_channel_test PRIVATE engine/src)
     target_link_libraries(afterlight_water_channel_test PRIVATE Afterlight::Engine)
@@ -992,6 +1016,8 @@ if(BUILD_TESTING)
 
 
 
+    add_test(NAME afterlight.water_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/water_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_water_game>" --play-test "$<TARGET_FILE:afterlight_water_demo_test>" ${package_test_flags})
+    set_tests_properties(afterlight.water_export PROPERTIES TIMEOUT 180 LABELS "graphics;packaging")
     add_test(NAME afterlight.compound_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/physics_export.py" --compound --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_compound_game>" --play-test "$<TARGET_FILE:afterlight_compound_demo_test>" ${package_test_flags})
     set_tests_properties(afterlight.compound_export PROPERTIES TIMEOUT 300 LABELS "graphics;packaging" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
     add_test(NAME afterlight.machinery_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/physics_export.py" --machinery --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_machinery_game>" --play-test "$<TARGET_FILE:afterlight_machinery_demo_test>" ${package_test_flags})

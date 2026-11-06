@@ -1,13 +1,15 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "water_internal.h"
+#include "cJSON.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-static const char *fields[] = {"owner",      "enabled",    "mode",       "quality",    "half_size",
-                               "depth",      "density",    "drag",       "wave_speed", "damping",
-                               "wind",       "absorption", "scattering", "roughness",  "ior",
-                               "flow_speed", "path"};
+static const char *fields[] = {
+    "owner",          "enabled",       "mode",       "quality",          "half_size", "depth",
+    "density",        "drag",          "wave_speed", "damping",          "wind",      "absorption",
+    "scattering",     "roughness",     "ior",        "flow_speed",       "path",      "particle_spacing",
+    "initial_volume", "emission_rate", "viscosity",  "emission_velocity"};
 static bool number(const cJSON *j, float *v) {
     if (!cJSON_IsNumber(j) || !isfinite(j->valuedouble) || fabs(j->valuedouble) > 1e9)
         return false;
@@ -26,8 +28,9 @@ bool wa_decode(af_scene *s, const cJSON *root) {
     const cJSON *array = cJSON_GetObjectItemCaseSensitive(root, "water"), *j;
     if (!cJSON_IsArray(array) || cJSON_GetArraySize(array) > (int)AF_SCENE_MAX_WATERS)
         return false;
-    unsigned fields_count =
-        cJSON_GetObjectItemCaseSensitive(root, "version")->valueint >= 18 ? 17u : 15u;
+    unsigned fields_count = cJSON_GetObjectItemCaseSensitive(root, "version")->valueint >= 19   ? 22u
+                            : cJSON_GetObjectItemCaseSensitive(root, "version")->valueint >= 18 ? 17u
+                                                                                                : 15u;
     cJSON_ArrayForEach(j, array) {
         if (!cJSON_IsObject(j) || cJSON_GetArraySize(j) != (int)fields_count)
             return false;
@@ -45,7 +48,8 @@ bool wa_decode(af_scene *s, const cJSON *root) {
         char *end = NULL;
         if (!cJSON_IsString(id) || !id->valuestring[0] || id->valuestring[0] == '-' ||
             !cJSON_IsBool(enabled) || !cJSON_IsString(mode) ||
-            (strcmp(mode->valuestring, "pool") && strcmp(mode->valuestring, "river")))
+            (strcmp(mode->valuestring, "pool") && strcmp(mode->valuestring, "river") &&
+             strcmp(mode->valuestring, "particles")))
             return false;
         w.owner = strtoull(id->valuestring, &end, 10);
         char canonical[32];
@@ -53,7 +57,9 @@ bool wa_decode(af_scene *s, const cJSON *root) {
         if (!end || *end || !w.owner || strcmp(canonical, id->valuestring) ||
             af_scene_get_water(s, w.owner))
             return false;
-        w.mode = !strcmp(mode->valuestring, "river") ? AF_WATER_RIVER : AF_WATER_POOL;
+        w.mode = !strcmp(mode->valuestring, "particles") ? AF_WATER_PARTICLES
+                 : !strcmp(mode->valuestring, "river")   ? AF_WATER_RIVER
+                                                         : AF_WATER_POOL;
         if (fields_count >= 17) {
             const cJSON *path = cJSON_GetObjectItemCaseSensitive(j, "path");
             if (!number(cJSON_GetObjectItemCaseSensitive(j, "flow_speed"), &w.flow_speed) ||
@@ -68,6 +74,17 @@ bool wa_decode(af_scene *s, const cJSON *root) {
                 w.path[i] = (af_vec3){point[0], point[1], point[2]};
             }
         } else if (w.mode != AF_WATER_POOL)
+            return false;
+        if (fields_count >= 22) {
+            float *v[] = {&w.particle_spacing, &w.initial_volume, &w.emission_rate, &w.viscosity};
+            for (unsigned k = 0; k < 4; ++k)
+                if (!number(cJSON_GetObjectItemCaseSensitive(j, fields[17 + k]), v[k]))
+                    return false;
+            float xyz[3];
+            if (!vec(cJSON_GetObjectItemCaseSensitive(j, "emission_velocity"), xyz, 3))
+                return false;
+            w.emission_velocity = (af_vec3){xyz[0], xyz[1], xyz[2]};
+        } else if (w.mode == AF_WATER_PARTICLES)
             return false;
         w.enabled = cJSON_IsTrue(enabled) != 0;
         float quality;
@@ -115,7 +132,10 @@ bool wa_encode(const af_scene *s, cJSON *root) {
               b[] = {w.scattering.x, w.scattering.y, w.scattering.z};
         if (!cJSON_AddStringToObject(j, "owner", id) ||
             !cJSON_AddBoolToObject(j, "enabled", w.enabled) ||
-            !cJSON_AddStringToObject(j, "mode", w.mode == AF_WATER_RIVER ? "river" : "pool") ||
+            !cJSON_AddStringToObject(j, "mode",
+                                     w.mode == AF_WATER_PARTICLES ? "particles"
+                                     : w.mode == AF_WATER_RIVER   ? "river"
+                                                                  : "pool") ||
             !cJSON_AddNumberToObject(j, "quality", w.quality) || !addvec(j, "half_size", pair, 2) ||
             !addvec(j, "absorption", a, 3) || !addvec(j, "scattering", b, 3))
             return false;
@@ -129,6 +149,13 @@ bool wa_encode(const af_scene *s, cJSON *root) {
             if (!cJSON_AddItemToArray(path, cJSON_CreateFloatArray(point, 3)))
                 return false;
         }
+        float particle_values[] = {w.particle_spacing, w.initial_volume, w.emission_rate, w.viscosity};
+        for (unsigned k = 0; k < 4; ++k)
+            if (!cJSON_AddNumberToObject(j, fields[17 + k], particle_values[k]))
+                return false;
+        float velocity[] = {w.emission_velocity.x, w.emission_velocity.y, w.emission_velocity.z};
+        if (!addvec(j, "emission_velocity", velocity, 3))
+            return false;
         float values[] = {w.depth,   w.density, w.drag,      w.wave_speed,
                           w.damping, w.wind,    w.roughness, w.ior};
         unsigned indexes[] = {5, 6, 7, 8, 9, 10, 13, 14};

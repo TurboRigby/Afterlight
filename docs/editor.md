@@ -247,3 +247,13 @@ is grouped into one undo operation; Escape cancels it. Collider debug outlines
 actual shapes. Dynamic owners require root placement and positive uniform scale;
 individual parts can have different positive scales and orientations. Keep one
 active shape on a dynamic compound. Prefabs and duplication retain ownership.
+
+## Water authoring (0.17)
+
+**Add water** creates a selectable root surface. Its inspector switches between
+pool/lake, river/stream and pourable fluid. Edit dimensions, density, drag,
+quality and optical settings there; use Move/Yaw for placement. Rivers expose
+centerline points and current speed. Particles expose initial volume, spacing,
+emitter rate/velocity and viscosity. Definitions support undo, duplication and
+prefabs. Stop discards simulation state. Water nodes require unit scale and yaw
+rotation; size belongs to the water settings. See the [water guide](development-017.md).

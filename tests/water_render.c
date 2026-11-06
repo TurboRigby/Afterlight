@@ -124,6 +124,23 @@ static void update(af_engine *e, double dt, void *data) {
         CHECK(af_engine_water_stats(e).cells == 4096 && af_engine_water_stats(e).max_wave > 0);
         puts("Water rendering: dark/green sun/red point light, intensity, channel absorption, disable, "
              "high quality and waves passed.");
+        af_engine_set_simulation_paused(e, true);
+        w.mode = AF_WATER_PARTICLES;
+        w.initial_volume = .25f;
+        w.half_size = (af_vec2){.4f, .4f};
+        w.absorption = (af_vec3){1, 1, 1};
+        w.scattering = (af_vec3){.5f, .5f, .5f};
+        l.intensity = 3;
+        l.color = (af_vec3){0, 1, 0};
+        af_engine_set_clear_color(e, (af_color){0, 0, 0, 1});
+        break;
+    case 10:
+        CHECK(p[1] > 20 && p[1] > p[0] + 10);
+        l.intensity = 0;
+        break;
+    case 11:
+        CHECK(p[0] < 3 && p[1] < 3 && p[2] < 3);
+        puts("Pourable surface lighting responds to sun and darkness.");
         af_engine_request_quit(e);
         return;
     default:
@@ -153,5 +170,5 @@ int main(void) {
     int r = af_engine_run(e, &game);
     af_engine_stats stats = af_engine_get_stats(e);
     af_engine_destroy(e);
-    return r || s.failed || s.phase != 9 || stats.validation_errors ? 1 : 0;
+    return r || s.failed || s.phase != 11 || stats.validation_errors ? 1 : 0;
 }

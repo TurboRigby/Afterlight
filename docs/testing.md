@@ -244,3 +244,17 @@ L-prop, compound steps and an open five-part cup with falling payloads. Native
 C Play checks compound prefab spawning, COM consistency, interaction, motor
 controls, reset and hot reload. Exports remove their source, relocate and repeat
 Play. Vulkan validation and sanitizer suites retain all earlier regressions.
+
+## 0.17 water checks
+
+`water_pool` checks equilibrium, sinking and interactive waves at all qualities.
+`water_river` checks slopes, boundaries and downstream drift; `water_scenes` and
+`water_channel` run the simple and harder authored scenes. `water_particles`
+checks cup retention, spilling, conservation and reset; `water_particle_limits`
+checks emission controls, blocked-nozzle stop, capacity, bounded meshes and cleanup.
+`water_coupling` checks bounded momentum transfer to a dynamic thin receiver. `water_data`
+checks saved settings, history, duplication, prefab owner remapping and deletion.
+`water_render` checks actual Vulkan pixels for sun/local-light color and intensity,
+absorption, quality changes and particle lighting. `water_demo` exercises all six
+C demos with pause/single-step and Play isolation. `water_export` removes sources,
+relocates exports and repeats C Play and standalone launches.

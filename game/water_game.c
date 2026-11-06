@@ -4,7 +4,9 @@
 #include <string.h>
 typedef struct water_game {
     af_camera camera;
-    bool hard;
+    bool hard, pouring, tilted;
+    float tilt;
+    af_object_id cup;
     char scene[32];
 } water_game;
 static bool init(void *memory, const af_game_host *h) {
@@ -13,11 +15,18 @@ static bool init(void *memory, const af_game_host *h) {
     bool river = false;
     for (size_t i = 0; i < h->object_count(h->scene); ++i) {
         const af_water *w = h->get_water(h->scene, h->object_at(h->scene, i)->id);
-        if (w)
-            river |= w->mode == AF_WATER_RIVER;
+        if (w) {
+            river |= w->mode == AF_WATER_RIVER;s->hard|=w->quality==AF_WATER_HIGH;
+            s->pouring |= w->mode == AF_WATER_PARTICLES;
+        }
+        const af_scene_object *o = h->object_at(h->scene, i);
+        if (!strcmp(o->name, "Pouring cup"))
+            s->cup = o->id;
     }
     strcpy(s->scene, river ? (s->hard ? "water-river-bend" : "water-stream")
                            : (s->hard ? "water-lake" : "water-pool"));
+    if (s->pouring)
+        strcpy(s->scene, s->hard ? "water-pour-lab" : "water-pour");
     s->camera = (af_camera){.position = {0, 5, 9},
                             .yaw = -AF_PI / 2,
                             .pitch = -.48f,
@@ -25,8 +34,11 @@ static bool init(void *memory, const af_game_host *h) {
                             .near_clip = .08f,
                             .far_clip = 200};
     h->set_camera(h->engine, &s->camera);
-    h->log("Water: right-click captures camera; WASD/QE fly, Space makes ripples, R resets, N switches "
-           "pools. F6 pauses.");
+    h->log(s->pouring ? "Pourable water: right-click fly camera, F tips the lab cup, R resets, N "
+                        "switches labs, F6 pauses."
+                      : "Water: right-click captures camera; WASD/QE fly, Space makes ripples, R "
+                        "resets, N switches "
+                        "pools. F6 pauses.");
     return true;
 }
 static void update(void *memory, const af_game_host *h, double dt) {
@@ -34,6 +46,18 @@ static void update(void *memory, const af_game_host *h, double dt) {
     water_game *s = memory;
     if (!h->input_enabled)
         return;
+    if (s->pouring && s->cup && h->key_pressed(h, AF_KEY_F))
+        s->tilted = !s->tilted;
+    if (s->pouring && s->cup) {
+        const af_scene_object *o = h->get_object(h->scene, s->cup);
+        if (o && o->body.enabled) {
+            float target = s->tilted ? -1.65f : 0, step = (float)dt * .7f;
+            s->tilt += fmaxf(-step, fminf(step, target - s->tilt));
+            af_transform t = o->transform;
+            t.rotation.z = s->tilt;
+            h->set_transform(h->scene, s->cup, t);
+        }
+    }
     if (h->key_pressed(h, AF_KEY_SPACE))
         for (size_t i = 0; i < h->object_count(h->scene); ++i) {
             const af_scene_object *o = h->object_at(h->scene, i);
@@ -44,7 +68,8 @@ static void update(void *memory, const af_game_host *h, double dt) {
         if (h->key_pressed(h, AF_KEY_R))
             h->request_scene(h, s->scene);
         if (h->key_pressed(h, AF_KEY_N))
-            h->request_scene(h, strstr(s->scene, "stream") || strstr(s->scene, "bend")
+            h->request_scene(h, s->pouring ? (s->hard ? "water-pour" : "water-pour-lab")
+                                : strstr(s->scene, "stream") || strstr(s->scene, "bend")
                                     ? (s->hard ? "water-stream" : "water-river-bend")
                                     : (s->hard ? "water-pool" : "water-lake"));
     }

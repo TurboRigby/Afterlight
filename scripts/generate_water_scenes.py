@@ -51,3 +51,23 @@ def river(name,hard):
     (root/'sandbox/scenes'/(name+'.afterlight.json')).write_text(json.dumps(s,indent=2)+'\n')
 river('water-stream',False)
 river('water-river-bend',True)
+
+def pour(name,hard):
+    s=json.loads((root/'sandbox/scenes/water-pool.afterlight.json').read_text());s.update(version=19,objects=[],water=[],next_id='1')
+    def obj(name,p,half=None,color=(.3,.4,.45,1),parent='0'):
+        o=copy.deepcopy(template);o.update(id=s['next_id'],name=name,mesh='cube' if half else '__node',parent=parent,position=p,rotation=[0,0,0],scale=[h/.65 for h in half] if half else [1,1,1]);s['next_id']=str(int(s['next_id'])+1);o['collider'].update(type='box' if half else 'none',enabled=bool(half),half_extents=[.65]*3,center=[0,0,0]);o['body'].update(enabled=False,type='static',mass=1,velocity=[0,0,0],angular_velocity=[0,0,0]);o['material']['base_color']=list(color);s['objects'].append(o);return o
+    obj('Laboratory floor',[0,-.2,0],[6,.2,6])
+    def cup(label,pos,tilt=False):
+        owner=obj(label,pos);owner['collider'].update(enabled=True,type='compound');owner['body'].update(enabled=tilt,type='kinematic',mass=30)
+        for center,half in [([0,0,0],[.8,.1,.8]),([-.7,.6,0],[.1,.6,.8]),([.7,.6,0],[.1,.6,.8]),([0,.6,-.7],[.6,.6,.1]),([0,.6,.7],[.6,.6,.1])]:
+            s['collider_parts'].append(dict(id=s['next_part'],owner=owner['id'],name='Container wall',position=center,rotation=[0,0,0],scale=[1,1,1],type='box',enabled=True,half_extents=half,radius=.5,density=1000));s['next_part']=str(int(s['next_part'])+1)
+            visual=obj(label+' wall',center,half,parent=owner['id']);visual['collider']['enabled']=False
+        return owner
+    cup('Pouring cup',[0,0,0],hard)
+    if hard:
+        cup('Receiving cup',[1.8,0,0]);obj('Ramp',[2,.35,2],[1.8,.1,.8])['rotation'][2]=-.2
+    surface=obj('Pourable fluid',[0,2.1,0]);w=json.loads((root/'sandbox/scenes/water-pool.afterlight.json').read_text())['water'][0]
+    w.update(owner=surface['id'],mode='particles',quality=2 if hard else 1,half_size=[.4,.4],depth=1.5,flow_speed=0,path=[[0,0,-4],[0,0,4]],particle_spacing=.16,initial_volume=.7 if hard else .4096,emission_rate=.015 if hard else 0,viscosity=3,emission_velocity=[0,-.5,0]);s['water'].append(w)
+    (root/'sandbox/scenes'/(name+'.afterlight.json')).write_text(json.dumps(s,indent=2)+'\n')
+pour('water-pour',False)
+pour('water-pour-lab',True)

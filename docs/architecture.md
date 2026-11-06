@@ -510,3 +510,19 @@ rotated/offset masses. The authored pivot is recovered when publishing poses.
 Broadphase bounds encompass all parts. Narrowphase contacts and warm starts
 retain part-pair identity, and CCD predicts each part from one shared body motion.
 Editor transforms, prefab cloning and host APIs operate on the same definitions.
+
+## Water runtime (0.17)
+
+Scenes own at most eight `af_water` definitions. Physics owns independent wave
+slots and optional particle allocations, synchronized by owner and structural
+settings. Fixed ticks update waves, volume-sampled rigid-body buoyancy/drag and
+bounded position-based particles. Queries distinguish height-field surfaces from
+particle fluids. Source definitions clone/save; transient state frees on reset,
+owner removal and destruction. Quality changes numerical work and particle budgets.
+
+The renderer builds reserved `__water_ID` meshes, reuses unchanged previews and
+removes stale slots. Water first attenuates existing HDR color per channel, then
+adds shadowed PBR reflection/scattering through a compatible additive pipeline.
+Both use the existing 128-byte push constant layout and portable Vulkan 1.1.
+Particle rendering reconstructs bounded implicit surfaces with a drop fallback.
+The current mesh upload waits for GPU safety; streaming buffers remain future work.

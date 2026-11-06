@@ -177,3 +177,7 @@ Source removal/relocation tests exercise both scenes and the motor controls.
 0.16 adds `prop-room` / `prop-workshop`, an original imported L mesh and a compound
 prefab. Exports preserve scene-16 part tables/owners and cover their C source.
 Both scene-only asset references and build-folder prefab copies include the mesh.
+
+0.17 adds six `water-*` labs and `afterlight_water_game`. Water definitions ship
+with scenes; generated meshes and fluid particles are recreated at runtime.
+The water export regression removes original sources and relocates all six labs.

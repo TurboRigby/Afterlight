@@ -13,6 +13,11 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
+Afterlight 0.17 adds water in order: pools/lakes, rivers and pourable fluid. Use
+`run_water-pool_editor` first, then the more demanding demos in the
+[water guide](development-017.md). Water quality affects simulation work and
+surface detail; light color, intensity, shadows and environment affect its look.
+
 Afterlight 0.16 adds compound collider parts, mass properties, shared-body
 contacts, per-part CCD and editor authoring. Start with `run_prop-room_editor`,
 then `run_prop-workshop_editor`. See [0.16](development-016.md).
@@ -366,7 +371,7 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](game-code.md).
 
-The scene format is version 16 and still reads versions 1–15. Asset bytes stay in
+The scene format is version 19 and still reads versions 1–18. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](assets.md),
 [scene format](scene-format.md) and [editor controls](editor.md).
 

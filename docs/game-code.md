@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **15** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **18** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 15 modules.
+to use newly built ABI 18 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -161,3 +161,15 @@ are centers of mass; scene transforms retain authored visual pivots.
 
 Use part IDs for part selection and owner IDs for forces, queries, grabs and
 body filtering. Character push budgets apply once per owner.
+
+## Water in C (0.17)
+
+ABI 18 adds `set_water`, `remove_water`, `get_water`, `sample_water`,
+`disturb_water`, `water_particles` and `water_stats` to the host table. Water
+owners are root `__node` objects with unit scale and yaw rotation. Add/edit an
+`af_water_default()` definition and select `AF_WATER_POOL`, `AF_WATER_RIVER` or
+`AF_WATER_PARTICLES`. The sample returns height/bottom/current by XZ for pools
+and rivers; it excludes particles. Particle queries copy positions, velocities
+and per-particle volume into caller storage and return the total available count.
+The runtime fluid state is isolated to Play; definitions belong to the scene.
+`game/water_game.c` demonstrates controls and gradual kinematic cup tipping.

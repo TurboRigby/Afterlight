@@ -9,7 +9,7 @@ af_physics *af_physics_create(void) {
     return calloc(1, sizeof(af_physics));
 }
 void af_physics_destroy(af_physics *p) {
-    if(p)free(p->water);
+    if(p){wa_destroy(p->water);free(p->water);}
     free(p);
 }
 void af_physics_set_profiling(af_physics *p, bool enabled) {
@@ -19,7 +19,7 @@ void af_physics_set_profiling(af_physics *p, bool enabled) {
 void af_physics_reset(af_physics *p) {
     if (p) {
         bool profiling = p->profiling;
-        free(p->water);
+        wa_destroy(p->water);free(p->water);
         memset(p, 0, sizeof(*p));
         p->profiling = profiling;
     }

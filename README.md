@@ -3,9 +3,9 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.16** adds compound collider parts, computed centers of mass and
-inertia, per-part contacts/CCD and editor fitting/transform tools. Start with the
-imported L-prop room, then try the prop workshop.
+Afterlight **0.17** adds buoyant pools and lakes, flowing rivers, and bounded
+pourable fluid, with quality settings and light-dependent water rendering.
+Start with the pool, then try the lake, stream and pouring labs.
 
 ## Build and run
 
@@ -15,16 +15,17 @@ first, then run from the repository root:
 
 ```sh
 cmake --preset debug
-cmake --build --preset debug --target run_prop-room_editor
+cmake --build --preset debug --target run_water-pool_editor
 ```
 
-Press **Play**. **WASD** walks, **Shift** runs, **Space** jumps, **E** toggles
-root motion, **R** restarts and **Escape** releases the mouse.
-In the physics demo, **F** grabs/releases, **V** throws, **Q** spawns a dynamic crate and **N** switches rooms. In machinery demos, **Z** brakes/resumes motors and **X** reverses them.
+Press **Play**, right-click to capture the camera, and use **WASD/QE** to fly.
+**Space** makes ripples, **R** resets, **N** switches the demo pair, and **F6** pauses.
 
-Use `run_prop-workshop_editor` for compound steps, an open container and powered mechanisms or
-`run_prop-room_player` for standalone play. See the [compound props guide](docs/development-016.md)
-for the other demos, debugging tools and current limits.
+Try `run_water-lake_editor`, `run_water-stream_editor`, `run_water-river-bend_editor`,
+`run_water-pour_editor`, then `run_water-pour-lab_editor`. **F** tips the cup in the
+pouring lab. Each also has a `_player` target. See the [water guide](docs/development-017.md)
+for settings, controls and simulation limits, or the [compound prop guide](docs/development-016.md)
+for the earlier physics demos.
 
 ## Documentation
 

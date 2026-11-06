@@ -4,7 +4,7 @@
 #include <afterlight/scene.h>
 #define AF_SCENE_MAX_WATERS 8u
 #define AF_WATER_MAX_PATH 8u
-typedef enum af_water_mode { AF_WATER_POOL, AF_WATER_RIVER } af_water_mode;
+typedef enum af_water_mode { AF_WATER_POOL, AF_WATER_RIVER, AF_WATER_PARTICLES } af_water_mode;
 typedef enum af_water_quality { AF_WATER_LOW, AF_WATER_MEDIUM, AF_WATER_HIGH } af_water_quality;
 /* Metres, kilograms, seconds. Surface owner: root node, unit scale, yaw only.
    Definitions are saved; waves belong to the physics world and reset on Stop. */
@@ -20,6 +20,8 @@ typedef struct af_water {
     float flow_speed;
     unsigned path_count;
     af_vec3 path[AF_WATER_MAX_PATH];
+    float particle_spacing, initial_volume, emission_rate, viscosity;
+    af_vec3 emission_velocity;
 } af_water;
 typedef struct af_water_sample {
     bool inside;
@@ -31,8 +33,14 @@ typedef struct af_water_stats {
     size_t surfaces, cells, wet_bodies, particles;
     float max_wave, displaced_volume;
     double milliseconds;
+    float emitted_volume, escaped_volume, particle_volume;
 } af_water_stats;
+typedef struct af_water_particle {
+    af_vec3 position, velocity;
+    float volume;
+} af_water_particle;
 typedef struct af_physics af_physics;
+size_t af_physics_water_particles(const af_physics *, af_object_id, af_water_particle *, size_t);
 af_water af_water_default(void);
 bool af_water_valid(af_water);
 size_t af_scene_water_count(const af_scene *);

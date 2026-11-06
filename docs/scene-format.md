@@ -1,10 +1,13 @@
-# Afterlight scene format, version 10
+# Afterlight scene format, version 19
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
 load asset bytes or execute game code. `af_engine_load_scene_assets` loads the
 manifest into the renderer separately. Game library selection stays outside the
 scene file.
+
+The following version 10 example shows the base fields; newer extensions are
+documented below. Current saves include all version 19 tables.
 
 ```json
 {
@@ -512,7 +515,7 @@ Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
 and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
 200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
 positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
-body defaults. Saving writes version 16. Physics runtime limits and diagnostics
+body defaults. Saving writes version 19. Physics runtime limits and diagnostics
 are documented in [0.13](development-013.md).
 
 ## Version 14: mesh colliders and scene joints
@@ -570,3 +573,31 @@ parts; explicit `body.mass` rescales the mass distribution. Overlaps contribute
 additively. Parts do not need separate visual objects. Query hits carry owner
 and part IDs; body forces use owners. Prefabs/duplication remap both identities.
 Versions 1–15 remain readable with an empty part table. Game ABI is 15.
+
+## Water (versions 17–19)
+
+Version 17 adds the required root `water` array (maximum eight definitions).
+Version 18 adds river paths/current. Version 19 adds particle source settings.
+Earlier definitions receive defaults. Saving writes version 19, including the
+array when empty. Each entry has exactly these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `owner` | Nonzero decimal-string object ID; unique per water definition |
+| `enabled`, `mode`, `quality` | Boolean; `pool`, `river` or `particles`; integer 0–2 |
+| `half_size`, `depth` | XZ half-size in metres; volume depth, or initial particle source footprint |
+| `density`, `drag` | kg/m³; implicit buoyancy drag coefficient |
+| `wave_speed`, `damping`, `wind` | Surface-wave speed, decay and forcing |
+| `absorption`, `scattering` | RGB absorption per metre and lit scattering color |
+| `roughness`, `ior` | Surface roughness and index of refraction |
+| `flow_speed`, `path` | River speed and 2–8 local XYZ centerline points |
+| `particle_spacing`, `initial_volume` | Particle scale and initial volume in m³ |
+| `emission_rate`, `emission_velocity` | Additional volume per second and local source velocity |
+| `viscosity` | XSPH smoothing rate in inverse seconds |
+
+Owners must be root `__node` objects with disabled body/collider, unit scale and
+only yaw rotation. Removing an owner removes its water definition. Source limits
+and finite ranges are checked by `af_water_valid`; particle volume must fit its
+source footprint/depth and quality capacity. Particle/wave state is transient
+and omitted from the file. See [water development](development-017.md) for the
+physical approximations and numerical budgets.

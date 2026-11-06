@@ -20,16 +20,39 @@ af_water af_water_default(void) {
                       .ior = 1.333f,
                       .flow_speed = 1.5f,
                       .path_count = 2,
-                      .path = {{0, 0, -4}, {0, 0, 4}}};
+                      .path = {{0, 0, -4}, {0, 0, 4}},
+                      .particle_spacing = .16f,
+                      .initial_volume = .25f,
+                      .emission_rate = 0,
+                      .viscosity = 3,
+                      .emission_velocity = {0, -1, 0}};
 }
 static bool range(float v, float a, float b) { return isfinite(v) && v >= a && v <= b; }
 bool af_water_valid(af_water w) {
+    if (w.quality < AF_WATER_LOW || w.quality > AF_WATER_HIGH)
+        return false;
+    if (w.mode == AF_WATER_PARTICLES && range(w.particle_spacing, .06f, .5f)) {
+        float max_volume = (float)(256u << (2u * (unsigned)w.quality)) * w.particle_spacing *
+                           w.particle_spacing * w.particle_spacing;
+        if (w.initial_volume > max_volume + .00001f ||
+            w.initial_volume > 4 * w.half_size.x * w.half_size.y * w.depth)
+            return false;
+    }
     if (w.path_count < 2 || w.path_count > AF_WATER_MAX_PATH)
         return false;
     for (unsigned i = 0; i < w.path_count; ++i)
         if (!range(w.path[i].x, -1000, 1000) || !range(w.path[i].y, -100, 100) ||
             !range(w.path[i].z, -1000, 1000))
             return false;
+    if (w.mode == AF_WATER_PARTICLES && range(w.particle_spacing, .06f, .5f) &&
+        range(w.half_size.x, .25f, 1000) && range(w.half_size.y, .25f, 1000) &&
+        range(w.depth, .05f, 100)) {
+        float s = w.particle_spacing;
+        float nx = fminf(64, floorf(2 * w.half_size.x / s)),
+              nz = fminf(64, floorf(2 * w.half_size.y / s)), ny = floorf(w.depth / s);
+        if (w.initial_volume > nx * nz * ny * s * s * s + .00001f)
+            return false;
+    }
     if (w.mode == AF_WATER_RIVER) {
         if (w.path_count < 2 || w.path_count > AF_WATER_MAX_PATH)
             return false;
@@ -51,14 +74,18 @@ bool af_water_valid(af_water w) {
             }
         }
     }
-    return (w.mode == AF_WATER_POOL || w.mode == AF_WATER_RIVER) && range(w.flow_speed, 0, 20) &&
-           w.quality >= AF_WATER_LOW && w.quality <= AF_WATER_HIGH && range(w.half_size.x, .25f, 1000) &&
-           range(w.half_size.y, .25f, 1000) && range(w.depth, .05f, 100) &&
-           range(w.density, .01f, 20000) && range(w.drag, 0, 20) && range(w.wave_speed, .01f, 20) &&
-           range(w.damping, 0, 20) && range(w.wind, 0, 1) && range(w.roughness, .04f, 1) &&
-           range(w.ior, 1, 2.5f) && range(w.absorption.x, 0, 100) && range(w.absorption.y, 0, 100) &&
-           range(w.absorption.z, 0, 100) && range(w.scattering.x, 0, 1) && range(w.scattering.y, 0, 1) &&
-           range(w.scattering.z, 0, 1);
+    return range(w.particle_spacing, .06f, .5f) && range(w.initial_volume, 0, 100) &&
+           range(w.emission_rate, 0, 2) && range(w.viscosity, 0, 20) &&
+           range(w.emission_velocity.x, -20, 20) && range(w.emission_velocity.y, -20, 20) &&
+           range(w.emission_velocity.z, -20, 20) &&
+           (w.mode == AF_WATER_POOL || w.mode == AF_WATER_RIVER || w.mode == AF_WATER_PARTICLES) &&
+           range(w.flow_speed, 0, 20) && w.quality >= AF_WATER_LOW && w.quality <= AF_WATER_HIGH &&
+           range(w.half_size.x, .25f, 1000) && range(w.half_size.y, .25f, 1000) &&
+           range(w.depth, .05f, 100) && range(w.density, .01f, 20000) && range(w.drag, 0, 20) &&
+           range(w.wave_speed, .01f, 20) && range(w.damping, 0, 20) && range(w.wind, 0, 1) &&
+           range(w.roughness, .04f, 1) && range(w.ior, 1, 2.5f) && range(w.absorption.x, 0, 100) &&
+           range(w.absorption.y, 0, 100) && range(w.absorption.z, 0, 100) &&
+           range(w.scattering.x, 0, 1) && range(w.scattering.y, 0, 1) && range(w.scattering.z, 0, 1);
 }
 size_t af_scene_water_count(const af_scene *s) { return s ? s->water_count : 0; }
 const af_water *af_scene_water_at(const af_scene *s, size_t i) {
@@ -74,9 +101,10 @@ bool wa_owner_valid(const af_scene *s, af_object_id id, af_water w) {
     const af_scene_object *o = af_scene_get_object(s, id);
     if (!o || !af_water_valid(w) || o->parent || o->body.enabled ||
         (o->collider.enabled && o->collider.type != AF_COLLIDER_NONE) || strcmp(o->mesh, "__node") ||
-        fabsf(o->transform.rotation.x) > 1e-6f || fabsf(o->transform.rotation.z) > 1e-6f ||
-        fabsf(o->transform.scale.x - 1) > 1e-6f || fabsf(o->transform.scale.y - 1) > 1e-6f ||
-        fabsf(o->transform.scale.z - 1) > 1e-6f)
+        fabsf(o->transform.position.x) > 1000000 || fabsf(o->transform.position.y) > 1000000 ||
+        fabsf(o->transform.position.z) > 1000000 || fabsf(o->transform.rotation.x) > 1e-6f ||
+        fabsf(o->transform.rotation.z) > 1e-6f || fabsf(o->transform.scale.x - 1) > 1e-6f ||
+        fabsf(o->transform.scale.y - 1) > 1e-6f || fabsf(o->transform.scale.z - 1) > 1e-6f)
         return false;
     return true;
 }

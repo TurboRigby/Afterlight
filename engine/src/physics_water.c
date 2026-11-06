@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "physics_internal.h"
 #include "water_internal.h"
+#include "water_particles_internal.h"
 #include <stdlib.h>
 #include <string.h>
 const af_water_runtime *ph_water_runtime(const af_physics *p) { return p ? p->water : NULL; }
@@ -9,6 +10,15 @@ af_water_sample af_physics_sample_water(const af_physics *p, const af_scene *s, 
 }
 af_water_stats af_physics_water_stats(const af_physics *p) {
     af_water_stats stats = p && p->water ? p->water->stats : (af_water_stats){0};
+    for (size_t k = 0; p && p->water && k < p->water->count; ++k) {
+        const wa_particles *f = p->water->slots[k].particles;
+        if (f) {
+            stats.particles += f->count;
+            stats.emitted_volume += f->emitted;
+            stats.escaped_volume += f->escaped;
+            stats.particle_volume += (float)f->count * f->volume;
+        }
+    }
     for (size_t i = 0; p && i < p->count; ++i)
         stats.wet_bodies += p->bodies[i].wet ? 1u : 0u;
     return stats;
@@ -21,7 +31,7 @@ bool af_physics_disturb_water(af_physics *p, const af_scene *s, af_object_id id,
         p->water = calloc(1, sizeof(*p->water));
     if (!p->water)
         return false;
-    if (!p->water->count && !wa_sync(p->water, s))
+    if (!wa_sync(p->water, s))
         return false;
     return wa_disturb(p->water, s, id, point, radius, velocity);
 }
@@ -37,6 +47,9 @@ bool ph_water_sync(af_physics *p, const af_scene *s) {
     for (size_t i = 0; i < p->water->count; ++i) {
         wa_slot *a = &p->water->slots[i];
         memcpy(a->previous, a->h, sizeof(a->h));
+        if (a->particles)
+            for (size_t k = 0; k < a->particles->count; ++k)
+                a->particles->values[k].previous = a->particles->values[k].p;
     }
     return true;
 }
@@ -136,5 +149,8 @@ void ph_water_step(af_physics *p, float dt) {
         b->v = ph_limit(b->v, 200);
         b->w = ph_limit(b->w, 100);
     }
+    for (size_t i = 0; i < p->water->count; ++i)
+        if (p->water->slots[i].config.enabled && p->water->slots[i].config.mode == AF_WATER_PARTICLES)
+            ph_particles_step(p, &p->water->slots[i], dt);
     p->water->stats.milliseconds += ph_clock(p) - stamp;
 }

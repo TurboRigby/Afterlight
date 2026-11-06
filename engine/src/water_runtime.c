@@ -42,23 +42,31 @@ bool wa_sync(af_water_runtime *r, const af_scene *s) {
         wa_slot *a = &r->slots[i];
         if (k == r->count || a->config.owner != w.owner || a->config.quality != w.quality ||
             a->config.half_size.x != w.half_size.x || a->config.half_size.y != w.half_size.y ||
-            a->config.mode != w.mode || a->config.path_count != w.path_count ||
+            a->config.mode != w.mode || a->config.particle_spacing != w.particle_spacing ||
+            a->config.initial_volume != w.initial_volume || a->config.path_count != w.path_count ||
             memcmp(a->config.path, w.path, sizeof(w.path)) ||
             memcmp(&a->transform, &o->transform, sizeof(o->transform))) {
+            wa_particles_free(a->particles);
             memset(a, 0, sizeof(*a));
             a->config = w;
             a->transform = o->transform;
             a->n = 16u << (unsigned)w.quality;
         }
         a->config = w;
+        if (w.mode == AF_WATER_PARTICLES && !wa_particles_sync(a))
+            return false;
     }
-    for (size_t i = n; i < r->count; ++i)
+    for (size_t i = n; i < r->count; ++i) {
+        wa_particles_free(r->slots[i].particles);
         memset(&r->slots[i], 0, sizeof(r->slots[i]));
+    }
     r->count = n;
     r->stats = (af_water_stats){.surfaces = n};
     for (size_t i = 0; i < n; ++i)
         if (r->slots[i].config.enabled)
-            r->stats.cells += (size_t)r->slots[i].n * r->slots[i].n;
+            r->stats.cells += r->slots[i].config.mode == AF_WATER_PARTICLES
+                                  ? 0
+                                  : (size_t)r->slots[i].n * r->slots[i].n;
     return true;
 }
 static float length(const af_water *w) {
@@ -80,7 +88,7 @@ void wa_step(af_water_runtime *r, float dt) {
     for (size_t i = 0; i < r->count; ++i) {
         wa_slot *a = &r->slots[i];
         af_water w = a->config;
-        if (!w.enabled)
+        if (!w.enabled || w.mode == AF_WATER_PARTICLES)
             continue;
         unsigned n = a->n;
         float dx = 2 * w.half_size.x / (float)(n - 1), dz = 2 * length(&w) / (float)(n - 1);
@@ -91,6 +99,8 @@ void wa_step(af_water_runtime *r, float dt) {
             steps = 1;
         float h = dt / (float)steps;
         for (unsigned sub = 0; sub < steps; ++sub) {
+            float old_v[AF_WATER_GRID_MAX * AF_WATER_GRID_MAX];
+            memcpy(old_v, a->v, n * n * sizeof(float));
             for (unsigned z = 0; z < n; ++z)
                 for (unsigned x = 0; x < n; ++x) {
                     unsigned k = z * n + x;
@@ -102,7 +112,7 @@ void wa_step(af_water_runtime *r, float dt) {
                             (dz * dz);
                     float wind = w.wind * sinf((float)x * .37f + (float)z * .19f + a->time * 1.7f);
                     float advect = w.mode == AF_WATER_RIVER
-                                       ? w.flow_speed * (a->v[k] - a->v[(z ? z - 1 : z) * n + x]) / dz
+                                       ? w.flow_speed * (old_v[k] - old_v[(z ? z - 1 : z) * n + x]) / dz
                                        : 0;
                     a->v[k] = (a->v[k] + (c2 * lap + wind - advect) * h) * expf(-w.damping * h);
                 }
@@ -138,7 +148,7 @@ static af_water_sample sample_id(const af_water_runtime *r, const af_scene *s, a
                                  af_object_id id) {
     for (size_t i = 0; i < af_scene_water_count(s); ++i) {
         af_water w = *af_scene_water_at(s, i);
-        if (!w.enabled || (id && w.owner != id))
+        if (!w.enabled || w.mode == AF_WATER_PARTICLES || (id && w.owner != id))
             continue;
         const af_scene_object *o = af_scene_get_object(s, w.owner);
         if (!o)
@@ -188,19 +198,21 @@ static af_water_sample sample_id(const af_water_runtime *r, const af_scene *s, a
     return (af_water_sample){0};
 }
 af_water_sample wa_sample(const af_water_runtime *r, const af_scene *s, af_vec3 p, float alpha) {
+    if (!isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z))
+        return (af_water_sample){0};
     return sample_id(r, s, p, alpha, 0);
 }
 bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3 p, float radius,
                 float velocity) {
-    if (!r || !isfinite(radius) || radius <= 0 || radius > 1000 || !isfinite(velocity) ||
-        fabsf(velocity) > 20)
+    if (!r || !isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z) || !isfinite(radius) || radius <= 0 ||
+        radius > 1000 || !isfinite(velocity) || fabsf(velocity) > 20)
         return false;
     wa_slot *a = NULL;
     for (size_t i = 0; i < r->count; ++i)
         if (r->slots[i].config.owner == id)
             a = &r->slots[i];
     const af_scene_object *o = af_scene_get_object(s, id);
-    if (!a || !o || !a->config.enabled)
+    if (!a || !o || !a->config.enabled || a->config.mode == AF_WATER_PARTICLES)
         return false;
     af_vec3 q = local(o->transform, p);
     if (a->config.mode == AF_WATER_RIVER) {
@@ -227,6 +239,18 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
     const af_scene_object *o = af_scene_get_object(s, id);
     if (!w || !o)
         return false;
+    if (w->mode == AF_WATER_PARTICLES) {
+        const wa_slot *a = slot(r, id);
+        wa_slot preview = {.config = *w, .transform = o->transform};
+        if (!a) {
+            if (!wa_particles_sync(&preview))
+                return false;
+            a = &preview;
+        }
+        bool ok = wa_particles_mesh(a, alpha, vertices, indices, mesh);
+        wa_particles_free(preview.particles);
+        return ok;
+    }
     unsigned n = 16u << (unsigned)w->quality;
     uint32_t vc = n * n, ic = (n - 1) * (n - 1) * 6;
     af_vertex *v = calloc(vc, sizeof(*v));
@@ -269,4 +293,12 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
     *indices = ix;
     *mesh = (af_mesh_data){v, vc, ix, ic};
     return true;
+}
+
+void wa_destroy(af_water_runtime *r) {
+    if (r)
+        for (size_t i = 0; i < AF_SCENE_MAX_WATERS; ++i) {
+            wa_particles_free(r->slots[i].particles);
+            r->slots[i].particles = NULL;
+        }
 }

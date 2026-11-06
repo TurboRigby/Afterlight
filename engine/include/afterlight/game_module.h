@@ -11,7 +11,7 @@
 #include <afterlight/prefab.h>
 #include <afterlight/joint.h>
 #include <afterlight/compound.h>
-#define AF_GAME_ABI_VERSION 17u
+#define AF_GAME_ABI_VERSION 18u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
 #define AF_GAME_EXPORT __declspec(dllexport)
@@ -52,6 +52,8 @@ typedef struct af_game_host {
     bool (*set_water)(af_scene*,af_object_id,af_water);
     bool (*remove_water)(af_scene*,af_object_id);
     const af_water *(*get_water)(const af_scene*,af_object_id);
+    size_t (*water_particles)(const af_engine*,af_object_id,af_water_particle*,size_t);
+    af_water_stats (*water_stats)(const af_engine*);
     af_water_sample (*sample_water)(const af_engine*,af_vec3);
     bool (*disturb_water)(af_engine*,af_object_id,af_vec3,float,float);
     af_joint_id (*add_joint)(af_scene*,af_joint);
