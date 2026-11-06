@@ -63,3 +63,15 @@ phase, adjacent weights, extracted root delta, emitted/queued/dropped events and
 the last event. Queries leave the event queue and scene history unchanged.
 Transport controls are disabled while gameplay drives locomotion. Bone queries
 report total count and safely write only the caller's capacity.
+
+## Larger-scene profiling
+
+`afterlight_animation_stress sandbox/assets/locomotion.gltf` measures CPU pose,
+hierarchy and palette work for 1/16/64 shared-asset rigs (13/208/832 objects),
+with 30 warmup ticks followed by 120 samples. It verifies all posed joints and
+reports mean, p95 and maximum without a machine-specific timing assertion.
+On this Apple M4 Debug build, the 64-rig mean fell from 2.385 ms to 1.381 ms
+after indexing scene IDs once per update and reusing refreshed instances.
+Transition capture buffers are also reused. These are CPU-only measurements;
+GPU skinning/shadows are exercised separately. The Performance panel exposes
+animation CPU time, included in its render total.

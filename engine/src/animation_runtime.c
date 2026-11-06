@@ -16,10 +16,12 @@ typedef struct animation_instance {
     af_locomotion_player locomotion;bool driven;af_animation_events events;uint64_t emitted;char last_event[32];
     af_animation_player player;af_animation_pose *poses;af_object_id *nodes;size_t node_count;
 } animation_instance;
+typedef struct object_slot {af_object_id id;size_t index;} object_slot;
 struct af_animation_runtime {
     af_renderer *renderer;const af_scene *scene;
     animation_asset assets[RUNTIME_ASSETS];size_t asset_count,bytes;uint64_t serial;
     animation_instance instances[RUNTIME_INSTANCES];size_t instance_count,total_nodes;
+    object_slot *index;size_t index_capacity;
     af_mat4 *local,*world;unsigned char *ready;size_t capacity,world_count;
     af_object_id palette_objects[RUNTIME_INSTANCES];size_t palette_count;
 };
@@ -27,7 +29,7 @@ static animation_asset *asset(af_animation_runtime *r,const char *name){for(size
 static void free_instance(animation_instance *i){af_animation_player_destroy(&i->player);af_locomotion_player_destroy(&i->locomotion);free(i->poses);free(i->nodes);*i=(animation_instance){0};}
 static void clear_instances(af_animation_runtime *r){for(size_t i=0;i<r->instance_count;++i)free_instance(&r->instances[i]);r->instance_count=r->total_nodes=0;r->world_count=0;}
 af_animation_runtime *af_animation_runtime_create(af_renderer *renderer){af_animation_runtime *r=calloc(1,sizeof(*r));if(r)r->renderer=renderer;return r;}
-void af_animation_runtime_destroy(af_animation_runtime *r){if(!r)return;clear_instances(r);for(size_t i=0;i<r->asset_count;++i)af_animation_file_free(&r->assets[i].file);free(r->local);free(r->world);free(r->ready);free(r);}
+void af_animation_runtime_destroy(af_animation_runtime *r){if(!r)return;clear_instances(r);for(size_t i=0;i<r->asset_count;++i)af_animation_file_free(&r->assets[i].file);free(r->index);free(r->local);free(r->world);free(r->ready);free(r);}
 void af_animation_runtime_scene(af_animation_runtime *r,const af_scene *scene){if(r&&r->scene!=scene){clear_instances(r);r->scene=scene;r->palette_count=0;af_renderer_set_object_worlds(r->renderer,NULL,NULL,0);}}
 static size_t file_bytes(const af_animation_file *f){size_t bytes=f->node_count*(sizeof(af_animation_pose)+sizeof(int32_t))+f->skin_count*sizeof(af_animation_skin);
     for(size_t i=0;i<f->clip_count;++i){bytes+=sizeof(af_animation_clip)+f->clips[i].channel_count*sizeof(af_animation_channel);for(size_t j=0;j<f->clips[i].channel_count;++j){const af_animation_channel *c=&f->clips[i].channels[j];bytes+=c->key_count*(sizeof(float)+(c->interpolation==AF_ANIM_CUBIC?3u:1u)*sizeof(af_vec4));}}return bytes;}
@@ -80,30 +82,34 @@ bool af_animation_runtime_pause(af_animation_runtime *r,af_object_id object,bool
 bool af_animation_runtime_stop(af_animation_runtime *r,af_object_id object){animation_instance *i=instance(r,object);if(!i)return false;i->driven=false;i->events=(af_animation_events){0};af_animation_player_stop(&i->player);return true;}
 bool af_animation_runtime_seek(af_animation_runtime *r,af_object_id object,double seconds){animation_instance *i=instance(r,object);if(i){i->driven=false;i->events=(af_animation_events){0};}return i&&af_animation_player_seek(&i->player,&asset(r,i->configuration.asset)->file,seconds);}
 bool af_animation_runtime_options(af_animation_runtime *r,af_object_id object,float speed,bool loop){animation_instance *i=instance(r,object);if(!i||!isfinite(speed)||fabsf(speed)>100)return false;i->player.speed=speed;i->player.loop=loop;return true;}
-static size_t object_index(const af_scene *scene,af_object_id id){const af_scene_object *o=af_scene_get_object(scene,id);return o?(size_t)(o-scene->objects):scene->count;}
+static animation_instance *existing_instance(af_animation_runtime *r,af_object_id root){for(size_t i=0;i<r->instance_count;++i)if(r->instances[i].root==root)return &r->instances[i];return NULL;}
+static size_t hash_id(af_object_id id,size_t capacity){return (size_t)((id*UINT64_C(11400714819323198485))^(id>>32))&(capacity-1);}
+static bool build_index(af_animation_runtime *r){size_t capacity=16;while(capacity<r->scene->count*2)capacity*=2;if(capacity>r->index_capacity){object_slot *slots=calloc(capacity,sizeof(*slots));if(!slots)return false;free(r->index);r->index=slots;r->index_capacity=capacity;}memset(r->index,0,r->index_capacity*sizeof(*r->index));
+    for(size_t i=0;i<r->scene->count;++i){af_object_id id=r->scene->objects[i].id;size_t at=hash_id(id,r->index_capacity);while(r->index[at].id)at=(at+1)&(r->index_capacity-1);r->index[at]=(object_slot){id,i};}return true;}
+static size_t object_index(const af_animation_runtime *r,af_object_id id){if(!id||!r->index_capacity)return r->scene->count;size_t at=hash_id(id,r->index_capacity);while(r->index[at].id){if(r->index[at].id==id)return r->index[at].index;at=(at+1)&(r->index_capacity-1);}return r->scene->count;}
 static bool world(af_animation_runtime *r,size_t at,unsigned depth){
     if(r->ready[at])return true;if(depth>=AF_SCENE_MAX_DEPTH)return false;af_mat4 m=r->local[at];af_object_id parent=r->scene->objects[at].parent;
-    if(parent){size_t p=object_index(r->scene,parent);if(p==r->scene->count||!world(r,p,depth+1))return false;m=af_mat4_mul(r->world[p],m);}for(unsigned j=0;j<16;++j)if(!isfinite(m.elements[j]))return false;r->world[at]=m;r->ready[at]=1;return true;
+    if(parent){size_t p=object_index(r,parent);if(p==r->scene->count||!world(r,p,depth+1))return false;m=af_mat4_mul(r->world[p],m);}for(unsigned j=0;j<16;++j)if(!isfinite(m.elements[j]))return false;r->world[at]=m;r->ready[at]=1;return true;
 }
-bool af_animation_runtime_world(const af_animation_runtime *r,af_object_id object,af_mat4 *out){if(!r||!r->scene||!out||r->world_count!=r->scene->count)return false;size_t at=object_index(r->scene,object);if(at>=r->world_count)return false;*out=r->world[at];return true;}
+bool af_animation_runtime_world(const af_animation_runtime *r,af_object_id object,af_mat4 *out){if(!r||!r->scene||!out||r->world_count!=r->scene->count)return false;size_t at=object_index(r,object);if(at>=r->world_count)return false;*out=r->world[at];return true;}
 bool af_animation_runtime_update(af_animation_runtime *r,const af_scene *previous,float alpha,double delta,bool animate){
     if(!r)return true;
     for(size_t j=r->instance_count;j>0;--j){animation_instance *i=&r->instances[j-1];const af_scene_object *o=af_scene_get_object(r->scene,i->root);if(!o||!o->animation.asset[0]||!asset(r,o->animation.asset)){r->total_nodes-=i->node_count;free_instance(i);*i=r->instances[--r->instance_count];}}
     for(size_t j=0;j<af_scene_object_count(r->scene);++j)if(r->scene->objects[j].animation.asset[0])(void)instance(r,r->scene->objects[j].id);
     if(!r->instance_count){for(size_t j=0;j<r->palette_count;++j)af_renderer_set_skin_palette(r->renderer,r->palette_objects[j],NULL,0);r->palette_count=r->world_count=0;af_renderer_set_object_worlds(r->renderer,NULL,NULL,0);return true;}
-    size_t count=r->scene->count;if(count>r->capacity){af_mat4 *local=calloc(count,sizeof(*local)),*worlds=calloc(count,sizeof(*worlds));unsigned char *ready=calloc(count,1);if(!local||!worlds||!ready){free(local);free(worlds);free(ready);return false;}free(r->local);free(r->world);free(r->ready);r->local=local;r->world=worlds;r->ready=ready;r->capacity=count;}memset(r->ready,0,count);
+    size_t count=r->scene->count;if(!build_index(r))return false;if(count>r->capacity){af_mat4 *local=calloc(count,sizeof(*local)),*worlds=calloc(count,sizeof(*worlds));unsigned char *ready=calloc(count,1);if(!local||!worlds||!ready){free(local);free(worlds);free(ready);return false;}free(r->local);free(r->world);free(r->ready);r->local=local;r->world=worlds;r->ready=ready;r->capacity=count;}memset(r->ready,0,count);
     for(size_t j=0;j<r->instance_count;++j){animation_instance *i=&r->instances[j];animation_asset *a=asset(r,i->configuration.asset);if(!a||i->generation!=a->generation||i->node_count!=a->file.node_count)continue;memset(i->nodes,0,i->node_count*sizeof(*i->nodes));
         if(animate&&!i->driven&&i->player.playing&&i->player.clip<a->file.clip_count){af_animation_events events;if(af_animation_collect_events(&a->file.clips[i->player.clip],i->player.time,delta*i->player.speed,i->player.loop,&events))queue_events(i,&events);}
         if(!animate||!a->file.clip_count)memcpy(i->poses,a->file.bind_pose,i->node_count*sizeof(*i->poses));else if(i->driven){if(!af_locomotion_player_sample(&i->locomotion,&a->file,i->poses,i->node_count))return false;}else if(!af_animation_player_update(&i->player,&a->file,delta)||!af_animation_player_sample(&i->player,&a->file,i->poses,i->node_count))memcpy(i->poses,a->file.bind_pose,i->node_count*sizeof(*i->poses));}
     for(size_t j=0;j<count;++j){const af_scene_object *o=&r->scene->objects[j],*old=af_scene_get_object(previous,o->id);af_transform t=o->transform;
         if(old&&old->parent==o->parent){t.position=af_vec3_add(old->transform.position,af_vec3_scale(af_vec3_sub(t.position,old->transform.position),alpha));t.scale=af_vec3_add(old->transform.scale,af_vec3_scale(af_vec3_sub(t.scale,old->transform.scale),alpha));t.rotation=(af_vec3){old->transform.rotation.x+remainderf(t.rotation.x-old->transform.rotation.x,2*AF_PI)*alpha,old->transform.rotation.y+remainderf(t.rotation.y-old->transform.rotation.y,2*AF_PI)*alpha,old->transform.rotation.z+remainderf(t.rotation.z-old->transform.rotation.z,2*AF_PI)*alpha};}
-        r->local[j]=af_transform_matrix(t);if(o->model.root&&!o->model.primitive){animation_instance *i=instance(r,o->model.root);if(i&&o->model.node<i->node_count){i->nodes[o->model.node]=o->id;af_mat4 inverse;animation_asset *a=asset(r,i->configuration.asset);if(af_mat4_inverse(af_animation_pose_matrix(a->file.bind_pose[o->model.node]),&inverse))r->local[j]=af_mat4_mul(r->local[j],af_mat4_mul(inverse,af_animation_pose_matrix(i->poses[o->model.node])));}}
+        r->local[j]=af_transform_matrix(t);if(o->model.root&&!o->model.primitive){animation_instance *i=existing_instance(r,o->model.root);if(i&&o->model.node<i->node_count){i->nodes[o->model.node]=o->id;af_mat4 inverse;animation_asset *a=asset(r,i->configuration.asset);if(af_mat4_inverse(af_animation_pose_matrix(a->file.bind_pose[o->model.node]),&inverse))r->local[j]=af_mat4_mul(r->local[j],af_mat4_mul(inverse,af_animation_pose_matrix(i->poses[o->model.node])));}}
     }
     for(size_t j=0;j<count;++j)if(!world(r,j,0))return false;r->world_count=count;af_renderer_set_object_worlds(r->renderer,r->scene,r->world,count);
     af_object_id palettes[RUNTIME_INSTANCES];size_t palette_count=0;
-    for(size_t j=0;j<count&&palette_count<RUNTIME_INSTANCES;++j){const af_scene_object *o=&r->scene->objects[j];if(!o->model.root||!o->model.primitive||o->model.skin<0)continue;animation_instance *i=instance(r,o->model.root);animation_asset *a=i?asset(r,i->configuration.asset):NULL;if(!a||(size_t)o->model.skin>=a->file.skin_count)continue;
+    for(size_t j=0;j<count&&palette_count<RUNTIME_INSTANCES;++j){const af_scene_object *o=&r->scene->objects[j];if(!o->model.root||!o->model.primitive||o->model.skin<0)continue;animation_instance *i=existing_instance(r,o->model.root);animation_asset *a=i?asset(r,i->configuration.asset):NULL;if(!a||(size_t)o->model.skin>=a->file.skin_count)continue;
         const af_animation_skin *skin=&a->file.skins[o->model.skin];af_mat4 inverse,palette[AF_ANIMATION_MAX_JOINTS];if(!af_mat4_inverse(r->world[j],&inverse))continue;bool valid=true;
-        for(size_t k=0;k<skin->joint_count;++k){size_t node=skin->joints[k]<i->node_count?object_index(r->scene,i->nodes[skin->joints[k]]):count;if(node==count){valid=false;break;}palette[k]=af_mat4_mul(inverse,af_mat4_mul(r->world[node],skin->inverse_bind[k]));}
+        for(size_t k=0;k<skin->joint_count;++k){size_t node=skin->joints[k]<i->node_count?object_index(r,i->nodes[skin->joints[k]]):count;if(node==count){valid=false;break;}palette[k]=af_mat4_mul(inverse,af_mat4_mul(r->world[node],skin->inverse_bind[k]));}
         if(valid&&af_renderer_set_skin_palette(r->renderer,o->id,palette,skin->joint_count))palettes[palette_count++]=o->id;
     }
     for(size_t j=0;j<r->palette_count;++j){bool found=false;for(size_t k=0;k<palette_count;++k)if(palettes[k]==r->palette_objects[j])found=true;if(!found)af_renderer_set_skin_palette(r->renderer,r->palette_objects[j],NULL,0);}memcpy(r->palette_objects,palettes,palette_count*sizeof(*palettes));r->palette_count=palette_count;return true;

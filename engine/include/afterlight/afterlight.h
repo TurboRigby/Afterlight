@@ -68,6 +68,7 @@ typedef struct af_engine_stats {
        second. Zero before the first sample. Includes pacing/vsync, not GPU time. */
     double frames_per_second;
     double average_frame_ms;
+    double cpu_animation_ms; /* Pose/world/palette update; also included in render total. */
     double cpu_events_ms,cpu_update_ms,cpu_render_ms; /* Last completed CPU iteration; render includes waits/present. */
     double gpu_frame_ms,gpu_shadow_ms,gpu_scene_ms,gpu_post_ms,gpu_overlay_ms;
     double cpu_fence_ms,cpu_acquire_ms; /* Renderer waits, separate from command recording. */

@@ -22,7 +22,7 @@ typedef struct af_locomotion_player {
     af_locomotion motion;
     size_t clips[5],node_count;
     float weights[3];
-    af_animation_pose *scratch,*frozen;
+    af_animation_pose *scratch,*frozen,*capture;
     af_animation_events events;
     uint32_t root_node;
     bool root_motion;

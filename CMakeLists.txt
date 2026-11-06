@@ -387,6 +387,12 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_animation_stress sandbox/animation_stress.c)
+    target_include_directories(afterlight_animation_stress PRIVATE engine/src)
+    target_link_libraries(afterlight_animation_stress PRIVATE Afterlight::Engine SDL3::SDL3)
+    afterlight_warnings(afterlight_animation_stress)
+    add_test(NAME afterlight.animation_stress COMMAND afterlight_animation_stress "${PROJECT_SOURCE_DIR}/sandbox/assets/locomotion.gltf")
+    set_tests_properties(afterlight.animation_stress PROPERTIES TIMEOUT 60)
     add_executable(afterlight_locomotion_runtime_test tests/locomotion_runtime.c)
     target_include_directories(afterlight_locomotion_runtime_test PRIVATE engine/src)
     target_link_libraries(afterlight_locomotion_runtime_test PRIVATE Afterlight::Engine SDL3::SDL3)

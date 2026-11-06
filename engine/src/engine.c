@@ -32,7 +32,7 @@ struct af_engine {
     uint64_t fps_frames;
     double frames_per_second;
     double average_frame_ms;
-    double cpu_events_ms,cpu_update_ms,cpu_render_ms;
+    double cpu_events_ms,cpu_update_ms,cpu_render_ms,cpu_animation_ms;
     af_color clear_color;
     const af_scene *scene;
     af_scene *previous_scene;af_camera previous_camera;af_vec3 fixed_camera_position;bool has_fixed_camera;
@@ -297,7 +297,9 @@ int af_engine_run(af_engine *engine, const af_game *game)
         if(engine->previous_scene&&engine->has_fixed_camera&&af_vec3_length(af_vec3_sub(engine->camera.position,engine->fixed_camera_position))<0.000001f)render_camera.position=af_vec3_add(engine->previous_camera.position,af_vec3_scale(af_vec3_sub(engine->camera.position,engine->previous_camera.position),alpha));
         af_renderer_set_interpolation(engine->renderer,engine->previous_scene,alpha);
         double animation_delta=game->fixed_update&&!engine->animation_real_time?(double)animation_steps*AF_FIXED_DELTA:delta;
+        Uint64 animation_start=SDL_GetPerformanceCounter();
         if(!af_animation_runtime_update(engine->animations,engine->previous_scene,alpha,animation_delta,engine->animation_enabled)){result=1;break;}
+        engine->cpu_animation_ms=(double)(SDL_GetPerformanceCounter()-animation_start)*1000/frequency;
         if (!af_renderer_draw(engine->renderer, engine->clear_color, engine->scene, &render_camera, engine->viewport, engine->highlighted, &engine->overlay, &rendered)) {
             result = 1;
             break;
@@ -420,7 +422,7 @@ af_engine_stats af_engine_get_stats(const af_engine *engine)
     stats.frames_per_second = engine->frames_per_second;
     stats.average_frame_ms = engine->average_frame_ms;
     stats.simulation_ticks=engine->fixed_ticks;stats.simulation_steps=engine->clock.steps;stats.simulation_alpha=engine->clock.alpha;stats.simulation_dropped_seconds=engine->clock.dropped_seconds;stats.simulation_paused=engine->simulation_paused;
-    stats.cpu_events_ms=engine->cpu_events_ms;stats.cpu_update_ms=engine->cpu_update_ms;stats.cpu_render_ms=engine->cpu_render_ms;
+    stats.cpu_events_ms=engine->cpu_events_ms;stats.cpu_update_ms=engine->cpu_update_ms;stats.cpu_animation_ms=engine->cpu_animation_ms;stats.cpu_render_ms=engine->cpu_render_ms;
     return stats;
 }
 
