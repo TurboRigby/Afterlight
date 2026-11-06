@@ -20,6 +20,9 @@ typedef struct character_state {
     platform_state platforms[16];unsigned platform_count;
     double time;
     bool goal_locked;
+#ifdef AF_PHYSICS_GAME
+    struct {af_object_id id;af_transform transform;af_rigid_body body;} initial_bodies[128];unsigned initial_body_count;
+#endif
 } character_state;
 static void present(character_state *s,const af_game_host *host){
     const af_scene_object *body=host->get_object(host->scene,s->body);
@@ -40,6 +43,9 @@ static bool init(void *memory,const af_game_host *host){
         if(o->gameplay.role==AF_ROLE_PLATFORM){if(o->parent||s->platform_count==16)return false;s->platforms[s->platform_count++]=(platform_state){o->id,o->transform};}
         if(o->gameplay.role==AF_ROLE_CHECKPOINT){unsigned order=o->gameplay.checkpoint_order;if(!order||order>1024||orders[order]||!o->collider.enabled||!o->collider.trigger)return false;orders[order]=true;++s->status.checkpoint_count;}
     }
+#ifdef AF_PHYSICS_GAME
+    for(size_t i=0;i<host->object_count(host->scene);++i){const af_scene_object *o=host->object_at(host->scene,i);if(o->body.enabled&&o->body.type==AF_BODY_DYNAMIC){if(s->initial_body_count==128)return false;unsigned at=s->initial_body_count++;s->initial_bodies[at].id=o->id;s->initial_bodies[at].transform=o->transform;s->initial_bodies[at].body=o->body;}}
+#endif
     for(unsigned i=1;i<=s->status.checkpoint_count;++i)if(!orders[i]){host->log("Checkpoint orders must be unique and consecutive from 1.");return false;}
     const af_scene_object *body=host->get_object(host->scene,s->body);
     if(!body||body->parent||body->transform.scale.x!=1||body->transform.scale.y!=1||body->transform.scale.z!=1||body->collider.type!=AF_COLLIDER_CAPSULE||!body->collider.enabled||body->collider.trigger||!body->gameplay.camera.enabled||!body->gameplay.camera.primary){host->log("Player needs a root capsule, unit scale and a primary Camera component.");return false;}
@@ -68,10 +74,19 @@ static void frame(void *memory,const af_game_host *host,double delta){
 }
 static void update(void *memory,const af_game_host *host,double delta){
     character_state *s=memory;af_third_person_input input={0};bool controls=host->input_enabled&&host->mouse_captured(host->engine);
-    if(controls&&host->action_pressed(host,"Restart")){restart(s,host,true);present(s,host);return;}
+    if(controls&&host->action_pressed(host,"Restart")){
+#ifdef AF_PHYSICS_GAME
+        if(host->held_body(host->engine))host->release_body(host->engine,(af_vec3){0});for(size_t i=host->object_count(host->scene);i>0;--i){const af_scene_object *o=host->object_at(host->scene,i-1);if(!o||!o->body.enabled||o->body.type!=AF_BODY_DYNAMIC)continue;bool original=false;for(unsigned j=0;j<s->initial_body_count;++j)original|=s->initial_bodies[j].id==o->id;if(!original)host->remove_object(host->scene,o->id);}for(unsigned i=0;i<s->initial_body_count;++i){host->set_transform(host->scene,s->initial_bodies[i].id,s->initial_bodies[i].transform);host->set_body(host->scene,s->initial_bodies[i].id,s->initial_bodies[i].body);}
+#endif
+        restart(s,host,true);present(s,host);return;}
 #ifdef AF_TOOLBOX_GAME
-    if(controls&&host->action_pressed(host,"NextScene")){if(host->request_scene)host->request_scene(host,s->status.checkpoint_count?"toolbox":"toolbox-course");return;}
-    if(controls&&host->action_pressed(host,"Spawn")&&host->project_directory){char path[4096];if(snprintf(path,sizeof(path),"%sprefabs/crate.afterlight.prefab",host->project_directory)<(int)sizeof(path)){af_transform placement=host->get_object(host->scene,s->body)->transform;placement.position.x+=2;placement.position.y+=.25f;af_object_id root;af_scene_error error;if(!host->spawn_prefab(host->engine,host->scene,path,0,placement,&root,&error))host->log(error.message);}}
+#ifdef AF_PHYSICS_GAME
+    const char *simple_scene="physics-drop",*course_scene="physics-playground",*prefab="physics-crate";
+#else
+    const char *simple_scene="toolbox",*course_scene="toolbox-course",*prefab="crate";
+#endif
+    if(controls&&host->action_pressed(host,"NextScene")){if(host->request_scene)host->request_scene(host,s->status.checkpoint_count?simple_scene:course_scene);return;}
+    if(controls&&host->action_pressed(host,"Spawn")&&host->project_directory){char path[4096];if(snprintf(path,sizeof(path),"%sprefabs/%s.afterlight.prefab",host->project_directory,prefab)<(int)sizeof(path)){af_transform placement=host->get_object(host->scene,s->body)->transform;placement.position.x+=2;placement.position.y+=.25f;af_object_id root;af_scene_error error;if(!host->spawn_prefab(host->engine,host->scene,path,0,placement,&root,&error))host->log(error.message);}}
 #endif
     s->time+=delta;
     for(unsigned i=0;i<s->crowd_count;++i)host->locomotion_step(host->engine,s->crowd[i],(af_locomotion_input){.speed=(float)(i%3)*2.5f,.grounded=true},(float)delta,NULL);

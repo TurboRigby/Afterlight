@@ -108,5 +108,25 @@
     "mouse_axis": -1,
     "deadzone": 0.18,
     "scale": 1
+  },
+  {
+    "name": "Grab",
+    "negative_key": -1,
+    "positive_key": 29,
+    "pad_button": 1,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
+  },
+  {
+    "name": "Throw",
+    "negative_key": -1,
+    "positive_key": 25,
+    "pad_button": 10,
+    "pad_axis": -1,
+    "mouse_axis": -1,
+    "deadzone": 0.18,
+    "scale": 1
   }
 ]

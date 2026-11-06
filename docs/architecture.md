@@ -457,3 +457,14 @@ animation markers, bounded event queues, horizontal root-motion extraction and
 posed skeleton queries. Game ABI is 10; scene format remains 10. The pose runtime
 builds an object-ID index once per update and reuses per-instance transition
 buffers. `cpu_animation_ms` measures pose/world/palette work inside render time.
+
+## Primitive rigid-body world (0.13)
+
+The engine owns one bounded main-thread physics world for its attached scene.
+Fixed game callbacks run first, then physics steps, then interpolation/animation
+and rendering consume the updated scene. Dynamic roots publish their quaternion
+orientation as Euler TRS and their runtime velocities into the Play clone;
+render interpolation uses quaternion SLERP for dynamic roots. Scene identity
+changes reset contact caches and grabs. CPU worlds can be used independently.
+Broadphase, narrowphase, solver, sleep/CCD and interaction live in separate C files.
+Scene version is 13 and game ABI is 12; see [the physics notes](development-013.md).

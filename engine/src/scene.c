@@ -249,7 +249,7 @@ bool af_scene_interpolated_world_matrix(const af_scene *scene,const af_scene *pr
         if(old&&old->parent==node->parent){t.position=af_vec3_add(old->transform.position,af_vec3_scale(af_vec3_sub(t.position,old->transform.position),alpha));
             t.scale=af_vec3_add(old->transform.scale,af_vec3_scale(af_vec3_sub(t.scale,old->transform.scale),alpha));
             t.rotation=(af_vec3){interpolate_angle(old->transform.rotation.x,t.rotation.x,alpha),interpolate_angle(old->transform.rotation.y,t.rotation.y,alpha),interpolate_angle(old->transform.rotation.z,t.rotation.z,alpha)};}
-        result=af_mat4_mul(af_transform_matrix(t),result);if(!node->parent){*out=result;return true;}node=af_scene_get_object(scene,node->parent);
+        af_mat4 local=af_transform_matrix(t);if(old&&old->parent==node->parent&&node->body.enabled&&node->body.type==AF_BODY_DYNAMIC)local=af_animation_pose_matrix((af_animation_pose){.translation=t.position,.scale=t.scale,.rotation=af_quaternion_slerp(af_quaternion_from_euler(old->transform.rotation),af_quaternion_from_euler(node->transform.rotation),alpha)});result=af_mat4_mul(local,result);if(!node->parent){*out=result;return true;}node=af_scene_get_object(scene,node->parent);
     }return false;
 }
 

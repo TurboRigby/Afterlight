@@ -83,6 +83,7 @@ typedef struct editor {
     uint64_t frame_limit;
     unsigned updates;
     uint64_t smoke_ticks;
+    const char *play_test_failure;unsigned play_test_failure_frame,play_test_failure_line;
     unsigned play_test_started,play_test_focus;
     uint64_t play_test_focus_losses;
 } editor;
@@ -279,7 +280,7 @@ static void keyboard(editor *app,double delta)
         if(af_engine_key_pressed(engine,AF_KEY_D)){ed_document_duplicate(&app->document);refresh(app);}
     }
     if(!app->runtime.playing&&!app->fields_active&&!modifier&&af_engine_key_pressed(engine,AF_KEY_DELETE)){ed_document_delete(&app->document);refresh(app);}
-    if(!app->fields_active&&!modifier&&af_engine_key_pressed(engine,AF_KEY_F))focus_selection(app);
+    if(!app->runtime.playing&&!app->fields_active&&!modifier&&af_engine_key_pressed(engine,AF_KEY_F))focus_selection(app);
     if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){
         app->free_camera=app->resume_game_capture=false;
         (void)af_engine_set_mouse_capture(engine,false);
@@ -1092,6 +1093,7 @@ static void light_tools_smoke(editor *app){
     default:break;
     }
 }
+#define PLAY_CHECK(condition) do{if(!(condition)){app->play_test_failure=#condition;app->play_test_failure_frame=app->updates;app->play_test_failure_line=__LINE__;return;}}while(0)
 static void play_controls_smoke(editor *app)
 {
     if(!app->play_controls_test)return;
@@ -1099,8 +1101,15 @@ static void play_controls_smoke(editor *app)
     if(app->play_test_started&&(focus_losses!=app->play_test_focus_losses||!(SDL_GetWindowFlags(af_engine_sdl_window(app->engine))&SDL_WINDOW_INPUT_FOCUS))){
         /* Native focus loss clears all held/injected buttons in the engine.
            Restart this sequence instead of treating OS focus as a game failure. */
-        stop_play(app);app->play_test_started=app->play_test_focus=0;app->play_test_focus_losses=focus_losses;
+        stop_play(app);app->play_test_started=app->play_test_focus=0;app->play_test_focus_losses=focus_losses;app->play_test_failure=NULL;
         fputs("Native focus changed; restarting scripted Play controls.\n",stderr);return;
+    }
+    if(app->play_test_failure){
+        /* Cocoa may revoke capture before SDL delivers FOCUS_LOST. Confirm a
+           failed snapshot after two event batches; the guard above restarts on
+           focus loss, while a genuine stable-focus failure still fails. */
+        if(app->updates-app->play_test_failure_frame<2)return;
+        fprintf(stderr,"Editor Play check %u: %s\n",app->play_test_failure_line,app->play_test_failure);app->failed=true;af_engine_request_quit(app->engine);return;
     }
     /* Play normally follows a foreground user click. Wait for that same native
        focus state before injecting events, rather than racing Cocoa startup. */
@@ -1113,32 +1122,33 @@ static void play_controls_smoke(editor *app)
     unsigned stage=app->updates-app->play_test_started;
     if(stage==3){toggle_play(app);smoke_button(app,SDL_BUTTON_RIGHT,true);}
     if(stage==4){
-        SMOKE_CHECK(app,af_engine_mouse_captured(app->engine)&&fabsf(app->camera.position.z-7.0f)<.01f);
+        PLAY_CHECK(af_engine_mouse_captured(app->engine)&&fabsf(app->camera.position.z-7.0f)<.01f);
     }
     if(stage==5){
-        SMOKE_CHECK(app,app->free_camera&&af_engine_mouse_captured(app->engine)&&!app->runtime.host.camera_enabled);
+        PLAY_CHECK(app->free_camera&&af_engine_mouse_captured(app->engine)&&!app->runtime.host.camera_enabled);
         app->camera.position.x+=10;smoke_button(app,SDL_BUTTON_RIGHT,false);
     }
     if(stage==7){
-        SMOKE_CHECK(app,!app->free_camera&&af_engine_mouse_captured(app->engine)&&fabsf(app->camera.position.x)<.01f);
+        PLAY_CHECK(!app->free_camera&&af_engine_mouse_captured(app->engine)&&fabsf(app->camera.position.x)<.01f);
         smoke_key(app,SDL_SCANCODE_ESCAPE);
     }
-    if(stage==9){SMOKE_CHECK(app,!af_engine_mouse_captured(app->engine));smoke_click(app,550,350);smoke_key(app,SDL_SCANCODE_SPACE);}
-    if(stage==11){SMOKE_CHECK(app,af_engine_mouse_captured(app->engine));
-        SMOKE_CHECK(app,af_engine_audio_stats(app->engine).clips==4&&af_engine_get_stats(app->engine).loaded_meshes>=2&&af_engine_get_stats(app->engine).missing_meshes==0);
+    if(stage==9){PLAY_CHECK(!af_engine_mouse_captured(app->engine));smoke_click(app,550,350);smoke_key(app,SDL_SCANCODE_SPACE);}
+    if(stage==11){PLAY_CHECK(af_engine_mouse_captured(app->engine));
+        PLAY_CHECK(af_engine_audio_stats(app->engine).clips==4&&af_engine_get_stats(app->engine).loaded_meshes>=2&&af_engine_get_stats(app->engine).missing_meshes==0);
     }
-    if(stage==13){SMOKE_CHECK(app,af_engine_audio_stats(app->engine).plays>0&&af_engine_gameplay_status(app->engine).elapsed>0);
+    if(stage==13){PLAY_CHECK(af_engine_audio_stats(app->engine).plays>0&&af_engine_gameplay_status(app->engine).elapsed>0);
         app->runtime.paused=true;af_engine_set_simulation_paused(app->engine,true);}
     if(stage==14){app->smoke_ticks=af_engine_get_stats(app->engine).simulation_ticks;af_engine_step_simulation(app->engine);}
-    if(stage==15){SMOKE_CHECK(app,af_engine_get_stats(app->engine).simulation_ticks==app->smoke_ticks+1);smoke_key(app,SDL_SCANCODE_F6);}
-    if(stage==18){SMOKE_CHECK(app,app->maximize_play&&app->viewport.x==0&&app->runtime.paused&&nk_window_find(&app->gui.context,"Play HUD")!=NULL);smoke_key(app,SDL_SCANCODE_F6);}
-    if(stage==21){SMOKE_CHECK(app,!app->maximize_play&&app->viewport.x==252);stop_play(app);
-        SMOKE_CHECK(app,!af_engine_mouse_captured(app->engine)&&memcmp(&app->camera,&app->edit_camera,sizeof(af_camera))==0);}
+    if(stage==15){PLAY_CHECK(af_engine_get_stats(app->engine).simulation_ticks==app->smoke_ticks+1);smoke_key(app,SDL_SCANCODE_F6);}
+    if(stage==18){PLAY_CHECK(app->maximize_play&&app->viewport.x==0&&app->runtime.paused&&nk_window_find(&app->gui.context,"Play HUD")!=NULL);smoke_key(app,SDL_SCANCODE_F6);}
+    if(stage==21){PLAY_CHECK(!app->maximize_play&&app->viewport.x==252);stop_play(app);
+        PLAY_CHECK(!af_engine_mouse_captured(app->engine)&&memcmp(&app->camera,&app->edit_camera,sizeof(af_camera))==0);}
     if(stage==22){
-        SMOKE_CHECK(app,!app->runtime.playing&&af_scene_object_count(app->document.scene)==21&&!ed_document_dirty(&app->document));
+        PLAY_CHECK(!app->runtime.playing&&af_scene_object_count(app->document.scene)==21&&!ed_document_dirty(&app->document));
         af_engine_request_quit(app->engine);
     }
 }
+#undef PLAY_CHECK
 static void smoke(editor *app)
 {
     if(!app->smoke_path)return;

@@ -192,3 +192,13 @@ base-color/normal/metallic-roughness images. The Assets panel adds packed surfac
 map import/assignment and **Reload changed assets**. Watch reload updates GPU
 geometry/images with last-good retention; hierarchy and material document edits
 are preserved. Reimport to update model structure or material definitions.
+
+## Physics authoring (0.13)
+
+The Inspector exposes body type, mass, friction, bounce, damping, gravity,
+sleep/continuous flags and initial velocity/spin. Dynamic bodies need a centered,
+enabled sphere/box collider on a root with positive scale. Enable **Physics** in
+the viewport toolbar to see awake/sleeping bodies, velocity vectors and contact
+normals. Performance shows physics CPU time and counts. Pause and **Step 1/60**
+advance the actual solver. Stop restores the authored scene. See
+[the physics rooms and limits](development-013.md).

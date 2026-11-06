@@ -158,3 +158,8 @@ and verify dependency reload/last-good recovery. See [testing](testing.md).
 
 Scene names are preserved in exports for deferred transitions. Optional project
 `input.json` and `prefabs/` resources are bundled; see [0.12](development-012.md).
+
+Physics scenes save body components in scene format 13. Exports include the
+original dynamic crate prefab, input actions and the same C physics module used
+by the editor. The integration test runs both rooms after source deletion and
+relocation; see [0.13 supported physics and controls](development-013.md).

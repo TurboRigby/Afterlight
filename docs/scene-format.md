@@ -502,4 +502,15 @@ Version 11 adds a `rig` object to every scene object, with `enabled`,
 order, model-space `walk_speed`/`run_speed`, `camera_distance`, `camera_height`
 and `turn_speed`. Version 12 adds material `alpha_mode` (opaque/mask/blend) and
 `alpha_cutoff` in [0,1]. Earlier versions read with a disabled rig and opaque
-material defaults. Saving writes version 12. See [0.12](development-012.md).
+material defaults. Version 12 introduced these fields. See [0.12](development-012.md).
+
+## Version 13: rigid bodies
+
+Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
+`mass` [.001,10000], `friction` [0,2], `restitution` [0,1], `linear_damping` and
+`angular_damping` [0,20], `gravity_scale` [-10,10], `allow_sleep`, `continuous`,
+and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
+200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
+positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
+body defaults. Saving writes version 13. Physics runtime limits and diagnostics
+are documented in [0.13](development-013.md).

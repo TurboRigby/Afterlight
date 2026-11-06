@@ -189,3 +189,15 @@ pixels also verify texture/material-alpha cutouts and cache invalidation. The
 `afterlight.toolbox` real-module test combines the systems. `toolbox_export`
 verifies portable input maps, scene aliases and prefab dependencies after source
 removal. See [the workflow and known limits](development-012.md).
+
+## 0.13 physics checks
+
+CPU tests cover body validation/persistence, fixed-tick gravity, force/impulse
+motion and angular response, primitive contact manifolds and broadphase pruning,
+four-box stacking/friction, restitution and render-rate independence, sleep/wake,
+lost support, thin-wall sweeps, pushing/grabbing/throwing, player proxies and
+editor undo/redo. Dynamic rotation interpolation crosses an Euler gimbal boundary
+without turning the long way. `afterlight.physics_demo` exercises a real C module
+with Vulkan validation, pause/single-step, reload and both physics rooms.
+`physics_export` runs the same sequence from relocated exports after deleting
+the source project. See [the supported physics scope](development-013.md).

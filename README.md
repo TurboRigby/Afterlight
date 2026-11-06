@@ -3,9 +3,9 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.12** adds configurable character rigs, input actions/controllers,
-prefabs, stateful hot reload, level switching, spatial audio and alpha materials.
-Start with the practice scene, then try the animated obstacle course.
+Afterlight **0.13** adds primitive rigid-body physics, friction and bounce,
+sleeping, fast-body sweeps, character pushing, grabbing/throwing and editor diagnostics.
+Start with the drop room, then try the larger physics playground.
 
 ## Build and run
 
@@ -15,15 +15,15 @@ first, then run from the repository root:
 
 ```sh
 cmake --preset debug
-cmake --build --preset debug --target run_toolbox_editor
+cmake --build --preset debug --target run_physics-drop_editor
 ```
 
 Press **Play**. **WASD** walks, **Shift** runs, **Space** jumps, **E** toggles
 root motion, **R** restarts and **Escape** releases the mouse.
-In the toolbox demo, **Q** spawns a prefab and **N** switches levels.
+In the physics demo, **F** grabs/releases, **V** throws, **Q** spawns a dynamic crate and **N** switches rooms.
 
-Use `run_toolbox-course_editor` for the obstacle course or
-`run_toolbox_player` for standalone play. See the [toolbox guide](docs/development-012.md)
+Use `run_physics-playground_editor` for stacks, ramps and dominoes or
+`run_physics-drop_player` for standalone play. See the [physics guide](docs/development-013.md)
 for the other demos, debugging tools and current limits.
 
 ## Documentation
