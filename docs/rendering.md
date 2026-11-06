@@ -1,6 +1,7 @@
 # Materials, lighting and profiling
 
-Afterlight **0.8** adds floating-point HDR rendering, environment lighting, local
+Afterlight **0.9** adds [imported HDR environments and skyboxes](assets-09.md).
+Afterlight **0.8** added floating-point HDR rendering, environment lighting, local
 shadows and bloom. Start with [the Lighting Lab and current controls](lighting-08.md).
 
 Afterlight 0.4 adds the [fifteen completed steps](development-15.md). Engine and

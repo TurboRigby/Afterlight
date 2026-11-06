@@ -28,6 +28,7 @@ layout(set=0,binding=0) uniform Frame {
     LocalLight lights[16];
     vec4 light_count;
     mat4 local_shadow_matrices[24];
+    mat4 inverse_view_projection;vec4 sky_params;
 } frame;
 layout(push_constant) uniform Draw {mat4 model;vec4 tint;vec4 params;vec4 surface;vec4 emission;} draw;
 void main(){

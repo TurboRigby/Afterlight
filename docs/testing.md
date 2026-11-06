@@ -8,11 +8,12 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-The 40-test Debug suite passes on the tested Apple M4/MoltenVK system, including
+The 44-test Debug suite passes on the tested Apple M4/MoltenVK system, including
 Vulkan synchronization validation, actual pixel comparisons, fixed simulation,
 collisions, the controller and obstacle-course gameplay. Graphics tests require
 a desktop and Vulkan driver. The macOS-only module-unload regression accounts
-for one of these tests; other platforms currently have 34 and remain untested.
+for one of these tests; other platforms currently have 43. Linux CPU coverage
+is described below; native Linux graphics and Windows still need verification.
 
 `afterlight.editor_playground` opens the actual obstacle course and its C module.
 It also injects a real jump and verifies its audio cue/timer, checks loaded audio/GLB resources and F6 maximize/restore.
@@ -128,3 +129,24 @@ GitHub's build workflow runs macOS Debug/Release/ASan+UBSan builds and all tests
 without the `graphics` label. Run the interactive suite locally with Vulkan
 synchronization validation. Apple ASan requires `ASAN_OPTIONS=detect_leaks=0`.
 Validate workflow changes with `actionlint .github/workflows/build.yml`.
+
+
+## 0.9 environment, job and light-tool checks
+
+The additional `afterlight.hdr`, `afterlight.environments`,
+`afterlight.light_gizmos` and `afterlight.editor_light_tools` tests verify decoder
+bounds, imported radiance/sky pixels, light wire geometry and actual editor
+mouse picking/drag/cancel behavior. Updated thumbnail tests cover worker
+completion, invalidation and teardown with queued work; exports include HDR.
+Updated data tests cover v9 persistence and v7/v8 compatibility. See
+[0.9 workflow and limits](assets-09.md).
+
+The first pushed macOS Debug/Release/Sanitizer CI jobs and C/Python CodeQL scans
+passed. New Linux jobs build SDL3 from a pinned commit and run CPU tests in
+Ubuntu 24.04, independently of macOS. Run the same build on Linux with
+`bash .github/scripts/linux-build.sh` after installing the workflow's packages.
+Use `AF_BUILD_CONFIGURATION=Release` or `Sanitizers` to select a variant.
+GPU tests are excluded from hosted CI; a software/container build does not prove
+native Linux desktop behavior. The local Linux environment is ARM64/GCC 13
+(Clang 18 for sanitizers); GitHub's Ubuntu runner is x86-64 and gets its first
+run after the workflow is pushed.

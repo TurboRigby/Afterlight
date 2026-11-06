@@ -1,4 +1,4 @@
-# Afterlight scene format, version 8
+# Afterlight scene format, version 9
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
@@ -9,7 +9,7 @@ scene file.
 ```json
 {
   "format": "afterlight.scene",
-  "version": 8,
+  "version": 9,
   "next_id": "3",
   "assets": [
     {
@@ -241,7 +241,10 @@ scene file.
     "environment_profile": 0,
     "environment_intensity": 1,
     "environment_rotation": 0,
-    "local_shadow_resolution": 512
+    "local_shadow_resolution": 512,
+    "environment_asset": "",
+    "skybox": false,
+    "skybox_intensity": 1
   },
   "local_lights": [
     {
@@ -274,7 +277,7 @@ scene file.
 }
 ```
 
-All shown fields are required in version 8. Names are case sensitive. Unknown or
+All shown fields are required in version 9. Names are case sensitive. Unknown or
 duplicate fields, unsupported versions, trailing data, embedded NUL and malformed
 UTF-8 are rejected. Version 1 remains readable with its original strict schema:
 no `assets`, `light`, `material` or `parent` fields. It receives an empty manifest,
@@ -285,7 +288,7 @@ four-cascade settings and true cast/receive flags. Version 3 retains its strict 
 new surface fields, `render` and `local_lights`. Versions 1–3 use Lambert
 materials with roughness 0.6, metallic/emission 0, no normal map and strength 1;
 exposure is 0, tone mapping is off, and local lights are empty. Saving always
-writes version 8. Version 4 retains material/render/local-light fields but omits
+writes version 9. Version 4 retains material/render/local-light fields but omits
 colliders; versions 1–4 get an enabled collider of type `none`.
 
 IDs, parent IDs and `next_id` are canonical unsigned decimal **strings** so all
@@ -436,5 +439,17 @@ requires `cast_shadows` and `shadow_bias` [0,0.1]. All numbers must be finite.
 
 Versions 1–7 retain their strict schemas; their missing new fields receive
 safe defaults, with environment/bloom/local shadows disabled. Saving always
-writes version 8. These settings survive clone, undo/redo, Play and project
+writes version 9. These settings survive clone, undo/redo, Play and project
 export. See [lighting controls and limits](lighting-08.md).
+
+
+## Imported environments and skyboxes (version 9)
+
+The asset kind `environment` references a linear Radiance RGBE `.hdr` panorama.
+`render` additionally requires `environment_asset` (empty or a named environment),
+`skybox` (boolean) and `skybox_intensity` (finite [0,100]). Intensity for lighting
+remains `environment_intensity`; rotation is shared. Environment names are UTF-8
+and fit `AF_MESH_NAME_CAPACITY` including NUL. Relative HDR paths use the same
+asset resolution/export rules as other source files. Versions 1–8 default to a
+hidden skybox and a procedural environment; saving upgrades to v9. See
+[HDR limits, resource ownership and editor workflow](assets-09.md).

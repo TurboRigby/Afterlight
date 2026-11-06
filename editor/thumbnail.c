@@ -2,6 +2,8 @@
 #include "thumbnail.h"
 #include "cube.h"
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_thread.h>
+#include <SDL3/SDL_mutex.h>
 #include <float.h>
 #include <math.h>
 #include <stdlib.h>
@@ -69,6 +71,8 @@ static bool mesh_preview(const af_scene_asset *asset,unsigned char *rgba){
 bool ed_thumbnail_generate(const af_scene *scene,const af_scene_asset *asset,const af_material *material,unsigned char rgba[64*64*4]){
     if(!rgba||(!asset&&!material))return false;background(rgba);
     if(material)return material_preview(scene,material,rgba);
+    if(asset->kind==AF_ASSET_ENVIRONMENT){af_hdr_file hdr;af_asset_error error;if(!af_hdr_file_load(asset->path,&hdr,&error))return false;
+        for(unsigned y=0;y<32;++y)for(unsigned x=0;x<64;++x){uint32_t sx=x*hdr.width/64,sy=y*hdr.height/32;const float *p=hdr.rgba+((size_t)sy*hdr.width+sx)*4;size_t at=((size_t)(y+16)*64+x)*4;for(unsigned c=0;c<3;++c)rgba[at+c]=encode(p[c]/(1+p[c]));}af_hdr_file_free(&hdr);return true;}
     if(asset->kind==AF_ASSET_MESH)return mesh_preview(asset,rgba);
     if(asset->kind==AF_ASSET_AUDIO){for(unsigned x=5;x<59;++x){int height=(int)(5+14*fabsf(sinf((float)x*.7f)*sinf((float)x*.13f)));for(int y=32-height;y<=32+height;++y){size_t i=((size_t)y*64+x)*4;rgba[i]=105;rgba[i+1]=190;rgba[i+2]=215;}}return true;}
     return texture_preview(asset,rgba);
@@ -78,22 +82,68 @@ static uint64_t path_signature(uint64_t signature,const char *reference){
     signature=hash(signature,reference,strlen(reference));char path[AF_ASSET_PATH_CAPACITY];size_t length=strcspn(reference,"#");if(length>=sizeof(path))return signature;memcpy(path,reference,length);path[length]=0;
     SDL_PathInfo info;if(SDL_GetPathInfo(path,&info)){signature=hash(signature,&info.size,sizeof(info.size));signature=hash(signature,&info.modify_time,sizeof(info.modify_time));}return signature;
 }
+typedef struct thumbnail_job {
+    af_scene *scene;af_scene_asset asset;af_material material;bool is_material,success;
+    unsigned index;uint64_t ticket;unsigned char pixels[64*64*4];
+} thumbnail_job;
+typedef struct ed_thumbnail_worker {
+    SDL_Thread *thread;SDL_Mutex *mutex;SDL_Condition *condition;
+    thumbnail_job *jobs[8],*results[8];unsigned job_count,result_count,total;bool stop;
+} ed_thumbnail_worker;
+static void free_job(thumbnail_job *job){if(job){af_scene_destroy(job->scene);free(job);}}
+static int SDLCALL thumbnail_worker(void *data){
+    ed_thumbnail_worker *worker=data;
+    for(;;){SDL_LockMutex(worker->mutex);while(!worker->job_count&&!worker->stop)SDL_WaitCondition(worker->condition,worker->mutex);
+        if(worker->stop){SDL_UnlockMutex(worker->mutex);return 0;}
+        thumbnail_job *job=worker->jobs[0];memmove(worker->jobs,worker->jobs+1,(--worker->job_count)*sizeof(*worker->jobs));SDL_UnlockMutex(worker->mutex);
+        job->success=ed_thumbnail_generate(job->scene,job->is_material?NULL:&job->asset,job->is_material?&job->material:NULL,job->pixels);
+        SDL_LockMutex(worker->mutex);worker->results[worker->result_count++]=job;SDL_UnlockMutex(worker->mutex);
+    }
+}
+static bool start_worker(ed_thumbnails *cache){
+    if(cache->worker)return true;ed_thumbnail_worker *worker=calloc(1,sizeof(*worker));if(!worker)return false;
+    worker->mutex=SDL_CreateMutex();worker->condition=SDL_CreateCondition();
+    if(worker->mutex&&worker->condition)worker->thread=SDL_CreateThread(thumbnail_worker,"Afterlight thumbnails",worker);
+    if(!worker->thread){SDL_DestroyCondition(worker->condition);SDL_DestroyMutex(worker->mutex);free(worker);return false;}cache->worker=worker;return true;
+}
+void ed_thumbnails_destroy(ed_thumbnails *cache){
+    if(!cache||!cache->worker)return;ed_thumbnail_worker *worker=cache->worker;
+    SDL_LockMutex(worker->mutex);worker->stop=true;SDL_SignalCondition(worker->condition);SDL_UnlockMutex(worker->mutex);SDL_WaitThread(worker->thread,NULL);
+    for(unsigned i=0;i<worker->job_count;++i)free_job(worker->jobs[i]);for(unsigned i=0;i<worker->result_count;++i)free_job(worker->results[i]);
+    SDL_DestroyCondition(worker->condition);SDL_DestroyMutex(worker->mutex);free(worker);*cache=(ed_thumbnails){0};
+}
+void ed_thumbnails_poll(ed_thumbnails *cache,af_engine *engine){
+    ed_thumbnail_worker *worker=cache->worker;if(!worker||!engine||!cache->budget)return;
+    SDL_LockMutex(worker->mutex);thumbnail_job *job=worker->result_count?worker->results[0]:NULL;
+    if(job){memmove(worker->results,worker->results+1,(--worker->result_count)*sizeof(*worker->results));--worker->total;}SDL_UnlockMutex(worker->mutex);
+    if(!job)return;ed_thumbnail_entry *entry=&cache->entries[job->index];
+    if(entry->ticket==job->ticket&&entry->pending){entry->pending=false;
+        if(job->success&&af_engine_upload_overlay_texture(engine,job->index+2,job->pixels,64,64))entry->ready=true;
+        ++cache->completed;--cache->budget;
+    }else ++cache->discarded;free_job(job);
+}
 void ed_thumbnails_begin(ed_thumbnails *cache){++cache->frame;cache->budget=1;}
-void ed_thumbnails_invalidate(ed_thumbnails *cache){for(unsigned i=0;i<ED_THUMBNAIL_CACHE_SIZE;++i)cache->entries[i].signature=0;}
+void ed_thumbnails_invalidate(ed_thumbnails *cache){for(unsigned i=0;i<ED_THUMBNAIL_CACHE_SIZE;++i){cache->entries[i].signature=0;cache->entries[i].ticket=++cache->next_ticket;cache->entries[i].pending=false;}}
 uint32_t ed_thumbnails_get(ed_thumbnails *cache,af_engine *engine,const af_scene *scene,const af_scene_asset *asset,const af_material *material){
     if(!cache||!engine||(!asset&&!material))return 0;
     const char *name=material?"@material":asset->name;uint64_t signature=UINT64_C(14695981039346656037);unsigned index=ED_THUMBNAIL_CACHE_SIZE;
     if(material){signature=hash(signature,material,sizeof(*material));const char *maps[]={material->texture,material->normal_map,material->metallic_roughness_map};for(unsigned i=0;i<3;++i){const af_scene_asset *map=af_scene_find_asset(scene,maps[i]);if(map)signature=path_signature(signature,map->path);}}
     else{signature=path_signature(signature,asset->path);signature=hash(signature,&asset->kind,sizeof(asset->kind));}
     for(unsigned i=0;i<ED_THUMBNAIL_CACHE_SIZE;++i)if(cache->entries[i].occupied&&cache->entries[i].material==(material!=NULL)&&!strcmp(cache->entries[i].name,name)){index=i;break;}
-    if(index<ED_THUMBNAIL_CACHE_SIZE&&cache->entries[index].signature==signature){cache->entries[index].last_used=cache->frame;return cache->entries[index].ready?index+2:0;}
     bool same=index<ED_THUMBNAIL_CACHE_SIZE;
-    if(same)cache->entries[index].last_used=cache->frame;
-    if(!cache->budget)return index<ED_THUMBNAIL_CACHE_SIZE&&cache->entries[index].ready?index+2:0;
-    if(index==ED_THUMBNAIL_CACHE_SIZE){uint64_t oldest=UINT64_MAX;for(unsigned i=0;i<ED_THUMBNAIL_CACHE_SIZE;++i){if(!cache->entries[i].occupied){index=i;break;}if(cache->entries[i].last_used<cache->frame&&cache->entries[i].last_used<oldest){oldest=cache->entries[i].last_used;index=i;}}}
+    if(same){ed_thumbnail_entry *entry=&cache->entries[index];entry->last_used=cache->frame;if(entry->signature==signature)return entry->ready?index+2:0;}
+    if(!start_worker(cache))return same&&cache->entries[index].ready?index+2:0;
+    if(!same){uint64_t oldest=UINT64_MAX;for(unsigned i=0;i<ED_THUMBNAIL_CACHE_SIZE;++i){ed_thumbnail_entry *entry=&cache->entries[i];if(!entry->occupied){index=i;break;}if(!entry->pending&&entry->last_used<cache->frame&&entry->last_used<oldest){oldest=entry->last_used;index=i;}}}
     if(index==ED_THUMBNAIL_CACHE_SIZE)return 0;
-    --cache->budget;unsigned char pixels[64*64*4];bool ready=ed_thumbnail_generate(scene,asset,material,pixels)&&af_engine_upload_overlay_texture(engine,index+2,pixels,64,64);
-    ed_thumbnail_entry *entry=&cache->entries[index];
-    if(!ready&&same&&entry->ready){entry->signature=signature;return index+2;}
-    *entry=(ed_thumbnail_entry){.signature=signature,.last_used=cache->frame,.occupied=true,.ready=ready,.material=material!=NULL};memcpy(entry->name,name,strlen(name)+1);return ready?index+2:0;
+    ed_thumbnail_worker *worker=cache->worker;SDL_LockMutex(worker->mutex);bool full=worker->total>=8;SDL_UnlockMutex(worker->mutex);if(full)return same&&cache->entries[index].ready?index+2:0;
+    thumbnail_job *job=calloc(1,sizeof(*job));if(!job)return same&&cache->entries[index].ready?index+2:0;
+    job->scene=af_scene_create();if(!job->scene){free(job);return 0;}
+    if(material){job->is_material=true;job->material=*material;const char *maps[]={material->texture,material->normal_map,material->metallic_roughness_map};
+        for(unsigned i=0;i<3;++i){const af_scene_asset *map=af_scene_find_asset(scene,maps[i]);if(map&&!af_scene_set_asset(job->scene,map->name,map->kind,map->path)){free_job(job);return 0;}}}
+    else job->asset=*asset;
+    ed_thumbnail_entry *entry=&cache->entries[index];bool ready=same&&entry->ready;
+    *entry=(ed_thumbnail_entry){.signature=signature,.last_used=cache->frame,.ticket=++cache->next_ticket,.occupied=true,.ready=ready,.material=material!=NULL,.pending=true};memcpy(entry->name,name,strlen(name)+1);
+    job->index=index;job->ticket=entry->ticket;
+    SDL_LockMutex(worker->mutex);worker->jobs[worker->job_count++]=job;++worker->total;SDL_SignalCondition(worker->condition);SDL_UnlockMutex(worker->mutex);++cache->submitted;
+    return ready?index+2:0;
 }

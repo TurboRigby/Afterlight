@@ -1,34 +1,36 @@
 {
-  "format": "afterlight.scene",
-  "version": 8,
-  "next_id": "6",
   "objects": [
     {
-      "id": "1",
-      "name": "Polished gold",
-      "mesh": "sphere",
-      "visible": true,
-      "position": [
-        -2,
-        0.08,
-        0
-      ],
-      "rotation": [
-        0,
-        0,
-        0
-      ],
-      "scale": [
-        1,
-        1,
-        1
-      ],
-      "parent": "0",
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
       "material": {
         "base_color": [
-          0.95,
-          0.62,
-          0.2,
+          0.949999988079071,
+          0.6200000047683716,
+          0.20000000298023224,
           1
         ],
         "texture": "",
@@ -36,7 +38,7 @@
         "cast_shadows": true,
         "receive_shadows": true,
         "physically_based": true,
-        "roughness": 0.12,
+        "roughness": 0.119999997317791,
         "metallic": 1,
         "emission": [
           0,
@@ -58,49 +60,23 @@
           0
         ],
         "half_extents": [
-          0.65,
-          0.65,
-          0.65
+          0.649999976158142,
+          0.649999976158142,
+          0.649999976158142
         ],
-        "radius": 0.35,
-        "half_height": 0.55,
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
         "layer": 1
       },
-      "gameplay": {
-        "role": "none",
-        "checkpoint_order": 0,
-        "player": {
-          "enabled": false,
-          "spawn": "0",
-          "radius": 0.35,
-          "half_height": 0.55,
-          "speed": 4.5,
-          "jump_speed": 6.5,
-          "gravity": 18,
-          "slope_limit": 0.7853981633974483,
-          "skin": 0.002,
-          "ground_snap": 0.15,
-          "mouse_sensitivity": 0.0025
-        },
-        "camera": {
-          "enabled": false,
-          "primary": false,
-          "eye_height": 0.75,
-          "vertical_fov": 1.0471975511965976,
-          "near_clip": 0.08,
-          "far_clip": 160
-        }
-      }
-    },
-    {
-      "id": "2",
-      "name": "Rough blue",
+      "parent": "0",
+      "id": "1",
+      "name": "Polished gold",
       "mesh": "sphere",
       "visible": true,
       "position": [
-        0,
-        0.08,
-        -0.6
+        -2,
+        0.07999999821186066,
+        0
       ],
       "rotation": [
         0,
@@ -111,12 +87,38 @@
         1,
         1,
         1
-      ],
-      "parent": "0",
+      ]
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
       "material": {
         "base_color": [
-          0.2,
-          0.4,
+          0.20000000298023224,
+          0.4000000059604645,
           0.75,
           1
         ],
@@ -125,7 +127,7 @@
         "cast_shadows": true,
         "receive_shadows": true,
         "physically_based": true,
-        "roughness": 0.7,
+        "roughness": 0.699999988079071,
         "metallic": 0,
         "emission": [
           0,
@@ -147,49 +149,23 @@
           0
         ],
         "half_extents": [
-          0.65,
-          0.65,
-          0.65
+          0.649999976158142,
+          0.649999976158142,
+          0.649999976158142
         ],
-        "radius": 0.35,
-        "half_height": 0.55,
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
         "layer": 1
       },
-      "gameplay": {
-        "role": "none",
-        "checkpoint_order": 0,
-        "player": {
-          "enabled": false,
-          "spawn": "0",
-          "radius": 0.35,
-          "half_height": 0.55,
-          "speed": 4.5,
-          "jump_speed": 6.5,
-          "gravity": 18,
-          "slope_limit": 0.7853981633974483,
-          "skin": 0.002,
-          "ground_snap": 0.15,
-          "mouse_sensitivity": 0.0025
-        },
-        "camera": {
-          "enabled": false,
-          "primary": false,
-          "eye_height": 0.75,
-          "vertical_fov": 1.0471975511965976,
-          "near_clip": 0.08,
-          "far_clip": 160
-        }
-      }
-    },
-    {
-      "id": "3",
-      "name": "Brushed pyramid",
-      "mesh": "pyramid",
+      "parent": "0",
+      "id": "2",
+      "name": "Rough blue",
+      "mesh": "sphere",
       "visible": true,
       "position": [
-        2,
-        -0.07,
-        0.2
+        0,
+        0.07999999821186066,
+        -0.600000023841858
       ],
       "rotation": [
         0,
@@ -200,13 +176,39 @@
         1,
         1,
         1
-      ],
-      "parent": "0",
+      ]
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
       "material": {
         "base_color": [
-          0.65,
+          0.649999976158142,
           0.75,
-          0.9,
+          0.899999976158142,
           1
         ],
         "texture": "checker",
@@ -214,8 +216,8 @@
         "cast_shadows": true,
         "receive_shadows": true,
         "physically_based": true,
-        "roughness": 0.35,
-        "metallic": 0.8,
+        "roughness": 0.3499999940395355,
+        "metallic": 0.800000011920929,
         "emission": [
           0,
           0,
@@ -240,45 +242,19 @@
           0.5,
           0.5
         ],
-        "radius": 0.35,
-        "half_height": 0.55,
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
         "layer": 1
       },
-      "gameplay": {
-        "role": "none",
-        "checkpoint_order": 0,
-        "player": {
-          "enabled": false,
-          "spawn": "0",
-          "radius": 0.35,
-          "half_height": 0.55,
-          "speed": 4.5,
-          "jump_speed": 6.5,
-          "gravity": 18,
-          "slope_limit": 0.7853981633974483,
-          "skin": 0.002,
-          "ground_snap": 0.15,
-          "mouse_sensitivity": 0.0025
-        },
-        "camera": {
-          "enabled": false,
-          "primary": false,
-          "eye_height": 0.75,
-          "vertical_fov": 1.0471975511965976,
-          "near_clip": 0.08,
-          "far_clip": 160
-        }
-      }
-    },
-    {
-      "id": "4",
-      "name": "Ground",
-      "mesh": "cube",
+      "parent": "0",
+      "id": "3",
+      "name": "Brushed pyramid",
+      "mesh": "pyramid",
       "visible": true,
       "position": [
-        0,
-        -0.85,
-        0
+        2,
+        -0.07000000029802322,
+        0.20000000298023224
       ],
       "rotation": [
         0,
@@ -286,11 +262,37 @@
         0
       ],
       "scale": [
-        7,
-        0.2,
-        5
-      ],
-      "parent": "0",
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
       "material": {
         "base_color": [
           1,
@@ -303,7 +305,7 @@
         "cast_shadows": true,
         "receive_shadows": true,
         "physically_based": true,
-        "roughness": 0.9,
+        "roughness": 0.899999976158142,
         "metallic": 0,
         "emission": [
           0,
@@ -325,49 +327,23 @@
           0
         ],
         "half_extents": [
-          0.65,
-          0.65,
-          0.65
+          0.649999976158142,
+          0.649999976158142,
+          0.649999976158142
         ],
-        "radius": 0.35,
-        "half_height": 0.55,
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
         "layer": 1
       },
-      "gameplay": {
-        "role": "none",
-        "checkpoint_order": 0,
-        "player": {
-          "enabled": false,
-          "spawn": "0",
-          "radius": 0.35,
-          "half_height": 0.55,
-          "speed": 4.5,
-          "jump_speed": 6.5,
-          "gravity": 18,
-          "slope_limit": 0.7853981633974483,
-          "skin": 0.002,
-          "ground_snap": 0.15,
-          "mouse_sensitivity": 0.0025
-        },
-        "camera": {
-          "enabled": false,
-          "primary": false,
-          "eye_height": 0.75,
-          "vertical_fov": 1.0471975511965976,
-          "near_clip": 0.08,
-          "far_clip": 160
-        }
-      }
-    },
-    {
-      "id": "5",
-      "name": "Emissive strip",
+      "parent": "0",
+      "id": "4",
+      "name": "Ground",
       "mesh": "cube",
       "visible": true,
       "position": [
-        -0.9,
-        1,
-        -1.8
+        0,
+        -0.850000023841858,
+        0
       ],
       "rotation": [
         0,
@@ -375,11 +351,37 @@
         0
       ],
       "scale": [
-        0.08,
-        1.7,
-        0.08
-      ],
-      "parent": "0",
+        7,
+        0.20000000298023224,
+        5
+      ]
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
       "material": {
         "base_color": [
           0,
@@ -392,11 +394,11 @@
         "cast_shadows": true,
         "receive_shadows": true,
         "physically_based": true,
-        "roughness": 0.7,
+        "roughness": 0.699999988079071,
         "metallic": 0,
         "emission": [
-          0.05,
-          0.7,
+          0.05000000074505806,
+          0.699999988079071,
           1
         ],
         "emission_strength": 12,
@@ -414,97 +416,143 @@
           0
         ],
         "half_extents": [
-          0.65,
-          0.65,
-          0.65
+          0.649999976158142,
+          0.649999976158142,
+          0.649999976158142
         ],
-        "radius": 0.35,
-        "half_height": 0.55,
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
         "layer": 1
       },
+      "parent": "0",
+      "id": "5",
+      "name": "Emissive strip",
+      "mesh": "cube",
+      "visible": true,
+      "position": [
+        -0.899999976158142,
+        1,
+        -1.7999999523162842
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.07999999821186066,
+        1.7000000476837158,
+        0.07999999821186066
+      ]
+    },
+    {
       "gameplay": {
-        "role": "none",
-        "checkpoint_order": 0,
         "player": {
           "enabled": false,
           "spawn": "0",
-          "radius": 0.35,
-          "half_height": 0.55,
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
           "speed": 4.5,
           "jump_speed": 6.5,
           "gravity": 18,
-          "slope_limit": 0.7853981633974483,
-          "skin": 0.002,
-          "ground_snap": 0.15,
-          "mouse_sensitivity": 0.0025
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
         },
         "camera": {
           "enabled": false,
           "primary": false,
           "eye_height": 0.75,
-          "vertical_fov": 1.0471975511965976,
-          "near_clip": 0.08,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
           "far_clip": 160
-        }
-      }
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "material": {
+        "base_color": [
+          0.949999988079071,
+          0.6200000047683716,
+          0.20000000298023224,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.119999997317791,
+        "metallic": 1,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": ""
+      },
+      "collider": {
+        "type": "box",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.649999976158142,
+          0.649999976158142,
+          0.649999976158142
+        ],
+        "radius": 0.3499999940395355,
+        "half_height": 0.550000011920929,
+        "layer": 1
+      },
+      "parent": "0",
+      "id": "6",
+      "name": "Polished gold",
+      "mesh": "sphere",
+      "visible": true,
+      "position": [
+        -0.805633306503296,
+        0.07999999821186066,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
     }
   ],
-  "assets": [
-    {
-      "name": "pyramid",
-      "kind": "mesh",
-      "path": "../assets/pyramid.obj"
-    },
-    {
-      "name": "checker",
-      "kind": "texture",
-      "path": "../assets/checker.tga"
-    },
-    {
-      "name": "sphere",
-      "kind": "mesh",
-      "path": "../assets/sphere.obj"
-    }
-  ],
-  "light": {
-    "direction": [
-      -0.6,
-      -1,
-      0.5
-    ],
-    "color": [
-      1,
-      0.95,
-      0.86
-    ],
-    "intensity": 1.2,
-    "ambient": 0.025
-  },
-  "shadows": {
-    "enabled": true,
-    "mode": "cascaded",
-    "resolution": 1024,
-    "distance": 45,
-    "constant_bias": 1.25,
-    "slope_bias": 1.75,
-    "normal_bias": 0.015,
-    "filter_radius": 1,
-    "split_lambda": 0.65,
-    "blend_fraction": 0.1,
-    "debug_cascades": false
-  },
+  "format": "afterlight.scene",
+  "version": 9,
+  "next_id": "8",
   "render": {
     "exposure": 0,
     "tone_mapping": true,
     "bloom": true,
-    "bloom_strength": 0.18,
+    "bloom_strength": 0.18000000715255737,
     "bloom_threshold": 1,
     "bloom_radius": 2,
     "environment_enabled": true,
     "environment_profile": 0,
-    "environment_intensity": 0.8,
-    "environment_rotation": 0.4,
-    "local_shadow_resolution": 512
+    "environment_intensity": 0.800000011920929,
+    "environment_rotation": 0.4000000059604645,
+    "local_shadow_resolution": 512,
+    "environment_asset": "studio_hdr",
+    "skybox": true,
+    "skybox_intensity": 0.65
   },
   "local_lights": [
     {
@@ -518,20 +566,20 @@
       ],
       "color": [
         1,
-        0.55,
-        0.2
+        0.550000011920929,
+        0.20000000298023224
       ],
-      "intensity": 35,
-      "range": 12,
       "direction": [
         0,
         -1,
         0
       ],
-      "inner_angle": 0.3,
-      "outer_angle": 0.6,
+      "intensity": 35,
+      "range": 12,
+      "inner_angle": 0.300000011920929,
+      "outer_angle": 0.600000023841858,
       "cast_shadows": true,
-      "shadow_bias": 0.0003
+      "shadow_bias": 0.0003000000142492354
     },
     {
       "name": "Cool spot rim",
@@ -547,17 +595,66 @@
         0.5,
         1
       ],
-      "intensity": 65,
-      "range": 15,
       "direction": [
         -0.5,
         -1,
-        -0.6
+        -0.600000023841858
       ],
-      "inner_angle": 0.35,
-      "outer_angle": 0.65,
+      "intensity": 65,
+      "range": 15,
+      "inner_angle": 0.3499999940395355,
+      "outer_angle": 0.649999976158142,
       "cast_shadows": true,
-      "shadow_bias": 0.0003
+      "shadow_bias": 0.0003000000142492354
+    }
+  ],
+  "shadows": {
+    "enabled": true,
+    "mode": "cascaded",
+    "resolution": 1024,
+    "distance": 45,
+    "constant_bias": 1.25,
+    "slope_bias": 1.75,
+    "normal_bias": 0.014999999664723873,
+    "filter_radius": 1,
+    "split_lambda": 0.649999976158142,
+    "blend_fraction": 0.10000000149011612,
+    "debug_cascades": false
+  },
+  "light": {
+    "direction": [
+      -0.600000023841858,
+      -1,
+      0.5
+    ],
+    "color": [
+      1,
+      0.949999988079071,
+      0.8600000143051147
+    ],
+    "intensity": 1.2000000476837158,
+    "ambient": 0.02500000037252903
+  },
+  "assets": [
+    {
+      "name": "pyramid",
+      "kind": "mesh",
+      "path": "../assets/pyramid.obj"
+    },
+    {
+      "name": "checker",
+      "kind": "texture",
+      "path": "../assets/checker.tga"
+    },
+    {
+      "name": "sphere",
+      "kind": "mesh",
+      "path": "../assets/sphere.obj"
+    },
+    {
+      "name": "studio_hdr",
+      "kind": "environment",
+      "path": "../assets/studio.hdr"
     }
   ]
 }

@@ -52,10 +52,35 @@ bool af_image_file_load(const char *path,af_image_file *out,af_asset_error *erro
     if(error)*error=(af_asset_error){0};if(!out)return failure(error,"An image output is required.");*out=(af_image_file){0};
     size_t length=0;unsigned char *bytes=read_file(path,&length,error);if(!bytes)return false;
     int w=0,h=0,channels=0;
-    bool valid=length<=INT_MAX&&stbi_info_from_memory(bytes,(int)length,&w,&h,&channels)&&w>0&&h>0&&w<=8192&&h<=8192;
+    bool valid=length<=INT_MAX&&!stbi_is_hdr_from_memory(bytes,(int)length)&&stbi_info_from_memory(bytes,(int)length,&w,&h,&channels)&&w>0&&h>0&&w<=8192&&h<=8192;
     unsigned char *rgba=valid?stbi_load_from_memory(bytes,(int)length,&w,&h,&channels,4):NULL;free(bytes);
     if(!rgba)return failure(error,"Unsupported or invalid image (PNG/JPEG/BMP/TGA; maximum 8192 square).");
     *out=(af_image_file){rgba,(uint32_t)w,(uint32_t)h};return true;
+}
+static bool hdr_complete(const unsigned char *bytes,size_t length,unsigned width,unsigned height){
+    size_t at=0;bool blank=false;
+    while(at<length&&at<16384){const unsigned char *newline=memchr(bytes+at,'\n',length-at);if(!newline)return false;size_t end=(size_t)(newline-bytes);size_t line=end-at;if(line&&bytes[end-1]=='\r')--line;at=end+1;if(!line){blank=true;break;}}
+    if(!blank||at>=length)return false;const unsigned char *newline=memchr(bytes+at,'\n',length-at);if(!newline)return false;
+    at=(size_t)(newline-bytes)+1;
+    if(width<8||width>32767||length-at<4||bytes[at]!=2||bytes[at+1]!=2||bytes[at+2]&128)return length-at>=(size_t)width*height*4;
+    for(unsigned y=0;y<height;++y){if(length-at<4||bytes[at]!=2||bytes[at+1]!=2||((unsigned)bytes[at+2]<<8|bytes[at+3])!=width)return false;at+=4;
+        for(unsigned channel=0;channel<4;++channel){unsigned decoded=0;
+            while(decoded<width){if(at>=length)return false;unsigned code=bytes[at++],count=code>128?code-128:code;
+                if(!count||count>width-decoded)return false;size_t needed=code>128?1:count;if(length-at<needed)return false;at+=needed;decoded+=count;}
+        }
+    }return true;
+}
+void af_hdr_file_free(af_hdr_file *image){if(image){stbi_image_free(image->rgba);*image=(af_hdr_file){0};}}
+bool af_hdr_file_load(const char *path,af_hdr_file *out,af_asset_error *error){
+    if(error)*error=(af_asset_error){0};if(!out)return failure(error,"An HDR output is required.");*out=(af_hdr_file){0};
+    size_t length=0;unsigned char *bytes=read_file(path,&length,error);if(!bytes)return false;
+    int width=0,height=0,channels=0;
+    bool valid=length<=INT_MAX&&stbi_is_hdr_from_memory(bytes,(int)length)&&stbi_info_from_memory(bytes,(int)length,&width,&height,&channels)&&width>=2&&height>=1&&width<=4096&&height<=2048&&(uint64_t)width*(uint64_t)height*16<=128u*1024u*1024u;
+    valid=valid&&hdr_complete(bytes,length,(unsigned)width,(unsigned)height);
+    float *rgba=valid?stbi_loadf_from_memory(bytes,(int)length,&width,&height,&channels,4):NULL;free(bytes);
+    if(!rgba)return failure(error,"Invalid Radiance HDR panorama (maximum 4096 x 2048 / 128 MiB).");
+    for(size_t i=0;i<(size_t)width*(size_t)height*4;++i)if(!isfinite(rgba[i])||rgba[i]<0||rgba[i]>65504){stbi_image_free(rgba);return failure(error,"HDR radiance must be finite and within [0,65504].");}
+    *out=(af_hdr_file){rgba,(uint32_t)width,(uint32_t)height};return true;
 }
 void af_mesh_file_free(af_mesh_file *mesh){if(mesh){free((void*)mesh->data.vertices);free((void*)mesh->data.indices);*mesh=(af_mesh_file){0};}}
 static bool grow(void **p,size_t *capacity,size_t count,size_t size){

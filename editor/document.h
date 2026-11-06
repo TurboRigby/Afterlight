@@ -47,6 +47,7 @@ bool ed_document_import_texture(ed_document *document,const char *name,const cha
 bool ed_document_parent(ed_document *document,af_object_id parent);
 bool ed_document_shadows(ed_document *document,af_shadow_settings settings);
 const char *ed_path_name(const char *path);
+bool ed_document_import_environment(ed_document *document,const char *name,const char *path);
 bool ed_document_import_surface(ed_document *document,const char *name,const char *path);
 bool ed_document_import_sound(ed_document *document,const char *name,const char *path);
 bool ed_document_import_normal_map(ed_document *document,const char *name,const char *path);

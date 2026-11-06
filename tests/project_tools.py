@@ -35,7 +35,9 @@ with tempfile.TemporaryDirectory(prefix='afterlight-project-tools-') as temporar
     for obj in model['objects']:
         obj['id']=str(int(obj['id'])+offset)
         if obj['parent']!='0':obj['parent']=str(int(obj['parent'])+offset)
-    scene['objects']+=model['objects'];scene['assets']=model['assets'];scene['next_id']=str(len(scene['objects'])+1);scene_path.write_text(json.dumps(scene))
+    scene['objects']+=model['objects'];scene['assets']=model['assets'];
+    panorama=project/'assets/sky.hdr';shutil.copy2(a.fixtures/'panorama.hdr',panorama);scene['assets'].append({'name':'sky','kind':'environment','path':'../assets/sky.hdr'});scene['version']=9;scene['render'].update(bloom=False,bloom_strength=.12,bloom_threshold=1,bloom_radius=1.5,environment_profile=0,environment_intensity=1,environment_rotation=0,local_shadow_resolution=512,environment_asset='sky',environment_enabled=True,skybox=True,skybox_intensity=.7);
+    scene['next_id']=str(len(scene['objects'])+1);scene_path.write_text(json.dumps(scene))
     output=root/'export'
     if a.sanitized:
         log=run([sys.executable,tool,'export',project/'game.afterlight.project','--output',output,'--player',a.player],root,False)
@@ -43,13 +45,15 @@ with tempfile.TemporaryDirectory(prefix='afterlight-project-tools-') as temporar
         print('Sanitized project tools: starter build/run and model import passed; distribution of a sanitizer runtime was correctly rejected.')
         sys.exit(0)
     run([sys.executable,tool,'export',project/'game.afterlight.project','--output',output,'--player',a.player],root)
-    manifest=json.loads((output/'export-manifest.json').read_text());assert manifest['scenes']==1 and manifest['assets']>=5
+    manifest=json.loads((output/'export-manifest.json').read_text());assert manifest['scenes']==1 and manifest['assets']>=6
     packed_resources=output/'Game.app/Contents/Resources' if sys.platform=='darwin' else output
     original_resources=a.player/'Contents/Resources' if a.player.is_dir() else a.player.parent
     assert (packed_resources/'source/afterlight-source.zip').read_bytes()==(original_resources/'source/afterlight-source.zip').read_bytes()
     assert (packed_resources/'source/game-source.zip').read_bytes()==module_archive.read_bytes()
     assert (packed_resources/'LICENSE').read_bytes()==(a.root/'LICENSE').read_bytes()
     assert 'MPL-2.0' in (output/'README.txt').read_text()
+    packed_scene=json.loads((packed_resources/'scenes/start.afterlight.json').read_text());assert packed_scene['render']['environment_asset']=='sky' and packed_scene['render']['skybox']
+    environment=next(asset for asset in packed_scene['assets'] if asset['kind']=='environment');assert (packed_resources/'scenes'/environment['path']).read_bytes()==(a.fixtures/'panorama.hdr').read_bytes()
     if sys.platform=='darwin':
         # An old/stripped player must not silently produce a source-less export.
         stripped=root/'Stripped player.app';shutil.copytree(a.player,stripped)

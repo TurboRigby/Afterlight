@@ -63,17 +63,21 @@ static void update(af_engine *engine,double delta,void *data){
     case 21:CHECK(p[0]>210&&p[1]>85&&p[1]<105&&p[2]<20);CHECK(af_engine_remove_overlay_texture(engine,3));CHECK(af_engine_set_overlay(engine,NULL));
         render.local_shadow_resolution=256;light.enabled=true;light.type=AF_LIGHT_POINT;light.cast_shadows=true;
         for(unsigned i=0;i<4;++i){af_local_light extra=light;extra.position.x+=(float)i+1;CHECK(af_scene_add_local_light(s->scene,extra));}break;
-    case 22:{af_engine_stats stats=af_engine_get_stats(engine);CHECK(stats.hdr_enabled&&stats.local_shadow_lights==4&&stats.local_shadow_maps==24&&stats.local_shadow_overflow==1);light.type=AF_LIGHT_SPOT;break;}
-    case 23:CHECK(af_engine_get_stats(engine).local_shadow_maps==19);af_engine_request_quit(engine);return;
+    case 22:{af_engine_stats stats=af_engine_get_stats(engine);CHECK(stats.hdr_enabled&&stats.local_shadow_lights==4&&stats.local_shadow_maps==24&&stats.local_shadow_overflow==1);light.type=AF_LIGHT_SPOT;
+        const unsigned char image[]={25,75,180,255};CHECK(af_engine_upload_overlay_texture(engine,4,image,1,1));ui_command.texture=4;break;}
+    case 23:{CHECK(af_engine_get_stats(engine).local_shadow_maps==19);CHECK(p[0]>20&&p[0]<30&&p[1]>70&&p[1]<80&&p[2]>175&&p[2]<185);
+        const unsigned char image[]={160,45,90,255};CHECK(af_engine_upload_overlay_texture(engine,4,image,1,1));break;}
+    case 24:CHECK(p[0]>155&&p[0]<165&&p[1]>40&&p[1]<50&&p[2]>85&&p[2]<95);CHECK(af_engine_remove_overlay_texture(engine,4));CHECK(af_engine_set_overlay(engine,NULL));break;
+    case 25:af_engine_request_quit(engine);return;
     default:CHECK(false);
     }
-    if(s->phase>=18&&s->phase<21){af_overlay_frame ui={.vertices=ui_vertices,.indices=indices,.commands=&ui_command,.vertex_count=4,.index_count=6,.command_count=1,.width=720,.height=500};CHECK(af_engine_set_overlay(engine,&ui));}
+    if((s->phase>=18&&s->phase<21)||(s->phase>=22&&s->phase<24)){af_overlay_frame ui={.vertices=ui_vertices,.indices=indices,.commands=&ui_command,.vertex_count=4,.index_count=6,.command_count=1,.width=720,.height=500};CHECK(af_engine_set_overlay(engine,&ui));}
     CHECK(af_scene_set_local_light(s->scene,0,light));CHECK(af_scene_set_object_material(s->scene,s->receiver,material));CHECK(af_scene_set_render_settings(s->scene,render));
     CHECK(af_engine_test_capture_pixel(engine,sample));++s->phase;
 }
 static void shutdown(af_engine *engine,void *data){state *s=data;af_engine_set_scene(engine,NULL);af_scene_destroy(s->scene);}
 int main(void){af_engine_config config=af_engine_config_default();config.title="Afterlight HDR / IBL / local shadow regression";config.width=640;config.height=480;config.enable_validation=true;
     af_engine *engine=af_engine_create(&config);if(!engine)return 1;state s={0};af_game game={.init=init,.update=update,.shutdown=shutdown,.user_data=&s};int result=af_engine_run(engine,&game);af_engine_stats stats=af_engine_get_stats(engine);af_engine_destroy(engine);
-    if(result||s.failed||stats.validation_errors||s.phase!=23)return 1;
+    if(result||s.failed||stats.validation_errors||s.phase!=25)return 1;
     puts("Lighting: HDR highlight recovery, rotating/profiled IBL, point/spot cast/receive/visibility, shadow resize, bloom halo/threshold and swapchain resize passed.");return 0;
 }

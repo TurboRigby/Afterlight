@@ -12,7 +12,7 @@
 #define AF_ASSET_PATH_CAPACITY 4096
 #define AF_SCENE_MAX_ASSETS 1024
 #define AF_ASSET_FILE_MAX_BYTES (64u*1024u*1024u)
-typedef enum af_asset_kind { AF_ASSET_MESH, AF_ASSET_TEXTURE, AF_ASSET_NORMAL_MAP, AF_ASSET_AUDIO, AF_ASSET_METALLIC_ROUGHNESS } af_asset_kind;
+typedef enum af_asset_kind { AF_ASSET_MESH, AF_ASSET_TEXTURE, AF_ASSET_NORMAL_MAP, AF_ASSET_AUDIO, AF_ASSET_METALLIC_ROUGHNESS, AF_ASSET_ENVIRONMENT } af_asset_kind;
 typedef struct af_scene_asset {
     char name[AF_MESH_NAME_CAPACITY];
     char path[AF_ASSET_PATH_CAPACITY];
@@ -27,6 +27,10 @@ typedef struct af_texture_info {
 typedef struct af_asset_error { char message[256]; } af_asset_error;
 typedef struct af_mesh_file { af_mesh_data data; } af_mesh_file;
 typedef struct af_image_file { unsigned char *rgba; uint32_t width,height; } af_image_file;
+typedef struct af_hdr_file {float *rgba;uint32_t width,height;} af_hdr_file;
+/* Radiance RGBE only; linear RGBA, <=4096x2048 / 128 MiB decoded. */
+bool af_hdr_file_load(const char *path,af_hdr_file *out,af_asset_error *error);
+void af_hdr_file_free(af_hdr_file *image);
 /* CPU-only loaders. Outputs are cleared on failure. Free successful outputs. */
 /* Static glTF 2.0/GLB default scene is flattened into one mesh. Node transforms,
    normals, UV0, COLOR0 and base-color factors are retained. Textures/animation

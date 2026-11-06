@@ -16,7 +16,7 @@ SOURCE_DIRS = ('engine', 'editor', 'game', 'player', 'playground', 'sandbox',
 ROOT_FILES = ('CMakeLists.txt', 'CMakePresets.json', 'README.md', 'LICENSE',
               'NOTICE', 'THIRD_PARTY_NOTICES.md', '.gitignore', '.gitattributes')
 SUFFIXES = {'.c', '.h', '.vert', '.frag', '.py', '.cmake', '.md', '.json',
-            '.yml', '.yaml', '.obj', '.tga', '.glb', '.gltf', '.png', '.bin', '.wav', '.ttf', '.txt'}
+            '.sh', '.hdr', '.yml', '.yaml', '.obj', '.tga', '.glb', '.gltf', '.png', '.bin', '.wav', '.ttf', '.txt'}
 
 
 def source_files(root: Path, project: bool = False):

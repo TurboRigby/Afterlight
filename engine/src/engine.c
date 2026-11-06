@@ -544,6 +544,7 @@ bool af_engine_load_asset(af_engine *engine,const af_scene_asset *asset,af_asset
     switch(asset->kind){case AF_ASSET_MESH:return af_engine_load_mesh(engine,asset->name,asset->path,error);
         case AF_ASSET_TEXTURE:return af_engine_load_texture(engine,asset->name,asset->path,error);
         case AF_ASSET_NORMAL_MAP:case AF_ASSET_METALLIC_ROUGHNESS:return af_engine_load_normal_map(engine,asset->name,asset->path,error);
+        case AF_ASSET_ENVIRONMENT:return af_engine_load_environment(engine,asset->name,asset->path,error);
         case AF_ASSET_AUDIO:return af_engine_load_sound(engine,asset->name,asset->path,error);default:return false;}
 }
 bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const char *source,af_asset_error *error){
@@ -563,3 +564,9 @@ bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const
 
 bool af_engine_upload_overlay_texture(af_engine *engine,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height){return engine&&af_renderer_upload_overlay_texture(engine->renderer,id,rgba,width,height);}
 bool af_engine_remove_overlay_texture(af_engine *engine,uint32_t id){return engine&&af_renderer_remove_overlay_texture(engine->renderer,id);}
+
+bool af_engine_load_environment(af_engine *engine,const char *name,const char *path,af_asset_error *error){
+    af_hdr_file image;if(!engine||!af_hdr_file_load(path,&image,error))return false;
+    bool result=af_renderer_upload_environment(engine->renderer,name,image.rgba,image.width,image.height);af_hdr_file_free(&image);
+    if(!result&&error)snprintf(error->message,sizeof(error->message),"Environment upload/convolution failed; previous data retained.");return result;
+}

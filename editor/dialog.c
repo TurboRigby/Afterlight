@@ -61,8 +61,8 @@ ed_file_dialog *ed_dialog_begin(af_engine *engine,bool save,const char *suggeste
     static const SDL_DialogFileFilter filter={"Afterlight scenes","json"};return begin_dialog(engine,save,suggested_path,&filter);
 }
 ed_file_dialog *ed_dialog_begin_asset(af_engine *engine,af_asset_kind kind){
-    static const SDL_DialogFileFilter mesh={"Static 3D models","obj;gltf;glb"},texture={"Images","png;jpg;jpeg;bmp;tga"},audio={"WAV sound effects","wav"};
-    return begin_dialog(engine,false,NULL,kind==AF_ASSET_MESH?&mesh:kind==AF_ASSET_AUDIO?&audio:&texture);
+    static const SDL_DialogFileFilter mesh={"Static 3D models","obj;gltf;glb"},texture={"Images","png;jpg;jpeg;bmp;tga"},audio={"WAV sound effects","wav"},environment={"HDR equirectangular panoramas","hdr"};
+    return begin_dialog(engine,false,NULL,kind==AF_ASSET_ENVIRONMENT?&environment:kind==AF_ASSET_MESH?&mesh:kind==AF_ASSET_AUDIO?&audio:&texture);
 }
 
 ed_file_dialog *ed_dialog_begin_module(af_engine *engine){

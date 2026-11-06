@@ -109,6 +109,7 @@ void af_engine_set_clear_color(af_engine *engine, af_color color);
 bool af_engine_upload_mesh(af_engine *engine, const char *name, const af_mesh_data *mesh);
 bool af_engine_upload_texture(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_engine_remove_texture(af_engine *engine,const char *name);
+bool af_engine_load_environment(af_engine *engine,const char *name,const char *path,af_asset_error *error);
 bool af_engine_load_texture(af_engine *engine,const char *name,const char *path,af_asset_error *error);
 bool af_engine_load_mesh(af_engine *engine,const char *name,const char *path,af_asset_error *error);
 bool af_engine_load_asset(af_engine *engine,const af_scene_asset *asset,af_asset_error *error);
@@ -132,7 +133,9 @@ void af_engine_set_viewport(af_engine *engine, const af_rect *viewport);
    Set a packet each update, or NULL to clear; packets do not persist. */
 bool af_engine_upload_overlay_atlas(af_engine *engine, const unsigned char *rgba, uint32_t width, uint32_t height);
 /* Overlay IDs >=2 are caller-selected; at most 128 independent images.
-   Upload/replace/remove waits for in-flight work. Missing IDs draw the atlas. */
+   Upload copies pixels; transfer is queued for the next frame (one image/frame).
+   Pending pixels are limited to 64 MiB total. Replacement/removal retires old
+   GPU images after fences. Missing IDs draw the atlas. */
 bool af_engine_upload_overlay_texture(af_engine *engine,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_engine_remove_overlay_texture(af_engine *engine,uint32_t id);
 bool af_engine_set_overlay(af_engine *engine, const af_overlay_frame *frame);

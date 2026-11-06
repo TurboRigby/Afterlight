@@ -8,9 +8,10 @@ files are MPL-2.0; bundled dependencies retain their [own licenses](THIRD_PARTY_
 Builds and exports include covered source and notices. See [licensing and
 distribution](docs/licensing.md), including how MPL applies to C game templates.
 
-Afterlight **0.8** adds build/test CI, RGBA16F HDR rendering, procedural environment
-IBL, point/spot shadows, bloom, and cached texture/model/material previews.
-Try the combined [Lighting Lab](docs/lighting-08.md):
+Afterlight **0.9** adds HDR panorama import and skyboxes, asynchronous previews,
+viewport light tools, and Linux build/test CI. It builds on 0.8's RGBA16F rendering,
+environment IBL, local shadows and bloom. Try the updated
+[Lighting Lab and asset workflow](docs/assets-09.md):
 
 ```sh
 cmake --build --preset debug --target run_lighting_editor
@@ -165,7 +166,7 @@ to the executable to override the default. `--help` lists the sandbox arguments.
 ctest --preset debug
 ```
 
-The 40-test suite includes CPU shadow fitting and GPU pixel checks for both the
+The 44-test suite includes CPU shadow fitting and GPU pixel checks for both the
 simple single map and four-cascade variant: cast/receive switches, PCF edges,
 cascade selection/blending, offscreen and distant casters, parent visibility,
 quality changes and resizing. Graphics tests enable synchronization validation.
@@ -327,14 +328,14 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](docs/game-code.md).
 
-The scene format is version 8 and still reads versions 1–7. Asset bytes stay in
+The scene format is version 9 and still reads versions 1–8. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](docs/assets.md),
 [scene format](docs/scene-format.md) and [editor controls](docs/editor.md).
 
 ## Next milestones
 
-- Asset thumbnails, glTF animation and richer material extensions.
-- External HDRI import, reflection probes, multiscale bloom and adaptive local shadows.
+- glTF animation and richer material extensions.
+- Reflection probes, multiscale bloom and adaptive local shadows.
 - Rigid-body dynamics, spatial/streaming audio and module state migration.
 
 The engine remains a small prototype. These next items are not implemented.

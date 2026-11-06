@@ -28,6 +28,7 @@ struct af_vk_texture {
     VkDescriptorSetLayout descriptor_layout;
     VkDescriptorPool descriptor_pool;
     VkDescriptorSet descriptor;
+    ui_buffer upload;
 };
 static bool ok(VkResult result, const char *operation)
 {
@@ -95,12 +96,12 @@ void af_vk_texture_destroy(af_vk_texture *ui){
     if(ui->view)vkDestroyImageView(ui->device,ui->view,NULL);
     if(ui->image)vkDestroyImage(ui->device,ui->image,NULL);
     if(ui->memory)vkFreeMemory(ui->device,ui->memory,NULL);
-    free(ui);
+    free_buffer(ui,&ui->upload);free(ui);
 }
 VkDescriptorSetLayout af_vk_texture_layout(const af_vk_texture *ui){return ui->descriptor_layout;}
 VkDescriptorSet af_vk_texture_descriptor(const af_vk_texture *ui){return ui->descriptor;}
 static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
-    const void *rgba, uint32_t width, uint32_t height,bool srgb,bool repeat,float anisotropy,uint32_t hdr_levels)
+    const void *rgba, uint32_t width, uint32_t height,bool srgb,bool repeat,float anisotropy,uint32_t hdr_levels,VkCommandBuffer external)
 {
     if(!rgba||!width||!height||width>8192||height>8192)return NULL;
     VkFormat format=hdr_levels?VK_FORMAT_R16G16B16A16_SFLOAT:srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM;
@@ -146,35 +147,6 @@ static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device,
         .allocationSize = requirements.size, .memoryTypeIndex = index};
     if (!ok(vkAllocateMemory(device, &allocation, NULL, &ui->memory), "atlas memory") ||
         !ok(vkBindImageMemory(device, ui->image, ui->memory, 0), "vkBindImageMemory")) goto fail;
-    VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = family};
-    if (!ok(vkCreateCommandPool(device, &pool_info, NULL, &pool), "upload pool")) goto fail;
-    VkCommandBuffer command;
-    VkCommandBufferAllocateInfo command_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-    if (!ok(vkAllocateCommandBuffers(device, &command_info, &command), "upload commands")) goto fail;
-    VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-    if (!ok(vkBeginCommandBuffer(command, &begin), "begin upload")) goto fail;
-    VkImageMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = ui->image, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,mips.count,0,1},
-        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT};
-    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-        0, NULL, 0, NULL, 1, &barrier);
-    VkBufferImageCopy copies[AF_MAX_MIPS]={0};
-    for(uint32_t level=0;level<mips.count;++level)copies[level]=(VkBufferImageCopy){.bufferOffset=mips.offsets[level],
-        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,level,0,1},.imageExtent={mips.widths[level],mips.heights[level],1}};
-    vkCmdCopyBufferToImage(command, staging.buffer, ui->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mips.count, copies);
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-        0, NULL, 0, NULL, 1, &barrier);
-    if (!ok(vkEndCommandBuffer(command), "end upload")) goto fail;
-    VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &command};
-    if (!ok(vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE), "upload submit") || !ok(vkQueueWaitIdle(queue), "upload wait")) goto fail;
-    vkDestroyCommandPool(device, pool, NULL); pool = VK_NULL_HANDLE;
-    free_buffer(ui, &staging);
     VkImageViewCreateInfo view = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = ui->image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = format,
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,mips.count,0,1}};
@@ -202,6 +174,39 @@ static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device,
         .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .pImageInfo = &image_info};
     vkUpdateDescriptorSets(device, 1, &write, 0, NULL);
+    VkCommandBuffer command=external;
+    if(!external){
+    VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = family};
+    if (!ok(vkCreateCommandPool(device, &pool_info, NULL, &pool), "upload pool")) goto fail;
+    VkCommandBufferAllocateInfo command_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+    if (!ok(vkAllocateCommandBuffers(device, &command_info, &command), "upload commands")) goto fail;
+    VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+    if (!ok(vkBeginCommandBuffer(command, &begin), "begin upload")) goto fail;
+    }
+    VkImageMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = ui->image, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,mips.count,0,1},
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT};
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+        0, NULL, 0, NULL, 1, &barrier);
+    VkBufferImageCopy copies[AF_MAX_MIPS]={0};
+    for(uint32_t level=0;level<mips.count;++level)copies[level]=(VkBufferImageCopy){.bufferOffset=mips.offsets[level],
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,level,0,1},.imageExtent={mips.widths[level],mips.heights[level],1}};
+    vkCmdCopyBufferToImage(command, staging.buffer, ui->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mips.count, copies);
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+        0, NULL, 0, NULL, 1, &barrier);
+    if(!external){
+    if (!ok(vkEndCommandBuffer(command), "end upload")) goto fail;
+    VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &command};
+    if (!ok(vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE), "upload submit") || !ok(vkQueueWaitIdle(queue), "upload wait")) goto fail;
+    vkDestroyCommandPool(device, pool, NULL); pool = VK_NULL_HANDLE;
+    free_buffer(ui, &staging);
+    }else{ui->upload=staging;staging=(ui_buffer){0};}
     free(mips.pixels);return ui;
 fail:
     free(mips.pixels);
@@ -212,9 +217,13 @@ fail:
 af_texture_info af_vk_texture_info(const af_vk_texture *texture){return texture->info;}
 
 af_vk_texture *af_vk_texture_create(VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,const unsigned char *rgba,uint32_t width,uint32_t height,bool srgb,bool repeat,float anisotropy){
-    return create_texture(physical,device,queue,family,rgba,width,height,srgb,repeat,anisotropy,0);
+    return create_texture(physical,device,queue,family,rgba,width,height,srgb,repeat,anisotropy,0,VK_NULL_HANDLE);
 }
 af_vk_texture *af_vk_texture_create_hdr(VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,const float *rgba,uint32_t width,uint32_t height,uint32_t levels,bool wrap_u){
-    return create_texture(physical,device,queue,family,rgba,width,height,false,wrap_u,1,levels);
+    return create_texture(physical,device,queue,family,rgba,width,height,false,wrap_u,1,levels,VK_NULL_HANDLE);
 }
 VkDescriptorImageInfo af_vk_texture_image(const af_vk_texture *texture){return (VkDescriptorImageInfo){texture->sampler,texture->view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};}
+
+af_vk_texture *af_vk_texture_create_recorded(VkPhysicalDevice physical,VkDevice device,VkCommandBuffer command,const unsigned char *rgba,uint32_t width,uint32_t height){
+    return command?create_texture(physical,device,VK_NULL_HANDLE,0,rgba,width,height,false,false,1,0,command):NULL;
+}

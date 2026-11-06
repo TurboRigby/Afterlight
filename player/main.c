@@ -22,6 +22,7 @@ static int check_project(const af_project *project){
     af_audio *audio=af_audio_create();bool ok=audio!=NULL;af_asset_error asset_error={0};
     for(size_t i=0;ok&&i<af_scene_asset_count(scene);++i){const af_scene_asset *a=af_scene_asset_at(scene,i);
         if(a->kind==AF_ASSET_MESH){af_mesh_file mesh;ok=af_mesh_file_load(a->path,&mesh,&asset_error);if(ok)af_mesh_file_free(&mesh);}
+        else if(a->kind==AF_ASSET_ENVIRONMENT){af_hdr_file image;ok=af_hdr_file_load(a->path,&image,&asset_error);if(ok)af_hdr_file_free(&image);}
         else if(a->kind==AF_ASSET_AUDIO)ok=af_audio_load(audio,a->name,a->path,&asset_error);
         else{af_image_file image;ok=af_image_file_load(a->path,&image,&asset_error);if(ok)af_image_file_free(&image);}
         if(!ok)fprintf(stderr,"Asset %s: %s\n",a->name,asset_error.message);

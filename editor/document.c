@@ -261,7 +261,7 @@ bool ed_document_import_normal_map(ed_document *d,const char *name,const char *p
 }
 
 bool ed_document_render_settings(ed_document *d,af_render_settings settings){
-    af_render_settings old=af_scene_get_render_settings(d->scene);if(old.exposure==settings.exposure&&old.tone_mapping==settings.tone_mapping)return true;
+    af_render_settings old=af_scene_get_render_settings(d->scene);if(!memcmp(&old,&settings,sizeof(settings)))return true;
     af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
     if(!af_scene_set_render_settings(next,settings)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,7);
 }
@@ -272,6 +272,7 @@ bool ed_document_add_light(ed_document *d,af_light_type type){
     return commit(d,next,d->selection,0);
 }
 bool ed_document_local_light(ed_document *d,size_t index,af_local_light light){
+    const af_local_light *old=af_scene_local_light_at(d->scene,index);if(old&&!memcmp(old,&light,sizeof(light)))return true;
     af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
     if(!af_scene_set_local_light(next,index,light)){af_scene_destroy(next);status(d,"Invalid light: check name, direction, range and cone angles.");return false;}
     return commit(d,next,d->selection,8+(int)index);
@@ -314,4 +315,10 @@ bool ed_document_import_surface(ed_document *d,const char *name,const char *path
     if(!af_scene_set_asset(next,name,AF_ASSET_METALLIC_ROUGHNESS,path)){af_scene_destroy(next);return false;}
     const af_scene_object *object=af_scene_get_object(next,d->selection);if(object){af_material m=object->material;snprintf(m.metallic_roughness_map,sizeof(m.metallic_roughness_map),"%s",name);if(!af_scene_set_object_material(next,object->id,m)){af_scene_destroy(next);return false;}}
     return commit(d,next,d->selection,0);
+}
+
+bool ed_document_import_environment(ed_document *d,const char *name,const char *path){
+    af_scene *next=af_scene_clone(d->scene);if(!next)return false;
+    af_render_settings settings=af_scene_get_render_settings(next);snprintf(settings.environment_asset,sizeof(settings.environment_asset),"%s",name);settings.environment_enabled=true;settings.skybox=true;
+    if(!af_scene_set_asset(next,name,AF_ASSET_ENVIRONMENT,path)||!af_scene_set_render_settings(next,settings)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
 }

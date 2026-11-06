@@ -15,6 +15,8 @@ typedef struct af_ibl_images {float *specular,*diffuse,*brdf;} af_ibl_images;
    split-sum BRDF integration. CPU-only and independent of Vulkan. */
 af_vec3 af_ibl_radiance(af_vec3 direction,uint32_t profile);
 af_vec3 af_ibl_direction(float u,float v);
+af_vec3 af_ibl_sample(const float *rgba,uint32_t width,uint32_t height,af_vec3 direction);
+bool af_ibl_bake_hdr(const float *rgba,uint32_t width,uint32_t height,af_ibl_images *images);
 bool af_ibl_bake(uint32_t profile,af_ibl_images *images);
 void af_ibl_free(af_ibl_images *images);
 #endif

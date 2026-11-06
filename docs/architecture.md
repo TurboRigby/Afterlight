@@ -123,7 +123,7 @@ transform and camera changes do not re-upload geometry or wait for the GPU.
 
 The math module is independent of SDL and Vulkan. Matrices use column-major
 storage and column vectors, so the shader receives `projection * view * model`
-in a 3024-byte per-frame camera/light/shadow uniform plus a 128-byte per-draw push constant
+in a 3104-byte per-frame camera/light/shadow uniform plus a 128-byte per-draw push constant
 (model matrix, material/selection tint, flags, surface values and emission). World space is right-handed with Y up,
 angles use radians, and the camera looks along -Z by default. Perspective maps
 near/far planes to Vulkan's [0,1] depth and flips clip Y for the positive-height
@@ -419,3 +419,19 @@ from cascaded directional shadows and protected per frame in flight.
 `editor/thumbnail.c` produces bounded CPU previews and maintains a 64-entry
 visible-widget cache. Overlay commands select independent UI images without
 exposing Vulkan descriptors in the public API. See [0.8 details](lighting-08.md).
+
+
+## Imported environment and thumbnail jobs (0.9)
+
+The frame uniform includes inverse view-projection for the skybox, drawn before
+opaque geometry without depth writes. Imported RGBE sources supply full-size
+backgrounds and convolved IBL maps; per-frame descriptors select procedural or
+named resources. Replacements drain GPU work transactionally.
+
+Thumbnail jobs own small immutable scene/asset/material snapshots. A bounded SDL
+worker queue returns CPU pixels tagged by generation. Main-thread publication
+queues one image transfer per frame, and previous GPU versions retire behind
+frame fences. UI decoding and ordinary frame upload avoid device/queue-idle
+waits; worker shutdown joins before document teardown. Light tools reuse the
+object gizmo math with separate light-array selection and grouped history.
+See [0.9 limits and checks](assets-09.md).

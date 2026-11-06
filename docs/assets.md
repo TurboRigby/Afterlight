@@ -112,3 +112,12 @@ or name to select; the Inspector has a material sphere. Cached previews follow
 file changes and successful dependency reloads, retain last-good replacements,
 and upload only one new visible preview per frame. See [preview limits and
 resource lifetime](lighting-08.md#6-editor-thumbnails).
+
+
+## HDR environments and background jobs (0.9)
+
+Import HDR panoramas in the Inspector or Assets panel. Lighting and background
+brightness are independent, and named environment assets survive reload/export.
+Thumbnail decoding/rasterization now runs on an SDL worker; GPU transfers are
+queued into ordinary frame commands with fence-protected retirement.
+See [0.9 asset workflow and limits](assets-09.md).

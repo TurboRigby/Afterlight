@@ -25,6 +25,7 @@ layout(set=0,binding=0) uniform Frame {
     LocalLight lights[16];
     vec4 light_count;
     mat4 local_shadow_matrices[24];
+    mat4 inverse_view_projection;vec4 sky_params;
 } frame;
 layout(set=0,binding=1) uniform sampler2DArray local_shadow_map;
 layout(set=0,binding=2) uniform sampler2D environment_map;

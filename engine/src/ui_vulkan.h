@@ -21,6 +21,7 @@ void af_vk_ui_destroy(af_vk_ui *ui);
 void af_vk_ui_release_pipeline(af_vk_ui *ui);
 bool af_vk_ui_create_pipeline(af_vk_ui *ui, VkRenderPass pass);
 /* Called only after the corresponding frame fence has completed. */
+void af_vk_ui_record_uploads(af_vk_ui *ui,VkCommandBuffer command,uint32_t frame_index);
 bool af_vk_ui_prepare(af_vk_ui *ui, uint32_t frame_index, const af_overlay_frame *frame);
 void af_vk_ui_draw(af_vk_ui *ui, VkCommandBuffer command, uint32_t frame_index,
     const af_overlay_frame *frame, VkExtent2D extent);

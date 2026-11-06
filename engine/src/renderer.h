@@ -27,6 +27,7 @@ bool af_renderer_test_capture_pixel(af_renderer *renderer,af_vec2 position);
 bool af_renderer_test_read_pixel(af_renderer *renderer,unsigned char rgba[4]);
 af_engine_stats af_renderer_stats(const af_renderer *renderer);
 bool af_renderer_texture_info(const af_renderer *renderer,const char *name,af_texture_info *out);
+bool af_renderer_upload_environment(af_renderer *renderer,const char *name,const float *rgba,uint32_t width,uint32_t height);
 bool af_renderer_upload_normal_map(af_renderer *renderer,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_renderer_commit_asset(af_renderer *renderer,const char *staged,const char *target,bool mesh);
 void af_renderer_set_interpolation(af_renderer *renderer,const af_scene *previous,float alpha);

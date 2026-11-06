@@ -139,7 +139,7 @@ const af_scene_asset *af_scene_find_asset(const af_scene *scene,const char *name
     if(scene&&name)for(size_t i=0;i<scene->asset_count;++i)if(!strcmp(scene->assets[i].name,name))return &scene->assets[i];return NULL;
 }
 bool af_scene_set_asset(af_scene *scene,const char *name,af_asset_kind kind,const char *path){
-    if(!scene||!valid_name(name,AF_MESH_NAME_CAPACITY)||!valid_name(path,AF_ASSET_PATH_CAPACITY)||(kind!=AF_ASSET_MESH&&kind!=AF_ASSET_TEXTURE&&kind!=AF_ASSET_NORMAL_MAP&&kind!=AF_ASSET_AUDIO&&kind!=AF_ASSET_METALLIC_ROUGHNESS))return false;
+    if(!scene||!valid_name(name,AF_MESH_NAME_CAPACITY)||!valid_name(path,AF_ASSET_PATH_CAPACITY)||(kind!=AF_ASSET_MESH&&kind!=AF_ASSET_TEXTURE&&kind!=AF_ASSET_NORMAL_MAP&&kind!=AF_ASSET_AUDIO&&kind!=AF_ASSET_METALLIC_ROUGHNESS&&kind!=AF_ASSET_ENVIRONMENT))return false;
     af_scene_asset asset={.kind=kind};memcpy(asset.name,name,strlen(name)+1);memcpy(asset.path,path,strlen(path)+1);
     for(size_t i=0;i<scene->asset_count;++i)if(!strcmp(scene->assets[i].name,name)){scene->assets[i]=asset;return true;}
     if(scene->asset_count>=AF_SCENE_MAX_ASSETS)return false;
@@ -201,7 +201,7 @@ bool af_scene_object_visible(const af_scene *scene,af_object_id id){
 bool af_scene_set_shadows(af_scene *scene,af_shadow_settings settings){if(!scene||!af_shadow_settings_valid(settings))return false;scene->shadows=settings;return true;}
 af_shadow_settings af_scene_get_shadows(const af_scene *scene){return scene?scene->shadows:af_shadow_settings_default();}
 
-af_render_settings af_render_settings_default(void){return (af_render_settings){.bloom_strength=.12f,.bloom_threshold=1,.bloom_radius=1.5f,.environment_intensity=1,.local_shadow_resolution=512};}
+af_render_settings af_render_settings_default(void){return (af_render_settings){.bloom_strength=.12f,.bloom_threshold=1,.bloom_radius=1.5f,.environment_intensity=1,.skybox_intensity=1,.local_shadow_resolution=512};}
 af_render_settings af_scene_get_render_settings(const af_scene *scene){return scene?scene->render_settings:af_render_settings_default();}
 bool af_scene_set_render_settings(af_scene *scene,af_render_settings settings){
     if(!scene||!isfinite(settings.exposure)||settings.exposure< -10||settings.exposure>10||
@@ -209,6 +209,7 @@ bool af_scene_set_render_settings(af_scene *scene,af_render_settings settings){
        !isfinite(settings.bloom_threshold)||settings.bloom_threshold<0||settings.bloom_threshold>100||
        !isfinite(settings.bloom_radius)||settings.bloom_radius<0||settings.bloom_radius>4||settings.environment_profile>2||
        (settings.local_shadow_resolution&&settings.local_shadow_resolution!=256&&settings.local_shadow_resolution!=512&&settings.local_shadow_resolution!=1024)||
+       !memchr(settings.environment_asset,0,sizeof(settings.environment_asset))||!isfinite(settings.skybox_intensity)||settings.skybox_intensity<0||settings.skybox_intensity>100||
        !isfinite(settings.environment_intensity)||settings.environment_intensity<0||settings.environment_intensity>100||
        !isfinite(settings.environment_rotation)||fabsf(settings.environment_rotation)>1000)return false;
     if(!settings.local_shadow_resolution)settings.local_shadow_resolution=512;

@@ -23,12 +23,12 @@ typedef struct ui_buffer {
     VkDeviceSize capacity;
     bool coherent;
 } ui_buffer;
-typedef struct ui_frame { ui_buffer vertices, indices; } ui_frame;
+typedef struct ui_frame { ui_buffer vertices, indices;af_vk_texture *retired[128];size_t retired_count; } ui_frame;
 struct af_vk_ui {
     VkPhysicalDevice physical;
     VkDevice device;
     af_vk_texture *texture;
-    struct {uint32_t id;af_vk_texture *texture;} images[128];
+    struct {uint32_t id;af_vk_texture *texture;unsigned char *pending;uint32_t width,height;bool remove;} images[128];
     size_t image_count;
     VkPipelineLayout layout;
     VkPipeline pipeline;
@@ -103,11 +103,12 @@ void af_vk_ui_destroy(af_vk_ui *ui)
     if (!ui) return;
     af_vk_ui_release_pipeline(ui);
     for (unsigned i = 0; i < UI_FRAME_COUNT; ++i) {
+        for(size_t j=0;j<ui->frames[i].retired_count;++j)af_vk_texture_destroy(ui->frames[i].retired[j]);
         free_buffer(ui, &ui->frames[i].vertices);
         free_buffer(ui, &ui->frames[i].indices);
     }
     if (ui->layout) vkDestroyPipelineLayout(ui->device, ui->layout, NULL);
-    for(size_t i=0;i<ui->image_count;++i)af_vk_texture_destroy(ui->images[i].texture);
+    for(size_t i=0;i<ui->image_count;++i){free(ui->images[i].pending);af_vk_texture_destroy(ui->images[i].texture);}
     af_vk_texture_destroy(ui->texture);
     free(ui);
 }
@@ -221,7 +222,7 @@ void af_vk_ui_draw(af_vk_ui *ui, VkCommandBuffer command, uint32_t frame_index,
         VkRect2D scissor = {.offset = {(int32_t)x0,(int32_t)y0}, .extent = {(uint32_t)(x1-x0),(uint32_t)(y1-y0)}};
         if (!scissor.extent.width || !scissor.extent.height || !draw->index_count) continue;
         af_vk_texture *texture=ui->texture;
-        if(draw->texture>=2)for(size_t t=0;t<ui->image_count;++t)if(ui->images[t].id==draw->texture){texture=ui->images[t].texture;break;}
+        if(draw->texture>=2)for(size_t t=0;t<ui->image_count;++t)if(ui->images[t].id==draw->texture&&ui->images[t].texture){texture=ui->images[t].texture;break;}
         VkDescriptorSet next=af_vk_texture_descriptor(texture);
         if(next!=descriptor){vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,ui->layout,0,1,&next,0,NULL);descriptor=next;}
         vkCmdSetScissor(command, 0, 1, &scissor);
@@ -230,12 +231,27 @@ void af_vk_ui_draw(af_vk_ui *ui, VkCommandBuffer command, uint32_t frame_index,
 }
 
 bool af_vk_ui_upload_texture(af_vk_ui *ui,VkQueue queue,uint32_t family,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height){
-    if(!ui||id<2)return false;size_t index=0;while(index<ui->image_count&&ui->images[index].id!=id)++index;
-    if(index==ui->image_count&&index==128)return false;
-    af_vk_texture *texture=af_vk_texture_create(ui->physical,ui->device,queue,family,rgba,width,height,false,false,1);if(!texture)return false;
-    if(index<ui->image_count)af_vk_texture_destroy(ui->images[index].texture);else ++ui->image_count;
-    ui->images[index].id=id;ui->images[index].texture=texture;return true;
+    (void)queue;(void)family;if(!ui||id<2||!rgba||!width||!height||width>8192||height>8192)return false;
+    size_t index=0;while(index<ui->image_count&&ui->images[index].id!=id)++index;if(index==128)return false;
+    size_t size=(size_t)width*height*4,total=0;for(size_t i=0;i<ui->image_count;++i)if(i!=index&&ui->images[i].pending)total+=(size_t)ui->images[i].width*ui->images[i].height*4;
+    if(size>64u*1024u*1024u||total>64u*1024u*1024u-size)return false;
+    unsigned char *copy=malloc(size);if(!copy)return false;memcpy(copy,rgba,size);
+    if(index==ui->image_count){memset(&ui->images[index],0,sizeof(ui->images[index]));++ui->image_count;}
+    free(ui->images[index].pending);ui->images[index].id=id;ui->images[index].pending=copy;ui->images[index].width=width;ui->images[index].height=height;ui->images[index].remove=false;return true;
 }
 bool af_vk_ui_remove_texture(af_vk_ui *ui,uint32_t id){
-    if(!ui||id<2)return false;for(size_t i=0;i<ui->image_count;++i)if(ui->images[i].id==id){af_vk_texture_destroy(ui->images[i].texture);ui->images[i]=ui->images[--ui->image_count];return true;}return false;
+    if(!ui||id<2)return false;for(size_t i=0;i<ui->image_count;++i)if(ui->images[i].id==id){free(ui->images[i].pending);ui->images[i].pending=NULL;ui->images[i].remove=true;return true;}return false;
+}
+void af_vk_ui_record_uploads(af_vk_ui *ui,VkCommandBuffer command,uint32_t frame_index){
+    ui_frame *frame=&ui->frames[frame_index%UI_FRAME_COUNT];
+    for(size_t i=0;i<frame->retired_count;++i)af_vk_texture_destroy(frame->retired[i]);frame->retired_count=0;
+    bool uploaded=false;
+    for(size_t i=0;i<ui->image_count;){
+        if(ui->images[i].remove){if(ui->images[i].texture)frame->retired[frame->retired_count++]=ui->images[i].texture;ui->images[i]=ui->images[--ui->image_count];continue;}
+        if(!uploaded&&ui->images[i].pending){
+            af_vk_texture *texture=af_vk_texture_create_recorded(ui->physical,ui->device,command,ui->images[i].pending,ui->images[i].width,ui->images[i].height);
+            if(texture){if(ui->images[i].texture)frame->retired[frame->retired_count++]=ui->images[i].texture;ui->images[i].texture=texture;}
+            free(ui->images[i].pending);ui->images[i].pending=NULL;uploaded=true;
+        }++i;
+    }
 }

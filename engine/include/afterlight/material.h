@@ -45,6 +45,8 @@ typedef struct af_render_settings {
     uint32_t local_shadow_resolution; /* 256, 512, 1024; zero selects 512. */
     bool environment_enabled;
     uint32_t environment_profile; /* 0=studio, 1=sunset, 2=overcast. */
+    char environment_asset[AF_MESH_NAME_CAPACITY]; /* Empty: procedural profile. */
+    bool skybox;float skybox_intensity; /* Independent background brightness. */
     float environment_intensity,environment_rotation; /* Linear multiplier; radians. */
 } af_render_settings; /* Exposure in stops, [-10,10]. */
 af_render_settings af_render_settings_default(void);

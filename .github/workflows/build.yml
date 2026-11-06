@@ -11,6 +11,28 @@ concurrency:
   group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  linux:
+    name: Linux / ${{ matrix.configuration }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release, Sanitizers]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential clang libclang-rt-18-dev cmake ninja-build git python3 ca-certificates libvulkan-dev glslang-tools spirv-tools libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+      - name: Build pinned SDL3 and Afterlight; run CPU tests
+        env:
+          AF_BUILD_CONFIGURATION: ${{ matrix.configuration }}
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: bash .github/scripts/linux-build.sh
   macos:
     name: macOS / ${{ matrix.configuration }}
     runs-on: macos-15
