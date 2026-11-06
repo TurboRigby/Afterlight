@@ -62,6 +62,7 @@ typedef struct af_frame {
     VkDescriptorSet descriptor;
     VkQueryPool timestamps;
     bool timestamp_submitted;
+    uint64_t shadow_signatures[4],local_shadow_signatures[24];
 } af_frame;
 
 typedef struct af_depth_attachment {
@@ -110,6 +111,7 @@ struct af_renderer {
     af_shadow_draw *shadow_draws;
     af_shadow_bounds *shadow_bounds;
     size_t shadow_capacity,shadow_count,shadow_draw_calls;
+    uint64_t mesh_revision;uint32_t shadow_passes,shadow_cached_passes;
     af_gpu_buffer capture_buffer;
     af_vec2 capture_position;
     VkFormat capture_format;
@@ -639,7 +641,7 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
     if (index < renderer->mesh_count) destroy_mesh(renderer, &renderer->meshes[index].gpu);
     else ++renderer->mesh_count;
     renderer->meshes[index] = (af_mesh_asset){.gpu = uploaded};
-    memcpy(renderer->meshes[index].name, asset_name, strlen(asset_name) + 1);
+    memcpy(renderer->meshes[index].name, asset_name, strlen(asset_name) + 1);++renderer->mesh_revision;
     return true;
 fail:
     destroy_mesh(renderer, &uploaded);
@@ -654,7 +656,7 @@ bool af_renderer_remove_mesh(af_renderer *renderer, const char *name)
     destroy_mesh(renderer, &renderer->meshes[index].gpu);
     memmove(&renderer->meshes[index], &renderer->meshes[index+1],
         (renderer->mesh_count-index-1) * sizeof(*renderer->meshes));
-    --renderer->mesh_count;
+    --renderer->mesh_count;++renderer->mesh_revision;
     return true;
 }
 
@@ -1134,6 +1136,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
         af_vk_shadows *replacement=af_vk_shadows_create(renderer->physical_device,renderer->device,settings.resolution,layers);
         if(!replacement)return false;af_vk_shadows_destroy(renderer->shadows);renderer->shadows=replacement;
         renderer->shadow_resolution=settings.resolution;renderer->shadow_layers=layers;
+        for(unsigned f=0;f<AF_FRAMES_IN_FLIGHT;++f)memset(renderer->frames[f].shadow_signatures,0,sizeof(renderer->frames[f].shadow_signatures));
     }
     size_t count=af_scene_object_count(scene);
     if(count>renderer->shadow_capacity){
@@ -1161,14 +1164,16 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     af_render_settings render_settings=af_scene_get_render_settings(scene);uniform->render_params=(af_vec4){exp2f(render_settings.exposure),render_settings.tone_mapping?1.0f:0.0f,render_settings.environment_enabled?render_settings.environment_intensity:0,render_settings.environment_rotation};
     if(!af_mat4_inverse(uniform->view_projection,&uniform->inverse_view_projection))return false;
     uniform->sky_params=(af_vec4){render_settings.skybox_intensity,0,0,0};
-    uint32_t local_layers=0,shadow_lights=0,requested=0;
+    uint32_t local_layers=0,shadow_lights=0;unsigned requested=0,selected[AF_LOCAL_SHADOW_LIGHTS];
+    af_local_light local_lights[AF_SCENE_MAX_LOCAL_LIGHTS];size_t local_count=af_scene_local_light_count(scene);for(size_t i=0;i<local_count;++i)local_lights[i]=*af_scene_local_light_at(scene,i);
+    unsigned selected_count=af_local_shadow_select(local_lights,local_count,camera,area.width/area.height,selected,&requested);
     for(size_t i=0;i<af_scene_local_light_count(scene);++i){const af_local_light *local=af_scene_local_light_at(scene,i);if(!local->enabled)continue;
         af_vec3 ray=af_vec3_normalize(local->direction);
         unsigned n=(unsigned)uniform->light_count.x;uniform->lights[n]=(af_gpu_light){.position_range={local->position.x,local->position.y,local->position.z,local->range},
             .color_intensity={local->color.x,local->color.y,local->color.z,local->intensity},.direction_inner={ray.x,ray.y,ray.z,cosf(local->inner_angle)},
             .params={cosf(local->outer_angle),local->type==AF_LIGHT_SPOT?1.0f:0.0f,0,0}};uniform->light_count.x+=1;
-        if(local->cast_shadows&&local->intensity>0)++requested;
-        if(local->cast_shadows&&local->intensity>0&&shadow_lights<AF_LOCAL_SHADOW_LIGHTS){
+        bool chosen=false;for(unsigned j=0;j<selected_count;++j)if(selected[j]==i)chosen=true;
+        if(chosen){
             uniform->lights[n].params.z=(float)(local_layers+1);uniform->lights[n].params.w=local->shadow_bias;
             unsigned faces=local->type==AF_LIGHT_POINT?6u:1u;
             for(unsigned face=0;face<faces;++face)uniform->local_shadow_matrices[local_layers++]=af_local_shadow_matrix(*local,face);
@@ -1182,9 +1187,17 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
         af_vk_shadows *replacement=af_vk_shadows_create(renderer->physical_device,renderer->device,render_settings.local_shadow_resolution,wanted_layers);if(!replacement)return false;
         af_vk_shadows_destroy(renderer->local_shadows);renderer->local_shadows=replacement;renderer->local_shadow_layers=wanted_layers;renderer->local_shadow_resolution=render_settings.local_shadow_resolution;
         update_environment_descriptors(renderer);
+        for(unsigned f=0;f<AF_FRAMES_IN_FLIGHT;++f)memset(renderer->frames[f].local_shadow_signatures,0,sizeof(renderer->frames[f].local_shadow_signatures));
     }
     uniform->light_count.y=1.0f/(float)renderer->local_shadow_resolution;uniform->light_count.z=(float)local_layers;
     memcpy(uniform->shadow_matrices,view->matrices,sizeof(view->matrices));return true;
+}
+static uint64_t shadow_hash(uint64_t h,const void *data,size_t size){const unsigned char *p=data;for(size_t i=0;i<size;++i){h^=p[i];h*=UINT64_C(1099511628211);}return h;}
+static uint64_t shadow_signature(af_renderer *r,af_mat4 matrix,af_shadow_settings settings,bool enabled){
+    uint64_t h=shadow_hash(UINT64_C(14695981039346656037),&matrix,sizeof(matrix));
+    h=shadow_hash(h,&settings.constant_bias,sizeof(float));h=shadow_hash(h,&settings.slope_bias,sizeof(float));h=shadow_hash(h,&r->mesh_revision,sizeof(r->mesh_revision));h=shadow_hash(h,&enabled,sizeof(enabled));
+    if(enabled)for(size_t i=0;i<r->shadow_count;++i){h=shadow_hash(h,&r->shadow_draws[i].model,sizeof(af_mat4));h=shadow_hash(h,&r->shadow_draws[i].mesh,sizeof(size_t));}
+    return h?h:1;
 }
 bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera, af_rect viewport_rect, af_object_id highlighted, const af_overlay_frame *overlay, bool *rendered)
 {
@@ -1240,8 +1253,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (!vk_ok(vkBeginCommandBuffer(frame->command, &begin), "vkBeginCommandBuffer")) return false;
     if(renderer->ui)af_vk_ui_record_uploads(renderer->ui,frame->command,renderer->frame_index);
     if(frame->timestamps){vkCmdResetQueryPool(frame->command,frame->timestamps,0,5);vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,frame->timestamps,0);}
-    renderer->shadow_draw_calls=0;
+    renderer->shadow_draw_calls=0;renderer->shadow_passes=renderer->shadow_cached_passes=0;
     for(uint32_t layer=0;layer<shadow_view.count;++layer){
+        uint64_t signature=shadow_signature(renderer,shadow_view.matrices[layer],af_scene_get_shadows(scene),uniform.shadow_params.x>.5f);
+        if(frame->shadow_signatures[layer]==signature){++renderer->shadow_cached_passes;continue;}frame->shadow_signatures[layer]=signature;++renderer->shadow_passes;
         af_vk_shadows_begin(renderer->shadows,frame->command,renderer->frame_index,layer,af_scene_get_shadows(scene));
         for(size_t i=0;uniform.shadow_params.x>.5f&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(shadow_view.matrices[layer],&renderer->shadow_bounds[i]))continue;
@@ -1254,6 +1269,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     }
     for(uint32_t layer=0;layer<renderer->local_shadow_layers;++layer){
         af_shadow_settings bias=af_scene_get_shadows(scene);bias.constant_bias=1;bias.slope_bias=1.5f;
+        uint64_t signature=shadow_signature(renderer,uniform.local_shadow_matrices[layer],bias,layer<(uint32_t)uniform.light_count.z);
+        if(frame->local_shadow_signatures[layer]==signature){++renderer->shadow_cached_passes;continue;}frame->local_shadow_signatures[layer]=signature;++renderer->shadow_passes;
         af_vk_shadows_begin(renderer->local_shadows,frame->command,renderer->frame_index,layer,bias);
         for(size_t i=0;layer<(uint32_t)uniform.light_count.z&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(uniform.local_shadow_matrices[layer],&renderer->shadow_bounds[i]))continue;
@@ -1412,7 +1429,7 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer)
         .loaded_meshes = renderer->mesh_count,
         .loaded_textures=renderer->texture_count,.missing_textures=renderer->missing_textures,
         .draw_calls = renderer->draw_calls,
-        .shadow_draw_calls=renderer->shadow_draw_calls,.shadow_cascades=renderer->shadow_layers,.shadow_resolution=renderer->shadow_resolution,
+        .shadow_draw_calls=renderer->shadow_draw_calls,.shadow_passes=renderer->shadow_passes,.shadow_cached_passes=renderer->shadow_cached_passes,.shadow_cascades=renderer->shadow_layers,.shadow_resolution=renderer->shadow_resolution,
         .missing_meshes = renderer->missing_meshes,
         .validation_errors = atomic_load(&renderer->validation_errors),
         .validation_enabled = renderer->validation_enabled
@@ -1477,7 +1494,7 @@ bool af_renderer_commit_asset(af_renderer *renderer,const char *staged,const cha
         if(to<renderer->environment_count){af_environment_asset swap=renderer->environments[to];renderer->environments[to]=renderer->environments[from];renderer->environments[from]=swap;snprintf(renderer->environments[from].name,AF_MESH_NAME_CAPACITY,"%s",staged);}
         else to=from;snprintf(renderer->environments[to].name,AF_MESH_NAME_CAPACITY,"%s",target);update_environment_descriptors(renderer);return true;
     }
-    if(mesh){size_t from=find_mesh_index(renderer,staged),to=find_mesh_index(renderer,target);if(from==renderer->mesh_count)return false;
+    if(mesh){size_t from=find_mesh_index(renderer,staged),to=find_mesh_index(renderer,target);if(from==renderer->mesh_count)return false;++renderer->mesh_revision;
         if(to<renderer->mesh_count){af_gpu_mesh old=renderer->meshes[to].gpu;renderer->meshes[to].gpu=renderer->meshes[from].gpu;renderer->meshes[from].gpu=old;}
         else snprintf(renderer->meshes[from].name,sizeof(renderer->meshes[from].name),"%s",target);
     }else{size_t from=0,to=0;while(from<renderer->texture_count&&strcmp(renderer->textures[from].name,staged))++from;while(to<renderer->texture_count&&strcmp(renderer->textures[to].name,target))++to;

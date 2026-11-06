@@ -68,7 +68,7 @@ static void update(af_engine *engine,double delta,void *data){
     case 23:{CHECK(af_engine_get_stats(engine).local_shadow_maps==19);CHECK(p[0]>20&&p[0]<30&&p[1]>70&&p[1]<80&&p[2]>175&&p[2]<185);
         const unsigned char image[]={160,45,90,255};CHECK(af_engine_upload_overlay_texture(engine,4,image,1,1));break;}
     case 24:CHECK(p[0]>155&&p[0]<165&&p[1]>40&&p[1]<50&&p[2]>85&&p[2]<95);CHECK(af_engine_remove_overlay_texture(engine,4));CHECK(af_engine_set_overlay(engine,NULL));break;
-    case 25:af_engine_request_quit(engine);return;
+    case 25:CHECK(af_engine_get_stats(engine).shadow_cached_passes>0&&af_engine_get_stats(engine).shadow_passes==0);af_engine_request_quit(engine);return;
     default:CHECK(false);
     }
     if((s->phase>=18&&s->phase<21)||(s->phase>=22&&s->phase<24)){af_overlay_frame ui={.vertices=ui_vertices,.indices=indices,.commands=&ui_command,.vertex_count=4,.index_count=6,.command_count=1,.width=720,.height=500};CHECK(af_engine_set_overlay(engine,&ui));}

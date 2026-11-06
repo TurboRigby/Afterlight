@@ -51,7 +51,7 @@ static void update(af_engine *engine,double delta,void *data){
         VERIFY(af_scene_set_object_material(s->scene,s->ground,af_material_default()));af_transform moved=af_transform_identity();moved.position=(af_vec3){3,1,0};VERIFY(af_scene_set_object_transform(s->scene,s->cube,moved));request(engine,s,sample);}
     if(s->step==10){VERIFY(af_engine_test_read_pixel(engine,pixel));VERIFY(abs((int)pixel[0]-(int)s->lit[0])<4);
         af_shadow_settings settings=af_scene_get_shadows(s->scene);settings.resolution=512;settings.filter_radius=2;VERIFY(af_scene_set_shadows(s->scene,settings));VERIFY(af_engine_set_window_size(engine,800,500));}
-    if(s->step==20){VERIFY(af_engine_get_stats(engine).shadow_resolution==512&&af_engine_get_stats(engine).shadow_draw_calls>0);
+    if(s->step==20){VERIFY(af_engine_get_stats(engine).shadow_resolution==512&&af_engine_get_stats(engine).shadow_cached_passes>0);
         af_shadow_settings settings=af_scene_get_shadows(s->scene);settings.mode=AF_SHADOW_CASCADED;settings.resolution=2048;settings.filter_radius=1;VERIFY(af_scene_set_shadows(s->scene,settings));
         af_transform transform=af_transform_identity();transform.position.y=1;VERIFY(af_scene_set_object_transform(s->scene,s->cube,transform));request(engine,s,sample);}
     if(s->step==21){VERIFY(af_engine_test_read_pixel(engine,pixel));VERIFY(pixel[0]+30<s->lit[0]);VERIFY(af_engine_get_stats(engine).shadow_cascades==4);

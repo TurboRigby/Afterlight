@@ -722,6 +722,7 @@ static void performance_panel(editor *app,float width,float height)
         snprintf(text,sizeof(text),"CPU events %.3f ms",stats.cpu_events_ms);label(ctx,text,24);
         snprintf(text,sizeof(text),"CPU update %.3f ms",stats.cpu_update_ms);label(ctx,text,24);
         snprintf(text,sizeof(text),"CPU submit/wait %.3f ms",stats.cpu_render_ms);label(ctx,text,24);
+        snprintf(text,sizeof(text),"Shadow passes %u / reused %u",stats.shadow_passes,stats.shadow_cached_passes);label(ctx,text,24);
         if(stats.gpu_timing_valid){
             snprintf(text,sizeof(text),"GPU frame %.3f ms",stats.gpu_frame_ms);label(ctx,text,28);
             snprintf(text,sizeof(text),"Shadows %.3f / Scene %.3f ms",stats.gpu_shadow_ms,stats.gpu_scene_ms);label(ctx,text,24);

@@ -55,6 +55,7 @@ typedef struct af_engine_stats {
     uint32_t texture_mip_levels;
     float texture_anisotropy;
     size_t shadow_draw_calls;
+    uint32_t shadow_passes,shadow_cached_passes; /* Recorded/reused map layers this frame. */
     uint32_t shadow_cascades,shadow_resolution;
     uint32_t local_shadow_lights,local_shadow_maps,local_shadow_resolution,local_shadow_overflow;
     bool hdr_enabled;

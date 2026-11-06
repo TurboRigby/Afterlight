@@ -60,3 +60,24 @@ destruction cancels/joins the worker and releases every result. C callers use
 `af_engine_cancel_environment`. CPU tests cover successful completion, invalid
 input, early/late cancellation and shutdown; GPU sky/IBL checks start through
 the asynchronous engine API.
+
+## 3. Shadow budget and map reuse
+
+The four-light shadow budget selects enabled, nonzero lights whose range boxes
+intersect the camera frustum. It conservatively retains lights whose centers
+are offscreen but whose influence enters the view. Priority is range divided
+by distance plus one, with scene order breaking ties. Overflow counts eligible
+lights that exceed the budget; all enabled lights still contribute lighting.
+This is a conservative range heuristic, not per-pixel occlusion or spot-cone
+visibility testing.
+
+Each frame owns its shadow maps and signatures. Unchanged caster world matrices,
+mesh registry generation, light matrices and depth biases reuse completed maps.
+Animated/moved/deleted casters, cast/visibility changes, hot reload and shadow
+resource replacement invalidate them. Reuse preserves sampled depth layouts;
+new maps receive their first clear/render before being sampled. Counters in
+Performance distinguish recorded layers from reused layers. Receiver filters
+and material colors need no depth-map regeneration.
+On the tested Apple M4, warmed static-scene shadow timing fell to about
+0.17–0.25 ms in the benchmark; total GPU time still includes lighting and post
+work and varies with other running applications.

@@ -345,6 +345,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_shadow_budget_test tests/shadow_budget.c)
+    target_include_directories(afterlight_shadow_budget_test PRIVATE engine/src)
+    target_link_libraries(afterlight_shadow_budget_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_shadow_budget_test)
+    add_test(NAME afterlight.shadow_budget COMMAND afterlight_shadow_budget_test)
     add_executable(afterlight_environment_job_test tests/environment_jobs.c)
     target_include_directories(afterlight_environment_job_test PRIVATE engine/src)
     target_link_libraries(afterlight_environment_job_test PRIVATE Afterlight::Engine SDL3::SDL3)
