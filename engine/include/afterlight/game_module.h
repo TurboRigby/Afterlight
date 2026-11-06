@@ -45,6 +45,9 @@ typedef struct af_game_host {
     af_joint_id (*add_joint)(af_scene*,af_joint);
     bool (*set_joint)(af_scene*,af_joint_id,af_joint);
     bool (*remove_joint)(af_scene*,af_joint_id);
+    const af_joint *(*get_joint)(const af_scene*,af_joint_id);
+    const af_joint *(*joint_at)(const af_scene*,size_t);
+    size_t (*joint_count)(const af_scene*);
     bool (*key_down)(const struct af_game_host*,af_key);
     size_t (*object_count)(const af_scene*);
     const af_scene_object *(*object_at)(const af_scene*,size_t);

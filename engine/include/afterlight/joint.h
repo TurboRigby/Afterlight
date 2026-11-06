@@ -16,6 +16,8 @@ typedef struct af_joint {
     float distance;
     af_vec3 axis_a, axis_b, reference_a, reference_b;
     bool limits_enabled;
+    bool motor_enabled;
+    float motor_speed,max_motor_torque; /* Relative B-A rad/s; torque budget per second. */
     float lower_limit, upper_limit; /* Radians: signed B reference relative to A. */
 } af_joint;
 /* Anchors use unscaled body axes about the world collider center. A world

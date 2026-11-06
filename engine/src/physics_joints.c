@@ -136,7 +136,9 @@ void ph_joints_warm_start(af_physics *p,float dt){float ratio=p->last_dt>0?fminf
     if(j->type==AF_JOINT_HINGE){af_vec3 x=ph_vector(a,j->axis_a),y=ph_vector(b,j->axis_b),u=ph_vector(a,j->reference_a),v=af_vec3_cross(x,u),cross=af_vec3_cross(x,y);float n=af_vec3_length(cross),angle=atan2f(n,dot(x,y));af_vec3 error=n>1e-6f?mul(cross,angle/n):mul(u,angle);row_prepare(&state->rows[3],a,b,ra,rb,u,dot(error,u),dt,true,-10000,10000,ratio);row_prepare(&state->rows[4],a,b,ra,rb,v,dot(error,v),dt,true,-10000,10000,ratio);
         angle=hinge_angle(a,b,j);if(j->limits_enabled&&(angle<j->lower_limit+.001f||angle>j->upper_limit-.001f)){bool lock=j->upper_limit-j->lower_limit<1e-6f,lower=angle<j->lower_limit+.001f;af_vec3 axis=lower||lock?x:mul(x,-1);float c=lock?angle-j->lower_limit:lower?angle-j->lower_limit:j->upper_limit-angle;row_prepare(&state->rows[5],a,b,ra,rb,axis,c,dt,true,lock?-10000:0,10000,ratio);}else state->rows[5]=(ph_joint_row){0};
     }else for(unsigned k=3;k<6;++k)state->rows[k]=(ph_joint_row){0};
-    for(unsigned k=0;k<6;++k)if(state->rows[k].inverse>0)row_apply(a,b,&state->rows[k],state->rows[k].lambda,k>=3);
+
+    if(j->type==AF_JOINT_HINGE&&j->motor_enabled&&j->max_motor_torque>0){float budget=j->max_motor_torque*dt;row_prepare(&state->rows[6],a,b,ra,rb,ph_vector(a,j->axis_a),0,dt,true,-budget,budget,ratio);state->rows[6].bias=-j->motor_speed;}else state->rows[6]=(ph_joint_row){0};
+    for(unsigned k=0;k<7;++k)if(state->rows[k].inverse>0)row_apply(a,b,&state->rows[k],state->rows[k].lambda,k>=3);
 }}
 void ph_joints_solve(af_physics *p, float dt, bool pos) {
     for (size_t i = 0; i < p->joint_count; ++i) {
@@ -145,7 +147,7 @@ void ph_joints_solve(af_physics *p, float dt, bool pos) {
                 *b = p->joints[i].b == SIZE_MAX ? &p->world : &p->bodies[p->joints[i].b];
         if((a->inv_mass==0||a->sleeping)&&(b->inv_mass==0||b->sleeping))continue;
 
-        if(!pos){ph_joint *state=&p->joints[i];for(unsigned k=0;k<6;++k){ph_joint_row *r=&state->rows[k];if(r->inverse<=0)continue;float speed=k>=3?dot(sub(b->w,a->w),r->n):dot(sub(velocity(b,r->rb),velocity(a,r->ra)),r->n);float next=fmaxf(r->lo,fminf(r->hi,r->lambda-(speed+r->bias)*r->inverse));row_apply(a,b,r,next-r->lambda,k>=3);r->lambda=next;}continue;}
+        if(!pos){ph_joint *state=&p->joints[i];for(unsigned k=0;k<7;++k){ph_joint_row *r=&state->rows[k];if(r->inverse<=0)continue;float speed=k>=3?dot(sub(b->w,a->w),r->n):dot(sub(velocity(b,r->rb),velocity(a,r->ra)),r->n);float next=fmaxf(r->lo,fminf(r->hi,r->lambda-(speed+r->bias)*r->inverse));row_apply(a,b,r,next-r->lambda,k>=3);r->lambda=next;}continue;}
         af_vec3 ra = ph_vector(a, j->anchor_a), rb = ph_vector(b, j->anchor_b),
                 delta = sub(add(b->p, rb), add(a->p, ra));
         float length = af_vec3_length(delta);

@@ -59,3 +59,13 @@ are cached solver impulses divided by substep duration, retaining the last solve
 value during sleep. The suspended 2 kg regression measures approximately 19.62 N.
 The editor shows per-joint state, phase timings, island counts, cache probes and
 CCD clamps; sleeping and high-error joints have distinct overlay colors.
+
+## Hinge motors
+
+Scene 15 adds `motor_enabled`, `motor_speed` (relative B-A radians/second) and
+`max_motor_torque` (newton-metres) to every joint. Older scenes default motors off.
+Only hinges accept enabled motors. Accumulated motor impulse is clamped to torque
+times substep duration, including warm starts; angular limits take precedence.
+Zero target speed acts as a brake. Running motors keep their island awake.
+Editor controls and C-host joint views/setters expose these settings. Tests cover
+acceleration budgets, speed tracking, braking, limit stalls and persistence.

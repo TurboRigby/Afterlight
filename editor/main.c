@@ -558,6 +558,8 @@ static void joint_controls(editor *app, af_scene_object object) {
                 if (nk_property_float(ctx, "Max deg", low, &high, 180, 5, .5f))
                     j.upper_limit = high * AF_PI / 180;
             }
+
+            if(j.type==AF_JOINT_HINGE){nk_bool motor=j.motor_enabled;nk_layout_row_dynamic(ctx,26,1);nk_checkbox_label(ctx,"Hinge motor",&motor);j.motor_enabled=motor!=0;if(j.motor_enabled){label(ctx,"Relative B-A speed (rad/s)",24);nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Speed",-100,&j.motor_speed,100,.1f,.01f);nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Max torque (Nm)",0,&j.max_motor_torque,1000000,1,.1f);}}
             if(app->runtime.playing){af_physics_joint_state state=af_engine_joint_state(app->engine,j.id);if(state.available){char text[160];snprintf(text,sizeof(text),"%s | error %.4f | angle %.1f deg",state.sleeping?"Sleeping":"Awake",state.linear_error,state.angle*180/AF_PI);label(ctx,text,28);snprintf(text,sizeof(text),"Reaction %.2f N | %.2f Nm | motor %.2f Nm",state.force,state.torque,state.motor_torque);label(ctx,text,28);}}
             bool remove;
             nk_layout_row_dynamic(ctx, 28, 1);
