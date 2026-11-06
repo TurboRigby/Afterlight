@@ -181,12 +181,25 @@ def export_project(project_path, destination, player_path, icd=None):
         startup_name=None
         for index,source in enumerate(scenes):
             document=read_json(source)
-            if document.get('format')!='afterlight.scene' or document.get('version') not in range(1,11):raise ValueError(f'Unsupported scene: {source}')
+            if document.get('format')!='afterlight.scene' or document.get('version') not in range(1,13):raise ValueError(f'Unsupported scene: {source}')
             for asset in document.get('assets',[]):
                 original,separator,selector=asset['path'].partition('#');packed=copy_asset(source.parent/original)
                 asset['path']='../assets/'+packed.name+(separator+selector if separator else '')
-            name='start.afterlight.json' if index==0 else f'{index}_{source.name}';write_json(resources/'scenes'/name,document)
+            name=source.name;write_json(resources/'scenes'/name,document)
             if index==0:startup_name=name
+        input_map=project_path.parent/'input.json'
+        if input_map.is_file():shutil.copy2(input_map,resources/'input.json')
+        prefabs=project_path.parent/'prefabs'
+        if prefabs.is_dir():
+            files=sorted(prefabs.rglob('*.afterlight.prefab'))
+            if len(files)>128:raise ValueError('Too many prefabs (maximum 128).')
+            for source in files:
+                document=read_json(source)
+                for asset in document.get('assets',[]):
+                    original,separator,selector=asset['path'].partition('#');packed=copy_asset(source.parent/original)
+                    target=resources/'prefabs'/source.relative_to(prefabs)
+                    asset['path']=os.path.relpath(packed,target.parent)+(separator+selector if separator else '')
+                write_json(resources/'prefabs'/source.relative_to(prefabs),document)
         game_module=resources/'game'/('game'+module.suffix);shutil.copy2(module,game_module)
         write_json(resources/'game.afterlight.project',{'format':'afterlight.project','version':1,'name':project['name'],'startup_scene':'scenes/'+startup_name,'game_module':'game/'+game_module.name})
         libraries=[]

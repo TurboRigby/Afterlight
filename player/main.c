@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-typedef struct player {af_project project;af_scene *source;ed_runtime runtime;ed_gui gui;af_asset_watch *watch;uint64_t frames;bool failed,hot_reload;} player;
+typedef struct player {char project_path[4096];af_project project;af_scene *source;ed_runtime runtime;ed_gui gui;af_asset_watch *watch;uint64_t frames;bool failed,hot_reload;} player;
 static int check_project(const af_project *project){
     af_scene_error error;af_scene *scene=af_scene_load(project->startup_scene,&error);if(!scene){fprintf(stderr,"Scene: %s\n",error.message);return 1;}
     af_audio *audio=af_audio_create();bool ok=audio!=NULL;af_asset_error asset_error={0};
@@ -42,6 +42,8 @@ static bool init(af_engine *engine,void *memory){
     af_mesh_data cube=cube_mesh_data();if(!af_engine_upload_mesh(engine,"cube",&cube)||!af_engine_load_scene_assets(engine,app->source,&error)){fprintf(stderr,"Player assets: %s\n",error.message);return false;}
     char font[AF_ASSET_PATH_CAPACITY];const char *base=af_engine_get_base_path(engine);
     if(!base||snprintf(font,sizeof(font),"%sfonts/FiraSans-Regular.ttf",base)>=(int)sizeof(font)||!ed_gui_init(&app->gui,engine,font))return false;
+    if(!ed_runtime_set_project(&app->runtime,app->project_path,app->project.startup_scene))return false;
+    char input_path[4096];if(af_asset_resolve_path(app->project_path,"input.json",input_path,sizeof(input_path))){FILE *input=fopen(input_path,"rb");if(input){fclose(input);if(!af_engine_load_input_map(engine,input_path,&error))return false;}}
     if(!ed_runtime_start_file(&app->runtime,app->source,engine,app->project.game_module)){fprintf(stderr,"Player game: %s\n",app->runtime.status);return false;}
     if(app->hot_reload)app->watch=af_asset_watch_create();
     app->runtime.auto_reload=app->hot_reload;af_engine_set_scene(engine,app->runtime.scene);return true;
@@ -67,7 +69,7 @@ int main(int argc,char **argv){
         else if(!strcmp(argv[i],"--check"))check=true;else if(!strcmp(argv[i],"--hot-reload"))app.hot_reload=true;else if(!strcmp(argv[i],"--validation"))config.enable_validation=true;else if(!strcmp(argv[i],"--no-validation"))config.enable_validation=false;
         else if(!strcmp(argv[i],"--help")){puts("afterlight_player [--project PATH] [--frames N] [--hot-reload] [--validation | --no-validation]\nF6 pauses; Escape releases mouse, then exits. Without --project, loads game.afterlight.project beside app resources.");return 0;}else return 1;}
     char bundled[AF_ASSET_PATH_CAPACITY];if(!project){const char *base=SDL_GetBasePath();if(!base||snprintf(bundled,sizeof(bundled),"%sgame.afterlight.project",base)>=(int)sizeof(bundled))return 1;project=bundled;}
-    af_asset_error error;if(!af_project_load(project,&app.project,&error)){fprintf(stderr,"Player project: %s\n",error.message);return 1;}config.title=app.project.name;
+    af_asset_error error;if(!af_project_load(project,&app.project,&error)){fprintf(stderr,"Player project: %s\n",error.message);return 1;}snprintf(app.project_path,sizeof(app.project_path),"%s",project);config.title=app.project.name;
     if(check)return check_project(&app.project);
     af_engine *engine=af_engine_create(&config);if(!engine)return 1;const char *required=getenv("AFTERLIGHT_REQUIRE_VALIDATION");if(required&&!strcmp(required,"1")&&!af_engine_get_stats(engine).validation_enabled){af_engine_destroy(engine);return 1;}
     af_game game={.init=init,.update=update,.fixed_update=fixed,.shutdown=shutdown,.user_data=&app};int result=af_engine_run(engine,&game);af_engine_destroy(engine);return app.failed?1:result;

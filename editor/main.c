@@ -118,6 +118,7 @@ static void toggle_play(editor *app)
     ed_gui_unfocus(&app->gui);app->fields_active=false;
     ed_document_end_edit(&app->document);app->gizmo.dragging=false;app->edit_camera=app->camera;
     app->free_camera=app->resume_game_capture=false;
+    if(app->project_path[0])ed_runtime_set_project(&app->runtime,app->project_path,app->project.startup_scene);
     ed_runtime_start_file(&app->runtime,app->document.scene,app->engine,app->module_path);
     set_status(app,app->runtime.status);
 }
@@ -147,6 +148,7 @@ static bool open_project(editor *app,const char *path,bool untitled)
     af_project project;af_asset_error error;
     if(!af_project_load(path,&project,&error)){set_status(app,error.message);return false;}
     if(!ed_document_load(&app->document,project.startup_scene,untitled))return false;
+    char input_path[4096];if(af_asset_resolve_path(path,"input.json",input_path,sizeof(input_path))){FILE *input=fopen(input_path,"rb");if(input){fclose(input);if(!af_engine_load_input_map(app->engine,input_path,&error)){set_status(app,error.message);return false;}}}
     app->project=project;app->project_is_template=untitled;snprintf(app->project_path,sizeof(app->project_path),"%s",path);
     if(!app->module_override)snprintf(app->module_path,sizeof(app->module_path),"%s",project.game_module);
     refresh(app);reset_camera(app);return true;

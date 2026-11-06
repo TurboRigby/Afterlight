@@ -12,6 +12,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+static bool request_scene(const af_game_host *host,const char *name){return host&&host->runtime_context&&ed_runtime_request_scene(host->runtime_context,name);}
+bool ed_runtime_set_project(ed_runtime *r,const char *project_path,const char *startup){if(!r||!project_path||!startup)return false;char scene[4096],project[4096];if(!af_asset_resolve_path(NULL,startup,scene,sizeof(scene))||!af_asset_resolve_path(NULL,project_path,project,sizeof(project)))return false;char *s=strrchr(scene,'/'),*p=strrchr(project,'/');if(!s||!p)return false;s[1]=0;p[1]=0;snprintf(r->scene_directory,sizeof(r->scene_directory),"%s",scene);snprintf(r->project_directory,sizeof(r->project_directory),"%s",project);r->host.project_directory=r->project_directory;return true;}
+bool ed_runtime_request_scene(ed_runtime *r,const char *name){if(!r||!r->playing||!r->scene_directory[0]||!name||!name[0]||strlen(name)>=64||r->pending_scene[0])return false;for(const char *p=name;*p;++p)if(!((*p>='a'&&*p<='z')||(*p>='A'&&*p<='Z')||(*p>='0'&&*p<='9')||*p=='_'||*p=='-'))return false;snprintf(r->pending_scene,sizeof(r->pending_scene),"%s",name);return true;}
 static bool compatible(const af_game_module *api){
     return api&&api->abi_version==AF_GAME_ABI_VERSION&&api->struct_size==sizeof(*api)&&api->host_size==sizeof(af_game_host)&&api->object_size==sizeof(af_scene_object)&&
         (!api->save_state==!api->load_state)&&api->name&&api->state_size<=AF_GAME_STATE_MAX_BYTES&&api->init&&api->update&&api->shutdown;
@@ -21,7 +24,7 @@ bool ed_runtime_start(ed_runtime *r,const af_scene *source,af_engine *engine,con
     if(!compatible(api)){snprintf(r->status,sizeof(r->status),"Incompatible C game ABI or invalid callbacks.");return false;}
     af_scene *scene=af_scene_clone(source);void *state=calloc(1,api->state_size?api->state_size:1);
     if(!scene||!state){af_scene_destroy(scene);free(state);snprintf(r->status,sizeof(r->status),"Not enough memory to enter Play.");return false;}
-    af_game_host host=af_game_host_create(scene,engine);
+    af_game_host host=af_game_host_create(scene,engine);host.runtime_context=r;host.project_directory=r->project_directory;host.request_scene=request_scene;
     const af_scene *previous_scene=af_engine_get_scene(engine);af_engine_set_scene(engine,scene);
     af_camera previous=af_engine_get_camera(engine),camera;af_gameplay_status previous_status=af_engine_gameplay_status(engine);if(af_scene_game_camera(scene,&camera))af_engine_set_camera(engine,&camera);
     bool captured=af_engine_mouse_captured(engine);
@@ -34,10 +37,11 @@ void ed_runtime_frame_update(ed_runtime *r,double delta,bool input_enabled){
     if(r->auto_reload)ed_runtime_poll_reload(r,delta);
     r->host.input_enabled=input_enabled&&!r->paused;r->host.camera_enabled=input_enabled;
     if(r->api->frame_update)r->api->frame_update(r->state,&r->host,r->paused?0:fmin(delta,0.1));
+    if(!r->paused&&r->pending_scene[0])ed_runtime_transition(r);
 }
 void ed_runtime_update(ed_runtime *r,double delta,bool input_enabled){
     if(!r->playing||r->paused||!isfinite(delta)||delta<0)return;
-    r->host.input_enabled=input_enabled;r->api->update(r->state,&r->host,fmin(delta,0.1));
+    r->host.input_enabled=input_enabled;r->api->update(r->state,&r->host,fmin(delta,0.1));if(r->pending_scene[0])ed_runtime_transition(r);
 }
 void ed_runtime_step(ed_runtime *r,double delta){
     if(!r->playing)return;bool paused=r->paused;r->paused=false;ed_runtime_update(r,delta,false);r->paused=paused;
@@ -102,12 +106,12 @@ bool ed_runtime_reload(ed_runtime *r){
     bool captured=af_engine_mouse_captured(engine),editor_camera=!r->host.camera_enabled;af_camera previous_camera=af_engine_get_camera(engine);af_gameplay_status previous_status=af_engine_gameplay_status(engine);
     size_t size=0;void *blob=NULL;uint32_t version=r->api->state_version;
     if(r->api->save_state){size=r->api->save_state(r->state,NULL,0);if(!size||size>1024u*1024u||(blob=malloc(size))==NULL||r->api->save_state(r->state,blob,size)!=size){free(blob);snprintf(r->status,sizeof(r->status),"Reload rejected: state serialization failed or exceeds 1 MiB.");return false;}}
-    ed_runtime candidate={0};bool ready=ed_runtime_start_file(&candidate,r->scene,engine,r->module_path);
+    ed_runtime candidate={0};snprintf(candidate.scene_directory,sizeof(candidate.scene_directory),"%s",r->scene_directory);snprintf(candidate.project_directory,sizeof(candidate.project_directory),"%s",r->project_directory);bool ready=ed_runtime_start_file(&candidate,r->scene,engine,r->module_path);
     if(ready&&blob&&(!candidate.api->load_state||!candidate.api->load_state(candidate.state,&candidate.host,version,blob,size))){ed_runtime_stop(&candidate);ready=false;snprintf(candidate.status,sizeof(candidate.status),"Incompatible saved module state.");}
     free(blob);if(!ready){af_engine_set_scene(engine,r->scene);af_engine_set_camera(engine,&previous_camera);af_engine_set_gameplay_status(engine,previous_status);af_engine_set_mouse_capture(engine,captured);snprintf(r->status,sizeof(r->status),"Reload rejected: %.220s",candidate.status);return false;}
     af_camera next_camera=af_engine_get_camera(engine);af_gameplay_status next_status=af_engine_gameplay_status(engine);
     candidate.paused=r->paused;candidate.auto_reload=r->auto_reload;candidate.reload_count=r->reload_count+1;
-    bool restored=size!=0;ed_runtime_stop(r);*r=candidate;af_engine_set_scene(engine,r->scene);af_engine_set_gameplay_status(engine,next_status);af_engine_set_camera(engine,editor_camera?&previous_camera:&next_camera);af_engine_set_mouse_capture(engine,captured);r->host.camera_enabled=!editor_camera;
+    bool restored=size!=0;ed_runtime_stop(r);*r=candidate;r->host.runtime_context=r;r->host.project_directory=r->project_directory;af_engine_set_scene(engine,r->scene);af_engine_set_gameplay_status(engine,next_status);af_engine_set_camera(engine,editor_camera?&previous_camera:&next_camera);af_engine_set_mouse_capture(engine,captured);r->host.camera_enabled=!editor_camera;
     snprintf(r->status,sizeof(r->status),"C game reloaded (#%" PRIu64 "). %s",r->reload_count,restored?"Module state restored.":"Module state reinitialized.");return true;
 }
 void ed_runtime_poll_reload(ed_runtime *r,double delta){
@@ -118,4 +122,14 @@ void ed_runtime_poll_reload(ed_runtime *r,double delta){
     r->stable_time+=delta;if(r->stable_time<0.3)return;
     r->loaded_time=r->pending_time;r->loaded_size=r->pending_size;r->stable_time=0;
     (void)ed_runtime_reload(r);
+}
+
+bool ed_runtime_transition(ed_runtime *r){
+    if(!r||!r->playing||!r->pending_scene[0])return false;char path[4096];if(snprintf(path,sizeof(path),"%s%s.afterlight.json",r->scene_directory,r->pending_scene)>=(int)sizeof(path)){r->pending_scene[0]=0;return false;}r->pending_scene[0]=0;
+    af_scene_error error;af_scene *source=af_scene_load(path,&error);if(!source){snprintf(r->status,sizeof(r->status),"Scene change rejected: %.220s",error.message);return false;}
+    af_engine *engine=r->host.engine;af_camera camera=af_engine_get_camera(engine);af_gameplay_status status=af_engine_gameplay_status(engine);bool captured=af_engine_mouse_captured(engine);af_asset_error asset_error;ed_runtime candidate={0};snprintf(candidate.scene_directory,sizeof(candidate.scene_directory),"%s",r->scene_directory);snprintf(candidate.project_directory,sizeof(candidate.project_directory),"%s",r->project_directory);
+    bool ok=(!engine||af_engine_load_scene_assets(engine,source,&asset_error))&&(r->module_path[0]?ed_runtime_start_file(&candidate,source,engine,r->module_path):ed_runtime_start(&candidate,source,engine,r->api));af_scene_destroy(source);
+    if(!ok){if(engine)(void)af_engine_load_scene_assets(engine,r->scene,&asset_error);af_engine_set_scene(engine,r->scene);af_engine_set_camera(engine,&camera);af_engine_set_gameplay_status(engine,status);af_engine_set_mouse_capture(engine,captured);snprintf(r->status,sizeof(r->status),"Scene change rejected; previous scene retained.");return false;}
+    candidate.auto_reload=r->auto_reload;candidate.transition_count=r->transition_count+1;candidate.reload_count=r->reload_count;af_camera next_camera=af_engine_get_camera(engine);af_gameplay_status next_status=af_engine_gameplay_status(engine);
+    ed_runtime_stop(r);*r=candidate;r->host.runtime_context=r;r->host.project_directory=r->project_directory;af_engine_set_scene(engine,r->scene);af_engine_set_camera(engine,&next_camera);af_engine_set_gameplay_status(engine,next_status);af_engine_reset_interpolation(engine);snprintf(r->status,sizeof(r->status),"Scene changed (#%" PRIu64 ").",r->transition_count);return true;
 }

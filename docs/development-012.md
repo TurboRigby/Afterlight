@@ -49,3 +49,20 @@ and scene running. Modules without callbacks keep the previous reset behavior.
 The character module preserves its POD controller/progress/platform state in a
 versioned same-process blob. Private pointers must never be copied blindly.
 Pause, camera ownership and gameplay status survive a successful reload.
+
+## Scene transitions and portable resources
+
+C games request a scene by name through `host->request_scene(host,"level")`.
+Names contain only letters, digits, underscores and hyphens, resolving to
+`level.afterlight.json` beside the startup scene. Requests take effect after a
+callback returns; CPU data and the previous module are released only after a
+candidate initializes. A missing/invalid scene keeps the current game running.
+Transitions initialize fresh game state; hot reload remains a separate operation.
+Assets use the bounded shared engine cache. An initialization failure reloads the
+previous scene's assets; applications should keep those source assets available.
+Loads are synchronous. Project files remain version 1.
+
+The player/editor load an optional `input.json` beside the project. Exports retain
+scene filenames (and therefore aliases), package that input map and copy the
+project's `prefabs/` subtree with rewritten asset paths. Source removal and
+relocation remain supported.

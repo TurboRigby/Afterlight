@@ -419,6 +419,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_scene_transition_test tests/scene_transition.c)
+    target_link_libraries(afterlight_scene_transition_test PRIVATE afterlight_editor_document SDL3::SDL3)
+    afterlight_warnings(afterlight_scene_transition_test)
+    add_dependencies(afterlight_scene_transition_test afterlight_state_game)
+    add_test(NAME afterlight.scene_transition COMMAND afterlight_scene_transition_test "$<TARGET_FILE:afterlight_state_game>")
     foreach(module afterlight_state_game afterlight_state_reject_game)
         add_library(${module} MODULE tests/state_module.c)
         target_include_directories(${module} PRIVATE engine/include)

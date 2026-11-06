@@ -23,6 +23,9 @@ typedef struct af_game_host {
     af_scene *scene;
     af_engine *engine;
     bool input_enabled,camera_enabled;
+    void *runtime_context;
+    const char *project_directory;
+    bool (*request_scene)(const struct af_game_host*,const char *name);
     bool (*instantiate_prefab)(af_scene*,const char*,af_object_id,af_transform,af_object_id*,af_scene_error*);
     bool (*load_scene_assets)(af_engine*,const af_scene*,af_asset_error*);
     float (*action_value)(const struct af_game_host*,const char*);

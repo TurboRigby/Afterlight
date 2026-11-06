@@ -9,6 +9,7 @@
 #include <afterlight/game_module.h>
 #include <SDL3/SDL_loadso.h>
 typedef struct ed_runtime {
+    char scene_directory[AF_ASSET_PATH_CAPACITY],project_directory[AF_ASSET_PATH_CAPACITY],pending_scene[64];uint64_t transition_count;
     af_scene *scene;
     af_game_host host;
     const af_game_module *api;
@@ -23,6 +24,9 @@ typedef struct ed_runtime {
     double stable_time;
     bool auto_reload;
 } ed_runtime;
+bool ed_runtime_set_project(ed_runtime*,const char *project_path,const char *startup_scene);
+bool ed_runtime_request_scene(ed_runtime*,const char *name);
+bool ed_runtime_transition(ed_runtime*);
 bool ed_runtime_start(ed_runtime *runtime,const af_scene *source,af_engine *engine,const af_game_module *module);
 bool ed_runtime_start_file(ed_runtime *runtime,const af_scene *source,af_engine *engine,const char *path);
 bool ed_runtime_reload(ed_runtime *runtime);

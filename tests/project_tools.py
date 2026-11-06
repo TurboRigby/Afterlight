@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='afterlight-project-tools-') as temporar
         obj['id']=str(int(obj['id'])+offset)
         if obj['parent']!='0':obj['parent']=str(int(obj['parent'])+offset)
     scene['objects']+=model['objects'];scene['assets']=model['assets'];
-    panorama=project/'assets/sky.hdr';shutil.copy2(a.fixtures/'panorama.hdr',panorama);scene['assets'].append({'name':'sky','kind':'environment','path':'../assets/sky.hdr'});scene['version']=10;scene['render'].update(bloom=False,bloom_strength=.12,bloom_threshold=1,bloom_radius=1.5,environment_profile=0,environment_intensity=1,environment_rotation=0,local_shadow_resolution=512,environment_asset='sky',environment_enabled=True,skybox=True,skybox_intensity=.7);
+    panorama=project/'assets/sky.hdr';shutil.copy2(a.fixtures/'panorama.hdr',panorama);scene['assets'].append({'name':'sky','kind':'environment','path':'../assets/sky.hdr'});scene['version']=10;[obj.pop('rig',None) for obj in scene['objects']];scene['render'].update(bloom=False,bloom_strength=.12,bloom_threshold=1,bloom_radius=1.5,environment_profile=0,environment_intensity=1,environment_rotation=0,local_shadow_resolution=512,environment_asset='sky',environment_enabled=True,skybox=True,skybox_intensity=.7);
     for obj in scene['objects']:
         obj.setdefault('animation',dict(asset='',clip=0,speed=1,autoplay=False,loop=True));obj.setdefault('model',dict(root='0',node=0,skin=-1,primitive=False))
     scene['next_id']=str(len(scene['objects'])+1);scene_path.write_text(json.dumps(scene))
