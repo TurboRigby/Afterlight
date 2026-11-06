@@ -7,7 +7,8 @@
 #ifndef AFTERLIGHT_GAME_MODULE_H
 #define AFTERLIGHT_GAME_MODULE_H
 #include <afterlight/afterlight.h>
-#define AF_GAME_ABI_VERSION 9u
+#include <afterlight/third_person.h>
+#define AF_GAME_ABI_VERSION 10u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
 #define AF_GAME_EXPORT __declspec(dllexport)
@@ -64,6 +65,11 @@ typedef struct af_game_host {
     bool (*animated_world_matrix)(const af_engine*,af_object_id,af_mat4*);
     bool (*animation_clip)(const af_engine*,af_object_id,size_t,af_animation_clip_info*);
     af_object_id (*animation_root)(const af_engine*,af_object_id);
+    af_third_person_config (*third_person_config_default)(void);
+    af_third_person (*third_person_default)(af_vec3);
+    void (*third_person_look)(af_third_person*,af_third_person_config,af_vec2);
+    bool (*third_person_step)(const af_scene*,af_third_person*,af_third_person_config,af_third_person_input,float,af_query_filter);
+    bool (*third_person_camera)(const af_scene*,af_third_person*,af_third_person_config,float,af_query_filter,af_camera*);
 } af_game_host;
 typedef struct af_game_module {
     uint32_t abi_version,struct_size;

@@ -54,6 +54,7 @@ add_library(afterlight STATIC
     engine/src/project.c
     engine/src/game_host.c
     engine/src/character.c
+    engine/src/third_person.c
     engine/src/collision.c
     engine/src/simulation.c
     engine/src/mipmap.c
@@ -383,6 +384,10 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_third_person_test tests/third_person.c)
+    target_link_libraries(afterlight_third_person_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_third_person_test)
+    add_test(NAME afterlight.third_person COMMAND afterlight_third_person_test)
     add_executable(afterlight_animation_demo_play_test tests/animation_demo_play.c)
     target_include_directories(afterlight_animation_demo_play_test PRIVATE engine/src sandbox)
     target_link_libraries(afterlight_animation_demo_play_test PRIVATE afterlight_editor_document SDL3::SDL3)
