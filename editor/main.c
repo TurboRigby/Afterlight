@@ -62,6 +62,7 @@ typedef struct editor {
     bool refresh_fields;
     bool fields_active;
     bool free_camera,resume_game_capture,maximize_play;
+    af_collider_part_id edit_part;af_collider_part initial_part;uint64_t part_drag_revision;
     af_joint_id edit_joint;ed_joint_part joint_part;af_joint initial_joint;uint64_t joint_drag_revision;
     bool invalid_name;
     bool failed;
@@ -243,7 +244,7 @@ static bool should_close(af_engine *engine,void *userdata)
 }
 static void select_object(editor *app,af_object_id id)
 {
-    app->edit_joint=0;
+    app->edit_joint=0;app->edit_part=0;
     app->light_selected=false;
     if(app->document.selection!=id){app->document.selection=id;refresh(app);}
 }
@@ -301,7 +302,9 @@ static void keyboard(editor *app,double delta)
         const af_scene_object *object=af_scene_get_object(app->document.scene,app->document.selection);
         const af_local_light *light=app->light_selected?af_scene_local_light_at(app->document.scene,app->selected_light):NULL;
         const af_joint *joint=af_scene_get_joint(app->document.scene,app->edit_joint);
-        if(axis>=0&&joint){af_transform pose;if(ed_joint_edit_pose(app->document.scene,*joint,app->joint_part,&pose)){ed_document_end_edit(&app->document);app->initial_joint=*joint;app->joint_drag_revision=app->document.revision;ed_gizmo_begin(&app->gizmo,axis,0,pose,mouse);}}
+        const af_collider_part *part=af_scene_get_collider_part(app->document.scene,app->edit_part);
+        if(axis>=0&&part){ed_document_end_edit(&app->document);app->initial_part=*part;app->part_drag_revision=app->document.revision;ed_gizmo_begin(&app->gizmo,axis,0,part->local,mouse);}
+        else if(axis>=0&&joint){af_transform pose;if(ed_joint_edit_pose(app->document.scene,*joint,app->joint_part,&pose)){ed_document_end_edit(&app->document);app->initial_joint=*joint;app->joint_drag_revision=app->document.revision;ed_gizmo_begin(&app->gizmo,axis,0,pose,mouse);}}
         else if(axis>=0&&light){ed_document_end_edit(&app->document);app->initial_light=*light;app->drag_light=app->selected_light;app->light_drag_revision=app->document.revision;app->light_dragging=true;ed_gizmo_begin(&app->gizmo,axis,0,ed_light_transform(*light),mouse);}
         else if(axis>=0&&object){ed_document_end_edit(&app->document);ed_gizmo_begin(&app->gizmo,axis,object->id,object->transform,mouse);}
         else{int picked=ed_light_pick(app->document.scene,&app->camera,app->viewport,mouse);if(picked>=0){ed_document_end_edit(&app->document);app->selected_light=(size_t)picked;app->light_selected=true;app->document.selection=0;app->gizmo.dragging=false;struct nk_window *inspector_window=nk_window_find(&app->gui.context,"Inspector");if(inspector_window)inspector_window->scrollbar.y=0;}else select_object(app,af_engine_pick_object(engine,mouse));}
@@ -310,6 +313,8 @@ static void keyboard(editor *app,double delta)
         ed_gui_unfocus(&app->gui);app->fields_active=false;
     }
 
+
+    if(app->gizmo.dragging&&app->edit_part){if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){if(app->document.revision!=app->part_drag_revision)ed_document_undo(&app->document);app->gizmo.dragging=false;ed_document_end_edit(&app->document);}else{bool held=af_engine_mouse_down(engine,AF_MOUSE_LEFT);if(held||(SDL_GetWindowFlags(af_engine_sdl_window(engine))&SDL_WINDOW_INPUT_FOCUS)){af_collider_part next=app->initial_part;next.local=ed_gizmo_drag(&app->gizmo,mouse);ed_document_part(&app->document,next);}if(!held){app->gizmo.dragging=false;ed_document_end_edit(&app->document);}}return;}
     if(app->gizmo.dragging&&app->edit_joint){
         if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){if(app->document.revision!=app->joint_drag_revision)ed_document_undo(&app->document);app->gizmo.dragging=false;ed_document_end_edit(&app->document);}
         else{bool held=af_engine_mouse_down(engine,AF_MOUSE_LEFT);if(held||(SDL_GetWindowFlags(af_engine_sdl_window(engine))&SDL_WINDOW_INPUT_FOCUS)){af_joint next;if(ed_joint_edit_apply(app->document.scene,app->initial_joint,app->joint_part,ed_gizmo_drag(&app->gizmo,mouse),&next))ed_document_joint(&app->document,next);}if(!held){app->gizmo.dragging=false;ed_document_end_edit(&app->document);}}return;
@@ -472,15 +477,15 @@ static void local_light_controls(editor *app)
 }
 static void collider_controls(editor *app,af_scene_object object){
     struct nk_context *ctx=&app->gui.context;label(ctx,"Collider",30);af_collider value=object.collider,before=value;
-    static const char *types[]={"No collider","Box","Sphere","Capsule","Imported mesh"};nk_layout_row_dynamic(ctx,30,1);
-    value.type=(af_collider_type)nk_combo(ctx,types,5,(int)value.type,26,nk_vec2(290,150));
+    static const char *types[]={"No collider","Box","Sphere","Capsule","Imported mesh","Compound"};nk_layout_row_dynamic(ctx,30,1);
+    value.type=(af_collider_type)nk_combo(ctx,types,6,(int)value.type,26,nk_vec2(290,150));
     if(before.type==AF_COLLIDER_NONE&&value.type==AF_COLLIDER_BOX&&!strcmp(object.mesh,"cube"))value.half_extents=(af_vec3){0.65f,0.65f,0.65f};
     if(value.type!=AF_COLLIDER_NONE){nk_layout_row_dynamic(ctx,26,2);nk_bool enabled=value.enabled,trigger=value.trigger;
         nk_checkbox_label(ctx,"Enabled",&enabled);nk_checkbox_label(ctx,"Trigger",&trigger);value.enabled=enabled!=0;value.trigger=trigger!=0;
-        if(value.type==AF_COLLIDER_MESH){value.center=(af_vec3){0};label(ctx,"Uses imported static triangles; moving bodies unsupported.",42);}else vector_fields(ctx,"Collider center",&value.center,0.1f,0.01f);
+        if(value.type==AF_COLLIDER_MESH||value.type==AF_COLLIDER_COMPOUND){value.center=(af_vec3){0};label(ctx,value.type==AF_COLLIDER_COMPOUND?"Parts share one body and computed center of mass.":"Uses imported static triangles; moving bodies unsupported.",42);}else vector_fields(ctx,"Collider center",&value.center,0.1f,0.01f);
         if(value.type==AF_COLLIDER_BOX){label(ctx,"Half extents",22);nk_layout_row_dynamic(ctx,30,3);
             nk_property_float(ctx,"#X",0.001f,&value.half_extents.x,10000,0.1f,0.01f);nk_property_float(ctx,"#Y",0.001f,&value.half_extents.y,10000,0.1f,0.01f);nk_property_float(ctx,"#Z",0.001f,&value.half_extents.z,10000,0.1f,0.01f);
-        }else if(value.type!=AF_COLLIDER_MESH){nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Radius",0.001f,&value.radius,10000,0.05f,0.005f);
+        }else if(value.type!=AF_COLLIDER_MESH&&value.type!=AF_COLLIDER_COMPOUND){nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Radius",0.001f,&value.radius,10000,0.05f,0.005f);
             if(value.type==AF_COLLIDER_CAPSULE){nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Segment half height",0,&value.half_height,10000,0.1f,0.01f);}}
         nk_layout_row_dynamic(ctx,30,1);int layer=0;uint32_t bit=value.layer;while(bit>1){bit>>=1;++layer;}int next=layer;nk_property_int(ctx,"Layer bit",0,&next,31,1,1);if(next!=layer)value.layer=UINT32_C(1)<<(unsigned)next;
         char mask[96];snprintf(mask,sizeof(mask),"Mask 0x%08" PRIx32 "; selector assigns one bit.",value.layer);label(ctx,mask,24);
@@ -490,6 +495,12 @@ static void collider_controls(editor *app,af_scene_object object){
     if(memcmp(&value,&before,sizeof(value)))ed_document_collider(&app->document,value);
 }
 
+
+static void part_controls(editor *app,af_scene_object object){struct nk_context *ctx=&app->gui.context;if(object.gameplay.player.enabled)return;label(ctx,"Collider parts",28);nk_layout_row_dynamic(ctx,28,2);for(unsigned type=0;type<2;++type)if(nk_button_label(ctx,type?"Add sphere part":"Add box part")){af_collider_part part=af_collider_part_default();part.collider.type=type?AF_COLLIDER_SPHERE:AF_COLLIDER_BOX;if(!af_scene_collider_part_count(app->document.scene,object.id)&&(object.collider.type==AF_COLLIDER_BOX||object.collider.type==AF_COLLIDER_SPHERE)){part.collider=object.collider;part.collider.trigger=false;part.local.position=part.collider.center;part.collider.center=(af_vec3){0};}ed_document_end_edit(&app->document);ed_document_part(&app->document,part);ed_document_end_edit(&app->document);return;}
+    for(size_t i=0;i<af_scene_collider_part_count(app->document.scene,object.id);++i){af_collider_part part=*af_scene_collider_part_at(app->document.scene,object.id,i),before=part;char title[96];snprintf(title,sizeof(title),"Part %llu: %s",(unsigned long long)part.id,part.name);if(!nk_tree_push_id(ctx,NK_TREE_NODE,title,NK_MINIMIZED,(int)part.id))continue;static const char *types[]={"Box","Sphere"};nk_layout_row_dynamic(ctx,28,1);part.collider.type=nk_combo(ctx,types,2,part.collider.type==AF_COLLIDER_SPHERE,24,nk_vec2(250,100))?AF_COLLIDER_SPHERE:AF_COLLIDER_BOX;vector_fields(ctx,"Part position",&part.local.position,.1f,.01f);af_vec3 degrees=af_vec3_scale(part.local.rotation,180/AF_PI);if(vector_fields(ctx,"Part rotation (degrees)",&degrees,5,.5f))part.local.rotation=af_vec3_scale(degrees,AF_PI/180);vector_fields(ctx,"Part scale",&part.local.scale,.1f,.01f);if(part.collider.type==AF_COLLIDER_BOX)vector_fields(ctx,"Half extents",&part.collider.half_extents,.1f,.01f);else{nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Radius",.001f,&part.collider.radius,10000,.1f,.01f);}nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Density (kg/m3)",.001f,&part.density,1000000,50,5);
+        nk_layout_row_dynamic(ctx,28,3);const char *tools[]={"Move part","Rotate part","Scale part"};for(unsigned tool=0;tool<3;++tool)if(nk_button_label(ctx,tools[tool])){app->edit_part=part.id;app->edit_joint=0;app->gizmo.mode=(ed_gizmo_mode)tool;app->gizmo.dragging=false;app->show_colliders=true;ed_document_end_edit(&app->document);}nk_layout_row_dynamic(ctx,28,2);bool fit=nk_button_label(ctx,"Fit mesh bounds")!=0,remove=nk_button_label(ctx,"Delete part")!=0;nk_tree_pop(ctx);if(fit){ed_document_fit_part(&app->document,part.id);return;}if(remove){ed_document_remove_part(&app->document,part.id);return;}if(memcmp(&part,&before,sizeof(part))){ed_document_part(&app->document,part);return;}}
+    if(object.collider.type==AF_COLLIDER_COMPOUND){af_mass_properties mass;if(af_scene_compound_mass(app->document.scene,object.id,&mass)){char text[140];snprintf(text,sizeof(text),"Volume %.4f m3 | material mass %.2f kg",mass.volume,mass.mass);label(ctx,text,30);nk_layout_row_dynamic(ctx,28,1);if(nk_button_label(ctx,"Use computed total mass")){af_rigid_body body=object.body;body.mass=mass.mass;ed_document_end_edit(&app->document);ed_document_body(&app->document,body);ed_document_end_edit(&app->document);}}}if(app->edit_part){nk_layout_row_dynamic(ctx,26,1);if(nk_button_label(ctx,"Finish part edit")){app->edit_part=0;app->gizmo.dragging=false;ed_document_end_edit(&app->document);}}
+}
 static void joint_controls(editor *app, af_scene_object object) {
     struct nk_context *ctx = &app->gui.context;
     label(ctx, "Joints", 28);
@@ -541,7 +552,7 @@ static void joint_controls(editor *app, af_scene_object object) {
                 nk_combo_end(ctx);
             }
 
-            if(!app->runtime.playing){nk_layout_row_dynamic(ctx,28,2);const char *buttons[]={"Drag anchor A","Drag anchor B","Rotate axis A","Rotate axis B"};for(unsigned part=0;part<(j.type==AF_JOINT_HINGE?4u:2u);++part)if(nk_button_label(ctx,buttons[part])){ed_document_end_edit(&app->document);app->edit_joint=j.id;app->joint_part=(ed_joint_part)part;app->show_physics=true;app->gizmo.dragging=false;}if(app->edit_joint==j.id){nk_layout_row_dynamic(ctx,24,1);label(ctx,app->joint_part<ED_JOINT_AXIS_A?"Drag an axis handle; Snap uses 0.5 units.":"Drag a rotation ring; Snap uses 15 degrees.",36);nk_layout_row_dynamic(ctx,26,1);if(nk_button_label(ctx,"Finish joint edit")){app->edit_joint=0;ed_document_end_edit(&app->document);}}}
+            if(!app->runtime.playing){nk_layout_row_dynamic(ctx,28,2);const char *buttons[]={"Drag anchor A","Drag anchor B","Rotate axis A","Rotate axis B"};for(unsigned part=0;part<(j.type==AF_JOINT_HINGE?4u:2u);++part)if(nk_button_label(ctx,buttons[part])){ed_document_end_edit(&app->document);app->edit_joint=j.id;app->edit_part=0;app->joint_part=(ed_joint_part)part;app->show_physics=true;app->gizmo.dragging=false;}if(app->edit_joint==j.id){nk_layout_row_dynamic(ctx,24,1);label(ctx,app->joint_part<ED_JOINT_AXIS_A?"Drag an axis handle; Snap uses 0.5 units.":"Drag a rotation ring; Snap uses 15 degrees.",36);nk_layout_row_dynamic(ctx,26,1);if(nk_button_label(ctx,"Finish joint edit")){app->edit_joint=0;ed_document_end_edit(&app->document);}}}
             vector_fields(ctx, "Anchor A (body units)", &j.anchor_a, .1f, .01f);
             vector_fields(ctx, j.b ? "Anchor B (body units)" : "World anchor B", &j.anchor_b, .1f, .01f);
             if (j.type == AF_JOINT_DISTANCE) {
@@ -694,7 +705,7 @@ static void inspector(editor *app,float width,float height)
                     if(nk_combo_item_label(context,text,NK_TEXT_LEFT))ed_document_parent(&app->document,candidate.id);
                 }nk_combo_end(context);
             }
-            collider_controls(app,object);body_controls(app,object);joint_controls(app,object);
+            collider_controls(app,object);part_controls(app,object);body_controls(app,object);joint_controls(app,object);
             gameplay_controls(app,object);
             label(context,"Material",30);af_material material=object.material;
             nk_layout_row_dynamic(context,80,1);thumbnail_widget(app,NULL,&material);
@@ -803,7 +814,7 @@ static void draw_colliders(editor *app){
     nk_style_push_style_item(ctx,&ctx->style.window.fixed_background,nk_style_item_color(nk_rgba(0,0,0,0)));
     if(nk_begin(ctx,"Collision shapes",nk_rect(r.x,r.y,r.width,r.height),NK_WINDOW_NO_INPUT|NK_WINDOW_NO_SCROLLBAR|NK_WINDOW_BACKGROUND)){
         struct nk_command_buffer *canvas=nk_window_get_canvas(ctx);const af_scene *scene=app->runtime.playing?app->runtime.scene:app->document.scene;
-        for(size_t i=0;i<af_scene_object_count(scene);++i){af_world_collider collider;if(!af_scene_world_collider(scene,af_scene_object_at(scene,i)->id,&collider))continue;
+        for(size_t i=0;i<af_scene_object_count(scene);++i)for(size_t part=0;part<af_scene_collider_shape_count(scene,af_scene_object_at(scene,i)->id);++part){af_world_collider collider;if(!af_scene_collider_shape_at(scene,af_scene_object_at(scene,i)->id,part,&collider))continue;
             ed_line3 lines[ED_COLLIDER_MAX_LINES];size_t count=ed_collider_lines(collider,lines,ED_COLLIDER_MAX_LINES);struct nk_color color=collider.object==app->document.selection?nk_rgb(255,211,115):collider.trigger?nk_rgb(195,135,255):nk_rgb(92,225,204);
             for(size_t j=0;j<count&&j<ED_COLLIDER_MAX_LINES;++j){af_vec2 a,b;if(ed_project(&app->camera,r,lines[j].a,&a)&&ed_project(&app->camera,r,lines[j].b,&b))nk_stroke_line(canvas,a.x,a.y,b.x,b.y,1.5f,color);}
         }
@@ -1368,7 +1379,10 @@ static void update(af_engine *engine,double delta,void *userdata)
     af_engine_set_viewport(engine,&app->viewport);
     const af_scene_object *selected=af_scene_get_object(app->document.scene,app->document.selection);
     const af_joint *editing=af_scene_get_joint(app->document.scene,app->edit_joint);if(app->edit_joint&&(!editing||!selected||(selected->id!=editing->a&&selected->id!=editing->b))){app->edit_joint=0;app->gizmo.dragging=false;}
-    if(app->edit_joint&&!app->runtime.playing){af_transform pose;if(ed_joint_edit_pose(app->document.scene,*editing,app->joint_part,&pose)){app->gizmo.mode=app->joint_part<ED_JOINT_AXIS_A?ED_GIZMO_MOVE:ED_GIZMO_ROTATE;ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,pose.position,af_mat4_identity(),pose.rotation);}else app->gizmo.projected=false;}
+
+    const af_collider_part *editing_part=af_scene_get_collider_part(app->document.scene,app->edit_part);if(app->edit_part&&(!editing_part||!selected||editing_part->owner!=selected->id)){app->edit_part=0;app->gizmo.dragging=false;}
+    if(app->edit_part&&!app->runtime.playing){af_mat4 matrix;if(af_scene_world_matrix(app->document.scene,editing_part->owner,&matrix)){af_vec4 world=af_mat4_transform(matrix,(af_vec4){editing_part->local.position.x,editing_part->local.position.y,editing_part->local.position.z,1});ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,(af_vec3){world.x,world.y,world.z},matrix,editing_part->local.rotation);}else app->gizmo.projected=false;}
+    else if(app->edit_joint&&!app->runtime.playing){af_transform pose;if(ed_joint_edit_pose(app->document.scene,*editing,app->joint_part,&pose)){app->gizmo.mode=app->joint_part<ED_JOINT_AXIS_A?ED_GIZMO_MOVE:ED_GIZMO_ROTATE;ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,pose.position,af_mat4_identity(),pose.rotation);}else app->gizmo.projected=false;}
     else if(app->light_selected){const af_local_light *light=af_scene_local_light_at(app->document.scene,app->selected_light);if(light)ed_gizmo_project(&app->gizmo,&app->camera,app->viewport,light->position,af_mat4_identity(),ed_light_transform(*light).rotation);}
     else if(selected){af_mat4 world,parent=af_mat4_identity();
         if(selected->parent)af_scene_world_matrix(app->document.scene,selected->parent,&parent);

@@ -32,3 +32,8 @@ root bounds include angular reach, then primitive/mesh distances test individual
 parts. Impact suppression is per part pair, so another protrusion can contact the
 same body during the substep. Work retains the 16-event / 80-sample limits. Tests
 cover offset tips, thin walls, empty-gap passages and rotating protrusions.
+
+The editor adds box/sphere parts, fits bounds over rigid mesh descendants, edits
+local poses/density, and exposes computed material mass. Move/rotate/scale tools
+reuse the snapped viewport gizmo and grouped undo/cancel. Collider overlays draw
+individual parts. Dynamic owners stay rooted with uniform positive scale.

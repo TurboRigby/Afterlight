@@ -9,6 +9,7 @@
 #include <afterlight/model.h>
 #include <afterlight/collision_mesh.h>
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -366,3 +367,11 @@ bool ed_document_remove_joint(ed_document *d, af_joint_id id) {
     ed_document_end_edit(d);
     return commit(d, next, d->selection, 49);
 }
+
+bool ed_document_part(ed_document *d,af_collider_part part){const af_collider_part *old=af_scene_get_collider_part(d->scene,part.id);if(old&&!memcmp(old,&part,sizeof(part)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;af_object_id owner=old?old->owner:d->selection;bool ok=old?af_scene_set_collider_part(next,part.id,part):af_scene_add_collider_part(next,owner,part)!=0;const af_scene_object *o=af_scene_get_object(next,owner);if(ok&&o){af_collider c=o->collider;c.type=AF_COLLIDER_COMPOUND;c.enabled=true;c.center=(af_vec3){0};ok=af_scene_set_object_collider(next,owner,c);}if(!ok){af_scene_destroy(next);status(d,"Compound parts need valid box/sphere dimensions and uniform dynamic-root scale.");return false;}return commit(d,next,d->selection,50);}
+bool ed_document_remove_part(ed_document *d,af_collider_part_id id){af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_remove_collider_part(next,id)){af_scene_destroy(next);status(d,"Keep one part on a compound; remove the owner to delete its body.");return false;}ed_document_end_edit(d);return commit(d,next,d->selection,51);}
+static af_vec3 fit_point(af_mat4 m,af_vec3 p){af_vec4 v=af_mat4_transform(m,(af_vec4){p.x,p.y,p.z,1});return (af_vec3){v.x,v.y,v.z};}
+bool ed_document_fit_part(ed_document *d,af_collider_part_id id){const af_collider_part *found=af_scene_get_collider_part(d->scene,id);if(!found)return false;af_collider_part part=*found;af_mat4 root,inverse;if(!af_scene_world_matrix(d->scene,part.owner,&root)||!af_mat4_inverse(root,&inverse))return false;af_vec3 lo={1e30f,1e30f,1e30f},hi={-1e30f,-1e30f,-1e30f};bool any=false;
+    for(size_t i=0;i<af_scene_object_count(d->scene);++i){const af_scene_object *o=af_scene_object_at(d->scene,i);if(o->id!=part.owner&&!af_scene_is_descendant(d->scene,o->id,part.owner))continue;if(!strcmp(o->mesh,"__node"))continue;af_mat4 matrix;if(!af_scene_world_matrix(d->scene,o->id,&matrix))continue;matrix=af_mat4_mul(inverse,matrix);af_mesh_file file={0};bool cube=!strcmp(o->mesh,"cube");if(!cube){const af_scene_asset *a=af_scene_find_asset(d->scene,o->mesh);af_asset_error e;if(!a||a->kind!=AF_ASSET_MESH||!af_mesh_file_load(a->path,&file,&e))continue;}
+        size_t count=cube?8:file.data.vertex_count;for(size_t k=0;k<count;++k){af_vec3 point=cube?(af_vec3){k&1?.65f:-.65f,k&2?.65f:-.65f,k&4?.65f:-.65f}:file.data.vertices[k].position;point=fit_point(matrix,point);lo=(af_vec3){fminf(lo.x,point.x),fminf(lo.y,point.y),fminf(lo.z,point.z)};hi=(af_vec3){fmaxf(hi.x,point.x),fmaxf(hi.y,point.y),fmaxf(hi.z,point.z)};any=true;}if(!cube)af_mesh_file_free(&file);
+    }if(!any){status(d,"No rigid mesh bounds found on this owner or its children.");return false;}part.local=af_transform_identity();part.local.position=af_vec3_scale(af_vec3_add(lo,hi),.5f);af_vec3 half=af_vec3_scale(af_vec3_sub(hi,lo),.5f);half=(af_vec3){fmaxf(.01f,half.x),fmaxf(.01f,half.y),fmaxf(.01f,half.z)};part.collider.half_extents=half;part.collider.radius=af_vec3_length(half);ed_document_end_edit(d);bool ok=ed_document_part(d,part);ed_document_end_edit(d);return ok;}
