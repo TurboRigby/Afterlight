@@ -10,7 +10,7 @@
 #include <afterlight/third_person.h>
 #include <afterlight/prefab.h>
 #include <afterlight/joint.h>
-#define AF_GAME_ABI_VERSION 14u
+#define AF_GAME_ABI_VERSION 15u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
 #define AF_GAME_EXPORT __declspec(dllexport)

@@ -60,6 +60,7 @@ add_library(afterlight STATIC
     engine/src/physics_mesh.c
     engine/src/physics_solver.c
     engine/src/physics_sleep.c
+    engine/src/compound.c
     engine/src/joint.c
     engine/src/physics_joints.c
     engine/src/physics_ccd.c
@@ -507,6 +508,11 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_compound_data_test tests/compound_data.c)
+    target_include_directories(afterlight_compound_data_test PRIVATE engine/src)
+    target_link_libraries(afterlight_compound_data_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_compound_data_test)
+    add_test(NAME afterlight.compound_data COMMAND afterlight_compound_data_test )
     add_executable(afterlight_motor_scene_test tests/motor_scene.c)
     target_include_directories(afterlight_motor_scene_test PRIVATE engine/src)
     target_link_libraries(afterlight_motor_scene_test PRIVATE Afterlight::Engine)

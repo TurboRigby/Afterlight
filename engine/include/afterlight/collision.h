@@ -12,7 +12,7 @@
 #include <afterlight/math.h>
 #include <afterlight/collision_mesh.h>
 struct af_scene;
-typedef enum af_collider_type {AF_COLLIDER_NONE,AF_COLLIDER_BOX,AF_COLLIDER_SPHERE,AF_COLLIDER_CAPSULE,AF_COLLIDER_MESH} af_collider_type;
+typedef enum af_collider_type {AF_COLLIDER_NONE,AF_COLLIDER_BOX,AF_COLLIDER_SPHERE,AF_COLLIDER_CAPSULE,AF_COLLIDER_MESH,AF_COLLIDER_COMPOUND} af_collider_type;
 typedef struct af_collider {
     af_collider_type type;
     bool enabled,trigger;

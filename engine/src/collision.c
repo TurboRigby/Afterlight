@@ -18,8 +18,8 @@ static af_vec3 safe_normal(af_vec3 v){float length=af_vec3_length(v);return leng
 af_collider af_collider_default(void){return (af_collider){.enabled=true,.half_extents={0.5f,0.5f,0.5f},.radius=0.5f,.half_height=0.5f,.layer=1};}
 af_query_filter af_query_filter_default(void){return (af_query_filter){.mask=UINT32_MAX};}
 bool af_collider_valid(af_collider c){
-    if(c.type==AF_COLLIDER_MESH&&af_vec3_length(c.center)>1e-6f)return false;
-    if(c.type<AF_COLLIDER_NONE||c.type>AF_COLLIDER_MESH||!finite3(c.center)||!finite3(c.half_extents)||!isfinite(c.radius)||!isfinite(c.half_height)||!c.layer)return false;
+    if((c.type==AF_COLLIDER_MESH||c.type==AF_COLLIDER_COMPOUND)&&af_vec3_length(c.center)>1e-6f)return false;
+    if(c.type<AF_COLLIDER_NONE||c.type>AF_COLLIDER_COMPOUND||!finite3(c.center)||!finite3(c.half_extents)||!isfinite(c.radius)||!isfinite(c.half_height)||!c.layer)return false;
     if(c.half_extents.x<0||c.half_extents.y<0||c.half_extents.z<0||c.radius<0||c.half_height<0||c.radius>10000||c.half_height>10000||c.half_extents.x>10000||c.half_extents.y>10000||c.half_extents.z>10000)return false;
     if(c.type==AF_COLLIDER_BOX&&(c.half_extents.x<=0||c.half_extents.y<=0||c.half_extents.z<=0))return false;
     return (c.type!=AF_COLLIDER_SPHERE&&c.type!=AF_COLLIDER_CAPSULE)||c.radius>0;

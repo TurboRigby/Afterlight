@@ -193,7 +193,7 @@ static bool read_body(const cJSON *json,af_rigid_body *out){
 static bool add_body(cJSON *json,af_rigid_body b){if(!af_rigid_body_valid(b))return false;cJSON *j=cJSON_AddObjectToObject(json,"body");return j&&cJSON_AddBoolToObject(j,"enabled",b.enabled)&&cJSON_AddStringToObject(j,"type",b.type==AF_BODY_DYNAMIC?"dynamic":b.type==AF_BODY_KINEMATIC?"kinematic":"static")&&cJSON_AddNumberToObject(j,"mass",b.mass)&&cJSON_AddNumberToObject(j,"friction",b.friction)&&cJSON_AddNumberToObject(j,"restitution",b.restitution)&&cJSON_AddNumberToObject(j,"linear_damping",b.linear_damping)&&cJSON_AddNumberToObject(j,"angular_damping",b.angular_damping)&&cJSON_AddNumberToObject(j,"gravity_scale",b.gravity_scale)&&cJSON_AddBoolToObject(j,"allow_sleep",b.allow_sleep)&&cJSON_AddBoolToObject(j,"continuous",b.continuous)&&add_vector(j,"velocity",b.velocity)&&add_vector(j,"angular_velocity",b.angular_velocity);}
 static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene_error *error)
 {
-    static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights", "joints", "next_joint"};
+    static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights", "joints", "next_joint", "collider_parts", "next_part"};
     static const char *const object_fields[] = {"id", "name", "mesh", "visible", "position", "rotation", "scale", "material", "parent", "collider", "gameplay", "animation", "model", "rig", "body"};
     const cJSON *format = cJSON_GetObjectItemCaseSensitive(root, "format");
     const cJSON *version = cJSON_GetObjectItemCaseSensitive(root, "version");
@@ -204,11 +204,11 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != 13 && version->valuedouble != 14 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != 13 && version->valuedouble != 14 && version->valuedouble != 15 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
-    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:version->valuedouble>=14?11:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
+    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:version->valuedouble>=16?13:version->valuedouble>=14?11:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
         cJSON_GetArraySize(objects) > (int)AF_SCENE_FILE_MAX_OBJECTS) {
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid next_id or object array (maximum %u objects).", AF_SCENE_FILE_MAX_OBJECTS);
         return NULL;
@@ -258,8 +258,8 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             if(!exact_fields(c,fields,8)||!cJSON_IsString(type)||!cJSON_IsBool(enabled)||!cJSON_IsBool(trigger)||!read_vector(cJSON_GetObjectItemCaseSensitive(c,"center"),&value.center)||
                 !read_vector(cJSON_GetObjectItemCaseSensitive(c,"half_extents"),&value.half_extents)||!read_float_field(c,"radius",&value.radius)||!read_float_field(c,"half_height",&value.half_height)||
                 !cJSON_IsNumber(layer)||!isfinite(layer->valuedouble)||layer->valuedouble<1||layer->valuedouble>UINT32_MAX||floor(layer->valuedouble)!=layer->valuedouble){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid collider fields.");goto fail;}
-            static const char *const types[]={"none","box","sphere","capsule","mesh"};bool known=false;
-            for(unsigned shape=0;shape<(version->valuedouble>=14?5u:4u);++shape)if(!strcmp(type->valuestring,types[shape])){value.type=(af_collider_type)shape;known=true;break;}
+            static const char *const types[]={"none","box","sphere","capsule","mesh","compound"};bool known=false;
+            for(unsigned shape=0;shape<(version->valuedouble>=16?6u:version->valuedouble>=14?5u:4u);++shape)if(!strcmp(type->valuestring,types[shape])){value.type=(af_collider_type)shape;known=true;break;}
             value.enabled=cJSON_IsTrue(enabled)!=0;value.trigger=cJSON_IsTrue(trigger)!=0;value.layer=(uint32_t)layer->valuedouble;
             if(!known||!af_collider_valid(value)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid collider shape or dimensions.");goto fail;}object->collider=value;
         }
@@ -387,6 +387,10 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         }
         for(size_t i=0;i<scene->count;++i){af_scene_object *o=&scene->objects[i];if(!strcmp(o->name,"Player")&&o->collider.type==AF_COLLIDER_CAPSULE){o->gameplay.player.enabled=true;o->gameplay.player.spawn=spawn;o->gameplay.camera.enabled=o->gameplay.camera.primary=true;o->gameplay.player.controller.radius=o->collider.radius;o->gameplay.player.controller.half_height=o->collider.half_height;}}
     }
+
+    if(version->valuedouble>=16){const cJSON *parts=cJSON_GetObjectItemCaseSensitive(root,"collider_parts"),*entry;uint64_t next;if(!cJSON_IsArray(parts)||cJSON_GetArraySize(parts)>(int)AF_SCENE_MAX_COLLIDER_PARTS||!read_id(cJSON_GetObjectItemCaseSensitive(root,"next_part"),&next))goto part_fail;
+        cJSON_ArrayForEach(entry,parts){static const char *const fields[]={"id","owner","name","position","rotation","scale","type","enabled","half_extents","radius","density"};af_collider_part p=af_collider_part_default();const cJSON *type=cJSON_GetObjectItemCaseSensitive(entry,"type"),*enabled=cJSON_GetObjectItemCaseSensitive(entry,"enabled");if(!exact_fields(entry,fields,11)||!read_id(cJSON_GetObjectItemCaseSensitive(entry,"id"),&p.id)||!p.id||(next&&p.id>=next)||af_scene_get_collider_part(scene,p.id)||!read_id(cJSON_GetObjectItemCaseSensitive(entry,"owner"),&p.owner)||!read_name(cJSON_GetObjectItemCaseSensitive(entry,"name"),p.name,sizeof(p.name))||!read_vector(cJSON_GetObjectItemCaseSensitive(entry,"position"),&p.local.position)||!read_vector(cJSON_GetObjectItemCaseSensitive(entry,"rotation"),&p.local.rotation)||!read_vector(cJSON_GetObjectItemCaseSensitive(entry,"scale"),&p.local.scale)||!cJSON_IsString(type)||(strcmp(type->valuestring,"box")&&strcmp(type->valuestring,"sphere"))||!cJSON_IsBool(enabled)||!read_vector(cJSON_GetObjectItemCaseSensitive(entry,"half_extents"),&p.collider.half_extents)||!read_float_field(entry,"radius",&p.collider.radius)||!read_float_field(entry,"density",&p.density))goto part_fail;p.collider.type=!strcmp(type->valuestring,"box")?AF_COLLIDER_BOX:AF_COLLIDER_SPHERE;p.collider.enabled=cJSON_IsTrue(enabled)!=0;if(!af_scene_add_collider_part(scene,p.owner,p))goto part_fail;scene->parts[scene->part_count-1].id=p.id;}scene->next_part_id=next;
+    }
     for(size_t i=0;i<scene->count;++i)if(!af_scene_set_body(scene,scene->objects[i].id,scene->objects[i].body)){set_error(error,AF_SCENE_ERROR_FORMAT,"Dynamic bodies need a root sphere/box collider with a centered origin and positive scale.");goto fail;}
 
     if(version->valuedouble>=14){
@@ -407,6 +411,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
     }
     free(ids);
     return scene;
+part_fail:set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid collider part fields, owner, budget or ID counter.");goto fail;
 joint_fail:set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid joint fields, endpoints or ID counter.");
 fail:
     free(ids);
@@ -486,6 +491,9 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
     if (!objects || !cJSON_AddStringToObject(root, "format", "afterlight.scene") ||
         !cJSON_AddNumberToObject(root, "version", AF_SCENE_FILE_VERSION) || !add_id(root, "next_id", scene->next_id)) goto fail;
 
+
+    cJSON *parts=cJSON_AddArrayToObject(root,"collider_parts");if(!parts||!add_id(root,"next_part",scene->next_part_id))goto fail;
+    for(size_t i=0;i<scene->part_count;++i){af_collider_part p=scene->parts[i];cJSON *entry=cJSON_CreateObject();if(!entry)goto fail;cJSON_AddItemToArray(parts,entry);if(!af_collider_part_valid(p)||!add_id(entry,"id",p.id)||!add_id(entry,"owner",p.owner)||!cJSON_AddStringToObject(entry,"name",p.name)||!add_vector(entry,"position",p.local.position)||!add_vector(entry,"rotation",p.local.rotation)||!add_vector(entry,"scale",p.local.scale)||!cJSON_AddStringToObject(entry,"type",p.collider.type==AF_COLLIDER_BOX?"box":"sphere")||!cJSON_AddBoolToObject(entry,"enabled",p.collider.enabled)||!add_vector(entry,"half_extents",p.collider.half_extents)||!cJSON_AddNumberToObject(entry,"radius",p.collider.radius)||!cJSON_AddNumberToObject(entry,"density",p.density))goto fail;}
     cJSON *joints=cJSON_AddArrayToObject(root,"joints");if(!joints||!add_id(root,"next_joint",scene->next_joint_id))goto fail;
     for(size_t i=0;i<scene->joint_count;++i){af_joint j=scene->joints[i];cJSON *item=cJSON_CreateObject();if(!item)goto fail;cJSON_AddItemToArray(joints,item);
         if(!af_joint_valid(j)||!add_id(item,"id",j.id)||!cJSON_AddStringToObject(item,"name",j.name)||!cJSON_AddStringToObject(item,"type",j.type==AF_JOINT_HINGE?"hinge":"distance")||!cJSON_AddBoolToObject(item,"enabled",j.enabled)||!cJSON_AddBoolToObject(item,"collide_connected",j.collide_connected)||!add_id(item,"a",j.a)||!add_id(item,"b",j.b)||!add_vector(item,"anchor_a",j.anchor_a)||!add_vector(item,"anchor_b",j.anchor_b)||!cJSON_AddNumberToObject(item,"distance",j.distance)||!add_vector(item,"axis_a",j.axis_a)||!add_vector(item,"axis_b",j.axis_b)||!add_vector(item,"reference_a",j.reference_a)||!add_vector(item,"reference_b",j.reference_b)||!cJSON_AddBoolToObject(item,"limits_enabled",j.limits_enabled)||!cJSON_AddNumberToObject(item,"lower_limit",j.lower_limit)||!cJSON_AddNumberToObject(item,"upper_limit",j.upper_limit)||!cJSON_AddBoolToObject(item,"motor_enabled",j.motor_enabled)||!cJSON_AddNumberToObject(item,"motor_speed",j.motor_speed)||!cJSON_AddNumberToObject(item,"max_motor_torque",j.max_motor_torque))goto fail;
@@ -539,7 +547,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
         if(!cJSON_AddBoolToObject(material,"physically_based",source->material.physically_based)||!cJSON_AddNumberToObject(material,"roughness",source->material.roughness)||!cJSON_AddNumberToObject(material,"metallic",source->material.metallic)||
             !add_vector(material,"emission",source->material.emission)||!cJSON_AddNumberToObject(material,"emission_strength",source->material.emission_strength)||
             !cJSON_AddStringToObject(material,"normal_map",source->material.normal_map)||!cJSON_AddNumberToObject(material,"normal_strength",source->material.normal_strength)||!cJSON_AddStringToObject(material,"metallic_roughness_map",source->material.metallic_roughness_map))goto fail;
-        const af_collider *value=&source->collider;static const char *const types[]={"none","box","sphere","capsule","mesh"};
+        const af_collider *value=&source->collider;static const char *const types[]={"none","box","sphere","capsule","mesh","compound"};
         cJSON *collider=cJSON_AddObjectToObject(object,"collider");
         if(!collider||!cJSON_AddStringToObject(collider,"type",types[value->type])||!cJSON_AddBoolToObject(collider,"enabled",value->enabled)||!cJSON_AddBoolToObject(collider,"trigger",value->trigger)||
             !add_vector(collider,"center",value->center)||!add_vector(collider,"half_extents",value->half_extents)||!cJSON_AddNumberToObject(collider,"radius",value->radius)||

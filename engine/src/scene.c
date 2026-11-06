@@ -25,7 +25,7 @@ static af_scene_object *find_object(const af_scene *scene, af_object_id id)
 af_scene *af_scene_create(void)
 {
     af_scene *scene = calloc(1, sizeof(*scene));
-    if (scene) {scene->next_id = 1;scene->next_joint_id=1;scene->light=af_directional_light_default();scene->shadows=af_shadow_settings_default();scene->render_settings=af_render_settings_default();}
+    if (scene) {scene->next_id = 1;scene->next_joint_id=1;scene->next_part_id=1;scene->light=af_directional_light_default();scene->shadows=af_shadow_settings_default();scene->render_settings=af_render_settings_default();}
     return scene;
 }
 
@@ -67,6 +67,7 @@ bool af_scene_remove_object(af_scene *scene, af_object_id id)
     for(size_t i=0;i<scene->count;++i)removed[i]=scene->objects[i].id==id||af_scene_is_descendant(scene,scene->objects[i].id,id);
     size_t write=0;for(size_t i=0;i<scene->count;++i)if(!removed[i])scene->objects[write++]=scene->objects[i];
     scene->count=write;free(removed);
+    write=0;for(size_t i=0;i<scene->part_count;++i)if(find_object(scene,scene->parts[i].owner))scene->parts[write++]=scene->parts[i];scene->part_count=write;
     for(size_t i=scene->joint_count;i>0;--i){af_joint *j=&scene->joints[i-1];if(!find_object(scene,j->a)||(j->b&&!find_object(scene,j->b)))af_scene_remove_joint(scene,j->id);}
     return true;
 }
@@ -120,6 +121,7 @@ af_scene *af_scene_clone(const af_scene *source)
     af_scene *copy = af_scene_create();
     if (!copy) return NULL;
     memcpy(copy->joints,source->joints,sizeof(copy->joints));copy->joint_count=source->joint_count;copy->next_joint_id=source->next_joint_id;
+    memcpy(copy->parts,source->parts,sizeof(copy->parts));copy->part_count=source->part_count;copy->next_part_id=source->next_part_id;
     copy->next_id = source->next_id;copy->light=source->light;copy->shadows=source->shadows;copy->render_settings=source->render_settings;copy->local_light_count=source->local_light_count;
     memcpy(copy->local_lights,source->local_lights,sizeof(copy->local_lights));
     if (source->count) {
