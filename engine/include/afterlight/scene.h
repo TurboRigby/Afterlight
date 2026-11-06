@@ -17,6 +17,7 @@
 #include <afterlight/collision.h>
 #include <afterlight/gameplay.h>
 #include <afterlight/rig.h>
+#include <afterlight/body.h>
 
 #define AF_OBJECT_NAME_CAPACITY 64
 #define AF_OBJECT_NONE UINT64_C(0)
@@ -40,6 +41,7 @@ typedef struct af_scene_object {
     af_animation_component animation;
     af_model_binding model;
     af_character_rig rig;
+    af_rigid_body body;
 } af_scene_object;
 
 /* CPU-only scene data; no engine, window, or game callbacks required. IDs are
@@ -61,6 +63,7 @@ bool af_scene_set_object_name(af_scene *scene, af_object_id id, const char *name
 bool af_scene_set_object_mesh(af_scene *scene, af_object_id id, const char *mesh);
 bool af_scene_set_object_transform(af_scene *scene, af_object_id id, af_transform transform);
 bool af_scene_set_object_animation(af_scene *scene,af_object_id id,af_animation_component component);
+bool af_scene_set_body(af_scene*,af_object_id,af_rigid_body);
 bool af_scene_set_character_rig(af_scene*,af_object_id,af_character_rig);
 bool af_scene_set_model_binding(af_scene *scene,af_object_id id,af_model_binding binding);
 bool af_scene_set_object_visible(af_scene *scene, af_object_id id, bool visible);
@@ -96,7 +99,7 @@ const af_scene_asset *af_scene_asset_at(const af_scene *scene,size_t index);
 const af_scene_asset *af_scene_find_asset(const af_scene *scene,const char *name);
 bool af_scene_set_asset(af_scene *scene,const char *name,af_asset_kind kind,const char *path);
 
-#define AF_SCENE_FILE_VERSION 12
+#define AF_SCENE_FILE_VERSION 13
 #define AF_SCENE_FILE_MAX_BYTES (16u * 1024u * 1024u)
 #define AF_SCENE_FILE_MAX_OBJECTS 65536u
 

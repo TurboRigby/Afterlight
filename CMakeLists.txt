@@ -53,6 +53,7 @@ add_library(afterlight STATIC
     engine/src/audio.c
     engine/src/gameplay.c
     engine/src/rig.c
+    engine/src/body.c
     engine/src/prefab.c
     engine/src/input.c
     engine/src/project.c
@@ -442,6 +443,11 @@ add_custom_target(export_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_physics_body_test tests/physics_body.c)
+    target_include_directories(afterlight_physics_body_test PRIVATE engine/src)
+    target_link_libraries(afterlight_physics_body_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_physics_body_test)
+    add_test(NAME afterlight.physics_body COMMAND afterlight_physics_body_test )
     add_executable(afterlight_toolbox_test tests/toolbox.c)
     target_include_directories(afterlight_toolbox_test PRIVATE engine/src sandbox)
     target_link_libraries(afterlight_toolbox_test PRIVATE afterlight_editor_document SDL3::SDL3)

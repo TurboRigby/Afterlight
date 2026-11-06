@@ -42,7 +42,7 @@ af_object_id af_scene_add_object(af_scene *scene, const char *name, const char *
     if (!scene || !valid_name(name, AF_OBJECT_NAME_CAPACITY) ||
         !valid_name(mesh, AF_MESH_NAME_CAPACITY) || scene->next_id == AF_OBJECT_NONE) return AF_OBJECT_NONE;
     /* Copy before realloc: callers may use a name from an existing object. */
-    af_scene_object object = {.id = scene->next_id, .transform = af_transform_identity(), .visible = true,.material=af_material_default(),.collider=af_collider_default(),.gameplay=af_gameplay_component_default(),.animation=af_animation_component_default(),.model=af_model_binding_default(),.rig=af_character_rig_default()};
+    af_scene_object object = {.id = scene->next_id, .transform = af_transform_identity(), .visible = true,.material=af_material_default(),.collider=af_collider_default(),.gameplay=af_gameplay_component_default(),.animation=af_animation_component_default(),.model=af_model_binding_default(),.rig=af_character_rig_default(),.body=af_rigid_body_default()};
     memcpy(object.name, name, strlen(name) + 1);
     memcpy(object.mesh, mesh, strlen(mesh) + 1);
     if (scene->count == scene->capacity) {
