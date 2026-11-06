@@ -1,4 +1,4 @@
-# Afterlight scene format, version 9
+# Afterlight scene format, version 10
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
@@ -9,7 +9,7 @@ scene file.
 ```json
 {
   "format": "afterlight.scene",
-  "version": 9,
+  "version": 10,
   "next_id": "3",
   "assets": [
     {
@@ -138,6 +138,19 @@ scene file.
           "near_clip": 0.08,
           "far_clip": 160
         }
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "0",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
       }
     },
     {
@@ -227,6 +240,19 @@ scene file.
           "near_clip": 0.08,
           "far_clip": 160
         }
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "0",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
       }
     }
   ],
@@ -277,7 +303,7 @@ scene file.
 }
 ```
 
-All shown fields are required in version 9. Names are case sensitive. Unknown or
+All shown fields are required in version 10. Names are case sensitive. Unknown or
 duplicate fields, unsupported versions, trailing data, embedded NUL and malformed
 UTF-8 are rejected. Version 1 remains readable with its original strict schema:
 no `assets`, `light`, `material` or `parent` fields. It receives an empty manifest,
@@ -288,7 +314,7 @@ four-cascade settings and true cast/receive flags. Version 3 retains its strict 
 new surface fields, `render` and `local_lights`. Versions 1–3 use Lambert
 materials with roughness 0.6, metallic/emission 0, no normal map and strength 1;
 exposure is 0, tone mapping is off, and local lights are empty. Saving always
-writes version 9. Version 4 retains material/render/local-light fields but omits
+writes version 10. Version 4 retains material/render/local-light fields but omits
 colliders; versions 1–4 get an enabled collider of type `none`.
 
 IDs, parent IDs and `next_id` are canonical unsigned decimal **strings** so all
@@ -439,7 +465,7 @@ requires `cast_shadows` and `shadow_bias` [0,0.1]. All numbers must be finite.
 
 Versions 1–7 retain their strict schemas; their missing new fields receive
 safe defaults, with environment/bloom/local shadows disabled. Saving always
-writes version 9. These settings survive clone, undo/redo, Play and project
+writes version 10. These settings survive clone, undo/redo, Play and project
 export. See [lighting controls and limits](lighting-08.md).
 
 
@@ -451,5 +477,20 @@ The asset kind `environment` references a linear Radiance RGBE `.hdr` panorama.
 remains `environment_intensity`; rotation is shared. Environment names are UTF-8
 and fit `AF_MESH_NAME_CAPACITY` including NUL. Relative HDR paths use the same
 asset resolution/export rules as other source files. Versions 1–8 default to a
-hidden skybox and a procedural environment; saving upgrades to v9. See
+hidden skybox and a procedural environment; saving upgrades to v10. See
 [HDR limits, resource ownership and editor workflow](assets-09.md).
+
+
+## Animation instances (version 10)
+
+Every object additionally has `animation` with `asset` (empty or named animation
+resource), `clip` [0,127], finite `speed` [-100,100], `autoplay` and `loop` booleans.
+`model` has `root` as an ID string, `node` [0,16383], `skin` [-1,127] and `primitive`
+boolean. Unbound defaults are root `"0"`, node 0, skin -1 and primitive false.
+A bound object must descend from its root; non-primitive source-node bindings
+must be unique per root. Root configuration and node bindings survive undo,
+clone, complete-model duplication and export. Asset kind `animation` references
+its glTF/GLB source and shares the usual relative-path/dependency packaging rules.
+Versions 1–9 receive empty configurations and unbound defaults. Current saves
+write v10. Playback time, fade buffers and posed matrices are transient runtime
+state; collision remains based on authored transforms.

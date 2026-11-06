@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **8** (0.9 adds named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **9** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 8 modules.
+to use newly built ABI 9 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -101,3 +101,14 @@ and module link-order requirements](testing.md).
 Generated starter projects use `game/starter_game.c` and matching copied headers.
 The generic player runs the same C module API without the editor; see
 [creation/build/export](shipping.md).
+
+
+## Animation control (0.10)
+
+Use the host's `animation_root`, `animation_clip` and `animation_status` to find
+an imported model and its clips. `animation_play(engine, root, clip, blend_seconds)`
+starts or crossfades a clip; `animation_options`, `animation_pause`,
+`animation_stop` and `animation_seek` control it. `animated_world_matrix` exposes
+the last computed visual pose for attachments. These calls work in game `init`:
+the runtime scene is attached before the callback. See
+[playback, timing and collider limits](development-010.md).

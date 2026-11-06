@@ -8,11 +8,11 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-The 44-test Debug suite passes on the tested Apple M4/MoltenVK system, including
+The 61-test Debug suite covers the Apple M4/MoltenVK path, including
 Vulkan synchronization validation, actual pixel comparisons, fixed simulation,
 collisions, the controller and obstacle-course gameplay. Graphics tests require
 a desktop and Vulkan driver. The macOS-only module-unload regression accounts
-for one of these tests; other platforms currently have 43. Linux CPU coverage
+for one of these tests; other platforms currently have 60. Linux CPU coverage
 is described below; native Linux graphics and Windows still need verification.
 
 `afterlight.editor_playground` opens the actual obstacle course and its C module.
@@ -150,3 +150,19 @@ GPU tests are excluded from hosted CI; a software/container build does not prove
 native Linux desktop behavior. The local Linux environment is ARM64/GCC 13
 (Clang 18 for sanitizers); GitHub's Ubuntu runner is x86-64 and gets its first
 run after the workflow is pushed.
+
+
+## 0.10 performance and animation checks
+
+CPU tests cover HDR job cancellation, shadow selection, glTF interpolation and
+malformed tracks, clip control/blend continuity, skeletons/normalized weights,
+malformed influences, independent scene instances, v10 persistence and demo
+regeneration. GPU tests compare skin silhouettes/normals and moving shadows,
+posed picking, fixed-step animation, reload, the actual editor preview controls,
+and both simple/complex C demo modules. The animation export test removes the
+source project and relocates both runnable packages. Sanitized players are
+explicitly rejected for distribution. The suite has 38 CPU/source checks on
+macOS, 37 on Linux; hosted jobs exclude its 23 desktop graphics checks.
+
+`afterlight_profile` produces fixed-camera CSV measurements rather than asserting
+an FPS threshold. See [profiling and demo commands](development-010.md).

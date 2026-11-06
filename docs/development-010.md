@@ -189,3 +189,36 @@ players. GPU skinning additionally limits simultaneous primitive palettes to 128
 Root status reports unavailable resources; missing animation leaves authored
 geometry available. Last computed poses can be queried during callbacks; fresh
 sampling/publication runs after game updates and before rendering.
+
+## 8. Simple and complex demos
+
+Start with the moving mechanism, then the nine-joint character stage:
+
+```sh
+cmake --build --preset debug --target run_mechanism_editor
+cmake --build --preset debug --target run_animation_editor
+cmake --build --preset debug --target run_animation_player
+```
+
+Press Play to run the module. Clips cycle every four seconds; Space chooses the
+next clip, and WASD moves the first actor. The character stage has Idle, Walk and
+Wave, mixed torso weights, independent actors, a mirrored/scaled instance, HDR
+lighting and point/spot/cascaded shadows. The mechanism uses rigid node tracks
+and includes linear, stepped and cubic variants. All geometry/keyframes are
+original generated source assets; no third-party model or motion data is used.
+
+Rebuild model fixtures with `python3 scripts/generate_animation_assets.py`.
+Rebuild sample scene manifests deliberately (not on every build) with:
+
+```sh
+cmake --build --preset debug --target afterlight_animation_builder
+build/debug/afterlight_animation_builder "$PWD/sandbox/assets" "$PWD/sandbox/scenes"
+```
+
+Regressions first run the mechanism, then the harder stage. They exercise real
+C module initialization and Space input, pause/seek, posed matrices across both
+characters, live shadows and resizing. Both projects are exported, their source
+tree removed, packages relocated and the generic player run with validation.
+Distribution includes corresponding covered source, including the demo C module.
+Sanitized runtime exports are rejected. See [verification](testing.md) for the
+complete test suite and platform limits.

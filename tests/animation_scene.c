@@ -5,7 +5,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-typedef struct state {const char *path,*skin;af_scene *scene;af_object_id root,node,primitive;af_camera camera;unsigned phase,ticks;bool failed;} state;
+typedef struct state {const char *path,*skin;af_scene *scene;af_object_id root,node,primitive;af_camera camera;unsigned phase,ticks,waiting;bool failed;} state;
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Animation scene phase %u line %d: %s\n",s->phase,__LINE__,#c);s->failed=true;af_engine_request_quit(engine);return;}}while(0)
 static af_vec2 project(state *s,af_vec3 p){af_mat4 vp=af_mat4_mul(af_mat4_perspective(s->camera.vertical_fov,4.0f/3,.1f,100),af_camera_view(&s->camera));af_vec4 q=af_mat4_transform(vp,(af_vec4){p.x,p.y,p.z,1});return (af_vec2){(q.x/q.w+1)*200,(q.y/q.w+1)*150};}
 static bool load(af_engine *engine,state *s,const char *path){
@@ -29,10 +29,12 @@ static void update(af_engine *engine,double delta,void *user){
     case 9:CHECK(pixel[0]>240);CHECK(af_engine_animation_seek(engine,s->root,1)&&af_engine_animation_pause(engine,s->root,true));af_engine_set_animation_playback(engine,true,false);sample=(af_vec3){0,1.8f,0};break;
     case 10:CHECK(pixel[0]<5);sample=(af_vec3){-.7f,1.5f,0};break;
     case 11:CHECK(pixel[0]>240);{af_asset_error error;CHECK(af_engine_reload_asset_source(engine,s->scene,s->skin,&error));CHECK(af_engine_animation_status(engine,s->root).time==0);}sample=(af_vec3){0,1.8f,0};break;
-    case 12:CHECK(pixel[0]>240);af_engine_request_quit(engine);return;
+    case 12:{CHECK(pixel[0]>240);char path[4096];snprintf(path,sizeof(path),"%s",s->skin);char *slash=strrchr(path,'/');CHECK(slash);snprintf(slash+1,sizeof(path)-(size_t)(slash+1-path),"panorama.hdr");af_asset_error error;CHECK(af_engine_start_environment(engine,"background-import",path,&error));break;}
+    case 13:{af_environment_job_status job=af_engine_environment_status(engine);CHECK(job.state!=AF_ENV_FAILED&&job.state!=AF_ENV_CANCELED&&++s->waiting<1200);CHECK(af_engine_animation_status(engine,s->root).available);if(job.state!=AF_ENV_COMPLETE){--s->phase;break;}CHECK(af_engine_animation_play(engine,s->root,0,0));break;}
+    case 14:CHECK(af_engine_animation_status(engine,s->root).available);af_engine_request_quit(engine);return;
     default:CHECK(false);
     }CHECK(af_engine_test_capture_pixel(engine,project(s,sample)));++s->phase;
 }
 static void fixed(af_engine *engine,double delta,void *user){(void)engine;(void)delta;(void)user;}
 static void shutdown(af_engine *engine,void *user){state *s=user;af_engine_set_scene(engine,NULL);af_scene_destroy(s->scene);}
-int main(int argc,char **argv){if(argc!=3)return 1;af_engine_config config=af_engine_config_default();config.title="Afterlight animation integration";config.width=400;config.height=300;config.enable_validation=true;af_engine *engine=af_engine_create(&config);if(!engine)return 1;state s={.path=argv[1],.skin=argv[2]};af_game game={.init=init,.update=update,.shutdown=shutdown,.fixed_update=fixed,.user_data=&s};int result=af_engine_run(engine,&game);af_engine_stats stats=af_engine_get_stats(engine);af_engine_destroy(engine);if(result||s.failed||s.phase!=12||stats.validation_errors)return 1;puts("Animation scene: automatic TRS/skin binding, pose picking, fixed pause/step, crossfade hold, authored isolation and transactional source reload passed.");return 0;}
+int main(int argc,char **argv){if(argc!=3)return 1;af_engine_config config=af_engine_config_default();config.title="Afterlight animation integration";config.width=400;config.height=300;config.enable_validation=true;af_engine *engine=af_engine_create(&config);if(!engine)return 1;state s={.path=argv[1],.skin=argv[2]};af_game game={.init=init,.update=update,.shutdown=shutdown,.fixed_update=fixed,.user_data=&s};int result=af_engine_run(engine,&game);af_engine_stats stats=af_engine_get_stats(engine);af_engine_destroy(engine);if(result||s.failed||s.phase!=14||stats.validation_errors)return 1;puts("Animation scene: automatic TRS/skin binding, pose picking, fixed pause/step, crossfade hold, authored isolation, source reload and concurrent HDR import passed.");return 0;}

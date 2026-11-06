@@ -592,7 +592,7 @@ bool af_engine_start_environment(af_engine *engine,const char *name,const char *
     af_environment_job_state state=af_environment_job_status_get(engine->environment_job).state;
     if(state==AF_ENV_LOADING||state==AF_ENV_BAKING||state==AF_ENV_UPLOADING){if(error)snprintf(error->message,sizeof(error->message),"An HDR import is already running. Cancel it first.");return false;}
     af_environment_job *job=af_environment_job_create(name,path);if(!job){if(error)snprintf(error->message,sizeof(error->message),"Cannot start HDR worker (invalid name/path or thread allocation).");return false;}
-    af_environment_job_destroy(engine->environment_job);af_animation_runtime_destroy(engine->animations);engine->environment_job=job;return true;
+    af_environment_job_destroy(engine->environment_job);engine->environment_job=job;return true;
 }
 void af_engine_cancel_environment(af_engine *engine){if(engine)af_environment_job_cancel(engine->environment_job);}
 af_environment_job_status af_engine_environment_status(const af_engine *engine){return af_environment_job_status_get(engine?engine->environment_job:NULL);}

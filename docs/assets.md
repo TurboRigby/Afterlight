@@ -10,7 +10,8 @@ corners work. Convex polygons are fan-triangulated. Missing normals are generate
 per triangle; explicit normals are normalized. UV V is flipped for image origin
 conventions. Imported vertex colors default to white. Object/group/material/MTL
 statements do not create submeshes or materials. Concave polygons should be
-triangulated before export. FBX and skeletal animation are not supported.
+triangulated before export. FBX is not supported. glTF node and skeletal animation are described in the
+[0.10 workflow](development-010.md), including influence/joint limits.
 
 Scroll down in the inspector to **Material**. Edit linear base RGB, choose Unlit,
 or use **Import texture** to load and assign a PNG, JPEG, BMP or TGA image. The
@@ -121,3 +122,11 @@ brightness are independent, and named environment assets survive reload/export.
 Thumbnail decoding/rasterization now runs on an SDL worker; GPU transfers are
 queued into ordinary frame commands with fence-protected retirement.
 See [0.9 asset workflow and limits](assets-09.md).
+
+
+## Animation resources (0.10)
+
+Animated/skinned glTF imports also register an `animation` asset and source-node
+bindings. The animation panel and C host functions drive independent runtime
+players without changing authored transforms. HDR file-dialog imports now decode
+and bake on a cancellable worker. See [0.10 details](development-010.md).

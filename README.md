@@ -8,14 +8,21 @@ files are MPL-2.0; bundled dependencies retain their [own licenses](THIRD_PARTY_
 Builds and exports include covered source and notices. See [licensing and
 distribution](docs/licensing.md), including how MPL applies to C game templates.
 
-Afterlight **0.9** adds HDR panorama import and skyboxes, asynchronous previews,
-viewport light tools, and Linux build/test CI. It builds on 0.8's RGBA16F rendering,
-environment IBL, local shadows and bloom. Try the updated
-[Lighting Lab and asset workflow](docs/assets-09.md):
+Afterlight **0.10** adds glTF transform/skeletal animation, editor clip previews
+and C playback controls, background HDR baking, and measured rendering improvements.
+Try the simple mechanism first, then the two-character stage:
 
 ```sh
-cmake --build --preset debug --target run_lighting_editor
+cmake --preset debug
+cmake --build --preset debug --target run_mechanism_editor
+cmake --build --preset debug --target run_animation_editor
 ```
+
+Press **Play** to run the C demo. Clips cycle automatically; **Space** chooses a
+clip and **WASD** moves the first actor. In Edit, select the imported model and
+open **Animation clips** to preview, blend and scrub without changing transforms.
+See [animation workflow, architecture and limits](docs/development-010.md).
+The [Lighting Lab](docs/assets-09.md) remains available through `run_lighting_editor`.
 
 The sandbox renders two independently animated cubes, an imported textured pyramid, and a ground platform
 over a dusk background. Four named scene objects use shared meshes and image textures.
@@ -166,7 +173,7 @@ to the executable to override the default. `--help` lists the sandbox arguments.
 ctest --preset debug
 ```
 
-The 44-test suite includes CPU shadow fitting and GPU pixel checks for both the
+The 61-test suite includes CPU shadow fitting and GPU pixel checks for both the
 simple single map and four-cascade variant: cast/receive switches, PCF edges,
 cascade selection/blending, offscreen and distant casters, parent visibility,
 quality changes and resizing. Graphics tests enable synchronization validation.
@@ -328,13 +335,13 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](docs/game-code.md).
 
-The scene format is version 9 and still reads versions 1–8. Asset bytes stay in
+The scene format is version 10 and still reads versions 1–9. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](docs/assets.md),
 [scene format](docs/scene-format.md) and [editor controls](docs/editor.md).
 
 ## Next milestones
 
-- glTF animation and richer material extensions.
+- Morph animation, animation events/root motion and richer material extensions.
 - Reflection probes, multiscale bloom and adaptive local shadows.
 - Rigid-body dynamics, spatial/streaming audio and module state migration.
 

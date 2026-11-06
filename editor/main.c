@@ -69,6 +69,7 @@ typedef struct editor {
     char asset_search[128],selected_asset[AF_MESH_NAME_CAPACITY];
     int asset_filter;
     size_t selected_light;bool light_selected,light_dragging;size_t drag_light;af_local_light initial_light;uint64_t light_drag_revision;
+    unsigned light_test_focus;uint64_t light_test_focus_losses;
     bool document_ready;
     char name[AF_OBJECT_NAME_CAPACITY];
     char mesh[AF_MESH_NAME_CAPACITY];
@@ -283,8 +284,8 @@ static void keyboard(editor *app,double delta)
     }
     if(modifier)return;
     af_vec2 mouse=af_engine_mouse_position(engine);
-    const char *floating[]={"Performance","Assets","Project"};bool open[]={app->show_performance,app->show_assets,app->show_project};
-    for(unsigned i=0;i<3;++i)if(open[i]){struct nk_window *panel=nk_window_find(&app->gui.context,floating[i]);
+    const char *floating[]={"Performance","Assets","Project","Animation","HDR import"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_animation,app->environment_pending};
+    for(unsigned i=0;i<5;++i)if(open[i]){struct nk_window *panel=nk_window_find(&app->gui.context,floating[i]);
         if(panel&&nk_input_is_mouse_hovering_rect(&app->gui.context.input,panel->bounds))return;}
     if(!app->runtime.playing&&inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_LEFT)&&!af_engine_mouse_captured(engine)){
         ed_gui_unfocus(&app->gui);app->fields_active=false;
@@ -301,7 +302,7 @@ static void keyboard(editor *app,double delta)
     if(app->gizmo.dragging&&app->light_dragging){
         if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){if(app->document.revision!=app->light_drag_revision)ed_document_undo(&app->document);app->light_dragging=app->gizmo.dragging=false;ed_document_end_edit(&app->document);}
         else if(af_engine_mouse_down(engine,AF_MOUSE_LEFT)){af_transform next=ed_gizmo_drag(&app->gizmo,mouse);ed_document_local_light(&app->document,app->drag_light,ed_light_apply(app->initial_light,next,app->gizmo.mode,app->gizmo.axis));}
-        else{app->light_dragging=app->gizmo.dragging=false;ed_document_end_edit(&app->document);}return;
+        else{if(SDL_GetWindowFlags(af_engine_sdl_window(engine))&SDL_WINDOW_INPUT_FOCUS){af_transform next=ed_gizmo_drag(&app->gizmo,mouse);ed_document_local_light(&app->document,app->drag_light,ed_light_apply(app->initial_light,next,app->gizmo.mode,app->gizmo.axis));}app->light_dragging=app->gizmo.dragging=false;ed_document_end_edit(&app->document);}return;
     }
     if(app->gizmo.dragging){
         if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){
@@ -309,7 +310,7 @@ static void keyboard(editor *app,double delta)
             if(object&&memcmp(&object->transform,&app->gizmo.initial,sizeof(af_transform)))ed_document_undo(&app->document);
             app->gizmo.dragging=false;ed_document_end_edit(&app->document);
         }else if(af_engine_mouse_down(engine,AF_MOUSE_LEFT))ed_document_transform(&app->document,ed_gizmo_drag(&app->gizmo,mouse));
-        else{app->gizmo.dragging=false;ed_document_end_edit(&app->document);}
+        else{if(SDL_GetWindowFlags(af_engine_sdl_window(engine))&SDL_WINDOW_INPUT_FOCUS)ed_document_transform(&app->document,ed_gizmo_drag(&app->gizmo,mouse));app->gizmo.dragging=false;ed_document_end_edit(&app->document);}
         return;
     }
     if(app->fields_active)return;
@@ -548,7 +549,7 @@ static void inspector(editor *app,float width,float height)
             if(app->mesh[0]&&strcmp(app->mesh,object.mesh))ed_document_mesh(&app->document,app->mesh);
             app->invalid_name=!app->name[0]||!app->mesh[0];
             if(app->invalid_name)label(context,"Name and mesh name cannot be empty.",24);
-            if(strcmp(app->mesh,"cube")&&!af_scene_find_asset(app->document.scene,app->mesh))label(context,"Unresolved mesh reference.",24);
+            if(strcmp(app->mesh,"cube")&&strcmp(app->mesh,"__node")&&!af_scene_find_asset(app->document.scene,app->mesh))label(context,"Unresolved mesh reference.",24);
             nk_layout_row_dynamic(context,28,1);nk_bool visible=object.visible;
             if(nk_checkbox_label(context,"Visible",&visible))ed_document_visible(&app->document,visible!=0);
             af_transform transform=object.transform;
@@ -1000,7 +1001,7 @@ static void animation_tools_smoke(editor *app){
     case 5:SMOKE_CHECK(app,status.playing);break;
     case 6:SMOKE_CHECK(app,status.time>app->animation_test_time);click=2;break;
     case 7:SMOKE_CHECK(app,!app->animation_preview&&status.time==0);break;
-    case 8:SMOKE_CHECK(app,app->document.revision==app->animation_test_revision);toggle_play(app);SMOKE_CHECK(app,app->runtime.playing&&af_engine_animation_play(app->engine,app->animation_target,0,0));break;
+    case 8:SMOKE_CHECK(app,app->document.revision==app->animation_test_revision&&app->document.selection==app->animation_target);toggle_play(app);SMOKE_CHECK(app,app->runtime.playing&&af_engine_animation_play(app->engine,app->animation_target,0,0));break;
     case 9:case 10:break;
     case 11:SMOKE_CHECK(app,af_engine_animation_status(app->engine,app->animation_target).time>0);stop_play(app);break;
     case 12:SMOKE_CHECK(app,!app->runtime.playing&&app->document.revision==app->animation_test_revision&&af_scene_get_object(app->document.scene,app->animation_target)->animation.clip==0);puts("Editor animation: actual Preview/Pause/Resume/Stop clicks, clean history and Play isolation passed.");af_engine_request_quit(app->engine);return;
@@ -1010,7 +1011,9 @@ static void animation_tools_smoke(editor *app){
 }
 static void light_tools_smoke(editor *app){
     if(!app->light_test||app->updates<8)return;
-    if(!(SDL_GetWindowFlags(af_engine_sdl_window(app->engine))&SDL_WINDOW_INPUT_FOCUS)&&app->light_test_step==0){SDL_RaiseWindow(af_engine_sdl_window(app->engine));return;}
+    uint64_t losses=af_engine_test_focus_losses(app->engine);bool focused=(SDL_GetWindowFlags(af_engine_sdl_window(app->engine))&SDL_WINDOW_INPUT_FOCUS)!=0;
+    if(app->light_test_step&&(losses!=app->light_test_focus_losses||!focused)){app->light_test_step=app->light_test_focus=0;app->light_dragging=app->gizmo.dragging=false;fputs("Native focus changed; restarting scripted light controls.\n",stderr);}
+    if(!app->light_test_step){app->light_test_focus_losses=losses;if(!focused){app->light_test_focus=0;SDL_RaiseWindow(af_engine_sdl_window(app->engine));return;}if(++app->light_test_focus<8)return;}
     SDL_WindowID window=SDL_GetWindowID(af_engine_sdl_window(app->engine));
     switch(app->light_test_step++){
     case 0:{SMOKE_CHECK(app,ed_document_new(&app->document));SMOKE_CHECK(app,ed_document_add_light(&app->document,AF_LIGHT_POINT));af_local_light light=*af_scene_local_light_at(app->document.scene,0);light.position=(af_vec3){0};SMOKE_CHECK(app,ed_document_local_light(&app->document,0,light));ed_document_end_edit(&app->document);app->light_selected=false;app->gizmo.mode=ED_GIZMO_MOVE;app->fields_active=false;app->show_assets=false;break;}
@@ -1019,7 +1022,7 @@ static void light_tools_smoke(editor *app){
     case 3:case 9:{af_vec2 p={app->gizmo.origin.x+(app->gizmo.ends[0].x-app->gizmo.origin.x)*.7f,app->gizmo.origin.y+(app->gizmo.ends[0].y-app->gizmo.origin.y)*.7f};SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;event.button.windowID=window;event.button.button=SDL_BUTTON_LEFT;event.button.down=true;event.button.x=p.x;event.button.y=p.y;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
     case 4:case 10:SMOKE_CHECK(app,app->light_dragging&&app->gizmo.dragging);break;
     case 5:case 11:{SDL_Event event={0};event.type=SDL_EVENT_MOUSE_MOTION;event.motion.windowID=window;event.motion.x=app->gizmo.start.x+app->gizmo.direction.x*.5f;event.motion.y=app->gizmo.start.y+app->gizmo.direction.y*.5f;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
-    case 6:case 13:{SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_UP;event.button.windowID=window;event.button.button=SDL_BUTTON_LEFT;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
+    case 6:case 13:{SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_UP;event.button.windowID=window;event.button.button=SDL_BUTTON_LEFT;event.button.x=app->gizmo.start.x+app->gizmo.direction.x*.5f;event.button.y=app->gizmo.start.y+app->gizmo.direction.y*.5f;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
     case 7:{const af_local_light *light=af_scene_local_light_at(app->document.scene,0);SMOKE_CHECK(app,light&&light->position.x>0&&!app->gizmo.dragging);SMOKE_CHECK(app,ed_document_undo(&app->document));SMOKE_CHECK(app,af_scene_local_light_at(app->document.scene,0)->position.x==0);SMOKE_CHECK(app,ed_document_redo(&app->document));app->light_test_position=af_scene_local_light_at(app->document.scene,0)->position;break;}
     case 8:break;
     case 12:smoke_key(app,SDL_SCANCODE_ESCAPE);break;

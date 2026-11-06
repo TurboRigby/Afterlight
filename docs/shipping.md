@@ -81,10 +81,11 @@ external dependency paths. `af_scene_import_model` transactionally instantiates
 that data. The older `af_mesh_file_load_gltf` remains a flattened geometry API for
 existing callers; the editor uses the richer path.
 
-Current limits: static triangle meshes, one UV set (UV0), repeat wrapping and no
-texture transforms. Alpha masking/blending, skins/morphs, mesh compression,
-material texture extensions, emissive textures, animation and imported cameras/
-lights are not implemented. Unsupported required features are rejected. Sampler
+Current limits: triangle meshes, one UV set (UV0), repeat wrapping and no
+texture transforms. Core TRS animation and four-influence skins are supported
+within the [0.10 budgets](development-010.md). Alpha masking/blending, morphs,
+mesh compression, material texture extensions, emissive textures and imported
+cameras/lights are not implemented. Unsupported required features are rejected. Sampler
 filtering uses the engine's trilinear/anisotropic policy. Node-local shear and
 singular transforms are rejected because editable objects use TRS. Nonuniform
 and mirrored TRS are supported. Material values must fit engine ranges. Model

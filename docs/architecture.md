@@ -221,7 +221,7 @@ CMake packages the sandbox's demo scene with the executable (bundle Resources
 on macOS). A platform path accessor lets the game find it without an SDL include
 or dependence on its working directory. The sandbox can load a custom scene and
 save an explicit snapshot on exit. Default demo animation offsets the loaded base
-transforms; custom scenes are inspected without animation overwriting their data.
+transforms; authored transforms stay separate from imported animation poses.
 
 ## Camera and input
 
@@ -435,3 +435,16 @@ frame fences. UI decoding and ordinary frame upload avoid device/queue-idle
 waits; worker shutdown joins before document teardown. Light tools reuse the
 object gizmo math with separate light-array selection and grouped history.
 See [0.9 limits and checks](assets-09.md).
+
+
+## Animation runtime (0.10)
+
+A bounded immutable clip library, per-root players and sampled pose buffers live
+in `animation_runtime.c`. Scene objects only store startup configuration and
+source-node bindings. After game callbacks, the runtime interpolates authored
+transforms, applies sampled bind-relative local animation, computes hierarchy
+worlds and publishes borrowed matrices to the renderer. Mesh-local bone palettes
+are copied into per-frame storage buffers after owner fences. Scene and shadow
+shaders share four-influence deformation; palette revisions invalidate cached
+maps. Physics still uses authored colliders. See
+[limits, timing, ownership and source references](development-010.md).
