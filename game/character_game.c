@@ -6,6 +6,7 @@
 
 #include <afterlight/game_module.h>
 #include <math.h>
+#include <string.h>
 typedef struct platform_state {af_object_id id;af_transform base;} platform_state;
 typedef struct character_state {
     af_third_person player;af_third_person_config third;float rig_scale;af_character_rig rig;af_object_id actor,crowd[63];unsigned crowd_count;bool root_motion;
@@ -102,7 +103,9 @@ static void update(void *memory,const af_game_host *host,double delta){
     present(s,host);
 }
 static void shutdown(void *memory,const af_game_host *host){(void)memory;host->capture_mouse(host->engine,false);}
+static size_t save_state(const void *memory,void *bytes,size_t capacity){if(!bytes)return sizeof(character_state);if(capacity<sizeof(character_state))return 0;memcpy(bytes,memory,sizeof(character_state));return sizeof(character_state);}
+static bool load_state(void *memory,const af_game_host *host,uint32_t version,const void *bytes,size_t size){if(version!=1||size!=sizeof(character_state)||!bytes)return false;character_state value;memcpy(&value,bytes,size);if(!host->get_object(host->scene,value.body)||!host->get_object(host->scene,value.actor)||!isfinite(value.time)||!isfinite(value.status.elapsed)||!isfinite(value.player.body.position.x)||!isfinite(value.player.body.position.y)||!isfinite(value.player.body.position.z)||value.platform_count>16||value.crowd_count>63)return false;memcpy(memory,&value,size);host->locomotion_root_motion(host->engine,value.actor,value.rig.root_node,value.root_motion);present(memory,host);return true;}
 AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t version){
-    static const af_game_module api={.abi_version=AF_GAME_ABI_VERSION,.struct_size=sizeof(af_game_module),.host_size=sizeof(af_game_host),.object_size=sizeof(af_scene_object),.name="Afterlight animated character course",.state_size=sizeof(character_state),.init=init,.update=update,.shutdown=shutdown,.frame_update=frame};
+    static const af_game_module api={.abi_version=AF_GAME_ABI_VERSION,.struct_size=sizeof(af_game_module),.host_size=sizeof(af_game_host),.object_size=sizeof(af_scene_object),.name="Afterlight animated character course",.state_size=sizeof(character_state),.init=init,.update=update,.shutdown=shutdown,.frame_update=frame,.state_version=1,.save_state=save_state,.load_state=load_state};
     return version==AF_GAME_ABI_VERSION?&api:NULL;
 }

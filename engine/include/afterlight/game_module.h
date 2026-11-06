@@ -92,6 +92,11 @@ typedef struct af_game_module {
     void (*shutdown)(void *state,const af_game_host *host);
     /* Optional per-render update for mouse look/camera; update above is a fixed tick. */
     void (*frame_update)(void *state,const af_game_host *host,double delta_seconds);
+    /* Optional paired callbacks. Blob is module-owned format, bounded to 1 MiB.
+       save(NULL,0) returns required size; load must validate version and bytes. */
+    uint32_t state_version;
+    size_t (*save_state)(const void *state,void *bytes,size_t capacity);
+    bool (*load_state)(void *state,const af_game_host *host,uint32_t version,const void *bytes,size_t size);
 } af_game_module;
 af_game_host af_game_host_create(af_scene *scene,af_engine *engine);
 typedef const af_game_module *(*af_game_get_api_fn)(uint32_t abi_version);

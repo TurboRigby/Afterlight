@@ -14,7 +14,7 @@
 #include <string.h>
 static bool compatible(const af_game_module *api){
     return api&&api->abi_version==AF_GAME_ABI_VERSION&&api->struct_size==sizeof(*api)&&api->host_size==sizeof(af_game_host)&&api->object_size==sizeof(af_scene_object)&&
-        api->name&&api->state_size<=AF_GAME_STATE_MAX_BYTES&&api->init&&api->update&&api->shutdown;
+        (!api->save_state==!api->load_state)&&api->name&&api->state_size<=AF_GAME_STATE_MAX_BYTES&&api->init&&api->update&&api->shutdown;
 }
 bool ed_runtime_start(ed_runtime *r,const af_scene *source,af_engine *engine,const af_game_module *api){
     if(r->playing)return false;
@@ -98,18 +98,17 @@ bool ed_runtime_start_file(ed_runtime *r,const af_scene *source,af_engine *engin
     r->auto_reload=true;r->stable_time=0;r->reload_count=0;return true;
 }
 bool ed_runtime_reload(ed_runtime *r){
-    if(!r->playing||!r->module_path[0])return false;
-    bool captured=af_engine_mouse_captured(r->host.engine);
-    bool editor_camera=!r->host.camera_enabled;af_camera previous_camera=af_engine_get_camera(r->host.engine);
-    ed_runtime candidate={0};
-    if(!ed_runtime_start_file(&candidate,r->scene,r->host.engine,r->module_path)){
-        af_engine_set_mouse_capture(r->host.engine,captured);
-        snprintf(r->status,sizeof(r->status),"Reload rejected: %.220s",candidate.status);return false;
-    }
+    if(!r->playing||!r->module_path[0])return false;af_engine *engine=r->host.engine;
+    bool captured=af_engine_mouse_captured(engine),editor_camera=!r->host.camera_enabled;af_camera previous_camera=af_engine_get_camera(engine);af_gameplay_status previous_status=af_engine_gameplay_status(engine);
+    size_t size=0;void *blob=NULL;uint32_t version=r->api->state_version;
+    if(r->api->save_state){size=r->api->save_state(r->state,NULL,0);if(!size||size>1024u*1024u||(blob=malloc(size))==NULL||r->api->save_state(r->state,blob,size)!=size){free(blob);snprintf(r->status,sizeof(r->status),"Reload rejected: state serialization failed or exceeds 1 MiB.");return false;}}
+    ed_runtime candidate={0};bool ready=ed_runtime_start_file(&candidate,r->scene,engine,r->module_path);
+    if(ready&&blob&&(!candidate.api->load_state||!candidate.api->load_state(candidate.state,&candidate.host,version,blob,size))){ed_runtime_stop(&candidate);ready=false;snprintf(candidate.status,sizeof(candidate.status),"Incompatible saved module state.");}
+    free(blob);if(!ready){af_engine_set_scene(engine,r->scene);af_engine_set_camera(engine,&previous_camera);af_engine_set_gameplay_status(engine,previous_status);af_engine_set_mouse_capture(engine,captured);snprintf(r->status,sizeof(r->status),"Reload rejected: %.220s",candidate.status);return false;}
+    af_camera next_camera=af_engine_get_camera(engine);af_gameplay_status next_status=af_engine_gameplay_status(engine);
     candidate.paused=r->paused;candidate.auto_reload=r->auto_reload;candidate.reload_count=r->reload_count+1;
-    ed_runtime_stop(r);*r=candidate;af_engine_set_mouse_capture(r->host.engine,captured);
-    if(editor_camera){af_engine_set_camera(r->host.engine,&previous_camera);r->host.camera_enabled=false;}
-    snprintf(r->status,sizeof(r->status),"C game reloaded (#%" PRIu64 "). Runtime scene kept; module state reinitialized.",r->reload_count);return true;
+    bool restored=size!=0;ed_runtime_stop(r);*r=candidate;af_engine_set_scene(engine,r->scene);af_engine_set_gameplay_status(engine,next_status);af_engine_set_camera(engine,editor_camera?&previous_camera:&next_camera);af_engine_set_mouse_capture(engine,captured);r->host.camera_enabled=!editor_camera;
+    snprintf(r->status,sizeof(r->status),"C game reloaded (#%" PRIu64 "). %s",r->reload_count,restored?"Module state restored.":"Module state reinitialized.");return true;
 }
 void ed_runtime_poll_reload(ed_runtime *r,double delta){
     if(!r->playing||!r->module_path[0])return;

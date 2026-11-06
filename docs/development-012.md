@@ -38,3 +38,14 @@ Use the editor Prefabs panel to save or instantiate through undo history. C game
 can instantiate through the host and then call `load_scene_assets` before drawing.
 The CPU limit is 4096 objects per prefab. This is explicit instancing, not a live
 prefab override/inheritance system.
+
+## State-preserving hot reload
+
+C modules may provide paired `save_state`/`load_state` callbacks and a format
+version. The host queries a blob size, limits it to 1 MiB, initializes a candidate
+against a cloned scene, then lets that candidate validate/restore the blob.
+Failed serialization, incompatible versions or rejected data keep the old module
+and scene running. Modules without callbacks keep the previous reset behavior.
+The character module preserves its POD controller/progress/platform state in a
+versioned same-process blob. Private pointers must never be copied blindly.
+Pause, camera ownership and gameplay status survive a successful reload.
