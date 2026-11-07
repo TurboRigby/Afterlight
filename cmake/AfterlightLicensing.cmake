@@ -4,14 +4,21 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 # Bundle the build's corresponding covered source, not the export-time checkout.
-file(GLOB_RECURSE afterlight_source_inputs CONFIGURE_DEPENDS
+file(GLOB_RECURSE afterlight_source_candidates CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/engine/*" "${PROJECT_SOURCE_DIR}/editor/*"
     "${PROJECT_SOURCE_DIR}/game/*" "${PROJECT_SOURCE_DIR}/player/*"
     "${PROJECT_SOURCE_DIR}/playground/*" "${PROJECT_SOURCE_DIR}/sandbox/*"
     "${PROJECT_SOURCE_DIR}/scripts/*" "${PROJECT_SOURCE_DIR}/tests/*"
     "${PROJECT_SOURCE_DIR}/docs/*" "${PROJECT_SOURCE_DIR}/cmake/*"
     "${PROJECT_SOURCE_DIR}/third_party/*" "${PROJECT_SOURCE_DIR}/.github/*")
-list(FILTER afterlight_source_inputs EXCLUDE REGEX "/(__pycache__|build|[.]git|[.]cache)/")
+# Filter paths inside the checkout, regardless of where the checkout lives.
+set(afterlight_source_inputs)
+foreach(afterlight_source_candidate IN LISTS afterlight_source_candidates)
+    file(RELATIVE_PATH afterlight_source_relative "${PROJECT_SOURCE_DIR}" "${afterlight_source_candidate}")
+    if(NOT afterlight_source_relative MATCHES "(^|/)(__pycache__|build|[.]git|[.]cache)/")
+        list(APPEND afterlight_source_inputs "${afterlight_source_candidate}")
+    endif()
+endforeach()
 set(afterlight_source_archive "${PROJECT_BINARY_DIR}/source/afterlight-source.zip")
 add_custom_command(OUTPUT "${afterlight_source_archive}"
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/package_source.py"
