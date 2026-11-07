@@ -12,6 +12,7 @@
 #define AF_SHADOW_LAYER_COUNT 24
 typedef struct af_vk_shadows af_vk_shadows;
 af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical,VkDevice device,uint32_t resolution,uint32_t layers,VkDescriptorSetLayout frame_layout,VkDescriptorSetLayout texture_layout);
+uint64_t af_vk_shadows_allocation_bytes(const af_vk_shadows *);
 void af_vk_shadows_destroy(af_vk_shadows *shadows);
 VkDescriptorSetLayout af_vk_shadows_layout(const af_vk_shadows *shadows);
 VkDescriptorSet af_vk_shadows_descriptor(const af_vk_shadows *shadows,uint32_t frame);

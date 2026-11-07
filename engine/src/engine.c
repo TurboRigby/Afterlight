@@ -435,6 +435,9 @@ bool af_engine_mouse_captured(const af_engine *engine)
     return engine && engine->mouse_captured;
 }
 
+bool af_engine_set_debug_view(af_engine *e,af_debug_view view){return e&&af_renderer_set_debug_view(e->renderer,view);}
+void af_engine_set_visibility_culling(af_engine *e,bool enabled){if(e)af_renderer_set_visibility_culling(e->renderer,enabled);}
+bool af_engine_set_render_budget(af_engine *e,double ms,uint64_t bytes){return e&&af_renderer_set_render_budget(e->renderer,ms,bytes);}
 af_engine_stats af_engine_get_stats(const af_engine *engine)
 {
     if (!engine) return (af_engine_stats){0};

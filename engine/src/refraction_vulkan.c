@@ -12,6 +12,7 @@ typedef struct frame {
     bool initialized;
 } frame;
 struct af_vk_refraction {
+    uint64_t allocation_bytes;
     VkPhysicalDevice physical;
     VkDevice device;
     VkExtent2D extent;
@@ -58,6 +59,7 @@ static bool create_image(af_vk_refraction *r, image *out, VkFormat format, VkIma
         }
     if (type == UINT32_MAX)
         return false;
+    r->allocation_bytes+=req.size;
     VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                                        .allocationSize = req.size,
                                        .memoryTypeIndex = type};
@@ -106,6 +108,7 @@ fail:
     af_vk_refraction_destroy(r);
     return NULL;
 }
+uint64_t af_vk_refraction_allocation_bytes(const af_vk_refraction *p){return p?p->allocation_bytes:0;}
 void af_vk_refraction_destroy(af_vk_refraction *r) {
     if (!r)
         return;

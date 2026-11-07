@@ -23,7 +23,7 @@ static bool stream_buffer(af_renderer *r, af_gpu_buffer *b, const void *data, Vk
         if (!vk_ok(vkCreateBuffer(r->device, &info, NULL, &b->handle), "create streamed buffer"))
             return false;
         VkMemoryRequirements req;
-        vkGetBufferMemoryRequirements(r->device, b->handle, &req);
+        vkGetBufferMemoryRequirements(r->device, b->handle, &req);b->allocation_bytes=req.size;
         VkPhysicalDeviceMemoryProperties props;
         vkGetPhysicalDeviceMemoryProperties(r->physical_device, &props);
         uint32_t type = UINT32_MAX;

@@ -970,6 +970,12 @@ static void performance_panel(editor *app,float width,float height)
         }else label(ctx,stats.gpu_timing_supported?"GPU sample pending":"GPU timestamps unavailable",26);
         snprintf(text,sizeof(text),"Simulation %" PRIu64 " ticks / %u steps / %.3f alpha",stats.simulation_ticks,stats.simulation_steps,stats.simulation_alpha);label(ctx,text,24);
         snprintf(text,sizeof(text),"Dropped catch-up %.3f s",stats.simulation_dropped_seconds);label(ctx,text,24);
+        static const char *views[]={"Shaded","Depth (log scale)","Motion vectors","Previous history","History rejection"};nk_layout_row_dynamic(ctx,28,1);int view=nk_combo(ctx,views,5,(int)stats.debug_view,26,nk_vec2(320,190));if(view!=(int)stats.debug_view)af_engine_set_debug_view(app->engine,(af_debug_view)view);
+        snprintf(text,sizeof(text),"Visible %zu / culled %zu",stats.visible_objects,stats.culled_objects);label(ctx,text,24);
+        snprintf(text,sizeof(text),"Tracked GPU %.1f / %.0f MiB%s",(double)stats.tracked_gpu_bytes/1048576,(double)stats.gpu_budget_bytes/1048576,stats.gpu_memory_over_budget?" OVER BUDGET":"");label(ctx,text,24);
+        snprintf(text,sizeof(text),"Post %.1f / shadows %.1f / refraction %.1f MiB",(double)stats.post_bytes/1048576,(double)stats.shadow_bytes/1048576,(double)stats.refraction_bytes/1048576);label(ctx,text,24);
+        snprintf(text,sizeof(text),"GPU target %.2f ms%s",stats.gpu_budget_ms,stats.gpu_time_over_budget?" OVER BUDGET":"");label(ctx,text,24);
+        label(ctx,"Tracked bytes exclude UI and driver/presentation allocations.",38);
         snprintf(text,sizeof(text),"Draws %zu + %zu shadow",stats.draw_calls,stats.shadow_draw_calls);label(ctx,text,26);
         snprintf(text,sizeof(text),"Textures %zu / %.2f MiB / %u mip levels",stats.loaded_textures,(double)stats.texture_bytes/1048576,stats.texture_mip_levels);label(ctx,text,24);
         snprintf(text,sizeof(text),"Anisotropy %.0fx / Shadow %u x %u",stats.texture_anisotropy,stats.shadow_resolution,stats.shadow_cascades);label(ctx,text,24);

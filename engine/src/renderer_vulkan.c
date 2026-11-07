@@ -34,12 +34,13 @@
 
 #define AF_FRAMES_IN_FLIGHT AF_UI_FRAMES_IN_FLIGHT
 _Static_assert(AF_FRAMES_IN_FLIGHT==AF_SHADOW_FRAME_COUNT,"Independent shadow maps for each frame");
+enum {AF_RESOURCE_AA_MASK=3u,AF_RESOURCE_BLOOM=4u,AF_RESOURCE_MOTION=8u,AF_RESOURCE_REFRACTION=16u};
 #define AF_PORTABILITY_SUBSET "VK_KHR_portability_subset"
 
 typedef struct af_gpu_buffer {
     VkBuffer handle;
     VkDeviceMemory memory;
-    VkDeviceSize capacity;void *mapped;bool coherent;
+    VkDeviceSize allocation_bytes,capacity;void *mapped;bool coherent;
 } af_gpu_buffer;
 
 typedef struct af_gpu_light {af_vec4 position_range,color_intensity,direction_inner,params;} af_gpu_light;
@@ -80,6 +81,7 @@ typedef struct af_frame {
 } af_frame;
 
 typedef struct af_depth_attachment {
+    VkDeviceSize allocation_bytes;
     VkImage image;
     VkDeviceMemory memory;
     VkImageView view;
@@ -88,6 +90,7 @@ typedef struct af_depth_attachment {
 typedef struct af_swapchain {
     VkSwapchainKHR handle;
     VkExtent2D extent;
+    uint32_t resource_config;
     VkSurfaceFormatKHR surface_format;
     af_vk_post *post;af_vk_refraction *refraction;
     VkRenderPass render_pass,water_pass;
@@ -175,6 +178,7 @@ struct af_renderer {
     size_t mesh_capacity;
     size_t draw_calls;
     size_t missing_meshes;
+    af_debug_view debug_view;bool culling_disabled;size_t visible_objects,culled_objects;double gpu_budget_ms;uint64_t gpu_budget_bytes;
     bool resize_pending;
     bool swapchain_invalid;
     bool validation_enabled;
@@ -594,7 +598,7 @@ static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize 
     };
     if (!vk_ok(vkCreateBuffer(renderer->device, &info, NULL, &buffer->handle), "vkCreateBuffer")) return false;
     VkMemoryRequirements requirements;
-    vkGetBufferMemoryRequirements(renderer->device, buffer->handle, &requirements);
+    vkGetBufferMemoryRequirements(renderer->device, buffer->handle, &requirements);buffer->allocation_bytes=requirements.size;
     VkPhysicalDeviceMemoryProperties properties;
     vkGetPhysicalDeviceMemoryProperties(renderer->physical_device, &properties);
     uint32_t memory_type = UINT32_MAX;
@@ -746,7 +750,7 @@ static bool create_depth_attachment(af_renderer *renderer, af_depth_attachment *
     };
     if (!vk_ok(vkCreateImage(renderer->device, &info, NULL, &depth->image), "vkCreateImage (depth)")) return false;
     VkMemoryRequirements requirements;
-    vkGetImageMemoryRequirements(renderer->device, depth->image, &requirements);
+    vkGetImageMemoryRequirements(renderer->device, depth->image, &requirements);depth->allocation_bytes=requirements.size;
     VkPhysicalDeviceMemoryProperties properties;
     vkGetPhysicalDeviceMemoryProperties(renderer->physical_device, &properties);
     uint32_t memory_type = UINT32_MAX;
@@ -816,7 +820,7 @@ static uint32_t clamp_extent(uint32_t value, uint32_t minimum, uint32_t maximum)
     return value < minimum ? minimum : (value > maximum ? maximum : value);
 }
 
-static bool create_swapchain(af_renderer *renderer)
+static bool create_swapchain(af_renderer *renderer,af_render_settings settings,uint32_t config)
 {
     int width = 0, height = 0;
     if (!SDL_GetWindowSizeInPixels(renderer->window, &width, &height)) {
@@ -861,7 +865,7 @@ static bool create_swapchain(af_renderer *renderer)
     af_swapchain *existing = &renderer->swapchain;
     if (existing->handle && !renderer->swapchain_invalid &&
         existing->extent.width == extent.width && existing->extent.height == extent.height &&
-        existing->surface_format.format == format.format && existing->surface_format.colorSpace == format.colorSpace) {
+        existing->resource_config==config && existing->surface_format.format == format.format && existing->surface_format.colorSpace == format.colorSpace) {
         renderer->resize_pending = false;
         return true;
     }
@@ -882,7 +886,7 @@ static bool create_swapchain(af_renderer *renderer)
     if (!vk_ok(vkDeviceWaitIdle(renderer->device), "vkDeviceWaitIdle")) return false;
     destroy_swapchain(renderer);
     af_swapchain *swapchain = &renderer->swapchain;
-    swapchain->extent = extent;
+    swapchain->extent = extent;swapchain->resource_config=config;
     swapchain->surface_format = format;
     renderer->capture_supported=(capabilities.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)&&
         (format.format==VK_FORMAT_B8G8R8A8_SRGB||format.format==VK_FORMAT_B8G8R8A8_UNORM||format.format==VK_FORMAT_R8G8B8A8_SRGB||format.format==VK_FORMAT_R8G8B8A8_UNORM);
@@ -931,7 +935,7 @@ static bool create_swapchain(af_renderer *renderer)
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}
     };
     attachments[2]=attachments[0];
-    VkAttachmentReference color_reference[] = {{.attachment=0,.layout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},{.attachment=2,.layout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+    VkAttachmentReference color_reference[] = {{.attachment=0,.layout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},{.attachment=(config&AF_RESOURCE_MOTION)?2u:VK_ATTACHMENT_UNUSED,.layout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
     VkAttachmentReference depth_reference = {.attachment = 1, .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     VkSubpassDescription subpass = {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -950,7 +954,7 @@ static bool create_swapchain(af_renderer *renderer)
     };
     VkRenderPassCreateInfo pass_info = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 3, .pAttachments = attachments,
+        .attachmentCount = (config&AF_RESOURCE_MOTION)?3u:2u, .pAttachments = attachments,
         .subpassCount = 1, .pSubpasses = &subpass,
         .dependencyCount = 2, .pDependencies = dependencies
     };
@@ -973,8 +977,8 @@ static bool create_swapchain(af_renderer *renderer)
     }
     VkImageView *depth_views=calloc(swapchain->image_count,sizeof(*depth_views));if(!depth_views)return false;
     for(uint32_t i=0;i<swapchain->image_count;++i)depth_views[i]=swapchain->depths[i].view;
-    swapchain->post=af_vk_post_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,extent,swapchain->image_count,swapchain->views,format.format,swapchain->render_pass,depth_views);
-    free(depth_views);swapchain->refraction=af_vk_refraction_create(renderer->physical_device,renderer->device,extent,swapchain->image_count,swapchain->depth_format);if(!swapchain->post||!swapchain->refraction||!create_pipeline(renderer)||!create_sky_pipeline(renderer))return false;
+    swapchain->post=af_vk_post_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,extent,swapchain->image_count,swapchain->views,format.format,swapchain->render_pass,depth_views,settings,(config&AF_RESOURCE_MOTION)!=0);
+    free(depth_views);swapchain->refraction=af_vk_refraction_create(renderer->physical_device,renderer->device,(config&AF_RESOURCE_REFRACTION)?extent:(VkExtent2D){1,1},swapchain->image_count,swapchain->depth_format);if(!swapchain->post||!swapchain->refraction||!create_pipeline(renderer)||!create_sky_pipeline(renderer))return false;
     if (renderer->ui && !af_vk_ui_create_pipeline(renderer->ui, af_vk_post_output_pass(swapchain->post))) return false;
     renderer->resize_pending = false;
     renderer->temporal_valid=false;
@@ -1072,7 +1076,7 @@ af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation)
     af_renderer *renderer = calloc(1, sizeof(*renderer));
     if (!renderer) return NULL;
     atomic_init(&renderer->validation_errors, 0);
-    renderer->window = window;
+    renderer->window = window;renderer->gpu_budget_ms=1000.0/60;renderer->gpu_budget_bytes=UINT64_C(512)*1024*1024;
     renderer->resize_pending = true;
     if (!create_instance(renderer, enable_validation)) goto fail;
     if (!SDL_Vulkan_CreateSurface(window, renderer->instance, NULL, &renderer->surface)) {
@@ -1088,7 +1092,7 @@ af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation)
     renderer->shadows=af_vk_shadows_create(renderer->physical_device,renderer->device,shadows.resolution,renderer->shadow_layers,renderer->frame_layout,af_vk_texture_layout(renderer->white));
     renderer->local_shadow_resolution=512;renderer->local_shadow_layers=1;
     renderer->local_shadows=af_vk_shadows_create(renderer->physical_device,renderer->device,512,1,renderer->frame_layout,af_vk_texture_layout(renderer->white));
-    if(!renderer->white||!renderer->flat_normal||!renderer->shadows||!renderer->local_shadows||!create_environment(renderer,0)||!create_uniforms(renderer)||!create_swapchain(renderer))goto fail;
+    if(!renderer->white||!renderer->flat_normal||!renderer->shadows||!renderer->local_shadows||!create_environment(renderer,0)||!create_uniforms(renderer)||!create_swapchain(renderer,af_render_settings_default(),0))goto fail;
     return renderer;
 fail:
     af_renderer_destroy(renderer);
@@ -1584,11 +1588,14 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame,
 bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera, af_rect viewport_rect, af_object_id highlighted, const af_overlay_frame *overlay, bool *rendered)
 {
     *rendered = false;renderer->missing_textures=0;
-    if (renderer->resize_pending || !renderer->swapchain.handle) {
-        if (!create_swapchain(renderer)) return false;
+    af_render_settings environment_settings=af_scene_get_render_settings(scene);
+    if(renderer->debug_view!=AF_DEBUG_SHADED)environment_settings.anti_aliasing=AF_AA_TAA;
+    if(environment_settings.anti_aliasing==AF_AA_TAA&&!renderer->temporal_supported)environment_settings.anti_aliasing=AF_AA_FXAA;
+    uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u);
+    if (renderer->resize_pending || !renderer->swapchain.handle || renderer->swapchain.resource_config!=resource_config) {
+        if (!create_swapchain(renderer,environment_settings,resource_config)) return false;
         if (renderer->resize_pending || !renderer->swapchain.handle) return true;
     }
-    af_render_settings environment_settings=af_scene_get_render_settings(scene);
     if((environment_settings.environment_enabled||environment_settings.skybox)&&!environment_settings.environment_asset[0]&&environment_settings.environment_profile!=renderer->environment_profile&&!create_environment(renderer,environment_settings.environment_profile))return false;
     bool environment_found=!environment_settings.environment_asset[0];
     for(size_t i=0;i<renderer->environment_count;++i)if(!strcmp(renderer->environments[i].name,environment_settings.environment_asset))environment_found=true;
@@ -1686,7 +1693,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         .clearValueCount = 3, .pClearValues = clears
     };
     vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
-    size_t draw_calls = 0, missing_meshes = 0;
+    af_mat4 visibility_projection=uniform.unjittered_view_projection;
+    float visible_width=uniform.water_screen.x*(uniform.water_viewport.z-uniform.water_viewport.x),visible_height=uniform.water_screen.y*(uniform.water_viewport.w-uniform.water_viewport.y);
+    for(unsigned column=0;column<4;++column){visibility_projection.elements[column*4]*=visible_width/(visible_width+4);visibility_projection.elements[column*4+1]*=visible_height/(visible_height+4);}
+    size_t draw_calls = 0, missing_meshes = 0;renderer->visible_objects=renderer->culled_objects=0;
     size_t object_count = af_scene_object_count(scene);
     if (object_count > 0||environment_settings.skybox) {
         VkExtent2D extent = renderer->swapchain.extent;
@@ -1730,9 +1740,11 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             }
             const af_mesh_asset *asset=&renderer->meshes[index];
             const af_gpu_mesh *mesh = asset->dynamic?&asset->streams[renderer->frame_index].gpu:&asset->gpu;
+            af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;
+            if(!renderer->culling_disabled){af_shadow_bounds bounds=object_bounds(renderer,object->id,world,mesh);if(!af_shadow_intersects(visibility_projection,&bounds)){++renderer->culled_objects;continue;}}
+            ++renderer->visible_objects;
             af_color base=object->material.base_color;
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
-            af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;
             struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{(float)((object->material.unlit?1u:0u)|((uint32_t)object->material.alpha_mode<<1u)|((uint32_t)lroundf(object->material.alpha_cutoff*65535)<<3u)),object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,(float)skin_base(renderer,object->id,mesh)},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
             if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(1u<<21u)|(2u<<1u)),1,1,water->wind};if(refract)transform.params.x+=(float)(1u<<22u);if(water->mode!=AF_WATER_PARTICLES&&wa_contains(ph_water_runtime(renderer->water_physics),scene,water->owner,camera->position))transform.params.x+=(float)(1u<<23u);transform.surface=(af_vec4){water->roughness,water->ripple_scale,water->mode==AF_WATER_PARTICLES?water->particle_spacing:water->depth,water->mode==AF_WATER_PARTICLES?0:water->ripple_strength};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
             _Static_assert(sizeof(transform)==128,"Portable draw push constant limit");
@@ -1762,7 +1774,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     int logical_w=0,logical_h=0;SDL_GetWindowSize(renderer->window,&logical_w,&logical_h);
     af_rect post_area=resolve_viewport(renderer,viewport_rect);post_area.x/=(float)(logical_w?logical_w:1);post_area.y/=(float)(logical_h?logical_h:1);post_area.width/=(float)(logical_w?logical_w:1);post_area.height/=(float)(logical_h?logical_h:1);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,2);
-    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,environment_settings,post_area,renderer->temporal_jitter);
+    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,environment_settings,post_area,renderer->temporal_jitter,renderer->debug_view);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,3);
     if (renderer->ui && overlay->index_count)
         af_vk_ui_draw(renderer->ui, frame->command, renderer->frame_index, overlay, renderer->swapchain.extent);
@@ -1830,12 +1842,23 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     return true;
 }
 
+bool af_renderer_set_debug_view(af_renderer *r,af_debug_view view){if(!r||view<AF_DEBUG_SHADED||view>=AF_DEBUG_COUNT||(view!=AF_DEBUG_SHADED&&!r->temporal_supported))return false;if(r->debug_view==view)return true;r->debug_view=view;r->temporal_valid=false;return true;}
+void af_renderer_set_visibility_culling(af_renderer *r,bool enabled){if(r)r->culling_disabled=!enabled;}
+bool af_renderer_set_render_budget(af_renderer *r,double ms,uint64_t bytes){if(!r||!isfinite(ms)||ms<=0||ms>1000||bytes<1024u*1024u)return false;r->gpu_budget_ms=ms;r->gpu_budget_bytes=bytes;return true;}
 af_engine_stats af_renderer_stats(const af_renderer *renderer)
 {
     size_t active_meshes=0;for(size_t i=0;i<renderer->mesh_count;++i)active_meshes+=renderer->meshes[i].name[0]&&!renderer->meshes[i].retired;
     uint64_t texture_bytes=0;uint32_t mip_levels=0;
     for(size_t i=0;i<renderer->texture_count;++i){af_texture_info info=af_vk_texture_info(renderer->textures[i].texture);texture_bytes+=info.allocation_bytes;mip_levels+=info.mip_levels;}
+    uint64_t mesh_bytes=0,other=0;
+    for(size_t i=0;i<renderer->mesh_count;++i){const af_mesh_asset *m=&renderer->meshes[i];mesh_bytes+=m->gpu.vertices.allocation_bytes+m->gpu.indices.allocation_bytes;for(unsigned f=0;f<AF_FRAMES_IN_FLIGHT;++f)mesh_bytes+=m->streams[f].gpu.vertices.allocation_bytes+m->streams[f].gpu.indices.allocation_bytes;}
+    for(unsigned f=0;f<AF_FRAMES_IN_FLIGHT;++f)other+=renderer->frames[f].uniform.allocation_bytes+renderer->frames[f].skin_buffer.allocation_bytes+renderer->frames[f].motion_buffer.allocation_bytes;
+    for(uint32_t i=0;i<renderer->swapchain.image_count;++i)other+=renderer->swapchain.depths[i].allocation_bytes;
+    af_vk_texture *fixed[]={renderer->white,renderer->flat_normal,renderer->environment,renderer->irradiance,renderer->brdf};for(unsigned i=0;i<5;++i)if(fixed[i])other+=af_vk_texture_info(fixed[i]).allocation_bytes;
+    for(size_t i=0;i<renderer->environment_count;++i){other+=af_vk_texture_info(renderer->environments[i].sky).allocation_bytes+af_vk_texture_info(renderer->environments[i].specular).allocation_bytes+af_vk_texture_info(renderer->environments[i].diffuse).allocation_bytes;}
+    uint64_t post=af_vk_post_allocation_bytes(renderer->swapchain.post),shadows=af_vk_shadows_allocation_bytes(renderer->shadows)+af_vk_shadows_allocation_bytes(renderer->local_shadows),refraction=af_vk_refraction_allocation_bytes(renderer->swapchain.refraction),tracked=post+shadows+refraction+mesh_bytes+texture_bytes+other;
     return (af_engine_stats){
+        .post_bytes=post,.shadow_bytes=shadows,.refraction_bytes=refraction,.mesh_bytes=mesh_bytes,.tracked_gpu_bytes=tracked,.gpu_budget_ms=renderer->gpu_budget_ms,.gpu_budget_bytes=renderer->gpu_budget_bytes,.gpu_time_over_budget=renderer->timing_valid&&renderer->gpu_ms[0]>renderer->gpu_budget_ms,.gpu_memory_over_budget=tracked>renderer->gpu_budget_bytes,.debug_view=renderer->debug_view,.effective_aa=(af_anti_aliasing)(renderer->swapchain.resource_config&AF_RESOURCE_AA_MASK),.visible_objects=renderer->visible_objects,.culled_objects=renderer->culled_objects,
         .gpu_timing_supported=renderer->timestamp_bits!=0,.gpu_timing_valid=renderer->timing_valid,
         .gpu_frame_ms=renderer->gpu_ms[0],.gpu_shadow_ms=renderer->gpu_ms[1],.gpu_scene_ms=renderer->gpu_ms[2],.gpu_post_ms=renderer->gpu_ms[3],.gpu_overlay_ms=renderer->gpu_ms[4],
         .cpu_fence_ms=renderer->cpu_fence_ms,.cpu_acquire_ms=renderer->cpu_acquire_ms,

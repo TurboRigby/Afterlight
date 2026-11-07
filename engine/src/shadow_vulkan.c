@@ -22,6 +22,7 @@ typedef struct shadow_frame {
     VkDescriptorSet descriptor;
 } shadow_frame;
 struct af_vk_shadows {
+    uint64_t allocation_bytes;
     VkDevice device;
     uint32_t resolution,layers;
     VkFormat format;
@@ -34,6 +35,7 @@ struct af_vk_shadows {
     shadow_frame frames[AF_SHADOW_FRAME_COUNT];
 };
 static bool ok(VkResult result,const char *operation){if(result==VK_SUCCESS)return true;af_log("error","Shadow %s failed (%d).",operation,(int)result);return false;}
+uint64_t af_vk_shadows_allocation_bytes(const af_vk_shadows *p){return p?p->allocation_bytes:0;}
 void af_vk_shadows_destroy(af_vk_shadows *s)
 {
     if(!s)return;
@@ -120,6 +122,7 @@ af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical,VkDevice device,ui
         VkMemoryRequirements requirements;vkGetImageMemoryRequirements(device,frame->image,&requirements);uint32_t type=UINT32_MAX;
         for(unsigned i=0;i<memory.memoryTypeCount;++i)if((requirements.memoryTypeBits&(1u<<i))&&(memory.memoryTypes[i].propertyFlags&VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)){type=i;break;}
         if(type==UINT32_MAX)goto fail;
+        s->allocation_bytes+=requirements.size;
         VkMemoryAllocateInfo allocate={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=requirements.size,.memoryTypeIndex=type};
         if(!ok(vkAllocateMemory(device,&allocate,NULL,&frame->memory),"memory")||!ok(vkBindImageMemory(device,frame->image,frame->memory,0),"bind memory"))goto fail;
         VkImageViewCreateInfo view={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=frame->image,.viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY,.format=s->format,.subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,layers}};

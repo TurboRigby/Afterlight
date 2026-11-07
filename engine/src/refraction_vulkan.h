@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.h>
 typedef struct af_vk_refraction af_vk_refraction;
 af_vk_refraction *af_vk_refraction_create(VkPhysicalDevice, VkDevice, VkExtent2D, uint32_t, VkFormat);
+uint64_t af_vk_refraction_allocation_bytes(const af_vk_refraction *);
 void af_vk_refraction_destroy(af_vk_refraction *);
 VkDescriptorImageInfo af_vk_refraction_color(const af_vk_refraction *, uint32_t);
 VkDescriptorImageInfo af_vk_refraction_depth(const af_vk_refraction *, uint32_t);

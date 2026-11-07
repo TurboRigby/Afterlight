@@ -17,6 +17,15 @@ vec3 sample_source(vec2 position){
 }
 void main(){
     int mode=int(post.blur_params.z);
+    if(mode>=11){
+        bool inside=all(greaterThanEqual(uv,post.viewport.xy))&&all(lessThan(uv,post.viewport.zw));if(!inside){out_color=vec4(0,0,0,1);return;}
+        vec4 movement=texture(lookup_image,uv);
+        if(mode==11){float d=log2(1+max(movement.w,0))/10;out_color=vec4(vec3(clamp(d,0,1)),1);}
+        else if(mode==12)out_color=vec4(movement.z<0?vec3(1,0,1):vec3(clamp(.5+movement.xy*vec2(textureSize(source_image,0))*.05,vec2(0),vec2(1)),.5),1);
+        else if(mode==13){vec3 c=max(texture(bloom_image,uv).rgb,vec3(0));out_color=vec4(c/(1+c),1);}
+        else{vec2 p=uv+movement.xy;bool valid=post.aa.w>.5&&movement.z>0&&all(greaterThanEqual(p,post.viewport.xy))&&all(lessThan(p,post.viewport.zw));float old=texture(bloom_image,clamp(p,vec2(0),vec2(1))).a;valid=valid&&abs(old-movement.z)<=max(.02,.015*movement.z);out_color=vec4(valid?vec3(0,.5,0):vec3(1,0,0),1);}
+        return;
+    }
     if(mode==10){out_color=taa_resolve();return;}
     if(mode>=7){out_color=smaa_pass(mode);return;}
     if(mode==6){

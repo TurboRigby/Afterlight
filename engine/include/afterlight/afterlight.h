@@ -42,6 +42,10 @@ typedef enum af_mouse_button {
 typedef struct af_engine_stats {
     uint64_t rendered_frames;
     uint64_t swapchain_rebuilds;
+    size_t visible_objects,culled_objects;
+    uint64_t post_bytes,shadow_bytes,refraction_bytes,mesh_bytes,tracked_gpu_bytes,gpu_budget_bytes;
+    double gpu_budget_ms;bool gpu_time_over_budget,gpu_memory_over_budget;
+    af_debug_view debug_view;af_anti_aliasing effective_aa;
     size_t loaded_meshes;
     size_t loaded_textures;
     uint64_t texture_bytes; /* Loaded scene textures, excluding UI/shadow maps. */
@@ -233,6 +237,9 @@ bool af_engine_swim_character(af_engine*,af_character*,af_character_config,af_sw
 af_water_sample af_engine_sample_water(const af_engine*,af_vec3);
 bool af_engine_disturb_water(af_engine*,af_object_id,af_vec3,float,float);
 af_water_stats af_engine_water_stats(const af_engine*);
+bool af_engine_set_debug_view(af_engine *,af_debug_view);
+void af_engine_set_visibility_culling(af_engine *,bool enabled);
+bool af_engine_set_render_budget(af_engine *,double gpu_ms,uint64_t bytes);
 af_engine_stats af_engine_get_stats(const af_engine *engine);
 
 bool af_engine_texture_info(const af_engine *engine,const char *name,af_texture_info *out);

@@ -25,6 +25,8 @@ struct af_vk_post {
   VkDevice device;
   VkExtent2D extent, half;
   uint32_t count;
+  uint64_t allocation_bytes;
+  unsigned allocation_attempts;
   VkRenderPass blur_pass, output_pass;
   VkPipeline blur_pipeline, output_pipeline;
   VkPipelineLayout pipeline_layout;
@@ -57,6 +59,11 @@ static bool framebuffer(af_vk_post *p, VkRenderPass pass,
   return ok(vkCreateFramebuffer(p->device, &info, NULL, out));
 }
 static bool image(af_vk_post *p, post_image *out, VkExtent2D extent) {
+  const char *fault = getenv("AFTERLIGHT_TEST_POST_FAIL_AT");
+  if (fault && strtoul(fault, NULL, 10) == ++p->allocation_attempts) {
+    af_log("info", "Injected post allocation failure for cleanup regression.");
+    return false;
+  }
   VkImageCreateInfo info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                             .imageType = VK_IMAGE_TYPE_2D,
                             .format = VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -86,6 +93,7 @@ static bool image(af_vk_post *p, post_image *out, VkExtent2D extent) {
     }
   if (type == UINT32_MAX)
     return false;
+  p->allocation_bytes += requirements.size;
   VkMemoryAllocateInfo allocation = {.sType =
                                          VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                                      .allocationSize = requirements.size,
@@ -217,6 +225,9 @@ done:
     vkDestroyShaderModule(p->device, fragment, NULL);
   return success;
 }
+uint64_t af_vk_post_allocation_bytes(const af_vk_post *p) {
+  return p ? p->allocation_bytes : 0;
+}
 void af_vk_post_destroy(af_vk_post *p) {
   if (!p)
     return;
@@ -276,7 +287,8 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
                               VkQueue queue, uint32_t family, VkExtent2D extent,
                               uint32_t count, const VkImageView *outputs,
                               VkFormat format, VkRenderPass scene_pass,
-                              const VkImageView *depths) {
+                              const VkImageView *depths,
+                              af_render_settings settings, bool motion) {
   VkFormatProperties properties;
   vkGetPhysicalDeviceFormatProperties(physical, VK_FORMAT_R16G16B16A16_SFLOAT,
                                       &properties);
@@ -346,50 +358,60 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
   if (!ok(vkCreateDescriptorPool(device, &pool, NULL, &p->pool)))
     goto fail;
   post_image *shared[] = {&p->display, &p->history[0], &p->history[1]};
-  for (unsigned j = 0; j < 3; ++j)
+  unsigned shared_count = settings.anti_aliasing >= AF_AA_SMAA  ? 3u
+                          : settings.anti_aliasing != AF_AA_OFF ? 1u
+                                                                : 0u;
+  for (unsigned j = 0; j < shared_count; ++j)
     if (!image(p, shared[j], extent) ||
         !framebuffer(p, p->blur_pass, &shared[j]->view, 1, extent,
                      &shared[j]->framebuffer))
       goto fail;
-  unsigned char *lut = malloc(AREATEX_WIDTH * AREATEX_HEIGHT * 4);
-  if (!lut)
-    goto fail;
-  for (unsigned i = 0; i < AREATEX_WIDTH * AREATEX_HEIGHT; ++i) {
-    lut[4 * i] = areaTexBytes[2 * i];
-    lut[4 * i + 1] = areaTexBytes[2 * i + 1];
-    lut[4 * i + 2] = 0;
-    lut[4 * i + 3] = 255;
+  if (settings.anti_aliasing == AF_AA_SMAA) {
+    unsigned char *lut = malloc(AREATEX_WIDTH * AREATEX_HEIGHT * 4);
+    if (!lut)
+      goto fail;
+    for (unsigned i = 0; i < AREATEX_WIDTH * AREATEX_HEIGHT; ++i) {
+      lut[4 * i] = areaTexBytes[2 * i];
+      lut[4 * i + 1] = areaTexBytes[2 * i + 1];
+      lut[4 * i + 2] = 0;
+      lut[4 * i + 3] = 255;
+    }
+    p->area_lut =
+        af_vk_texture_create(physical, device, queue, family, lut,
+                             AREATEX_WIDTH, AREATEX_HEIGHT, false, false, 1);
+    free(lut);
+    if (!p->area_lut)
+      goto fail;
+    lut = malloc(SEARCHTEX_WIDTH * SEARCHTEX_HEIGHT * 4);
+    if (!lut)
+      goto fail;
+    for (unsigned i = 0; i < SEARCHTEX_WIDTH * SEARCHTEX_HEIGHT; ++i) {
+      lut[4 * i] = searchTexBytes[i];
+      lut[4 * i + 1] = lut[4 * i + 2] = 0;
+      lut[4 * i + 3] = 255;
+    }
+    p->search_lut = af_vk_texture_create(physical, device, queue, family, lut,
+                                         SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT,
+                                         false, false, 1);
+    free(lut);
+    if (!p->search_lut)
+      goto fail;
+    p->allocation_bytes += af_vk_texture_info(p->area_lut).allocation_bytes +
+                           af_vk_texture_info(p->search_lut).allocation_bytes;
   }
-  p->area_lut =
-      af_vk_texture_create(physical, device, queue, family, lut, AREATEX_WIDTH,
-                           AREATEX_HEIGHT, false, false, 1);
-  free(lut);
-  if (!p->area_lut)
-    goto fail;
-  lut = malloc(SEARCHTEX_WIDTH * SEARCHTEX_HEIGHT * 4);
-  if (!lut)
-    goto fail;
-  for (unsigned i = 0; i < SEARCHTEX_WIDTH * SEARCHTEX_HEIGHT; ++i) {
-    lut[4 * i] = searchTexBytes[i];
-    lut[4 * i + 1] = lut[4 * i + 2] = 0;
-    lut[4 * i + 3] = 255;
-  }
-  p->search_lut =
-      af_vk_texture_create(physical, device, queue, family, lut,
-                           SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, false, false, 1);
-  free(lut);
-  if (!p->search_lut)
-    goto fail;
   for (uint32_t i = 0; i < count; ++i) {
     post_frame *f = &p->frames[i];
-    if (!image(p, &f->hdr, extent) || !image(p, &f->motion, extent) ||
-        !image(p, &f->blur[0], p->half) || !image(p, &f->blur[1], p->half))
+    if (!image(p, &f->hdr, extent) ||
+        (motion && !image(p, &f->motion, extent)) ||
+        (settings.bloom &&
+         (!image(p, &f->blur[0], p->half) || !image(p, &f->blur[1], p->half))))
       goto fail;
     VkImageView views[] = {f->hdr.view, depths[i], f->motion.view};
-    if (!framebuffer(p, scene_pass, views, 3, extent, &f->scene) ||
+    if (!framebuffer(p, scene_pass, views, motion ? 3u : 2u, extent,
+                     &f->scene) ||
         !framebuffer(p, p->output_pass, &outputs[i], 1, extent, &f->output))
       goto fail;
-    for (unsigned j = 0; j < 2; ++j)
+    for (unsigned j = 0; settings.bloom && j < 2; ++j)
       if (!framebuffer(p, p->blur_pass, &f->blur[j].view, 1, p->half,
                        &f->blur[j].framebuffer))
         goto fail;
@@ -410,6 +432,9 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
         p->history[0].view, p->display.view,    f->hdr.view,
         f->hdr.view,        p->history[0].view, p->history[1].view,
         p->history[0].view, p->history[1].view};
+    for (unsigned j = 0; j < 14; ++j)
+      if (!sources[j])
+        sources[j] = f->hdr.view;
     for (unsigned j = 0; j < 14; ++j) {
       VkDescriptorImageInfo images[] = {
           {p->sampler, sources[j], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
@@ -420,13 +445,19 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
            : j == 9                     ? p->history[0].view
                                         : sources[j],
            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-          af_vk_texture_image(p->search_lut)};
-      if (j == 6)
+          p->search_lut ? af_vk_texture_image(p->search_lut)
+                        : (VkDescriptorImageInfo){
+                              p->sampler, f->hdr.view,
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+      if (j == 6 && p->area_lut)
         images[1] = af_vk_texture_image(p->area_lut);
-      if (j == 5 || j == 8 || j == 9)
+      if (motion && (j == 5 || j == 8 || j == 9))
         images[2] =
             (VkDescriptorImageInfo){p->sampler, f->motion.view,
                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+      if (!images[1].imageView)
+        images[1] = (VkDescriptorImageInfo){
+            p->sampler, f->hdr.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
       VkWriteDescriptorSet writes[3];
       for (uint32_t k = 0; k < 3; ++k)
         writes[k] = (VkWriteDescriptorSet){
@@ -492,8 +523,8 @@ static void draw_pass(af_vk_post *p, VkCommandBuffer command,
     vkCmdEndRenderPass(command);
 }
 void af_vk_post_draw(af_vk_post *p, VkCommandBuffer command, uint32_t index,
-                     af_render_settings settings, af_rect area,
-                     af_vec2 jitter) {
+                     af_render_settings settings, af_rect area, af_vec2 jitter,
+                     af_debug_view debug_view) {
   post_frame *f = &p->frames[index];
   struct {
     af_vec4 settings, filter, viewport, aa, temporal;
@@ -552,6 +583,12 @@ void af_vk_post_draw(af_vk_post *p, VkCommandBuffer command, uint32_t index,
     ++p->history_index;
   } else
     p->history_valid = false;
+  if (debug_view != AF_DEBUG_SHADED) {
+    push.filter.z = (float)(10 + (unsigned)debug_view);
+    draw_pass(p, command, f->output, true, p->extent, f->sets[8 + parity],
+              &push);
+    return;
+  }
   unsigned last = settings.anti_aliasing == AF_AA_SMAA ? 7u : aa ? 5u : 4u;
   for (unsigned stage = bloom ? 1u : 4u; stage <= last; ++stage) {
     bool output = stage == last;
