@@ -13,7 +13,7 @@ static bool load(af_engine *engine,state *s,const char *path){
     for(size_t i=0;i<af_scene_object_count(s->runtime.scene);++i){const af_scene_object *o=af_scene_object_at(s->runtime.scene,i);if(o->animation.asset[0]){s->actor=o->id;break;}}return s->actor!=0;
 }
 static bool init(af_engine *engine,void *user){state *s=user;af_mesh_data cube=cube_mesh_data();return af_engine_upload_mesh(engine,"cube",&cube)&&load(engine,s,s->simple);}
-static void space(af_engine *engine){SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.windowID=SDL_GetWindowID(af_engine_sdl_window(engine));e.key.scancode=SDL_SCANCODE_SPACE;e.key.down=true;SDL_PushEvent(&e);e.type=SDL_EVENT_KEY_UP;e.key.down=false;SDL_PushEvent(&e);}
+static void space(af_engine *engine){SDL_Event e;SDL_zero(e);e.type=SDL_EVENT_KEY_DOWN;e.key.windowID=SDL_GetWindowID(af_engine_sdl_window(engine));e.key.scancode=SDL_SCANCODE_SPACE;e.key.down=true;SDL_PushEvent(&e);e.type=SDL_EVENT_KEY_UP;e.key.down=false;SDL_PushEvent(&e);}
 static void update(af_engine *engine,double delta,void *user){
     state *s=user;ed_runtime_frame_update(&s->runtime,delta,true);uint64_t ticks=af_engine_get_stats(engine).simulation_ticks;
     if(ticks-s->start_tick<12)return;s->start_tick=ticks;af_animation_status status=af_engine_animation_status(engine,s->actor);

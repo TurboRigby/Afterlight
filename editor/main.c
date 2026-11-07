@@ -1238,7 +1238,7 @@ static bool init(af_engine *engine,void *userdata)
 }
 static void smoke_click(editor *app,float x,float y)
 {
-    SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
     event.button.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));
     event.button.button=SDL_BUTTON_LEFT;event.button.down=true;event.button.x=x;event.button.y=y;
     app->failed|=!SDL_PushEvent(&event);
@@ -1247,13 +1247,13 @@ static void smoke_click(editor *app,float x,float y)
 }
 static void smoke_button(editor *app,Uint8 button,bool down)
 {
-    SDL_Event event={0};event.type=down?SDL_EVENT_MOUSE_BUTTON_DOWN:SDL_EVENT_MOUSE_BUTTON_UP;
+    SDL_Event event;SDL_zero(event);event.type=down?SDL_EVENT_MOUSE_BUTTON_DOWN:SDL_EVENT_MOUSE_BUTTON_UP;
     event.button.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.button.button=button;event.button.down=down;
     event.button.x=550;event.button.y=350;app->failed|=!SDL_PushEvent(&event);
 }
 static void smoke_key(editor *app,SDL_Scancode key)
 {
-    SDL_Event event={0};event.type=SDL_EVENT_KEY_DOWN;event.key.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.key.scancode=key;event.key.down=true;app->failed|=!SDL_PushEvent(&event);
+    SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_KEY_DOWN;event.key.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.key.scancode=key;event.key.down=true;app->failed|=!SDL_PushEvent(&event);
     event.type=SDL_EVENT_KEY_UP;event.key.down=false;app->failed|=!SDL_PushEvent(&event);
 }
 #define SMOKE_CHECK(app,condition) do{if(!(condition)){fprintf(stderr,"Editor smoke frame %u: %s\n",(app)->updates,#condition);(app)->failed=true;}}while(0)
@@ -1288,10 +1288,10 @@ static void light_tools_smoke(editor *app){
     case 0:{SMOKE_CHECK(app,ed_document_new(&app->document));SMOKE_CHECK(app,ed_document_add_light(&app->document,AF_LIGHT_POINT));af_local_light light=*af_scene_local_light_at(app->document.scene,0);light.position=(af_vec3){0};SMOKE_CHECK(app,ed_document_local_light(&app->document,0,light));ed_document_end_edit(&app->document);app->light_selected=false;app->gizmo.mode=ED_GIZMO_MOVE;app->fields_active=false;app->show_assets=false;break;}
     case 1:{af_vec2 position;SMOKE_CHECK(app,ed_project(&app->camera,app->viewport,(af_vec3){0},&position));smoke_click(app,position.x,position.y);break;}
     case 2:SMOKE_CHECK(app,app->light_selected&&app->selected_light==0);break;
-    case 3:case 9:{af_vec2 p={app->gizmo.origin.x+(app->gizmo.ends[0].x-app->gizmo.origin.x)*.7f,app->gizmo.origin.y+(app->gizmo.ends[0].y-app->gizmo.origin.y)*.7f};SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;event.button.windowID=window;event.button.button=SDL_BUTTON_LEFT;event.button.down=true;event.button.x=p.x;event.button.y=p.y;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
+    case 3:case 9:{af_vec2 p={app->gizmo.origin.x+(app->gizmo.ends[0].x-app->gizmo.origin.x)*.7f,app->gizmo.origin.y+(app->gizmo.ends[0].y-app->gizmo.origin.y)*.7f};SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;event.button.windowID=window;event.button.button=SDL_BUTTON_LEFT;event.button.down=true;event.button.x=p.x;event.button.y=p.y;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
     case 4:case 10:SMOKE_CHECK(app,app->light_dragging&&app->gizmo.dragging);break;
-    case 5:case 11:{SDL_Event event={0};event.type=SDL_EVENT_MOUSE_MOTION;event.motion.windowID=window;event.motion.x=app->gizmo.start.x+app->gizmo.direction.x*.5f;event.motion.y=app->gizmo.start.y+app->gizmo.direction.y*.5f;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
-    case 6:case 13:{SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_UP;event.button.windowID=window;event.button.button=SDL_BUTTON_LEFT;event.button.x=app->gizmo.start.x+app->gizmo.direction.x*.5f;event.button.y=app->gizmo.start.y+app->gizmo.direction.y*.5f;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
+    case 5:case 11:{SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_MOTION;event.motion.windowID=window;event.motion.x=app->gizmo.start.x+app->gizmo.direction.x*.5f;event.motion.y=app->gizmo.start.y+app->gizmo.direction.y*.5f;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
+    case 6:case 13:{SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_BUTTON_UP;event.button.windowID=window;event.button.button=SDL_BUTTON_LEFT;event.button.x=app->gizmo.start.x+app->gizmo.direction.x*.5f;event.button.y=app->gizmo.start.y+app->gizmo.direction.y*.5f;SMOKE_CHECK(app,SDL_PushEvent(&event));break;}
     case 7:{const af_local_light *light=af_scene_local_light_at(app->document.scene,0);SMOKE_CHECK(app,light&&light->position.x>0&&!app->gizmo.dragging);SMOKE_CHECK(app,ed_document_undo(&app->document));SMOKE_CHECK(app,af_scene_local_light_at(app->document.scene,0)->position.x==0);SMOKE_CHECK(app,ed_document_redo(&app->document));app->light_test_position=af_scene_local_light_at(app->document.scene,0)->position;break;}
     case 8:break;
     case 12:smoke_key(app,SDL_SCANCODE_ESCAPE);break;
@@ -1375,12 +1375,12 @@ static void smoke(editor *app)
     if(app->updates==21)smoke_click(app,1020,195);
     if(app->updates==23){
         app->failed|=!SDL_TextInputActive(af_engine_sdl_window(app->engine));
-        SDL_Event event={0};event.type=SDL_EVENT_TEXT_INPUT;event.text.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.text.text="x";app->failed|=!SDL_PushEvent(&event);
+        SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_TEXT_INPUT;event.text.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.text.text="x";app->failed|=!SDL_PushEvent(&event);
     }
     if(app->updates==25){app->failed|=strchr(af_scene_get_object(d->scene,1)->name,'x')==NULL;app->failed|=!ed_document_name(d,"Editor smoke cube");ed_document_end_edit(d);}
     if(app->updates==26||app->updates==28||app->updates==29){
         if(app->updates==28)app->failed|=strlen(af_scene_get_object(d->scene,1)->name)!=16;
-        SDL_Event event={0};event.type=app->updates==29?SDL_EVENT_KEY_UP:SDL_EVENT_KEY_DOWN;
+        SDL_Event event;SDL_zero(event);event.type=app->updates==29?SDL_EVENT_KEY_UP:SDL_EVENT_KEY_DOWN;
         event.key.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.key.scancode=SDL_SCANCODE_BACKSPACE;event.key.down=app->updates!=29;event.key.repeat=app->updates==28;app->failed|=!SDL_PushEvent(&event);
     }
     if(app->updates==30){app->failed|=strlen(af_scene_get_object(d->scene,1)->name)!=15;app->failed|=!ed_document_duplicate(d);}
@@ -1395,10 +1395,10 @@ static void smoke(editor *app)
     if(app->updates==100){
         app->gizmo.mode=ED_GIZMO_MOVE;
         af_vec2 p={app->gizmo.origin.x+(app->gizmo.ends[0].x-app->gizmo.origin.x)*0.7f,app->gizmo.origin.y+(app->gizmo.ends[0].y-app->gizmo.origin.y)*0.7f};
-        SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;event.button.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.button.button=SDL_BUTTON_LEFT;event.button.down=true;event.button.x=p.x;event.button.y=p.y;app->failed|=!SDL_PushEvent(&event);
+        SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;event.button.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.button.button=SDL_BUTTON_LEFT;event.button.down=true;event.button.x=p.x;event.button.y=p.y;app->failed|=!SDL_PushEvent(&event);
     }
-    if(app->updates==102){SDL_Event event={0};event.type=SDL_EVENT_MOUSE_MOTION;event.motion.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.motion.x=app->gizmo.start.x+app->gizmo.direction.x*0.4f;event.motion.y=app->gizmo.start.y+app->gizmo.direction.y*0.4f;app->failed|=!SDL_PushEvent(&event);}
-    if(app->updates==104){SDL_Event event={0};event.type=SDL_EVENT_MOUSE_BUTTON_UP;event.button.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.button.button=SDL_BUTTON_LEFT;app->failed|=!SDL_PushEvent(&event);}
+    if(app->updates==102){SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_MOTION;event.motion.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.motion.x=app->gizmo.start.x+app->gizmo.direction.x*0.4f;event.motion.y=app->gizmo.start.y+app->gizmo.direction.y*0.4f;app->failed|=!SDL_PushEvent(&event);}
+    if(app->updates==104){SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_BUTTON_UP;event.button.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.button.button=SDL_BUTTON_LEFT;app->failed|=!SDL_PushEvent(&event);}
     if(app->updates==107){const af_scene_object *o=af_scene_get_object(d->scene,d->selection);app->failed|=!o||o->transform.position.x<=app->gizmo.initial.position.x||app->gizmo.dragging;app->failed|=!ed_document_undo(d);refresh(app);}
     if(app->updates==115)smoke_click(app,75,132); /* Add cube through the UI. */
     if(app->updates==118)app->failed|=af_scene_object_count(d->scene)!=6;
@@ -1417,7 +1417,7 @@ static void smoke(editor *app)
     if(app->updates==151)refresh(app);
     if(app->updates==155){
         ed_document_name(d,"Unsaved modal test");ed_document_end_edit(d);
-        SDL_Event close={0};close.type=SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+        SDL_Event close;SDL_zero(close);close.type=SDL_EVENT_WINDOW_CLOSE_REQUESTED;
         close.window.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));
         app->failed|=!SDL_PushEvent(&close);
     }

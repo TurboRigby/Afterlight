@@ -13,7 +13,7 @@
 #include <string.h>
 typedef struct state{af_scene *scene;unsigned frames,ticks,space,r;bool failed;}state;
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Fixed loop frame %u: %s\n",s->frames,#c);s->failed=true;af_engine_request_quit(engine);return;}}while(0)
-static void key(SDL_Scancode scancode){SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.scancode=scancode;e.key.down=true;SDL_PushEvent(&e);e.type=SDL_EVENT_KEY_UP;e.key.down=false;SDL_PushEvent(&e);}
+static void key(SDL_Scancode scancode){SDL_Event e;SDL_zero(e);e.type=SDL_EVENT_KEY_DOWN;e.key.scancode=scancode;e.key.down=true;SDL_PushEvent(&e);e.type=SDL_EVENT_KEY_UP;e.key.down=false;SDL_PushEvent(&e);}
 static bool init(af_engine *engine,void *data){state *s=data;s->scene=af_scene_create();if(!s->scene)return false;af_scene_add_object(s->scene,"Tick cube","cube");af_shadow_settings shadow=af_shadow_settings_default();shadow.enabled=false;shadow.resolution=512;af_scene_set_shadows(s->scene,shadow);af_mesh_data cube=cube_mesh_data();if(!af_engine_upload_mesh(engine,"cube",&cube))return false;af_engine_set_scene(engine,s->scene);af_engine_set_simulation_paused(engine,true);return true;}
 static void update(af_engine *engine,double delta,void *data){(void)delta;state *s=data;++s->frames;
     if(s->frames==1)key(SDL_SCANCODE_SPACE);
