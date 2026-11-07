@@ -9,6 +9,8 @@
 #include <afterlight/afterlight.h>
 /* Private regression hook: copies one rendered pixel before presentation.
    Requests use logical window coordinates; read after a subsequent draw. */
+bool af_engine_test_capture_region(af_engine *,af_vec2,uint32_t,uint32_t);
+bool af_engine_test_read_pixels(af_engine *,unsigned char *,size_t,uint32_t *,uint32_t *);
 bool af_engine_test_capture_pixel(af_engine *engine,af_vec2 position);
 bool af_engine_test_read_pixel(af_engine *engine,unsigned char rgba[4]);
 /* Native focus may be lost and regained within one SDL event batch. */

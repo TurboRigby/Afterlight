@@ -25,6 +25,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.20: anti-aliasing](development-020.md)
 - [0.19: water boundaries, ripple texture and wind](development-019.md)
 - [0.18: water performance and gameplay](development-018.md)
 - [0.17: water physics and rendering](development-017.md)

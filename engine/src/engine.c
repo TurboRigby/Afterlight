@@ -544,6 +544,8 @@ bool af_engine_remove_texture(af_engine *engine,const char *name){return engine&
 
 bool af_engine_key_repeated(const af_engine *engine,af_key key){return engine&&key>=0&&key<AF_KEY_COUNT&&engine->repeated[key];}
 
+bool af_engine_test_capture_region(af_engine *e,af_vec2 p,uint32_t w,uint32_t h){return e&&af_renderer_test_capture_region(e->renderer,p,w,h);}
+bool af_engine_test_read_pixels(af_engine *e,unsigned char *p,size_t n,uint32_t *w,uint32_t *h){return e&&af_renderer_test_read_pixels(e->renderer,p,n,w,h);}
 bool af_engine_test_capture_pixel(af_engine *engine,af_vec2 position){return engine&&af_renderer_test_capture_pixel(engine->renderer,position);}
 bool af_engine_test_read_pixel(af_engine *engine,unsigned char rgba[4]){return engine&&af_renderer_test_read_pixel(engine->renderer,rgba);}
 

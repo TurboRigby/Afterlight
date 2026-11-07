@@ -1,10 +1,12 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 // SPDX-License-Identifier: MPL-2.0
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 out_color;
 layout(set=0,binding=0) uniform sampler2D source_image;
 layout(set=0,binding=1) uniform sampler2D bloom_image;
-layout(push_constant) uniform Post {vec4 settings;vec4 blur_params;vec4 viewport;} post;
+layout(push_constant) uniform Post {vec4 settings;vec4 blur_params;vec4 viewport;vec4 aa;} post;
+#include "fxaa.glsl"
 vec3 sample_source(vec2 position){
     vec2 half_texel=0.5/vec2(textureSize(source_image,0));
     vec2 midpoint=(post.viewport.xy+post.viewport.zw)*0.5;
@@ -12,13 +14,18 @@ vec3 sample_source(vec2 position){
 }
 void main(){
     int mode=int(post.blur_params.z);
-    if(mode==0){
+    if(mode==6){
+        bool inside=all(greaterThanEqual(uv,post.viewport.xy))&&all(lessThan(uv,post.viewport.zw));
+        vec3 perceptual=inside?fxaa(uv):texture(source_image,uv).rgb;
+        out_color=vec4(perceptual*perceptual,1);return;
+    }
+    if(mode==0||mode==5){
         vec3 color=max(texture(source_image,uv).rgb,vec3(0));
         if(post.settings.z>0&&all(greaterThanEqual(uv,post.viewport.xy))&&all(lessThan(uv,post.viewport.zw)))
             color+=texture(bloom_image,uv).rgb*post.settings.z;
         color*=post.settings.x;
         if(post.settings.y>0.5)color=color/(vec3(1)+color);
-        out_color=vec4(color,1);return;
+        out_color=vec4(mode==5?sqrt(max(color,vec3(0))):color,1);return;
     }
     if(any(lessThan(uv,post.viewport.xy))||any(greaterThanEqual(uv,post.viewport.zw))){out_color=vec4(0);return;}
     vec3 color=vec3(0);

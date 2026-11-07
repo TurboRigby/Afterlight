@@ -29,6 +29,8 @@ bool af_renderer_update_water(af_renderer*,const af_physics*,const af_scene*,flo
 bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera, af_rect viewport, af_object_id highlighted, const af_overlay_frame *overlay, bool *rendered);
 bool af_renderer_upload_overlay_texture(af_renderer *renderer,uint32_t id,const unsigned char *rgba,uint32_t width,uint32_t height);
 bool af_renderer_remove_overlay_texture(af_renderer *renderer,uint32_t id);
+bool af_renderer_test_capture_region(af_renderer *,af_vec2,uint32_t,uint32_t);
+bool af_renderer_test_read_pixels(af_renderer *,unsigned char *,size_t,uint32_t *,uint32_t *);
 bool af_renderer_test_capture_pixel(af_renderer *renderer,af_vec2 position);
 bool af_renderer_test_read_pixel(af_renderer *renderer,unsigned char rgba[4]);
 af_engine_stats af_renderer_stats(const af_renderer *renderer);

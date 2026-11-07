@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.24)
-project(Afterlight VERSION 0.19.0 LANGUAGES C)
+project(Afterlight VERSION 0.20.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -25,7 +25,7 @@ foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fulls
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
         COMMAND Vulkan::glslangValidator --target-env vulkan1.1 --spirv-val
             --vn af_${shader_name} -o "${shader_header}" "${shader_source}"
-        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/water_ripples.glsl" Vulkan::glslangValidator
+        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/water_ripples.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/fxaa.glsl" Vulkan::glslangValidator
         COMMENT "Compiling Afterlight ${shader} shader"
         VERBATIM
     )
@@ -575,6 +575,12 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_antialiasing_test tests/antialiasing.c)
+    target_include_directories(afterlight_antialiasing_test PRIVATE engine/src)
+    target_link_libraries(afterlight_antialiasing_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_antialiasing_test)
+    add_test(NAME afterlight.antialiasing COMMAND afterlight_antialiasing_test)
+    set_tests_properties(afterlight.antialiasing PROPERTIES TIMEOUT 60 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     add_executable(afterlight_environment_editor_test tests/environment_editor.c)
     target_include_directories(afterlight_environment_editor_test PRIVATE engine/src sandbox)
     target_link_libraries(afterlight_environment_editor_test PRIVATE afterlight_editor_document)

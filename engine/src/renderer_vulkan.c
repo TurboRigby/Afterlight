@@ -131,7 +131,7 @@ struct af_renderer {
     af_skin_instance skins[AF_SKIN_INSTANCES];size_t skin_count;uint64_t skin_revision;
     uint64_t texture_revision,mesh_revision;uint32_t shadow_passes,shadow_cached_passes;
     af_gpu_buffer capture_buffer;
-    af_vec2 capture_position;
+    af_vec2 capture_position;VkExtent2D capture_extent;
     VkFormat capture_format;
     bool capture_supported,capture_pending,capture_ready;
     af_vk_texture *white,*flat_normal;
@@ -1482,7 +1482,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             .srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
             .image=renderer->swapchain.images[image_index],.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
         vkCmdPipelineBarrier(frame->command,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
-        VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.imageOffset={(int32_t)x,(int32_t)y,0},.imageExtent={1,1,1}};
+        renderer->capture_extent.width=renderer->capture_extent.width<renderer->swapchain.extent.width-x?renderer->capture_extent.width:renderer->swapchain.extent.width-x;renderer->capture_extent.height=renderer->capture_extent.height<renderer->swapchain.extent.height-y?renderer->capture_extent.height:renderer->swapchain.extent.height-y;
+        VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.imageOffset={(int32_t)x,(int32_t)y,0},.imageExtent={renderer->capture_extent.width,renderer->capture_extent.height,1}};
         vkCmdCopyImageToBuffer(frame->command,barrier.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,renderer->capture_buffer.handle,1,&copy);
         VkBufferMemoryBarrier host={.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.dstAccessMask=VK_ACCESS_HOST_READ_BIT,
             .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.buffer=renderer->capture_buffer.handle,.size=VK_WHOLE_SIZE};
@@ -1577,20 +1578,30 @@ bool af_renderer_remove_texture(af_renderer *renderer,const char *name){if(rende
     af_vk_texture_destroy(renderer->textures[i].texture);memmove(&renderer->textures[i],&renderer->textures[i+1],(renderer->texture_count-i-1)*sizeof(*renderer->textures));--renderer->texture_count;return true;
 }
 
-bool af_renderer_test_capture_pixel(af_renderer *renderer,af_vec2 position){
-    if(!renderer->capture_supported||renderer->capture_pending||!isfinite(position.x)||!isfinite(position.y))return false;
-    if(!renderer->capture_buffer.handle){const unsigned char zero[4]={0};if(!upload_buffer(renderer,zero,4,VK_BUFFER_USAGE_TRANSFER_DST_BIT,&renderer->capture_buffer))return false;}
-    renderer->capture_position=position;renderer->capture_pending=true;renderer->capture_ready=false;return true;
+bool af_renderer_test_capture_region(af_renderer *renderer,af_vec2 position,uint32_t width,uint32_t height){
+    if(!renderer||!renderer->capture_supported||renderer->capture_pending||!isfinite(position.x)||!isfinite(position.y)||!width||!height||width>1024||height>1024)return false;
+    size_t bytes=(size_t)width*height*4;
+    if(renderer->capture_buffer.capacity<bytes){
+        if(!af_renderer_wait_idle(renderer))return false;destroy_buffer(renderer,&renderer->capture_buffer);
+        unsigned char *zero=calloc(bytes,1);if(!zero)return false;
+        bool success=upload_buffer(renderer,zero,bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT,&renderer->capture_buffer);free(zero);if(!success)return false;renderer->capture_buffer.capacity=bytes;
+    }
+    renderer->capture_extent=(VkExtent2D){width,height};renderer->capture_position=position;renderer->capture_pending=true;renderer->capture_ready=false;return true;
 }
-bool af_renderer_test_read_pixel(af_renderer *renderer,unsigned char rgba[4]){
-    if(!rgba||!renderer->capture_ready||!af_renderer_wait_idle(renderer))return false;
-    void *data=NULL;if(!vk_ok(vkMapMemory(renderer->device,renderer->capture_buffer.memory,0,VK_WHOLE_SIZE,0,&data),"map pixel"))return false;
+bool af_renderer_test_capture_pixel(af_renderer *renderer,af_vec2 position){return af_renderer_test_capture_region(renderer,position,1,1);}
+bool af_renderer_test_read_pixels(af_renderer *renderer,unsigned char *rgba,size_t capacity,uint32_t *width,uint32_t *height){
+    if(!renderer||!rgba||!renderer->capture_ready||capacity<(size_t)renderer->capture_extent.width*renderer->capture_extent.height*4||!af_renderer_wait_idle(renderer))return false;
+    void *data=NULL;if(!vk_ok(vkMapMemory(renderer->device,renderer->capture_buffer.memory,0,VK_WHOLE_SIZE,0,&data),"map pixels"))return false;
     VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=renderer->capture_buffer.memory,.size=VK_WHOLE_SIZE};
-    bool success=vk_ok(vkInvalidateMappedMemoryRanges(renderer->device,1,&range),"invalidate pixel");
+    bool success=vk_ok(vkInvalidateMappedMemoryRanges(renderer->device,1,&range),"invalidate pixels");
     if(success){const unsigned char *p=data;bool bgra=renderer->capture_format==VK_FORMAT_B8G8R8A8_SRGB||renderer->capture_format==VK_FORMAT_B8G8R8A8_UNORM;
-        rgba[0]=p[bgra?2:0];rgba[1]=p[1];rgba[2]=p[bgra?0:2];rgba[3]=p[3];}
+        size_t count=(size_t)renderer->capture_extent.width*renderer->capture_extent.height;
+        for(size_t i=0;i<count;++i){rgba[4*i]=p[4*i+(bgra?2u:0u)];rgba[4*i+1]=p[4*i+1];rgba[4*i+2]=p[4*i+(bgra?0u:2u)];rgba[4*i+3]=p[4*i+3];}
+        if(width)*width=renderer->capture_extent.width;if(height)*height=renderer->capture_extent.height;
+    }
     vkUnmapMemory(renderer->device,renderer->capture_buffer.memory);renderer->capture_ready=false;return success;
 }
+bool af_renderer_test_read_pixel(af_renderer *renderer,unsigned char rgba[4]){return af_renderer_test_read_pixels(renderer,rgba,4,NULL,NULL);}
 
 bool af_renderer_texture_info(const af_renderer *renderer,const char *name,af_texture_info *out){
     if(!name||!out)return false;

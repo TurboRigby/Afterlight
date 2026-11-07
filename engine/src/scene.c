@@ -214,9 +214,10 @@ bool af_scene_object_visible(const af_scene *scene,af_object_id id){
 bool af_scene_set_shadows(af_scene *scene,af_shadow_settings settings){if(!scene||!af_shadow_settings_valid(settings))return false;scene->shadows=settings;return true;}
 af_shadow_settings af_scene_get_shadows(const af_scene *scene){return scene?scene->shadows:af_shadow_settings_default();}
 
-af_render_settings af_render_settings_default(void){return (af_render_settings){.underwater=true,.refraction=true,.refraction_strength=1,.bloom_strength=.12f,.bloom_threshold=1,.bloom_radius=1.5f,.environment_intensity=1,.skybox_intensity=1,.local_shadow_resolution=512};}
+af_render_settings af_render_settings_default(void){return (af_render_settings){.taa_history_weight=.9f,.aa_sharpness=.1f,.underwater=true,.refraction=true,.refraction_strength=1,.bloom_strength=.12f,.bloom_threshold=1,.bloom_radius=1.5f,.environment_intensity=1,.skybox_intensity=1,.local_shadow_resolution=512};}
 af_render_settings af_scene_get_render_settings(const af_scene *scene){return scene?scene->render_settings:af_render_settings_default();}
 bool af_scene_set_render_settings(af_scene *scene,af_render_settings settings){
+    if(settings.anti_aliasing<AF_AA_OFF||settings.anti_aliasing>AF_AA_FXAA||!isfinite(settings.aa_sharpness)||settings.aa_sharpness<0||settings.aa_sharpness>1||!isfinite(settings.taa_history_weight)||settings.taa_history_weight<0||settings.taa_history_weight>.98f)return false;
     if(!isfinite(settings.refraction_strength)||settings.refraction_strength<0||settings.refraction_strength>2)return false;
     if(!scene||!isfinite(settings.exposure)||settings.exposure< -10||settings.exposure>10||
        !isfinite(settings.bloom_strength)||settings.bloom_strength<0||settings.bloom_strength>5||
