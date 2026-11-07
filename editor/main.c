@@ -33,6 +33,7 @@
 #include <string.h>
 
 typedef enum ed_action { ED_NONE, ED_NEW, ED_OPEN, ED_OPEN_PROJECT, ED_CLOSE } ed_action;
+enum { ED_DIALOG_EXTENSION = 10 };
 typedef struct editor {
     ed_document document;
     ed_gui gui;
@@ -48,7 +49,7 @@ typedef struct editor {
     char wizard_name[128],wizard_folder[AF_ASSET_PATH_CAPACITY],tool_project[AF_ASSET_PATH_CAPACITY];
     char project_path[AF_ASSET_PATH_CAPACITY];
     const char *initial_project;
-    bool show_project,module_override,project_is_template;
+    bool show_project,show_extensions,module_override,project_is_template;
     af_camera edit_camera;
     char module_path[AF_ASSET_PATH_CAPACITY];
     char runtime_status[256];
@@ -197,7 +198,12 @@ static void poll_dialog(editor *app)
     const char *extension = strrchr(path, '.');
     bool open_project_file = !app->dialog_asset && !app->dialog_save &&
                              extension && SDL_strcasecmp(extension, ".project") == 0;
-    if(app->dialog_asset==5 || open_project_file){
+    if (app->dialog_asset == ED_DIALOG_EXTENSION) {
+        bool loaded = af_engine_load_extension(app->engine, path);
+        set_status(app, loaded ? "Engine extension enabled." :
+                                 "Extension load failed. Check its dependencies, ABI and ID.");
+        app->dialog_asset = 0;
+    }else if(app->dialog_asset==5 || open_project_file){
         app->module_override=false;if(open_project(app,path,false))load_assets(app);app->dialog_asset=0;
     }else if(app->dialog_asset==6){
         af_project project=app->project;af_asset_error project_error;
@@ -299,7 +305,7 @@ static void keyboard(editor *app,double delta)
     }
     if(modifier)return;
     af_vec2 mouse=af_engine_mouse_position(engine);
-    const char *floating[]={"Performance","Assets","Project","Animation","HDR import","Input actions","Prefabs"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_animation,app->environment_pending,app->show_input,app->show_prefab};
+    const char *floating[]={"Performance","Assets","Project","Extensions","Animation","HDR import","Input actions","Prefabs"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_extensions,app->show_animation,app->environment_pending,app->show_input,app->show_prefab};
     for(size_t i=0;i<sizeof(open)/sizeof(open[0]);++i)if(open[i]){struct nk_window *panel=nk_window_find(&app->gui.context,floating[i]);
         if(panel&&nk_input_is_mouse_hovering_rect(&app->gui.context.input,panel->bounds))return;}
     if(!app->runtime.playing&&inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_LEFT)&&!af_engine_mouse_captured(engine)){
@@ -1085,6 +1091,11 @@ static void project_panel(editor *app,float width,float height)
 {
     if(!app->show_project)return;struct nk_context *ctx=&app->gui.context;
     if(nk_begin(ctx,"Project",nk_rect(fmaxf(20,(width-620)/2),70,620,fminf(680,height-100)),NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MOVABLE)){
+        nk_layout_row_dynamic(ctx,32,1);
+        if (nk_button_label(ctx, "Extensions") && !app->modal && !app->dialog) {
+            app->show_extensions = true;
+            app->show_project = false;
+        }
         label(ctx,app->project.name[0]?app->project.name:"Create a project from this scene",28);
         nk_layout_row_dynamic(ctx,42,1);nk_label_wrap(ctx,app->project_path[0]?app->project_path:"No project file selected.");
         label(ctx,"Startup scene",24);nk_layout_row_dynamic(ctx,54,1);nk_label_wrap(ctx,app->project.startup_scene);
@@ -1102,6 +1113,43 @@ static void project_panel(editor *app,float width,float height)
         if(nk_button_label(ctx,"Export saved project")&&!app->tool_process)start_project_tool(app,true);
         nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close project panel"))app->show_project=false;
     }nk_end(ctx);
+}
+
+static void extensions_panel(editor *app, float width, float height)
+{
+    if (!app->show_extensions) return;
+    struct nk_context *ctx = &app->gui.context;
+    nk_flags flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_MOVABLE;
+    if (app->modal || app->dialog) flags |= NK_WINDOW_NO_INPUT;
+    if (nk_begin(ctx, "Extensions", nk_rect(fmaxf(20, (width - 540) / 2), 100, 540,
+                 fminf(440, height - 140)), flags)) {
+        nk_layout_row_dynamic(ctx, 46, 1);
+        nk_label_wrap(ctx, "Load trusted native libraries for this editor session.");
+        size_t count = af_engine_extension_count(app->engine);
+        if (!count) label(ctx, "Built-in rendering. No extensions loaded.", 28);
+        for (size_t i = 0; i < count; ++i) {
+            af_extension_info info;
+            if (!af_engine_get_extension(app->engine, i, &info)) continue;
+            nk_layout_row_dynamic(ctx, 30, 2);
+            nk_bool enabled = info.enabled;
+            if (nk_checkbox_label(ctx, info.id, &enabled))
+                (void)af_engine_set_extension_enabled(app->engine, i, enabled != 0);
+            const char *state = info.enabled ? "Enabled" : "Disabled";
+            if (info.vulkan_upscaler && info.enabled)
+                state = info.upscaler_active ? "Upscaler active" : "Built-in rendering";
+            nk_label(ctx, state, NK_TEXT_LEFT);
+        }
+        nk_layout_row_dynamic(ctx, 34, 2);
+        if (nk_button_label(ctx, "Load extension") && !app->dialog) {
+            (void)af_engine_set_mouse_capture(app->engine, false);
+            app->dialog = ed_dialog_begin_extension(app->engine);
+            app->dialog_asset = ED_DIALOG_EXTENSION;
+            app->dialog_save = false;
+            if (!app->dialog) set_status(app, "Cannot open the extension dialog.");
+        }
+        if (nk_button_label(ctx, "Close")) app->show_extensions = false;
+    }
+    nk_end(ctx);
 }
 static void play_hud(editor *app)
 {
@@ -1213,7 +1261,7 @@ static void build_ui(editor *app,float width,float height)
         nk_layout_row_dynamic(context,18,1);nk_label(context,app->document.status,NK_TEXT_LEFT);
     }nk_end(context);
     nk_style_pop_vec2(context);
-    performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);environment_panel(app,width,height);
+    performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);extensions_panel(app,width,height);environment_panel(app,width,height);
     af_engine_set_scene(app->engine,app->runtime.playing?app->runtime.scene:app->document.scene);
     animation_panel(app,width,height);input_panel(app);prefab_panel(app);
     if(app->modal){

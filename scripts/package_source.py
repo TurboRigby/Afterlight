@@ -15,7 +15,7 @@ SOURCE_DIRS = ('engine', 'editor', 'game', 'player', 'playground', 'sandbox',
                'scripts', 'tests', 'docs', 'cmake', 'third_party', '.github')
 ROOT_FILES = ('CMakeLists.txt', 'CMakePresets.json', 'README.md', 'LICENSE',
               'NOTICE', 'THIRD_PARTY_NOTICES.md', 'CONTRIBUTING.md', 'DCO', '.gitignore', '.gitattributes')
-SUFFIXES = {'.c', '.cpp', '.h', '.vert', '.frag', '.glsl', '.hlsl', '.py', '.cmake', '.md', '.json',
+SUFFIXES = {'.c', '.cpp', '.h', '.vert', '.frag', '.comp', '.glsl', '.hlsl', '.py', '.cmake', '.md', '.json',
             '.sh', '.csv', '.hdr', '.yml', '.yaml', '.obj', '.tga', '.glb', '.gltf', '.png', '.bin', '.wav', '.ttf', '.txt', '.prefab'}
 
 

@@ -189,13 +189,45 @@ static void update_actions(af_engine *e,double dt){
 
 bool af_engine_load_extension(af_engine *engine, const char *path)
 {
-    if (!engine || engine->has_run) {
-        af_log("error", "Load engine extensions before starting the engine loop.");
+    if (!engine || engine->in_fixed || (engine->has_run && !engine->running)) {
+        af_log("error", "Load engine extensions at startup or from a frame update.");
         return false;
     }
     if (!af_extensions_load(&engine->extensions, path)) return false;
-    const af_loaded_extension *module = &engine->extensions.modules[engine->extensions.count - 1];
-    if (module->upscaler) af_renderer_set_upscaler(engine->renderer, module->upscaler, module->state);
+    return af_engine_set_extension_enabled(engine, engine->extensions.count - 1, true);
+}
+
+size_t af_engine_extension_count(const af_engine *engine)
+{
+    return engine ? engine->extensions.count : 0;
+}
+
+bool af_engine_get_extension(const af_engine *engine, size_t index, af_extension_info *info)
+{
+    if (!engine || !info || index >= engine->extensions.count) return false;
+    const af_loaded_extension *module = &engine->extensions.modules[index];
+    *info = (af_extension_info){
+        .id = module->api->id, .enabled = module->enabled,
+        .vulkan_upscaler = module->upscaler != NULL,
+        .upscaler_active = module->enabled && module->upscaler &&
+                           af_renderer_upscaler_active(engine->renderer),
+    };
+    return true;
+}
+
+bool af_engine_set_extension_enabled(af_engine *engine, size_t index, bool enabled)
+{
+    if (!engine || engine->in_fixed || index >= engine->extensions.count) return false;
+    af_loaded_extension *module = &engine->extensions.modules[index];
+    if (module->enabled == enabled) return true;
+    if (module->upscaler && enabled) {
+        for (size_t i = 0; i < engine->extensions.count; ++i)
+            if (engine->extensions.modules[i].upscaler) engine->extensions.modules[i].enabled = false;
+        af_renderer_set_upscaler(engine->renderer, module->upscaler, module->state);
+    } else if (module->upscaler) {
+        (void)af_renderer_set_upscaler_enabled(engine->renderer, false);
+    }
+    module->enabled = enabled;
     return true;
 }
 
@@ -385,7 +417,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
             break;
         }
         engine->cpu_render_ms=(double)(SDL_GetPerformanceCounter()-render_start)*1000/frequency;
-        if (rendered && engine->extensions.count)
+        if (rendered)
             af_extensions_present(&engine->extensions, engine->fixed_ticks, delta);
         if (!rendered) SDL_Delay(16);
         update_frame_stats(engine, frequency, rendered);

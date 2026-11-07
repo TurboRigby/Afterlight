@@ -17,6 +17,7 @@ af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation);
 void af_renderer_destroy(af_renderer *renderer);
 void af_renderer_set_upscaler(af_renderer *, const struct af_vulkan_upscaler_api *, void *state);
 bool af_renderer_set_upscaler_enabled(af_renderer *, bool enabled);
+bool af_renderer_upscaler_active(const af_renderer *);
 void af_renderer_release_upscaler(af_renderer *);
 bool af_renderer_wait_idle(af_renderer *renderer);
 af_temporal_test_stats af_renderer_test_temporal(const af_renderer *);

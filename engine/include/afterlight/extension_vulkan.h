@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 #define AF_VULKAN_UPSCALER_ABI_VERSION 1u
+#define AF_VULKAN_UPSCALER_SPATIAL 1u
 
 typedef struct af_vulkan_upscaler_config {
     uint32_t struct_size;
@@ -55,6 +56,8 @@ typedef struct af_vulkan_upscaler_api {
     bool (*record)(void *context, const af_vulkan_upscaler_frame *frame);
     /* Device idle. Called before the borrowed attachments are destroyed. */
     void (*destroy)(void *context);
+    /* Optional ABI 1 tail. Spatial providers render without projection jitter. */
+    uint32_t flags;
 } af_vulkan_upscaler_api;
 
 /* One loaded provider. It starts enabled, and disabling restores the authored

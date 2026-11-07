@@ -1,0 +1,52 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+// SPDX-License-Identifier: MPL-2.0
+
+layout(local_size_x=8, local_size_y=8) in;
+layout(set=0,binding=0) uniform sampler2D source_image;
+layout(set=0,binding=1,rgba16f) writeonly uniform image2D target_image;
+layout(push_constant) uniform Constants {
+    uvec4 easu[4];
+    uvec4 rcas;
+} constants;
+
+#define A_GPU 1
+#define A_GLSL 1
+#include "ffx_a.h"
+#if AF_FSR_PASS == 1
+#define FSR_EASU_F 1
+AF4 FsrEasuRF(AF2 p) { return textureGather(source_image, p, 0); }
+AF4 FsrEasuGF(AF2 p) { return textureGather(source_image, p, 1); }
+AF4 FsrEasuBF(AF2 p) { return textureGather(source_image, p, 2); }
+#elif AF_FSR_PASS == 2
+#define FSR_RCAS_F 1
+AF4 FsrRcasLoadF(ASU2 p)
+{
+    return texelFetch(source_image, clamp(p, ivec2(0), textureSize(source_image, 0) - 1), 0);
+}
+void FsrRcasInputF(inout AF1 r, inout AF1 g, inout AF1 b) {}
+#endif
+#include "ffx_fsr1.h"
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 output_size = imageSize(target_image);
+    if (any(greaterThanEqual(pixel, output_size))) return;
+    vec3 color;
+#if AF_FSR_PASS == 0
+    color = max(texelFetch(source_image, pixel, 0).rgb, vec3(0));
+    // Encode HDR for the SDK's perceptual 0–1 filters.
+    FsrSrtmF(color);
+    color = sqrt(clamp(color, 0.0, 1.0));
+#elif AF_FSR_PASS == 1
+    FsrEasuF(color, uvec2(pixel), constants.easu[0], constants.easu[1],
+             constants.easu[2], constants.easu[3]);
+#else
+    FsrRcasF(color.r, color.g, color.b, uvec2(pixel), constants.rcas);
+    color = clamp(color, 0.0, 1.0);
+    color *= color;
+    FsrSrtmInvF(color);
+#endif
+    imageStore(target_image, pixel, vec4(color, 1.0));
+}

@@ -8,6 +8,7 @@
 #define AFTERLIGHT_EXTENSION_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -61,10 +62,21 @@ typedef const af_extension_api *(*af_extension_get_api_fn)(uint32_t abi_version)
 AF_EXTENSION_EXPORT const af_extension_api *af_extension_get_api(uint32_t abi_version);
 #endif
 
-/* Load a trusted native library before af_engine_run. Calls run on the main
-   thread. Returns false and logs details on failure. Successfully started
-   extensions stop in reverse order during engine destruction. */
+typedef struct af_extension_info {
+    const char *id;
+    bool enabled, vulkan_upscaler, upscaler_active;
+} af_extension_info;
+
+/* Load a trusted native library before af_engine_run or from a game update
+   callback on the main thread. Successfully started extensions stay resident
+   and stop in reverse order during engine destruction. */
 bool af_engine_load_extension(af_engine *engine, const char *path);
+size_t af_engine_extension_count(const af_engine *engine);
+/* The ID remains valid until engine destruction. */
+bool af_engine_get_extension(const af_engine *engine, size_t index, af_extension_info *info);
+/* Disabled extensions skip presentation callbacks. Enabling an upscaler
+   disables the previous provider. The change applies on the next draw. */
+bool af_engine_set_extension_enabled(af_engine *engine, size_t index, bool enabled);
 
 #ifdef __cplusplus
 }

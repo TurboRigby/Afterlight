@@ -15,6 +15,7 @@ copyright, license and warranty notices when redistributing these components.
 | SMAA shader and lookup tables | `third_party/smaa` | MIT; original headers and LICENSE retained |
 | Vulkan Loader | External runtime dependency | Apache-2.0 and upstream exceptions; preserve its supplied license/notices |
 | MoltenVK (macOS) | External runtime dependency | Apache-2.0; preserve its supplied license/notices |
+| AMD FidelityFX Super Resolution 1.0.2 | Optional external shader SDK for `engine/extensions/amd-fsr1` | MIT. The extension build copies `AMD-FSR1-LICENSE.txt` beside the module. |
 
 Vendored component READMEs record the original sources, versions and local
 changes. The Fira Sans font is distributed unmodified with its original OFL and

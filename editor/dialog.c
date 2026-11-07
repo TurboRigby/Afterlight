@@ -71,6 +71,12 @@ ed_file_dialog *ed_dialog_begin_module(af_engine *engine){
     static const SDL_DialogFileFilter filter={"C game libraries","so;dylib;dll"};return begin_dialog(engine,false,NULL,&filter);
 }
 
+ed_file_dialog *ed_dialog_begin_extension(af_engine *engine)
+{
+    static const SDL_DialogFileFilter filter = {"Afterlight extension libraries", "so;dylib;dll"};
+    return begin_dialog(engine, false, NULL, &filter);
+}
+
 ed_file_dialog *ed_dialog_begin_project(af_engine *engine,bool save,const char *path){
     static const SDL_DialogFileFilter filter={"Afterlight projects","project"};return begin_dialog(engine,save,path,&filter);
 }

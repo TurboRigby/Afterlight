@@ -85,6 +85,7 @@ AF_EXTENSION_EXPORT const af_extension_api *af_extension_get_api(uint32_t versio
     static const af_vulkan_upscaler_api upscaler = {
         .abi_version = AF_VULKAN_UPSCALER_ABI_VERSION, .struct_size = sizeof(af_vulkan_upscaler_api),
         .render_scale = .75f, .create = create, .record = record, .destroy = destroy,
+        .flags = AF_VULKAN_UPSCALER_SPATIAL,
     };
     static const af_extension_api api = {
         .abi_version = AF_EXTENSION_ABI_VERSION, .struct_size = sizeof(af_extension_api),

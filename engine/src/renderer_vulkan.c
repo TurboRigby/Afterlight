@@ -831,9 +831,17 @@ static void destroy_upscaler_context(af_renderer *renderer)
 
 void af_renderer_set_upscaler(af_renderer *renderer, const af_vulkan_upscaler_api *api, void *state)
 {
+    if (renderer->upscaler == api && renderer->upscaler_state == state) {
+        (void)af_renderer_set_upscaler_enabled(renderer, true);
+        return;
+    }
+    af_renderer_release_upscaler(renderer);
+    if (renderer->swapchain.resource_config & AF_RESOURCE_UPSCALER)
+        renderer->swapchain_invalid = renderer->resize_pending = true;
     renderer->upscaler = api;
     renderer->upscaler_state = state;
     renderer->upscaler_enabled = true;
+    renderer->upscaler_failed = false;
 }
 
 bool af_renderer_set_upscaler_enabled(af_renderer *renderer, bool enabled)
@@ -844,6 +852,12 @@ bool af_renderer_set_upscaler_enabled(af_renderer *renderer, bool enabled)
         renderer->upscaler_failed = false;
     }
     return true;
+}
+
+bool af_renderer_upscaler_active(const af_renderer *renderer)
+{
+    return renderer && renderer->upscaler_enabled && !renderer->upscaler_failed &&
+           renderer->swapchain.upscaler_created;
 }
 
 void af_renderer_release_upscaler(af_renderer *renderer)
@@ -1575,7 +1589,7 @@ static uint64_t temporal_light_hash(uint64_t h, af_local_light value) {
 static bool prepare_temporal(af_renderer *r, af_frame *frame,
                              const af_scene *scene, const af_camera *camera,
                              af_rect area, af_color clear,
-                             af_render_settings settings, bool temporal,
+                             af_render_settings settings, bool temporal, bool jitter,
                              af_frame_uniform *uniform) {
   uniform->unjittered_view_projection = uniform->view_projection;
   uniform->previous_view_projection = uniform->view_projection;
@@ -1622,7 +1636,8 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame,
                    (float)(width ? width : 1),
         pixels_y = area.height * (float)r->swapchain.render_extent.height /
                    (float)(height ? height : 1);
-  float jx = halton(phase, 2) - .5f, jy = halton(phase, 3) - .5f;
+  float jx = jitter ? halton(phase, 2) - .5f : 0.f;
+  float jy = jitter ? halton(phase, 3) - .5f : 0.f;
   r->temporal_jitter = (af_vec2){jx / (float)r->swapchain.render_extent.width,
                                  jy / (float)r->swapchain.render_extent.height};
   for (unsigned c = 0; c < 4; ++c) {
@@ -1897,7 +1912,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (result == VK_SUBOPTIMAL_KHR) renderer->resize_pending = renderer->swapchain_invalid = true;
     else if (!vk_ok(result, "vkAcquireNextImageKHR")) return false;
     bool temporal = upscale || environment_settings.anti_aliasing == AF_AA_TAA;
-    if(!prepare_temporal(renderer,frame,scene,camera,resolve_viewport(renderer,viewport_rect),color,environment_settings,temporal,&uniform))return false;
+    bool spatial = upscale && renderer->upscaler->struct_size >= sizeof(*renderer->upscaler) &&
+                   (renderer->upscaler->flags & AF_VULKAN_UPSCALER_SPATIAL);
+    if(!prepare_temporal(renderer,frame,scene,camera,resolve_viewport(renderer,viewport_rect),color,environment_settings,temporal,!spatial,&uniform))return false;
     VkDescriptorImageInfo refraction_images[]={af_vk_refraction_color(renderer->swapchain.refraction,image_index),af_vk_refraction_depth(renderer->swapchain.refraction,image_index)};VkWriteDescriptorSet water_writes[2];for(unsigned i=0;i<2;++i)water_writes[i]=(VkWriteDescriptorSet){.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=frame->descriptor,.dstBinding=7+i,.descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.pImageInfo=&refraction_images[i]};vkUpdateDescriptorSets(renderer->device,2,water_writes,0,NULL);
     if (overlay->index_count && (!renderer->ui || !af_vk_ui_prepare(renderer->ui, renderer->frame_index, overlay))) return false;
     void *mapped=NULL;if(!vk_ok(vkMapMemory(renderer->device,frame->uniform.memory,0,VK_WHOLE_SIZE,0,&mapped),"map frame uniform"))return false;

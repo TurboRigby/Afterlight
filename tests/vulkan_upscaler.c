@@ -7,6 +7,7 @@
 
 typedef struct test_state {
     af_scene *scene;
+    const char *library;
     uint64_t changed_at, resets_before_resize;
     uint32_t width_before_resize;
     unsigned phase;
@@ -18,7 +19,7 @@ static bool init(af_engine *engine, void *data)
     test_state *test = data;
     af_engine_set_scene(engine, test->scene);
     af_engine_set_clear_color(engine, (af_color){.8f, .01f, .01f, 1});
-    return af_engine_set_upscaler_enabled(engine, false);
+    return true;
 }
 
 #define CHECK(condition) do { \
@@ -51,9 +52,13 @@ static void update(af_engine *engine, double delta, void *data)
 
     af_temporal_test_stats temporal = af_engine_test_temporal(engine);
     switch (test->phase) {
-    case 0:
-        CHECK(af_engine_set_upscaler_enabled(engine, true));
+    case 0: {
+        CHECK(af_engine_extension_count(engine) == 0);
+        CHECK(af_engine_load_extension(engine, test->library));
+        af_extension_info info;
+        CHECK(af_engine_get_extension(engine, 0, &info) && info.enabled && info.vulkan_upscaler);
         break;
+    }
     case 1:
         test->width_before_resize = temporal.width;
         test->resets_before_resize = temporal.resets;
@@ -61,18 +66,18 @@ static void update(af_engine *engine, double delta, void *data)
         break;
     case 2:
         CHECK(temporal.width > test->width_before_resize && temporal.resets > test->resets_before_resize);
-        CHECK(af_engine_set_upscaler_enabled(engine, false));
+        CHECK(af_engine_set_extension_enabled(engine, 0, false));
         break;
     case 3: {
         af_rect inset = {40, 40, 400, 300};
         af_engine_set_viewport(engine, &inset);
-        CHECK(af_engine_set_upscaler_enabled(engine, true));
+        CHECK(af_engine_set_extension_enabled(engine, 0, true));
         break;
     }
     case 4:
         af_engine_set_viewport(engine, NULL);
-        CHECK(af_engine_set_upscaler_enabled(engine, false));
-        CHECK(af_engine_set_upscaler_enabled(engine, true));
+        CHECK(af_engine_set_extension_enabled(engine, 0, false));
+        CHECK(af_engine_set_extension_enabled(engine, 0, true));
         break;
     case 5:
         puts("Vulkan upscaler output, resize reset, native AA, decline and retry passed.");
@@ -98,7 +103,7 @@ int main(int argc, char **argv)
         return 77;
     }
     const char *validation = getenv("AFTERLIGHT_REQUIRE_VALIDATION");
-    test_state test = {.scene = af_scene_create()};
+    test_state test = {.scene = af_scene_create(), .library = argv[1]};
     af_render_settings settings = af_render_settings_default();
     settings.tone_mapping = false;
     settings.anti_aliasing = AF_AA_FXAA;
@@ -106,8 +111,7 @@ int main(int argc, char **argv)
     settings.bloom_threshold = 2;
     int result = 1;
     if ((!validation || strcmp(validation, "1") || af_engine_get_stats(engine).validation_enabled) &&
-        test.scene && af_scene_set_render_settings(test.scene, settings) &&
-        af_engine_load_extension(engine, argv[1])) {
+        test.scene && af_scene_set_render_settings(test.scene, settings)) {
         af_game game = {.init = init, .update = update, .user_data = &test};
         result = af_engine_run(engine, &game) || test.failed || test.phase != 6;
     }

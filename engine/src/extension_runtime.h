@@ -16,13 +16,13 @@ typedef struct af_loaded_extension {
     const af_extension_api *api;
     const struct af_vulkan_upscaler_api *upscaler;
     void *state;
+    bool enabled;
 } af_loaded_extension;
 
 typedef struct af_extensions {
     af_loaded_extension modules[AF_EXTENSION_LIMIT];
     size_t count;
     uint64_t presented_frames;
-    bool has_upscaler;
 } af_extensions;
 
 bool af_extensions_load(af_extensions *extensions, const char *path);

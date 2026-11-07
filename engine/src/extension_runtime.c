@@ -61,12 +61,11 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
         }
     }
     const af_vulkan_upscaler_api *upscaler = api->struct_size >= sizeof(*api) ? api->vulkan_upscaler : NULL;
-    if (upscaler && (extensions->has_upscaler ||
-        upscaler->abi_version != AF_VULKAN_UPSCALER_ABI_VERSION ||
-        upscaler->struct_size < sizeof(*upscaler) ||
+    if (upscaler && (upscaler->abi_version != AF_VULKAN_UPSCALER_ABI_VERSION ||
+        upscaler->struct_size < offsetof(af_vulkan_upscaler_api, flags) ||
         !(upscaler->render_scale >= .5f && upscaler->render_scale <= 1.f) ||
         !upscaler->create || !upscaler->record || !upscaler->destroy)) {
-        af_log("error", "Extension %s has an incompatible or duplicate Vulkan upscaler.", api->id);
+        af_log("error", "Extension %s has an incompatible Vulkan upscaler.", api->id);
         goto fail;
     }
     void *state = NULL;
@@ -75,8 +74,9 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
         af_log("error", "Engine extension %s failed to start (status %" PRId32 ").", api->id, status);
         goto fail;
     }
-    extensions->modules[extensions->count++] = (af_loaded_extension){library, api, upscaler, state};
-    if (upscaler) extensions->has_upscaler = true;
+    extensions->modules[extensions->count++] = (af_loaded_extension){
+        .library = library, .api = api, .upscaler = upscaler, .state = state,
+    };
     af_log("info", "Loaded engine extension %s.", api->id);
     return true;
 
@@ -95,7 +95,7 @@ void af_extensions_present(af_extensions *extensions, uint64_t ticks, double del
     };
     for (size_t i = 0; i < extensions->count; ++i) {
         const af_loaded_extension *module = &extensions->modules[i];
-        if (module->api->on_present) module->api->on_present(module->state, &frame);
+        if (module->enabled && module->api->on_present) module->api->on_present(module->state, &frame);
     }
 }
 

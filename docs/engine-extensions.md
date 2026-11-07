@@ -5,6 +5,15 @@ native library that can use C, C++ or a vendor SDK and expose the C ABI in
 [`extension.h`](../engine/include/afterlight/extension.h). Extensions and game
 modules have independent ABI versions.
 
+## Enable extensions in the editor
+
+Open **Project → Extensions → Load extension** and choose a trusted native
+library. The panel lists loaded extensions and lets you disable or re-enable
+each one during the current session. The **Upscaler active** label confirms the
+selected provider is rendering. Disabling it restores the scene's built-in
+anti-aliasing and native resolution. You can also load libraries at launch with
+`--extension` in the editor or standalone player.
+
 ## Try the C++ telemetry extension
 
 Build the extension separately with a C++17 compiler. The engine's regular
@@ -32,14 +41,15 @@ eight libraries, in argument order.
 ## ABI and lifetime
 
 - Load libraries you trust. They execute native code in the engine process.
-  Loading is explicit through the CLI or `af_engine_load_extension` before
-  the run loop. Relative paths use the process working directory.
+  Loading is explicit through the editor, CLI or `af_engine_load_extension`
+  at startup or during a game update. Relative paths use the process working
+  directory.
 - Export `af_extension_get_api` with C linkage and `AF_EXTENSION_EXPORT`.
   Define `AF_EXTENSION_BUILD` when compiling the module. Return a descriptor
   for the requested ABI or return null. The loader checks the version,
   descriptor size, required callbacks and unique extension ID.
-- `start` runs after engine creation and before game initialization.
-  `on_present` is optional and runs once per successful presentation.
+- `start` runs when the library loads. `on_present` is optional and runs once
+  per successful presentation while the extension is enabled.
   The host calls `stop` in reverse load order before renderer destruction.
   All callbacks run on the main thread.
 - The library owns its state and releases it in `stop`. A failed `start`
@@ -48,9 +58,10 @@ eight libraries, in argument order.
 
 ## Vulkan upscaler hook
 
-An extension can provide a single upscaler through the optional descriptor
+An extension can provide an upscaler through the optional descriptor
 field in [`extension_vulkan.h`](../engine/include/afterlight/extension_vulkan.h).
-ABI 1 extensions with the original descriptor size still load.
+ABI 1 extensions with the original descriptor size still load. Only one
+upscaler is enabled at a time. Enabling another switches providers.
 
 Build the reference extension separately. It renders the scene at 75% of the
 output width and height and uses a linear Vulkan blit to expand HDR color.
@@ -78,7 +89,8 @@ completed frame slot for per-slot descriptors and temporary resources.
 - The frame also supplies the normalized viewport, projection jitter in render
   pixels, exposure multiplier and the history-reset flag. Resizing recreates
   the provider context after device idle. Camera cuts and scene changes reset
-  temporal history.
+  temporal history. Spatial providers can request zero projection jitter with
+  `AF_VULKAN_UPSCALER_SPATIAL`.
 - A loaded provider starts enabled and takes the place of built-in AA.
   `af_engine_set_upscaler_enabled` switches back to native resolution and
   the scene's AA setting. If the provider declines a frame, the renderer
@@ -87,6 +99,28 @@ completed frame slot for per-slot descriptors and temporary resources.
 
 The hook configures providers after the Vulkan device exists. SDKs that need
 instance or device extensions require a separate pre-device negotiation step.
+
+## AMD FidelityFX Super Resolution 1.0
+
+The optional C++ adapter uses AMD's FSR 1.0.2 EASU and RCAS shaders at a fixed
+Quality ratio of 1.5×. It encodes the HDR source into the range the spatial
+filters expect and converts the result back to linear HDR before Afterlight's
+bloom and tone mapping. The adapter uses the existing Vulkan device and
+requires compute on the graphics queue.
+[AMD FidelityFX Super Resolution source](https://github.com/GPUOpen-Effects/FidelityFX-FSR/tree/a21ffb8f6c13233ba336352bdff293894c706575)
+
+```sh
+git clone https://github.com/GPUOpen-Effects/FidelityFX-FSR.git
+git -C FidelityFX-FSR checkout a21ffb8f6c13233ba336352bdff293894c706575
+cmake -S engine/extensions/amd-fsr1 -B build/amd-fsr1 -G Ninja \
+  -DAFTERLIGHT_FSR1_ROOT="$PWD/FidelityFX-FSR"
+cmake --build build/amd-fsr1
+```
+
+Load `afterlight_fsr1.so` through the editor or pass its path to
+`--extension`. Keep `AMD-FSR1-LICENSE.txt` with the built module when sharing it.
+
+## Other SDKs
 
 NVIDIA documents Streamline for Windows. NGX supplies a Vulkan API and Linux
 libraries, including calls to query the Vulkan extensions a DLSS feature
