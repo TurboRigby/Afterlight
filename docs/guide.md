@@ -13,8 +13,9 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
-Afterlight 0.18 adds playable swimming courses, streamed water meshes, calm
-sleeping, underwater rendering and scene refraction. Start with
+Afterlight 0.20 adds selectable FXAA, SMAA and TAA in **Environment**; see the
+[AA guide](development-020.md). The playable water courses include wind,
+swimming, streamed meshes, underwater rendering and scene refraction. Start with
 `run_water-course_editor`, then `run_water-expedition_editor`; see the
 [0.18 guide](development-018.md).
 
@@ -382,15 +383,17 @@ source files referenced by the manifest. See [assets/materials](assets.md),
 
 ## Next milestones
 
-- Morph animation, richer character rigs and material extensions.
-- Reflection probes, multiscale bloom and adaptive local shadows.
-- Joints, mesh/convex physics, streaming music, audio occlusion and richer state migrations.
+The next priority is a polished exported demo, reliable scene/asset workflows,
+measured frame and memory budgets, raster quality and native platform coverage.
+The [foundation roadmap](foundation-roadmap.md) gives the proposed order and
+completion gate before optional ray-traced effects.
 
-The engine remains a small prototype. These next items are not implemented.
 The editor uses vendored [Nuklear](../third_party/nuklear/README.md) under MIT and
 [Fira Sans](../editor/assets/README.md) under SIL OFL. Image loading uses
 [stb_image](../third_party/stb/README.md) under its MIT option. All own engine/game
 code and bundled library implementations compile as C; shaders are GLSL.
+SMAA uses the upstream MIT-licensed shader and lookup tables, with its notices
+retained in source and application bundles.
 
 ## References
 

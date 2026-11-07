@@ -3,9 +3,11 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.19** adds closed water volumes, an animated ripple normal texture
-and gusting wind that drives waves and exposed physics props. Swim, dive, ride
-buoyant rafts and solve a pouring puzzle in the two playable water courses.
+Afterlight **0.20** adds selectable FXAA, SMAA and TAA in the editor's
+**Environment** panel. Water has closed volumes, wind-driven waves and ripple
+normals; the two playable courses include swimming, buoyant rafts and pouring.
+See the [anti-aliasing guide](docs/development-020.md) and
+[foundation roadmap](docs/foundation-roadmap.md).
 
 ## Build and run
 

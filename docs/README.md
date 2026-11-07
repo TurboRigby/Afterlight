@@ -15,6 +15,7 @@ repository layout and C gameplay workflow.
 
 ## Engine reference
 
+- [Foundations before ray tracing](foundation-roadmap.md)
 - [Architecture](architecture.md)
 - [Scene format and persistence](scene-format.md)
 - [Rendering](rendering.md)
