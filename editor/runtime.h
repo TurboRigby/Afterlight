@@ -9,7 +9,7 @@
 #include <afterlight/game_module.h>
 #include <SDL3/SDL_loadso.h>
 typedef struct ed_runtime {
-    char current_scene[64];
+    char current_scene[64];uint32_t authored_hash,authored_bytes;
     char scene_directory[AF_ASSET_PATH_CAPACITY],project_directory[AF_ASSET_PATH_CAPACITY],pending_scene[64];uint64_t transition_count;
     af_scene *scene;
     af_game_host host;
@@ -30,6 +30,8 @@ bool ed_runtime_request_scene(ed_runtime*,const char *name);
 bool ed_runtime_transition(ed_runtime*);
 bool ed_runtime_start(ed_runtime *runtime,const af_scene *source,af_engine *engine,const af_game_module *module);
 bool ed_runtime_start_file(ed_runtime *runtime,const af_scene *source,af_engine *engine,const char *path);
+bool ed_runtime_scene_fingerprint(const ed_runtime *,const char *,uint32_t *,uint32_t *);
+bool ed_runtime_capture_source(ed_runtime *);
 bool ed_runtime_save_game(ed_runtime *,const char *path);
 bool ed_runtime_load_game(ed_runtime *,const char *path);
 bool ed_runtime_reload(ed_runtime *runtime);

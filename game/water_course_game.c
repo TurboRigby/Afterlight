@@ -240,18 +240,37 @@ static size_t save(const void *memory, void *bytes, size_t cap) {
     memcpy(bytes, memory, sizeof(course));
     return sizeof(course);
 }
-static bool load(void *memory, const af_game_host *h, uint32_t version, const void *bytes, size_t size) {
-    if (version != 1 || size != sizeof(course))
-        return false;
-    course copy;
-    memcpy(&copy, bytes, size);
-    if (!finite3(copy.player.position) || !finite3(copy.player.velocity) || !isfinite(copy.camera.yaw) ||
-        !isfinite(copy.camera.pitch) || !isfinite(copy.status.elapsed) ||
-        copy.status.checkpoint > copy.status.checkpoint_count || !h->get_object(h->scene, copy.body))
-        return false;
-    *(course *)memory = copy;
-    publish(memory, h);
-    return true;
+static bool load(void *memory, const af_game_host *h, uint32_t version,
+                 const void *bytes, size_t size) {
+  if (version != 1 || size != sizeof(course))
+    return false;
+  course copy;
+  memcpy(&copy, bytes, size);
+  if (!finite3(copy.player.position) || !finite3(copy.player.velocity) ||
+      !isfinite(copy.camera.yaw) || !isfinite(copy.camera.pitch) ||
+      !isfinite(copy.status.elapsed) ||
+      copy.status.checkpoint > copy.status.checkpoint_count ||
+      !h->get_object(h->scene, copy.body))
+    return false;
+  const course *current = memory;
+  if (copy.body != current->body || copy.source != current->source ||
+      copy.receiver != current->receiver || copy.fluid != current->fluid ||
+      copy.status.checkpoint_count != current->status.checkpoint_count ||
+      copy.hard != current->hard || !finite3(copy.checkpoint) ||
+      !finite3(copy.spawn) || !finite3(copy.published) ||
+      !isfinite(copy.status.finish_time) || copy.status.elapsed < 0 ||
+      copy.status.finish_time < 0 || !isfinite(copy.tilt) ||
+      !isfinite(copy.received) || copy.camera.pitch < -1.5f ||
+      copy.camera.pitch > 1.5f)
+    return false;
+  copy.config = current->config;
+  copy.water = current->water;
+  copy.camera.vertical_fov = current->camera.vertical_fov;
+  copy.camera.near_clip = current->camera.near_clip;
+  copy.camera.far_clip = current->camera.far_clip;
+  *(course *)memory = copy;
+  publish(memory, h);
+  return true;
 }
 AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi) {
     static const af_game_module api = {.abi_version = AF_GAME_ABI_VERSION,

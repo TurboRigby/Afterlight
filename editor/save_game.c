@@ -45,20 +45,29 @@ bool ed_runtime_save_game(ed_runtime *r, const char *path) {
   if (!r || !r->playing || !path || !path[0] || !scene_name(r->current_scene) ||
       !r->api->save_state || strlen(r->api->name) >= 128)
     return fail(r, "this module does not support progress saves.");
+  uint32_t authored_hash, authored_bytes;
+  if (!r->authored_bytes ||
+      !ed_runtime_scene_fingerprint(r, r->current_scene, &authored_hash,
+                                    &authored_bytes) ||
+      authored_hash != r->authored_hash || authored_bytes != r->authored_bytes)
+    return fail(r, "authored scene changed or is unavailable; restart before "
+                   "saving progress.");
   size_t size = r->api->save_state(r->state, NULL, 0);
   if (!size || size > MAX_STATE)
     return fail(r, "module state exceeds the save limit.");
   unsigned char *data = calloc(1, HEADER + size);
   if (!data)
     return fail(r, "cannot allocate state.");
-  memcpy(data, "AFSAVE1", 7);
+  memcpy(data, "AFSAVE2", 7);
   put32(data + 8, AF_GAME_ABI_VERSION);
   put32(data + 12, r->api->state_version);
   put32(data + 16, (uint32_t)size);
+  put32(data + 24, authored_hash);
+  put32(data + 28, authored_bytes);
   snprintf((char *)data + 32, 64, "%s", r->current_scene);
   snprintf((char *)data + 96, 128, "%s", r->api->name);
   bool ok = r->api->save_state(r->state, data + HEADER, size) == size;
-  put32(data + 20, checksum(data + 32, HEADER + size - 32));
+  put32(data + 20, checksum(data, HEADER + size));
   char temporary[AF_ASSET_PATH_CAPACITY] = {0};
   int n = snprintf(temporary, sizeof(temporary), "%s.%llu.tmp", path,
                    (unsigned long long)SDL_GetTicksNS());
@@ -95,7 +104,7 @@ bool ed_runtime_load_game(ed_runtime *r, const char *path) {
     return fail(r, "no saved progress found.");
   unsigned char header[HEADER];
   bool ok = fread(header, 1, HEADER, f) == HEADER &&
-            !memcmp(header, "AFSAVE1\0", 8) &&
+            !memcmp(header, "AFSAVE2\0", 8) &&
             get32(header + 8) == AF_GAME_ABI_VERSION &&
             get32(header + 16) > 0 && get32(header + 16) <= MAX_STATE &&
             memchr(header + 32, 0, 64) && memchr(header + 96, 0, 128);
@@ -108,15 +117,24 @@ bool ed_runtime_load_game(ed_runtime *r, const char *path) {
     ok = false;
   if (ok) {
     memcpy(data, header, HEADER);
+    uint32_t expected = get32(header + 20);
+    put32(data + 20, 0);
     ok = fread(data + HEADER, 1, size, f) == size && fgetc(f) == EOF &&
-         !ferror(f) &&
-         get32(header + 20) == checksum(data + 32, HEADER + size - 32);
+         !ferror(f) && expected == checksum(data, HEADER + size);
   }
   if (fclose(f))
     ok = false;
   if (!ok) {
     free(data);
     return fail(r, "invalid/incompatible progress; current game retained.");
+  }
+  uint32_t authored_hash, authored_bytes;
+  if (!ed_runtime_scene_fingerprint(r, (const char *)header + 32,
+                                    &authored_hash, &authored_bytes) ||
+      authored_hash != get32(header + 24) ||
+      authored_bytes != get32(header + 28)) {
+    free(data);
+    return fail(r, "authored scene revision differs; current game retained.");
   }
   char scene_path[AF_ASSET_PATH_CAPACITY];
   int n = snprintf(scene_path, sizeof(scene_path), "%s%s.afterlight.json",
@@ -139,6 +157,8 @@ bool ed_runtime_load_game(ed_runtime *r, const char *path) {
            r->project_directory);
   snprintf(next.current_scene, sizeof(next.current_scene), "%s",
            (char *)header + 32);
+  next.authored_hash = authored_hash;
+  next.authored_bytes = authored_bytes;
   af_asset_error error = {0};
   ok = (!engine || af_engine_load_scene_assets(engine, source, &error)) &&
        (r->module_path[0]
