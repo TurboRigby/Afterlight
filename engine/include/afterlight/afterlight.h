@@ -122,7 +122,8 @@ af_engine_config af_engine_config_default(void);
    succeeds in run. Returns NULL on failure; details go to stderr. */
 af_engine *af_engine_create(const af_engine_config *config);
 /* Runs once per engine. Delta is capped at 0.1s. Updates suspend while the
-   window is minimized and resume with a zero-delta update.
+   window is minimized and resume with a zero-delta update. Wayland also
+   suspends when a previously focused window loses input focus.
    Returns 0 on normal exit, nonzero on initialization/render/validation error. */
 int af_engine_run(af_engine *engine, const af_game *game);
 void af_engine_destroy(af_engine *engine);

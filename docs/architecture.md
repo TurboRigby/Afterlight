@@ -82,6 +82,8 @@ swapchain uses framebuffer dimensions for high-density displays. Zero-sized
 surfaces defer rendering until there is a drawable extent. While minimized, the
 engine polls events and sleeps between polls. Game updates, simulation and
 rendering resume on restore with a fresh frame clock and interpolation history.
+On Wayland, losing input focus after the window has been activated also
+suspends updates because some compositors only signal focus loss on minimize.
 The per-render update delta is capped at 100 ms for UI/presentation. Optional
 fixed updates use a separate 60 Hz accumulator with an eight-tick catch-up limit.
 Excess whole ticks are discarded and reported; paused single steps execute one

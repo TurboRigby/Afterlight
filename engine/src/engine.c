@@ -216,10 +216,12 @@ int af_engine_run(af_engine *engine, const af_game *game)
     const double frequency = (double)SDL_GetPerformanceFrequency();
     engine->fps_started = previous;
     const SDL_WindowID window_id = SDL_GetWindowID(engine->window);
-    /* Wayland compositors report desktop-initiated minimization as suspension. */
+    /* Wayland may report desktop minimization through occlusion or only by
+       withdrawing input focus. Once focused, wait for activation again. */
     const bool wayland = !strcmp(SDL_GetCurrentVideoDriver(), "wayland");
     const SDL_WindowFlags suspend_flags = SDL_WINDOW_MINIMIZED | (wayland ? SDL_WINDOW_OCCLUDED : 0);
     SDL_WindowFlags suspended = 0;
+    bool had_wayland_focus = false;
     bool was_suspended = false;
     while (engine->running) {
         Uint64 event_start=SDL_GetPerformanceCounter();
@@ -300,7 +302,10 @@ int af_engine_run(af_engine *engine, const af_game *game)
                 af_renderer_resize(engine->renderer);
         }
         if (!engine->running) break;
-        if (suspended || (SDL_GetWindowFlags(engine->window) & suspend_flags)) {
+        SDL_WindowFlags flags = SDL_GetWindowFlags(engine->window);
+        if (wayland && (flags & SDL_WINDOW_INPUT_FOCUS)) had_wayland_focus = true;
+        if (suspended || (flags & suspend_flags) ||
+            (had_wayland_focus && !(flags & SDL_WINDOW_INPUT_FOCUS))) {
             was_suspended = true;
             SDL_Delay(16);
             update_frame_stats(engine, frequency, false);
