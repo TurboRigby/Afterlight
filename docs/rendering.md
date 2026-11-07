@@ -110,3 +110,8 @@ Pools/rivers now have visible side and bottom boundaries as well as their top.
 A filtered world-space ripple normal texture responds to wind and simulation time.
 It changes optical shading without an external image dependency; see the
 [0.19 guide](development-019.md) for controls and approximations.
+
+The editor's **Environment** panel groups sun, sky, environment lighting and
+exposure. Night presets lower all global sources together; sky brightness and
+image-based lighting remain separately adjustable. The sun is a directional
+light, and HDR image rotation is independent of its heading.

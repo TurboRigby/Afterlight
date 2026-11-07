@@ -290,3 +290,8 @@ submersion, partial-exposure torque and sleeping-island wake.
 
 `water_contact_render` compares 64 pixels per wall/floor view with water on/off
 and refraction on/off, catching depth competition at solid/liquid boundaries.
+
+`environment_editor` compares actual object and sky pixels after Day/Night
+presets, checks atomic undo/redo and invalid-edit preservation, and reloads saved
+settings. Editor smoke coverage opens the Environment panel alongside other
+panels, including an unsaved-changes modal.

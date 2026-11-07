@@ -60,3 +60,9 @@ Release benchmarks remain available as `afterlight_water_benchmark` and
 The 0.19 18-case render run reports zero mesh-wide upload waits. Raw measurements
 are in build/release/019-render.csv and 019-water-quiet.csv; presentation pacing
 and machine load still prevent interpreting these as uncapped FPS claims.
+
+The **Environment** toolbar panel groups sun direction/color/intensity, ambient
+light, sky source/brightness/rotation, environment lighting, exposure and tone
+mapping. Day/Night presets are atomic history edits. In Play, changes affect
+only the runtime scene; in Edit they persist on Save. No object selection is
+needed. Native tests compare sky/object brightness and verify undo and persistence.

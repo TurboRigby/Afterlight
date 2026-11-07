@@ -61,6 +61,7 @@ bool ed_document_import_surface(ed_document *document,const char *name,const cha
 bool ed_document_import_sound(ed_document *document,const char *name,const char *path);
 bool ed_document_import_normal_map(ed_document *document,const char *name,const char *path);
 bool ed_document_wind(ed_document *,af_wind);
+bool ed_document_environment(ed_document *,af_directional_light,af_render_settings);
 bool ed_document_render_settings(ed_document *document,af_render_settings settings);
 bool ed_document_add_light(ed_document *document,af_light_type type);
 bool ed_document_local_light(ed_document *document,size_t index,af_local_light light);

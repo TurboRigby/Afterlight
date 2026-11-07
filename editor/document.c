@@ -388,3 +388,10 @@ bool ed_document_wind(ed_document *d,af_wind w){
     af_scene *next=af_scene_clone(d->scene);if(!next)return false;
     if(!af_scene_set_wind(next,w)){af_scene_destroy(next);status(d,"Invalid wind settings.");return false;}return commit(d,next,d->selection,53);
 }
+bool ed_document_environment(ed_document *d,af_directional_light sun,af_render_settings render){
+    af_directional_light old_sun=af_scene_get_light(d->scene);af_render_settings old_render=af_scene_get_render_settings(d->scene);
+    if(!memcmp(&old_sun,&sun,sizeof(sun))&&!memcmp(&old_render,&render,sizeof(render)))return true;
+    af_scene *next=af_scene_clone(d->scene);if(!next)return false;
+    if(!af_scene_set_light(next,sun)||!af_scene_set_render_settings(next,render)){af_scene_destroy(next);status(d,"Invalid environment settings.");return false;}
+    return commit(d,next,d->selection,54);
+}

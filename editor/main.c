@@ -8,6 +8,7 @@
 #include <afterlight/project.h>
 #include <afterlight/asset_watch.h>
 #include "document.h"
+#include "environment.h"
 #include "asset_browser.h"
 #include "thumbnail.h"
 #include "gizmo.h"
@@ -66,6 +67,7 @@ typedef struct editor {
     af_joint_id edit_joint;ed_joint_part joint_part;af_joint initial_joint;uint64_t joint_drag_revision;
     bool invalid_name;
     bool failed;
+    bool show_environment;
     bool show_performance,show_assets,show_colliders,show_input,show_prefab,show_physics;char prefab_path[4096];char input_path[4096];
     bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
     bool show_animation,animation_preview,show_skeleton;af_object_id animation_target;float animation_blend;
@@ -377,16 +379,17 @@ static void toolbar(editor *app,float width)
     struct nk_context *context=&app->gui.context;
     if(nk_begin(context,"Toolbar",nk_rect(0,0,width,64),(NK_WINDOW_BORDER|((app->modal||app->dialog)?NK_WINDOW_NO_INPUT:0))|NK_WINDOW_NO_SCROLLBAR)){
         if(app->runtime.playing){
-            nk_layout_row_dynamic(context,34,8);if(nk_button_label(context,app->maximize_play?"Restore (F6)":"Maximize (F6)"))app->maximize_play=!app->maximize_play;
+            nk_layout_row_dynamic(context,34,9);if(nk_button_label(context,app->maximize_play?"Restore (F6)":"Maximize (F6)"))app->maximize_play=!app->maximize_play;
             if(nk_button_label(context,app->runtime.paused?"Resume":"Pause"))app->runtime.paused=!app->runtime.paused;
             if(nk_button_label(context,"Step 1/60")){app->runtime.paused=true;af_engine_set_simulation_paused(app->engine,true);af_engine_step_simulation(app->engine);}
             if(nk_button_label(context,"Stop (F5)"))stop_play(app);
             if(nk_button_label(context,"Reload game"))ed_runtime_reload(&app->runtime);
             nk_bool automatic=app->runtime.auto_reload;nk_checkbox_label(context,"Auto reload",&automatic);app->runtime.auto_reload=automatic!=0;
             if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
+            if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
             if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
         }else{
-        nk_layout_row_begin(context,NK_STATIC,34,11);
+        nk_layout_row_begin(context,NK_STATIC,34,12);
         nk_layout_row_push(context,132);nk_label_colored(context,"Afterlight",NK_TEXT_LEFT,nk_rgb(245,190,112));
         nk_layout_row_push(context,64);if(nk_button_label(context,"New"))request_action(app,ED_NEW);
         nk_layout_row_push(context,64);if(nk_button_label(context,"Open"))request_action(app,ED_OPEN);
@@ -396,8 +399,9 @@ static void toolbar(editor *app,float width)
         nk_layout_row_push(context,64);if(nk_button_label(context,"Redo")){ed_document_redo(&app->document);refresh(app);}
         nk_layout_row_push(context,80);if(nk_button_label(context,"Play"))toggle_play(app);
         nk_layout_row_push(context,120);if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
+        nk_layout_row_push(context,120);if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
         nk_layout_row_push(context,70);if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
-        nk_layout_row_push(context,fmaxf(60,width-950));
+        nk_layout_row_push(context,fmaxf(60,width-1070));
         char title[512];snprintf(title,sizeof(title),"%s%s",app->document.path[0]?ed_path_name(app->document.path):"Untitled scene",ed_document_dirty(&app->document)?" *":"");
         nk_label(context,title,NK_TEXT_RIGHT);nk_layout_row_end(context);
         }
@@ -892,6 +896,56 @@ static void draw_gizmo(editor *app)
         nk_fill_circle(canvas,nk_rect(g->origin.x-4,g->origin.y-4,8,8),nk_rgb(245,225,180));
     }nk_end(ctx);nk_style_pop_style_item(ctx);
 }
+static void environment_panel(editor *app,float width,float height){
+    if(!app->show_environment)return;struct nk_context *ctx=&app->gui.context;
+    nk_flags flags=NK_WINDOW_BORDER|NK_WINDOW_TITLE;
+    /* Nuklear's movable-window path requires input, including behind dialogs. */
+    if(app->modal||app->dialog)flags|=NK_WINDOW_NO_INPUT;
+    else flags|=NK_WINDOW_MOVABLE;
+    if(nk_begin(ctx,"Environment",nk_rect(fmaxf(20,(width-580)*.5f),80,fminf(580,width-40),fminf(720,height-120)),flags)){
+        af_scene *scene=app->runtime.playing?app->runtime.scene:app->document.scene;
+        af_directional_light sun=af_scene_get_light(scene);af_render_settings render=af_scene_get_render_settings(scene);
+        bool changed=false,preset=false;
+        label(ctx,app->runtime.playing?"Live preview: changes reset when Play stops.":"Scene environment: changes support Undo and Save.",28);
+        nk_layout_row_dynamic(ctx,32,2);
+        if(nk_button_label(ctx,"Day preset")){ed_environment_preset(scene,false,&sun,&render);changed=preset=true;}
+        if(nk_button_label(ctx,"Night preset")){ed_environment_preset(scene,true,&sun,&render);changed=preset=true;}
+        label(ctx,"Sun / directional light",28);
+        float heading=atan2f(-sun.direction.z,-sun.direction.x)*180/AF_PI;
+        float elevation=atan2f(-sun.direction.y,hypotf(sun.direction.x,sun.direction.z))*180/AF_PI;
+        float old_heading=heading,old_elevation=elevation;
+        nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Sun heading (degrees)",-180,&heading,180,5,.5f);
+        nk_property_float(ctx,"Sun elevation (degrees)",-90,&elevation,90,5,.5f);
+        if(heading!=old_heading||elevation!=old_elevation){float h=heading*AF_PI/180,e=elevation*AF_PI/180;sun.direction=(af_vec3){-cosf(e)*cosf(h),-sinf(e),-cosf(e)*sinf(h)};changed=true;}
+        nk_layout_row_dynamic(ctx,28,3);changed|=nk_property_float(ctx,"Red",0,&sun.color.x,10,.05f,.005f)!=0;
+        changed|=nk_property_float(ctx,"Green",0,&sun.color.y,10,.05f,.005f)!=0;
+        changed|=nk_property_float(ctx,"Blue",0,&sun.color.z,10,.05f,.005f)!=0;
+        nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"Sun intensity",0,&sun.intensity,100,.1f,.01f)!=0;
+        changed|=nk_property_float(ctx,"Ambient light",0,&sun.ambient,10,.02f,.002f)!=0;
+        label(ctx,"Skybox and environment lighting",28);nk_layout_row_dynamic(ctx,26,1);
+        nk_bool sky=render.skybox;if(nk_checkbox_label(ctx,"Show skybox",&sky)){render.skybox=sky!=0;changed=true;}
+        nk_layout_row_dynamic(ctx,28,1);
+        if(nk_combo_begin_label(ctx,render.environment_asset[0]?render.environment_asset:"Procedural sky",nk_vec2(420,180))){
+            nk_layout_row_dynamic(ctx,26,1);if(nk_combo_item_label(ctx,"Procedural sky",NK_TEXT_LEFT)){render.environment_asset[0]=0;changed=true;}
+            for(size_t i=0;i<af_scene_asset_count(scene);++i){const af_scene_asset *asset=af_scene_asset_at(scene,i);if(asset->kind==AF_ASSET_ENVIRONMENT&&nk_combo_item_label(ctx,asset->name,NK_TEXT_LEFT)){snprintf(render.environment_asset,sizeof(render.environment_asset),"%s",asset->name);changed=true;}}
+            nk_combo_end(ctx);
+        }
+        if(!render.environment_asset[0]){static const char *profiles[]={"Studio","Sunset","Overcast"};nk_layout_row_dynamic(ctx,28,1);int profile=nk_combo(ctx,profiles,3,(int)render.environment_profile,26,nk_vec2(280,110));if(profile!=(int)render.environment_profile){render.environment_profile=(uint32_t)profile;changed=true;}}
+        nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"Sky brightness",0,&render.skybox_intensity,100,.1f,.01f)!=0;
+        float rotation=remainderf(render.environment_rotation*180/AF_PI,360),old_rotation=rotation;nk_property_float(ctx,"Sky rotation (degrees)",-180,&rotation,180,5,.5f);if(rotation!=old_rotation){render.environment_rotation=rotation*AF_PI/180;changed=true;}
+        nk_layout_row_dynamic(ctx,26,1);nk_bool lighting=render.environment_enabled;if(nk_checkbox_label(ctx,"Environment lights objects",&lighting)){render.environment_enabled=lighting!=0;changed=true;}
+        nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"Environment intensity",0,&render.environment_intensity,100,.1f,.01f)!=0;
+        if(!app->runtime.playing&&nk_button_label(ctx,"Import HDR skybox"))start_import(app,AF_ASSET_ENVIRONMENT);
+        label(ctx,"Exposure",28);nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"Exposure (stops)",-10,&render.exposure,10,.25f,.025f)!=0;
+        nk_layout_row_dynamic(ctx,26,1);nk_bool tone=render.tone_mapping;if(nk_checkbox_label(ctx,"Tone mapping",&tone)){render.tone_mapping=tone!=0;changed=true;}
+        label(ctx,"Local lights and emissive objects keep their own brightness.",28);
+        if(changed){
+            if(app->runtime.playing){af_scene_set_light(scene,sun);af_scene_set_render_settings(scene,render);}
+            else{if(preset)ed_document_end_edit(&app->document);ed_document_environment(&app->document,sun,render);if(preset)ed_document_end_edit(&app->document);}
+        }
+        nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close environment"))app->show_environment=false;
+    }nk_end(ctx);
+}
 static void performance_panel(editor *app,float width,float height)
 {
     if(!app->show_performance)return;
@@ -1131,7 +1185,7 @@ static void build_ui(editor *app,float width,float height)
         nk_layout_row_dynamic(context,18,1);nk_label(context,app->document.status,NK_TEXT_LEFT);
     }nk_end(context);
     nk_style_pop_vec2(context);
-    performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);
+    performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);environment_panel(app,width,height);
     af_engine_set_scene(app->engine,app->runtime.playing?app->runtime.scene:app->document.scene);
     animation_panel(app,width,height);input_panel(app);prefab_panel(app);
     if(app->modal){
@@ -1304,8 +1358,8 @@ static void smoke(editor *app)
     ed_document *d=&app->document;
     if(app->updates==152){app->show_colliders=true;
         for(size_t i=0;i<af_scene_object_count(d->scene)&&i<3;++i){af_collider collider=af_collider_default();collider.type=(af_collider_type)(i+1);af_scene_set_object_collider(d->scene,af_scene_object_at(d->scene,i)->id,collider);}}
-    if(app->updates==155){app->show_performance=true;app->show_assets=true;}
-    if(app->updates==158){app->failed|=nk_window_find(&app->gui.context,"Performance")==NULL||nk_window_find(&app->gui.context,"Assets")==NULL;app->show_performance=false;app->show_assets=false;}
+    if(app->updates==155){app->show_performance=true;app->show_assets=true;app->show_environment=true;}
+    if(app->updates==158){app->failed|=nk_window_find(&app->gui.context,"Performance")==NULL||nk_window_find(&app->gui.context,"Assets")==NULL||nk_window_find(&app->gui.context,"Environment")==NULL;app->show_performance=false;app->show_assets=false;app->show_environment=false;}
     if(app->updates==3)toggle_play(app);
     if(app->updates==7){const af_scene_object *o=af_scene_get_object(app->runtime.scene,1);app->failed|=!app->runtime.playing||!o||o->transform.rotation.y==0||af_scene_get_object(d->scene,1)->transform.rotation.y!=0;}
     if(app->updates==8){app->runtime.paused=true;af_engine_set_simulation_paused(app->engine,true);}
@@ -1465,6 +1519,7 @@ int main(int argc,char **argv)
         if(!strcmp(argv[i],"--help")){puts("Usage: afterlight_editor [--playground] [--project PATH] [--scene PATH] [--game LIBRARY] [--frames N] [--smoke-test PATH] [--play-controls-test] [--validation | --no-validation]");return 0;}
         if(!strcmp(argv[i],"--playground")){app.playground=true;snprintf(app.module_path,sizeof(app.module_path),"%s",AF_PLAYGROUND_MODULE_PATH);}
         else if(!strcmp(argv[i],"--light-tools-test")){app.light_test=true;if(!app.frame_limit)app.frame_limit=600;}
+        else if(!strcmp(argv[i],"--show-environment"))app.show_environment=true;
         else if(!strcmp(argv[i],"--show-assets"))app.show_assets=true;
         else if(!strcmp(argv[i],"--thumbnail-test")){app.thumbnail_test=true;app.show_assets=true;if(!app.frame_limit)app.frame_limit=600;}
         else if(!strcmp(argv[i],"--play-controls-test")){app.play_controls_test=true;if(!app.frame_limit)app.frame_limit=300;}

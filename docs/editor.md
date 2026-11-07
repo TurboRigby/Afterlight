@@ -275,3 +275,14 @@ The global Wind controls below the selected object expose enable, heading, speed
 gust strength/frequency and air density. Water controls expose ripple size/detail;
 local wave forcing is separate from global wind. These edits support undo and
 scene persistence. Play advances wind, waves and ripple detail; pause freezes them.
+
+## Environment panel
+
+Click **Environment** in the top toolbar, including in an empty scene. Sun
+heading/elevation, RGB color, intensity and ambient light control the directional
+light and its shadows. Sky controls select a procedural profile or imported HDR
+asset, brightness and rotation; environment lighting has its own intensity.
+Exposure and tone mapping affect the scene while leaving editor UI readable.
+**Day preset** / **Night preset** adjust these together as one undoable edit.
+Local and emissive lights keep their own settings. Changes in Edit support
+Undo/Redo and Save; adjustments during Play are temporary and reset on Stop.
