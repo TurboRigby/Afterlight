@@ -256,6 +256,14 @@ static void update(af_engine *engine, double delta, void *memory) {
     if (stage == 50)
       ok =
           app->menu && app->finished_recorded && app->preferences.best_time > 0;
+    if (stage == 52) {
+      ok = ed_runtime_load_game(&app->runtime, app->save_path);
+      apply_preferences(app);
+      set_menu(app, engine, false);
+    }
+    if (stage == 56)
+      ok = !app->finished_recorded &&
+           !af_engine_gameplay_status(engine).finished;
     if (stage == 40) {
       af_player_preferences saved;
       af_asset_error error;
@@ -292,6 +300,8 @@ static void update(af_engine *engine, double delta, void *memory) {
   }
   af_engine_set_simulation_paused(engine, app->runtime.paused);
   af_gameplay_status status = af_engine_gameplay_status(engine);
+  if (!status.finished)
+    app->finished_recorded = false;
   if (status.finished && !app->finished_recorded) {
     app->finished_recorded = true;
     if (!app->frames || app->menu_test)
