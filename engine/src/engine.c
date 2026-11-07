@@ -254,6 +254,26 @@ bool af_engine_set_upscaler_enabled(af_engine *engine, bool enabled)
     return engine && af_renderer_set_upscaler_enabled(engine->renderer, enabled);
 }
 
+uint32_t af_engine_upscaler_quality_count(const af_engine *engine)
+{
+    return engine ? af_renderer_upscaler_quality_count(engine->renderer) : 0;
+}
+
+const char *af_engine_upscaler_quality_name(const af_engine *engine, uint32_t index)
+{
+    return engine ? af_renderer_upscaler_quality_name(engine->renderer, index) : NULL;
+}
+
+uint32_t af_engine_upscaler_quality(const af_engine *engine)
+{
+    return engine ? af_renderer_upscaler_quality(engine->renderer) : 0;
+}
+
+bool af_engine_set_upscaler_quality(af_engine *engine, uint32_t index)
+{
+    return engine && af_renderer_set_upscaler_quality(engine->renderer, index);
+}
+
 int af_engine_run(af_engine *engine, const af_game *game)
 {
     if (!engine || !game || engine->has_run) return 1;

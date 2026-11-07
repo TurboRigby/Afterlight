@@ -174,7 +174,8 @@ bool create(void *state, const af_vulkan_upscaler_config *config, void **out)
         host->log("AMD FSR requires an Afterlight build with Vulkan startup negotiation.");
         return false;
     }
-    if (config->struct_size < sizeof(*config) || !config->frames_in_flight ||
+    if (config->struct_size < offsetof(af_vulkan_upscaler_config, quality) ||
+        !config->frames_in_flight ||
         config->frames_in_flight > FFX_MAX_QUEUED_FRAMES ||
         config->color_format != VK_FORMAT_R16G16B16A16_SFLOAT ||
         config->output_format != VK_FORMAT_R16G16B16A16_SFLOAT ||

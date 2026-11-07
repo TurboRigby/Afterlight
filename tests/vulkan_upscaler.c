@@ -46,9 +46,14 @@ static void update(af_engine *engine, double delta, void *data)
     }
     unsigned char pixel[4];
     CHECK(af_engine_test_read_pixel(engine, pixel));
-    bool upscale = test->phase == 1 || test->phase == 2 || test->phase == 5;
+    bool upscale = test->phase >= 1 && test->phase <= 7 && test->phase != 3 &&
+                   test->phase != 4;
     CHECK(stats.effective_aa == (upscale ? AF_AA_OFF : AF_AA_FXAA));
-    CHECK(upscale ? pixel[1] > 200 && pixel[0] < 40 : pixel[0] > 200 && pixel[1] < 40);
+    if (test->phase == 6)
+        CHECK(pixel[2] > 200 && pixel[0] < 40 && pixel[1] < 40);
+    else
+        CHECK(upscale ? pixel[1] > 200 && pixel[0] < 40
+                      : pixel[0] > 200 && pixel[1] < 40);
 
     af_temporal_test_stats temporal = af_engine_test_temporal(engine);
     switch (test->phase) {
@@ -80,7 +85,20 @@ static void update(af_engine *engine, double delta, void *data)
         CHECK(af_engine_set_extension_enabled(engine, 0, true));
         break;
     case 5:
-        puts("Vulkan upscaler output, resize reset, native AA, decline and retry passed.");
+        CHECK(af_engine_upscaler_quality_count(engine) == 3);
+        CHECK(!strcmp(af_engine_upscaler_quality_name(engine, 0), "Half"));
+        CHECK(!strcmp(af_engine_upscaler_quality_name(engine, 1), "Three quarters"));
+        CHECK(!strcmp(af_engine_upscaler_quality_name(engine, 2), "Third"));
+        CHECK(af_engine_upscaler_quality(engine) == 0);
+        CHECK(!af_engine_set_upscaler_quality(engine, 3));
+        CHECK(af_engine_set_upscaler_quality(engine, 2));
+        break;
+    case 6:
+        CHECK(af_engine_upscaler_quality(engine) == 2);
+        CHECK(af_engine_set_upscaler_quality(engine, 0));
+        break;
+    case 7:
+        puts("Vulkan upscaler output, resize reset, quality switch, native AA, decline and retry passed.");
         af_engine_request_quit(engine);
         break;
     }
@@ -113,7 +131,7 @@ int main(int argc, char **argv)
     if ((!validation || strcmp(validation, "1") || af_engine_get_stats(engine).validation_enabled) &&
         test.scene && af_scene_set_render_settings(test.scene, settings)) {
         af_game game = {.init = init, .update = update, .user_data = &test};
-        result = af_engine_run(engine, &game) || test.failed || test.phase != 6;
+        result = af_engine_run(engine, &game) || test.failed || test.phase != 8;
     }
     af_engine_destroy(engine);
     af_scene_destroy(test.scene);

@@ -69,6 +69,21 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
         af_log("error", "Extension %s has an incompatible Vulkan upscaler.", api->id);
         goto fail;
     }
+    if (upscaler && upscaler->struct_size >= offsetof(af_vulkan_upscaler_api, quality_scales) +
+                                               sizeof(upscaler->quality_scales) &&
+        upscaler->quality_count) {
+        bool valid = upscaler->quality_count <= 16 && upscaler->quality_names &&
+                     upscaler->quality_scales;
+        for (uint32_t i = 0; valid && i < upscaler->quality_count; ++i)
+            valid = upscaler->quality_names[i] && upscaler->quality_names[i][0] &&
+                    upscaler->quality_scales[i] >= 1.f / 3.f &&
+                    upscaler->quality_scales[i] <= 1.f;
+        if (!valid) {
+            af_log("error", "Extension %s has an incompatible Vulkan upscaler quality list.",
+                   api->id);
+            goto fail;
+        }
+    }
     const af_vulkan_startup_api *startup = api->struct_size >= sizeof(*api) ? api->vulkan_startup : NULL;
     if (startup && (startup->abi_version != AF_VULKAN_STARTUP_ABI_VERSION ||
                     startup->struct_size < sizeof(*startup) ||

@@ -3,12 +3,28 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
 #include <nvsdk_ngx_helpers_vk.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static const char project_id[] = "38be4447-7dfd-4d1f-915e-2af138fa57c3";
 static const char engine_version[] = "0.22";
+static const char *const quality_names[] = {
+    "Quality", "Balanced", "Performance", "Ultra Performance",
+};
+static const float quality_scales[] = {2.f / 3.f, .58f, .5f, 1.f / 3.f};
+static const NVSDK_NGX_PerfQuality_Value quality_values[] = {
+    NVSDK_NGX_PerfQuality_Value_MaxQuality,
+    NVSDK_NGX_PerfQuality_Value_Balanced,
+    NVSDK_NGX_PerfQuality_Value_MaxPerf,
+    NVSDK_NGX_PerfQuality_Value_UltraPerformance,
+};
+_Static_assert(sizeof(quality_names) / sizeof(quality_names[0]) ==
+                   sizeof(quality_scales) / sizeof(quality_scales[0]) &&
+               sizeof(quality_names) / sizeof(quality_names[0]) ==
+                   sizeof(quality_values) / sizeof(quality_values[0]),
+               "DLSS quality tables must match");
 
 typedef struct ngx_module {
     const af_extension_host *host;
@@ -26,6 +42,7 @@ typedef struct ngx_context {
     NVSDK_NGX_Handle *feature;
     VkCommandPool pool;
     VkCommandBuffer *frames;
+    uint32_t quality;
     bool initialized, evaluated;
 } ngx_context;
 
@@ -154,7 +171,7 @@ static bool create_feature(ngx_context *context)
         .Feature = {
             .InWidth = config->render_extent.width, .InHeight = config->render_extent.height,
             .InTargetWidth = config->output_extent.width, .InTargetHeight = config->output_extent.height,
-            .InPerfQualityValue = NVSDK_NGX_PerfQuality_Value_MaxQuality,
+            .InPerfQualityValue = quality_values[context->quality],
         },
         .InFeatureCreateFlags = NVSDK_NGX_DLSS_Feature_Flags_IsHDR |
                                 NVSDK_NGX_DLSS_Feature_Flags_MVLowRes |
@@ -178,11 +195,16 @@ static bool create_feature(ngx_context *context)
 static bool create(void *state, const af_vulkan_upscaler_config *config, void **out)
 {
     ngx_module *module = state;
-    if (config->struct_size < sizeof(*config) || !config->frames_in_flight) return false;
+    if (config->struct_size < offsetof(af_vulkan_upscaler_config, quality) ||
+        !config->frames_in_flight) return false;
     ngx_context *context = calloc(1, sizeof(*context));
     if (!context) return false;
     context->module = module;
     context->config = *config;
+    if (config->struct_size >= offsetof(af_vulkan_upscaler_config, quality) +
+                                  sizeof(config->quality) &&
+        config->quality < sizeof(quality_names) / sizeof(quality_names[0]))
+        context->quality = config->quality;
     NVSDK_NGX_Result result = NVSDK_NGX_VULKAN_Init_with_ProjectID(project_id, NVSDK_NGX_ENGINE_TYPE_CUSTOM,
         engine_version, module->data_path, config->instance, config->physical_device, config->device,
         vkGetInstanceProcAddr, vkGetDeviceProcAddr, &module->feature_info, NVSDK_NGX_Version_API);
@@ -213,9 +235,10 @@ static bool create(void *state, const af_vulkan_upscaler_config *config, void **
         !create_feature(context)) goto fail;
     *out = context;
     char message[128];
-    snprintf(message, sizeof(message), "NVIDIA DLSS Super Resolution (Quality): %ux%u -> %ux%u.",
-             config->render_extent.width, config->render_extent.height,
-             config->output_extent.width, config->output_extent.height);
+    snprintf(message, sizeof(message), "NVIDIA DLSS Super Resolution (%s): %ux%u -> %ux%u.",
+             quality_names[context->quality], config->render_extent.width,
+             config->render_extent.height, config->output_extent.width,
+             config->output_extent.height);
     module->host->log(message);
     return true;
 fail:
@@ -300,6 +323,8 @@ AF_EXTENSION_EXPORT const af_extension_api *af_extension_get_api(uint32_t versio
     static const af_vulkan_upscaler_api upscaler = {
         .abi_version = AF_VULKAN_UPSCALER_ABI_VERSION, .struct_size = sizeof(upscaler),
         .render_scale = 2.f / 3.f, .create = create, .record = record, .destroy = destroy,
+        .quality_count = sizeof(quality_names) / sizeof(quality_names[0]),
+        .quality_names = quality_names, .quality_scales = quality_scales,
     };
     static const af_extension_api api = {
         .abi_version = AF_EXTENSION_ABI_VERSION, .struct_size = sizeof(api), .id = "NVIDIA DLSS",

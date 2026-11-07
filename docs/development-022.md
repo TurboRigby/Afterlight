@@ -54,7 +54,9 @@ cmake --build --preset debug --target run_water-expedition_editor
 The expedition requests hardware reflections for its pools and river. Use
 **Environment → Ray-traced water reflections** to compare with the environment
 map. Both ray options can run independently or together. **Performance** shows
-which effects are active.
+which effects are active. The standalone player's pause/settings menu has a
+**Ray tracing** switch that enables or disables both ray-traced effects together
+and saves the choice in the player's preferences.
 
 The water shader traces a single reflection ray from each eligible visible
 surface sample. Ripple normals bend the ray, and Fresnel and roughness control

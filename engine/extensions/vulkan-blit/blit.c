@@ -18,7 +18,7 @@ static void stop(void *state) { (void)state; }
 static bool create(void *state, const af_vulkan_upscaler_config *config, void **out)
 {
     const af_extension_host *host = state;
-    if (config->struct_size < sizeof(*config)) return false;
+    if (config->struct_size < offsetof(af_vulkan_upscaler_config, quality)) return false;
     VkFormatProperties source, destination;
     vkGetPhysicalDeviceFormatProperties(config->physical_device, config->color_format, &source);
     vkGetPhysicalDeviceFormatProperties(config->physical_device, config->output_format, &destination);

@@ -44,6 +44,9 @@ typedef struct af_vulkan_upscaler_config {
     uint32_t graphics_queue_family, frames_in_flight;
     VkExtent2D render_extent, output_extent;
     VkFormat color_format, depth_format, motion_format, output_format;
+    /* Optional ABI 1 tail. Index into the provider's quality list. Older
+       hosts pass a struct without this field, so check struct_size. */
+    uint32_t quality;
 } af_vulkan_upscaler_config;
 
 typedef struct af_vulkan_upscaler_image {
@@ -84,12 +87,28 @@ typedef struct af_vulkan_upscaler_api {
     void (*destroy)(void *context);
     /* Optional ABI 1 tail. Spatial providers render without projection jitter. */
     uint32_t flags;
+    /* Optional ABI 1 tail. A provider may expose quality presets instead of
+       its fixed render_scale. quality_names and quality_scales must remain
+       valid for the module's lifetime; scales are between 1/3 and 1.0 (the
+       DLSS Ultra Performance floor) and ordered from sharpest to fastest.
+       Index 0 is the default. Hosts that
+       see a smaller struct_size use render_scale and the original behavior. */
+    uint32_t quality_count;
+    const char *const *quality_names;
+    const float *quality_scales;
 } af_vulkan_upscaler_api;
 
 /* One loaded provider. It starts enabled, and disabling restores the authored
    anti-aliasing mode and native resolution. Changing state applies next draw.
    Enable after disabling to retry a provider that previously fell back. */
 bool af_engine_set_upscaler_enabled(af_engine *engine, bool enabled);
+/* Quality selection for the current provider. Providers without a quality
+   list report zero and keep their fixed render_scale. Changes rebuild render
+   resources and apply on the next draw. Invalid indexes are rejected. */
+uint32_t af_engine_upscaler_quality_count(const af_engine *engine);
+const char *af_engine_upscaler_quality_name(const af_engine *engine, uint32_t index);
+uint32_t af_engine_upscaler_quality(const af_engine *engine);
+bool af_engine_set_upscaler_quality(af_engine *engine, uint32_t index);
 
 #ifdef __cplusplus
 }

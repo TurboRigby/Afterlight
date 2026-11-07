@@ -104,6 +104,12 @@ completed frame slot for per-slot descriptors and temporary resources.
   the scene's AA setting. If the provider declines a frame, the renderer
   composites its current scene color and restores native rendering on the
   next frame. A failed resource setup also restores native rendering.
+- A provider can publish quality presets through the optional tail of
+  `af_vulkan_upscaler_api`: names, render scales and a count. The first preset
+  is the default and `af_engine_set_upscaler_quality` selects another one.
+  The engine passes the selected index in `af_vulkan_upscaler_config.quality`
+  and rebuilds its render targets when the render scale changes. Providers
+  without presets keep their fixed `render_scale`; query the count first.
 
 An extension can optionally declare a `vulkan_startup` descriptor to request
 Vulkan instance and device extensions and the supported feature bits documented
@@ -189,6 +195,13 @@ then restart the editor. For the standalone player, supply the module with
 `--extension build/nvidia-ngx/afterlight_ngx.so`. The module looks for NVIDIA's
 DLSS runtime in the SDK's `lib/Linux_x86_64/rel` directory. Set
 `AFTERLIGHT_NGX_RUNTIME_DIR` to use a different runtime directory.
+
+The module publishes **Quality**, **Balanced**, **Performance** and
+**Ultra Performance** presets. Quality is the default. The standalone player's
+pause/settings menu shows a **DLSS quality** selector when the module is
+loaded, and the same menu has a **Ray tracing** switch that enables or disables
+ray-traced sun shadows and water reflections together. The choices persist in
+the player's preferences alongside anti-aliasing and exposure.
 
 ## Other SDKs
 

@@ -197,7 +197,8 @@ int32_t start(const af_extension_host *host, void **state)
 bool create(void *state, const af_vulkan_upscaler_config *config, void **out)
 {
     auto *host = static_cast<const af_extension_host *>(state);
-    if (config->struct_size < sizeof(*config) || config->frames_in_flight == 0 ||
+    if (config->struct_size < offsetof(af_vulkan_upscaler_config, quality) ||
+        config->frames_in_flight == 0 ||
         config->color_format != VK_FORMAT_R16G16B16A16_SFLOAT ||
         config->output_format != VK_FORMAT_R16G16B16A16_SFLOAT ||
         !compute_queue_supported(*config)) {

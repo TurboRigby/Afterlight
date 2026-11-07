@@ -12,6 +12,7 @@
 #include <SDL3/SDL_filesystem.h>
 #include <afterlight/asset_watch.h>
 #include <afterlight/extension.h>
+#include <afterlight/extension_vulkan.h>
 #include <afterlight/project.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -126,6 +127,9 @@ static void apply_preferences(player *app) {
   r.aa_sharpness = app->preferences.sharpness;
   r.taa_history_weight = app->preferences.history;
   r.exposure = app->preferences.exposure;
+  r.ray_traced_shadows = app->preferences.ray_traced_shadows;
+  r.ray_traced_water_reflections =
+      app->preferences.ray_traced_water_reflections;
   af_scene_set_render_settings(app->runtime.scene, r);
   for (size_t i = 0; i < af_scene_object_count(app->runtime.scene); ++i) {
     const af_scene_object *o = af_scene_object_at(app->runtime.scene, i);
@@ -216,6 +220,12 @@ static bool init(af_engine *engine, void *memory) {
     }
   }
   apply_preferences(app);
+  uint32_t qualities = af_engine_upscaler_quality_count(engine);
+  if (qualities) {
+    if (app->preferences.upscaler_quality >= qualities)
+      app->preferences.upscaler_quality = 0;
+    af_engine_set_upscaler_quality(engine, app->preferences.upscaler_quality);
+  }
   set_menu(app, engine, (!app->frames || app->menu_test));
   return true;
 }
@@ -329,7 +339,7 @@ static void update(af_engine *engine, double delta, void *memory) {
                 false, false, false, character);
   else {
     struct nk_context *ctx = &app->gui.context;
-    float width = fminf(460, (float)w - 24), height = fminf(680, (float)h - 24);
+    float width = fminf(460, (float)w - 24), height = fminf(760, (float)h - 24);
     if (nk_begin(ctx, "Game menu",
                  nk_rect(((float)w - width) / 2, ((float)h - height) / 2, width,
                          height),
@@ -404,6 +414,40 @@ static void update(af_engine *engine, double delta, void *memory) {
       changed |=
           nk_property_float(ctx, "Mouse sensitivity", .1f,
                             &app->preferences.sensitivity, 4, .1f, .01f) != 0;
+      uint32_t quality_count = af_engine_upscaler_quality_count(engine);
+      if (quality_count) {
+        const char *names[16];
+        if (quality_count > 16)
+          quality_count = 16;
+        for (uint32_t i = 0; i < quality_count; ++i) {
+          names[i] = af_engine_upscaler_quality_name(engine, i);
+          if (!names[i])
+            names[i] = "Default";
+        }
+        const char *quality_label = "Upscaler quality";
+        for (size_t i = 0; i < af_engine_extension_count(engine); ++i) {
+          af_extension_info info;
+          if (af_engine_get_extension(engine, i, &info) && info.enabled &&
+              info.vulkan_upscaler && strstr(info.id, "DLSS"))
+            quality_label = "DLSS quality";
+        }
+        nk_label(ctx, quality_label, NK_TEXT_LEFT);
+        int current = (int)af_engine_upscaler_quality(engine);
+        int selected = nk_combo(ctx, names, (int)quality_count, current, 26,
+                                nk_vec2(width - 32, 150));
+        if (selected != current &&
+            af_engine_set_upscaler_quality(engine, (uint32_t)selected)) {
+          app->preferences.upscaler_quality = (uint32_t)selected;
+          store_preferences(app);
+        }
+      }
+      nk_bool ray_tracing = app->preferences.ray_traced_shadows ||
+                            app->preferences.ray_traced_water_reflections;
+      if (nk_checkbox_label(ctx, "Ray tracing", &ray_tracing)) {
+        app->preferences.ray_traced_shadows = ray_tracing != 0;
+        app->preferences.ray_traced_water_reflections = ray_tracing != 0;
+        changed = true;
+      }
       if (changed) {
         apply_preferences(app);
         store_preferences(app);

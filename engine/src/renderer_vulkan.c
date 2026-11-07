@@ -155,6 +155,7 @@ struct af_renderer {
     const af_vulkan_upscaler_api *upscaler;
     void *upscaler_state;
     bool upscaler_enabled, upscaler_failed;
+    uint32_t upscaler_quality;
     af_mat4 previous_view_projection;af_camera temporal_camera;af_rect temporal_viewport;
     const af_scene *temporal_scene;uint64_t temporal_signature,temporal_frame,temporal_resets;
     uint32_t temporal_objects,temporal_skins;bool temporal_valid,temporal_supported;af_vec2 temporal_jitter;
@@ -937,6 +938,27 @@ static void destroy_upscaler_context(af_renderer *renderer)
     }
 }
 
+static bool upscaler_has_qualities(const af_vulkan_upscaler_api *api)
+{
+    return api && api->struct_size >= offsetof(af_vulkan_upscaler_api, quality_scales) +
+                                      sizeof(api->quality_scales) &&
+           api->quality_count && api->quality_names && api->quality_scales;
+}
+
+static uint32_t upscaler_quality_count(const af_vulkan_upscaler_api *api)
+{
+    return upscaler_has_qualities(api) ? api->quality_count : 0;
+}
+
+static float upscaler_render_scale(const af_renderer *renderer)
+{
+    const af_vulkan_upscaler_api *api = renderer->upscaler;
+    if (!api) return 1.f;
+    if (upscaler_has_qualities(api) && renderer->upscaler_quality < api->quality_count)
+        return api->quality_scales[renderer->upscaler_quality];
+    return api->render_scale;
+}
+
 void af_renderer_set_upscaler(af_renderer *renderer, const af_vulkan_upscaler_api *api, void *state)
 {
     if (renderer->upscaler == api && renderer->upscaler_state == state) {
@@ -950,6 +972,7 @@ void af_renderer_set_upscaler(af_renderer *renderer, const af_vulkan_upscaler_ap
     renderer->upscaler_state = state;
     renderer->upscaler_enabled = true;
     renderer->upscaler_failed = false;
+    renderer->upscaler_quality = 0;
 }
 
 bool af_renderer_set_upscaler_enabled(af_renderer *renderer, bool enabled)
@@ -966,6 +989,37 @@ bool af_renderer_upscaler_active(const af_renderer *renderer)
 {
     return renderer && renderer->upscaler_enabled && !renderer->upscaler_failed &&
            renderer->swapchain.upscaler_created;
+}
+
+uint32_t af_renderer_upscaler_quality_count(const af_renderer *renderer)
+{
+    return renderer ? upscaler_quality_count(renderer->upscaler) : 0;
+}
+
+const char *af_renderer_upscaler_quality_name(const af_renderer *renderer, uint32_t index)
+{
+    if (!renderer || !upscaler_has_qualities(renderer->upscaler) ||
+        index >= renderer->upscaler->quality_count)
+        return NULL;
+    return renderer->upscaler->quality_names[index];
+}
+
+uint32_t af_renderer_upscaler_quality(const af_renderer *renderer)
+{
+    return renderer ? renderer->upscaler_quality : 0;
+}
+
+bool af_renderer_set_upscaler_quality(af_renderer *renderer, uint32_t index)
+{
+    if (!renderer || !renderer->upscaler ||
+        index >= upscaler_quality_count(renderer->upscaler))
+        return false;
+    if (renderer->upscaler_quality != index) {
+        renderer->upscaler_quality = index;
+        renderer->swapchain_invalid = renderer->resize_pending = true;
+        renderer->temporal_valid = false;
+    }
+    return true;
 }
 
 void af_renderer_release_upscaler(af_renderer *renderer)
@@ -1085,7 +1139,7 @@ static bool create_swapchain(af_renderer *renderer,af_render_settings settings,u
     af_swapchain *swapchain = &renderer->swapchain;
     swapchain->extent = extent;swapchain->resource_config=config;
     bool upscale = (config & AF_RESOURCE_UPSCALER) != 0;
-    float scale = upscale ? renderer->upscaler->render_scale : 1.f;
+    float scale = upscale ? upscaler_render_scale(renderer) : 1.f;
     swapchain->render_extent = (VkExtent2D){
         (uint32_t)fmaxf(1, (float)extent.width * scale),
         (uint32_t)fmaxf(1, (float)extent.height * scale),
@@ -1194,6 +1248,7 @@ static bool create_swapchain(af_renderer *renderer,af_render_settings settings,u
             .color_format = VK_FORMAT_R16G16B16A16_SFLOAT,
             .motion_format = VK_FORMAT_R16G16B16A16_SFLOAT,
             .output_format = VK_FORMAT_R16G16B16A16_SFLOAT,
+            .quality = renderer->upscaler_quality,
         };
         if (!renderer->upscaler->create(renderer->upscaler_state, &upscaler_config,
                                         &swapchain->upscaler_context)) return false;
