@@ -106,6 +106,7 @@ add_library(afterlight STATIC
     engine/src/camera.c
     engine/src/math.c
     engine/src/engine.c
+    engine/src/extension_runtime.c
     engine/src/texture_vulkan.c
     engine/src/ui_vulkan.c
     engine/src/local_shadow.c

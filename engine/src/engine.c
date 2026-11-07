@@ -8,6 +8,7 @@
 #include "log.h"
 #include "renderer.h"
 #include "environment_job.h"
+#include "extension_runtime.h"
 #include "animation_runtime.h"
 #include "render_test.h"
 #include "platform_sdl.h"
@@ -29,6 +30,7 @@ struct af_engine {
     af_environment_job *environment_job;
     af_animation_runtime *animations;bool animation_enabled,animation_real_time;
     af_renderer *renderer;
+    af_extensions extensions;
     char *base_title;
     bool show_fps;
     bool has_fps_sample;
@@ -183,6 +185,16 @@ static void update_actions(af_engine *e,double dt){
     for(size_t i=0;i<e->input_map.count;++i){af_action_binding b=e->input_map.bindings[i];float value=af_input_value(&e->input_map,&sample,b.name);if(b.mouse_axis>=0&&(b.mouse_axis==0?sample.mouse.x:sample.mouse.y)==0)value*=(float)dt*900;
         bool tap=focused&&b.positive_key>=0&&e->pressed[b.positive_key];e->action_pressed[i]=(fabsf(e->action_values[i])<.5f&&fabsf(value)>=.5f)||tap;if(e->action_pressed[i])e->fixed_actions[i]=true;e->action_values[i]=value;if(!focused)e->fixed_actions[i]=false;}
 }
+
+bool af_engine_load_extension(af_engine *engine, const char *path)
+{
+    if (!engine || engine->has_run) {
+        af_log("error", "Load engine extensions before starting the engine loop.");
+        return false;
+    }
+    return af_extensions_load(&engine->extensions, path);
+}
+
 int af_engine_run(af_engine *engine, const af_game *game)
 {
     if (!engine || !game || engine->has_run) return 1;
@@ -359,6 +371,8 @@ int af_engine_run(af_engine *engine, const af_game *game)
             break;
         }
         engine->cpu_render_ms=(double)(SDL_GetPerformanceCounter()-render_start)*1000/frequency;
+        if (rendered && engine->extensions.count)
+            af_extensions_present(&engine->extensions, engine->fixed_ticks, delta);
         if (!rendered) SDL_Delay(16);
         update_frame_stats(engine, frequency, rendered);
     }
@@ -373,6 +387,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
 void af_engine_destroy(af_engine *engine)
 {
     if (!engine) return;
+    af_extensions_destroy(&engine->extensions);
     af_environment_job_destroy(engine->environment_job);af_animation_runtime_destroy(engine->animations);
     af_scene_destroy(engine->previous_scene);
     af_physics_destroy(engine->physics);af_audio_destroy(engine->audio);

@@ -17,6 +17,7 @@ repository layout and C gameplay workflow.
 
 - [Foundations before ray tracing](foundation-roadmap.md)
 - [Architecture](architecture.md)
+- [Engine extensions and the C ABI](engine-extensions.md)
 - [Scene format and persistence](scene-format.md)
 - [Rendering](rendering.md)
 - [Shadows](shadows.md)

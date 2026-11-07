@@ -7,6 +7,7 @@
 #include <afterlight/afterlight.h>
 #include <afterlight/project.h>
 #include <afterlight/asset_watch.h>
+#include <afterlight/extension.h>
 #include "document.h"
 #include "environment.h"
 #include "asset_browser.h"
@@ -1537,10 +1538,12 @@ static void shutdown(af_engine *engine,void *userdata)
 int main(int argc,char **argv)
 {
     editor app={0};af_engine_config config=af_engine_config_default();
+    const char *extensions[AF_EXTENSION_LIMIT];
+    size_t extension_count = 0;
     snprintf(app.module_path,sizeof(app.module_path),"%s",AF_GAME_MODULE_PATH);
     config.title="Afterlight Editor";config.width=1280;config.height=800;config.show_fps=true;
     for(int i=1;i<argc;++i){
-        if(!strcmp(argv[i],"--help")){puts("Usage: afterlight_editor [--playground] [--project PATH] [--scene PATH] [--game LIBRARY] [--frames N] [--smoke-test PATH] [--play-controls-test] [--validation | --no-validation]");return 0;}
+        if(!strcmp(argv[i],"--help")){puts("Usage: afterlight_editor [--playground] [--project PATH] [--scene PATH] [--game LIBRARY] [--extension LIBRARY] [--frames N] [--smoke-test PATH] [--play-controls-test] [--validation | --no-validation]");return 0;}
         if(!strcmp(argv[i],"--playground")){app.playground=true;snprintf(app.module_path,sizeof(app.module_path),"%s",AF_PLAYGROUND_MODULE_PATH);}
         else if(!strcmp(argv[i],"--light-tools-test")){app.light_test=true;if(!app.frame_limit)app.frame_limit=600;}
         else if(!strcmp(argv[i],"--show-environment"))app.show_environment=true;
@@ -1548,6 +1551,9 @@ int main(int argc,char **argv)
         else if(!strcmp(argv[i],"--thumbnail-test")){app.thumbnail_test=true;app.show_assets=true;if(!app.frame_limit)app.frame_limit=600;}
         else if(!strcmp(argv[i],"--play-controls-test")){app.play_controls_test=true;if(!app.frame_limit)app.frame_limit=300;}
         else if(!strcmp(argv[i],"--project")&&i+1<argc)app.initial_project=argv[++i];
+        else if (!strcmp(argv[i], "--extension") && i + 1 < argc &&
+                 extension_count < AF_EXTENSION_LIMIT)
+            extensions[extension_count++] = argv[++i];
         else if(!strcmp(argv[i],"--wizard-test")&&i+1<argc){app.wizard_test=true;snprintf(app.wizard_folder,sizeof(app.wizard_folder),"%s-%" PRIu64,argv[++i],SDL_GetTicksNS());if(!app.frame_limit)app.frame_limit=600;}
         else if(!strcmp(argv[i],"--animation-tools-test")&&i+1<argc){app.animation_test_path=argv[++i];if(!app.frame_limit)app.frame_limit=600;}
         else if(!strcmp(argv[i],"--scene")&&i+1<argc)app.initial_scene=argv[++i];
@@ -1565,6 +1571,12 @@ int main(int argc,char **argv)
     const char *require_validation=getenv("AFTERLIGHT_REQUIRE_VALIDATION");
     if((app.smoke_path||app.play_controls_test)&&require_validation&&!strcmp(require_validation,"1")&&!af_engine_get_stats(engine).validation_enabled){
         fputs("Editor smoke test requires validation.\n",stderr);af_engine_destroy(engine);return 1;
+    }
+    for (size_t i = 0; i < extension_count; ++i) {
+        if (!af_engine_load_extension(engine, extensions[i])) {
+            af_engine_destroy(engine);
+            return 1;
+        }
     }
     af_game game={.init=init,.update=update,.shutdown=shutdown,.user_data=&app,.should_close=should_close,.fixed_update=fixed_update};
     int result=af_engine_run(engine,&game);af_engine_destroy(engine);

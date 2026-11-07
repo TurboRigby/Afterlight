@@ -11,6 +11,7 @@
 #include "runtime.h"
 #include <SDL3/SDL_filesystem.h>
 #include <afterlight/asset_watch.h>
+#include <afterlight/extension.h>
 #include <afterlight/project.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -458,11 +459,16 @@ int main(int argc, char **argv) {
   player app = {0};
   bool check = false;
   const char *project = NULL;
+  const char *extensions[AF_EXTENSION_LIMIT];
+  size_t extension_count = 0;
   af_engine_config config = af_engine_config_default();
   config.show_fps = true;
   for (int i = 1; i < argc; ++i) {
     if (!strcmp(argv[i], "--project") && i + 1 < argc)
       project = argv[++i];
+    else if (!strcmp(argv[i], "--extension") && i + 1 < argc &&
+             extension_count < AF_EXTENSION_LIMIT)
+      extensions[extension_count++] = argv[++i];
     else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
       const char *value = argv[++i];
       char *end;
@@ -484,6 +490,7 @@ int main(int argc, char **argv) {
       config.enable_validation = false;
     else if (!strcmp(argv[i], "--help")) {
       puts("afterlight_player [--project PATH] [--frames N] [--hot-reload] "
+           "[--extension LIBRARY] "
            "[--validation | --no-validation]\nEscape/F6 opens the "
            "pause/settings menu. Progress and preferences save in the user "
            "data directory. Without --project, loads game.afterlight.project "
@@ -507,6 +514,10 @@ int main(int argc, char **argv) {
   }
   snprintf(app.project_path, sizeof(app.project_path), "%s", project);
   config.title = app.project.name;
+  if (check && extension_count) {
+    fputs("--check cannot load engine extensions.\n", stderr);
+    return 1;
+  }
   if (check)
     return check_project(&app.project);
   af_engine *engine = af_engine_create(&config);
@@ -517,6 +528,12 @@ int main(int argc, char **argv) {
       !af_engine_get_stats(engine).validation_enabled) {
     af_engine_destroy(engine);
     return 1;
+  }
+  for (size_t i = 0; i < extension_count; ++i) {
+    if (!af_engine_load_extension(engine, extensions[i])) {
+      af_engine_destroy(engine);
+      return 1;
+    }
   }
   af_game game = {.init = init,
                   .update = update,
