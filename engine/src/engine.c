@@ -203,6 +203,12 @@ int af_engine_run(af_engine *engine, const af_game *game)
     Uint64 previous = SDL_GetPerformanceCounter();
     const double frequency = (double)SDL_GetPerformanceFrequency();
     engine->fps_started = previous;
+    const SDL_WindowID window_id = SDL_GetWindowID(engine->window);
+    /* Wayland compositors report desktop-initiated minimization as suspension. */
+    const bool wayland = !strcmp(SDL_GetCurrentVideoDriver(), "wayland");
+    const SDL_WindowFlags suspend_flags = SDL_WINDOW_MINIMIZED | (wayland ? SDL_WINDOW_OCCLUDED : 0);
+    SDL_WindowFlags suspended = 0;
+    bool was_suspended = false;
     while (engine->running) {
         Uint64 event_start=SDL_GetPerformanceCounter();
         memset(engine->pressed, 0, sizeof(engine->pressed));
@@ -251,8 +257,20 @@ int af_engine_run(af_engine *engine, const af_game *game)
                 engine->mouse_delta.x += event.motion.xrel;
                 engine->mouse_delta.y += event.motion.yrel;
             }
-            if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
-                ++engine->focus_losses;
+            SDL_WindowFlags suspending = 0;
+            if (event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST &&
+                event.window.windowID == window_id) {
+                if (event.type == SDL_EVENT_WINDOW_MINIMIZED) suspending = SDL_WINDOW_MINIMIZED;
+                if (wayland && event.type == SDL_EVENT_WINDOW_OCCLUDED) suspending = SDL_WINDOW_OCCLUDED;
+                if (event.type == SDL_EVENT_WINDOW_RESTORED || event.type == SDL_EVENT_WINDOW_MAXIMIZED)
+                    suspended &= ~(SDL_WindowFlags)SDL_WINDOW_MINIMIZED;
+                if (wayland && event.type == SDL_EVENT_WINDOW_EXPOSED)
+                    suspended &= ~(SDL_WindowFlags)SDL_WINDOW_OCCLUDED;
+                suspended |= suspending;
+                if (suspending) was_suspended = true;
+            }
+            if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST || suspending) {
+                if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) ++engine->focus_losses;
                 memset(engine->mouse_buttons_down, 0, sizeof(engine->mouse_buttons_down));
                 memset(engine->keys, 0, sizeof(engine->keys));
                 memset(engine->pressed, 0, sizeof(engine->pressed));
@@ -270,10 +288,26 @@ int af_engine_run(af_engine *engine, const af_game *game)
                 af_renderer_resize(engine->renderer);
         }
         if (!engine->running) break;
+        if (suspended || (SDL_GetWindowFlags(engine->window) & suspend_flags)) {
+            was_suspended = true;
+            SDL_Delay(16);
+            update_frame_stats(engine, frequency, false);
+            continue;
+        }
+        if (was_suspended) {
+            /* Presentation and simulation share this clock. Discard time
+               spent hidden and present the latest solved pose on resume. */
+            engine->clock.accumulator = 0;
+            memset(engine->fixed_pressed, 0, sizeof(engine->fixed_pressed));
+            memset(engine->fixed_actions, 0, sizeof(engine->fixed_actions));
+            engine->mouse_delta = (af_vec2){0};
+            af_engine_reset_interpolation(engine);
+        }
         if (button_position_changed) engine->mouse_position = button_position;
         engine->overlay = (af_overlay_frame){0};
         Uint64 now = SDL_GetPerformanceCounter();
-        double delta = (double)(now - previous) / frequency;
+        double delta = was_suspended ? 0 : (double)(now - previous) / frequency;
+        was_suspended = false;
         previous = now;
         double elapsed=delta;
         if (delta > 0.1) delta = 0.1;
@@ -304,7 +338,8 @@ int af_engine_run(af_engine *engine, const af_game *game)
         engine->cpu_update_ms=(double)(render_start-update_start)*1000/frequency;
         engine->cpu_render_ms=0;
         if (!engine->running) break;
-        if (SDL_GetWindowFlags(engine->window) & SDL_WINDOW_MINIMIZED) {
+        if (SDL_GetWindowFlags(engine->window) & suspend_flags) {
+            was_suspended = true;
             SDL_Delay(16);
             update_frame_stats(engine, frequency, false);
             continue;
@@ -318,7 +353,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
         Uint64 animation_start=SDL_GetPerformanceCounter();
         if(!af_animation_runtime_update(engine->animations,engine->previous_scene,alpha,animation_delta,engine->animation_enabled)){result=1;break;}
         engine->cpu_animation_ms=(double)(SDL_GetPerformanceCounter()-animation_start)*1000/frequency;
-        if(!af_renderer_update_water(engine->renderer,engine->physics,engine->scene,alpha)){result=1;break;}
+        if(!af_renderer_update_water(engine->renderer,engine->physics,engine->scene,engine->previous_scene?alpha:1)){result=1;break;}
         if (!af_renderer_draw(engine->renderer, engine->clear_color, engine->scene, &render_camera, engine->viewport, engine->highlighted, &engine->overlay, &rendered)) {
             result = 1;
             break;

@@ -79,8 +79,9 @@ renderer can retire old swapchains asynchronously with presentation fences.
 
 Logical window dimensions and framebuffer pixel dimensions are separate. The
 swapchain uses framebuffer dimensions for high-density displays. Zero-sized
-surfaces defer rendering until there is a drawable extent. Minimized windows
-keep receiving events and game updates, but skip rendering and sleep briefly.
+surfaces defer rendering until there is a drawable extent. While minimized, the
+engine polls events and sleeps between polls. Game updates, simulation and
+rendering resume on restore with a fresh frame clock and interpolation history.
 The per-render update delta is capped at 100 ms for UI/presentation. Optional
 fixed updates use a separate 60 Hz accumulator with an eight-tick catch-up limit.
 Excess whole ticks are discarded and reported; paused single steps execute one

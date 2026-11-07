@@ -41,6 +41,10 @@ typedef struct smoke_state {
   bool quit_in_init;
   bool failed;
   SDL_Window *window;
+  SDL_Event restore_event;
+  SDL_TimerID restore_timer;
+  Uint64 minimized_at;
+  uint64_t ticks_at_restore;
   af_camera camera;
   uint64_t rebuilds_before_duplicate;
   af_scene *scene;
@@ -184,6 +188,22 @@ static bool game_init(af_engine *engine, void *user_data) {
   if (state->quit_in_init)
     af_engine_request_quit(engine);
   return !state->fail_init;
+}
+
+/* Wayland requires desktop activation to restore a real minimized window.
+   Queue the same lifecycle events so the pause is deterministic everywhere. */
+static Uint32 SDLCALL restore_window(void *data, SDL_TimerID timer, Uint32 interval) {
+  (void)timer;
+  (void)interval;
+  SDL_Event event = *(const SDL_Event *)data;
+  SDL_PushEvent(&event);
+  return 0;
+}
+
+static void fixed_update(af_engine *engine, double delta, void *data) {
+  (void)engine;
+  (void)delta;
+  (void)data;
 }
 
 static void game_update(af_engine *engine, double delta, void *user_data) {
@@ -525,37 +545,33 @@ static void game_update(af_engine *engine, double delta, void *user_data) {
         state->failed = true;
       } while (0);
   }
-  if (state->updates == 140 &&
-      !(SDL_GetWindowFlags(state->window) & SDL_WINDOW_MINIMIZED))
-    do {
-      fprintf(stderr, "Smoke update %u line %d failed\n", state->updates,
-              __LINE__);
-      state->failed = true;
-    } while (0);
-  if (state->updates == 160 &&
-      (SDL_GetWindowFlags(state->window) & SDL_WINDOW_MINIMIZED)) {
-    if (!strcmp(SDL_GetCurrentVideoDriver(), "wayland"))
-      fputs("Wayland compositor denied programmatic unminimize; native restore "
-            "requires desktop activation. All rendering checks ran before "
-            "minimization.\n",
-            stdout);
-    else
+  if (state->updates == 135) {
+    SDL_WindowID window = SDL_GetWindowID(state->window);
+    SDL_Event minimize = {.window = {
+        .type = SDL_EVENT_WINDOW_MINIMIZED,
+        .windowID = window}};
+    state->restore_event = (SDL_Event){.window = {
+        .type = SDL_EVENT_WINDOW_RESTORED,
+        .windowID = window}};
+    state->minimized_at = SDL_GetTicks();
+    state->restore_timer = SDL_AddTimer(500, restore_window, &state->restore_event);
+    if (!state->restore_timer || !SDL_PushEvent(&minimize))
       state->failed = true;
   }
-  if (state->updates == 135 && !SDL_MinimizeWindow(state->window))
-    do {
-      fprintf(stderr, "Smoke update %u line %d failed\n", state->updates,
-              __LINE__);
+  if (state->updates == 136) {
+    if (SDL_GetTicks() - state->minimized_at < 500 || delta != 0) {
+      fputs("Minimization must suspend updates and discard hidden time.\n", stderr);
       state->failed = true;
-    } while (0);
-  if (state->updates == 145 &&
-      (!SDL_RestoreWindow(state->window) || !SDL_RaiseWindow(state->window) ||
-       !SDL_SyncWindow(state->window)))
-    do {
-      fprintf(stderr, "Smoke update %u line %d failed\n", state->updates,
-              __LINE__);
+    }
+    state->ticks_at_restore = af_engine_get_stats(engine).simulation_ticks;
+  }
+  if (state->updates == 137) {
+    af_engine_stats stats = af_engine_get_stats(engine);
+    if (stats.simulation_steps || stats.simulation_ticks != state->ticks_at_restore) {
+      fputs("Restore must not catch up on missed fixed steps.\n", stderr);
       state->failed = true;
-    } while (0);
+    }
+  }
   if (state->updates == 100 && !af_engine_set_window_size(engine, 640, 360))
     do {
       fprintf(stderr, "Smoke update %u line %d failed\n", state->updates,
@@ -581,6 +597,7 @@ static void game_update(af_engine *engine, double delta, void *user_data) {
 
 static void game_shutdown(af_engine *engine, void *user_data) {
   smoke_state *state = user_data;
+  if (state->restore_timer) SDL_RemoveTimer(state->restore_timer);
   af_engine_set_scene(engine, NULL);
   af_scene_destroy(state->scene);
   state->scene = NULL; /* Uploaded assets are released by renderer teardown. */
@@ -604,6 +621,7 @@ static int exercise_lifecycle(bool fail_init, bool quit_in_init) {
   SDL_free(windows);
   af_game game = {.init = game_init,
                   .update = game_update,
+                  .fixed_update = fixed_update,
                   .shutdown = game_shutdown,
                   .user_data = &state};
   int result = af_engine_run(engine, &game);
@@ -627,7 +645,7 @@ static int exercise_lifecycle(bool fail_init, bool quit_in_init) {
     printf("Smoke: %" PRIu64
            " presented frames; shared scene meshes, visibility, missing "
            "assets, stable removal, transforms, depth resize, input/focus "
-           "reset, minimize/restore requests and quit passed.\n",
+           "reset, minimized clock suspension and quit passed.\n",
            stats.rendered_frames);
   } else
     CHECK(state.updates == 0 && stats.rendered_frames == 0);

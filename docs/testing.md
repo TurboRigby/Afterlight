@@ -339,9 +339,10 @@ authored-scene and hot-reload checks passed after the final persistence revision
 The [0.21 guide](development-021.md) records full-suite results and benchmark limits.
 
 Synthetic SDL events are explicitly cleared with `SDL_zero` before filling fields.
-The smoke test completes rendering assertions before minimize/restore. GNOME
-Wayland may refuse programmatic unminimize; this is reported explicitly and
-requires desktop activation. Other rendering/input assertions remain enforced.
+The smoke test injects SDL minimize and restore events half a second apart.
+It checks that game updates suspend and fixed simulation never catches up on
+hidden time. Injected events keep the test independent of compositor rules for
+programmatic window activation.
 
 ## Optional ray queries (0.22)
 

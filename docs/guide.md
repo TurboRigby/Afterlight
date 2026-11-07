@@ -270,8 +270,8 @@ The graphics smoke test needs a desktop session and a working Vulkan driver.
 It draws objects sharing two named mesh assets, grows/compacts the asset registry,
 replaces/removes meshes while frames are in flight, checks visibility, missing
 assets, object deletion, scene detach/reattach, and updates object/camera transforms.
-It also resizes through landscape and portrait sizes,
-and minimizes/restores the window. It checks invalid indices/cameras, quick key
+It also resizes through landscape and portrait sizes and checks clock suspension
+across SDL minimize and restore events. It checks invalid indices/cameras, quick key
 presses, held keys, mouse button events, and capture/input reset on focus loss.
 It also checks failed game initialization and quitting during initialization.
 Validation errors, including errors during teardown, fail the test.
