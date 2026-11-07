@@ -11,7 +11,7 @@
 #include <afterlight/prefab.h>
 #include <afterlight/joint.h>
 #include <afterlight/compound.h>
-#define AF_GAME_ABI_VERSION 23u
+#define AF_GAME_ABI_VERSION 24u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
 #define AF_GAME_EXPORT __declspec(dllexport)
@@ -85,6 +85,8 @@ typedef struct af_game_host {
     bool (*remove_local_light)(af_scene*,size_t);
     bool (*set_light)(af_scene*,af_directional_light);
     bool (*set_render_settings)(af_scene*,af_render_settings);
+    af_render_settings (*get_render_settings)(const af_scene*);
+    af_engine_stats (*get_stats)(const af_engine*);
     bool (*key_pressed)(const struct af_game_host*,af_key);
     af_vec2 (*mouse_delta)(const af_engine*);
     bool (*mouse_pressed)(const af_engine*,af_mouse_button);

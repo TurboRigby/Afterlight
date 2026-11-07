@@ -15,6 +15,7 @@
 #include "shadow_math.h"
 #include "post_vulkan.h"
 #include "refraction_vulkan.h"
+#include "ray_query_vulkan.h"
 #include "ibl.h"
 #include "local_shadow.h"
 #include <math.h>
@@ -25,6 +26,7 @@
 #include <stddef.h>
 #include "mesh_vert.h"
 #include "mesh_frag.h"
+#include "mesh_ray_frag.h"
 #define af_fullscreen_vert af_sky_vertex
 #include "fullscreen_vert.h"
 #undef af_fullscreen_vert
@@ -34,7 +36,7 @@
 
 #define AF_FRAMES_IN_FLIGHT AF_UI_FRAMES_IN_FLIGHT
 _Static_assert(AF_FRAMES_IN_FLIGHT==AF_SHADOW_FRAME_COUNT,"Independent shadow maps for each frame");
-enum {AF_RESOURCE_AA_MASK=3u,AF_RESOURCE_BLOOM=4u,AF_RESOURCE_MOTION=8u,AF_RESOURCE_REFRACTION=16u};
+enum {AF_RESOURCE_AA_MASK=3u,AF_RESOURCE_BLOOM=4u,AF_RESOURCE_MOTION=8u,AF_RESOURCE_REFRACTION=16u,AF_RESOURCE_RAY_QUERY=32u};
 #define AF_PORTABILITY_SUBSET "VK_KHR_portability_subset"
 
 typedef struct af_gpu_buffer {
@@ -59,7 +61,7 @@ typedef struct af_frame_uniform {
 _Static_assert(sizeof(af_frame_uniform)==3344,"Shader frame layout");
 typedef struct af_blend_draw {size_t index;float depth;} af_blend_draw;
 static int blend_compare(const void *a,const void *b){const af_blend_draw *x=a,*y=b;if(x->depth!=y->depth)return x->depth>y->depth?-1:1;return (x->index>y->index)-(x->index<y->index);}
-typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;af_vk_texture *texture;float alpha,cutoff;uint32_t alpha_mode;} af_shadow_draw;
+typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;af_vk_texture *texture;float alpha,cutoff;uint32_t alpha_mode;bool ray_caster,liquid;} af_shadow_draw;
 #define AF_SKIN_INSTANCES 128u
 #define AF_SKIN_MATRICES (AF_SKIN_INSTANCES*AF_ANIMATION_MAX_JOINTS+1u)
 typedef struct af_skin_instance {af_object_id object;af_mat4 matrices[AF_ANIMATION_MAX_JOINTS];size_t count;} af_skin_instance;
@@ -109,7 +111,7 @@ typedef struct af_swapchain {
 typedef struct af_gpu_mesh {
     af_gpu_buffer vertices;
     af_gpu_buffer indices;
-    uint32_t index_count,max_joint;bool skinned;
+    uint32_t vertex_count,index_count,max_joint;bool skinned;
     af_vec3 minimum, maximum;
 } af_gpu_mesh;
 
@@ -129,6 +131,11 @@ struct af_renderer {
     const af_scene *previous_scene;float interpolation_alpha;
     af_vk_ui *ui;
     af_vk_shadows *shadows,*local_shadows;
+    af_vk_ray_query *rays;
+    bool ray_supported,ray_failed;
+    uint64_t ray_revision;
+    af_ray_instance *ray_inputs;
+    size_t ray_input_capacity,ray_raster_casters;
     uint32_t local_shadow_layers,local_shadow_resolution,local_shadow_lights,local_shadow_overflow;
     uint32_t shadow_resolution,shadow_layers;
     af_shadow_draw *shadow_draws;
@@ -282,6 +289,8 @@ static bool create_instance(af_renderer *renderer, bool enable_validation)
         .engineVersion = VK_MAKE_VERSION(0, 1, 0),
         .apiVersion = VK_API_VERSION_1_1
     };
+    uint32_t loader_version=VK_API_VERSION_1_0;
+    if(vkEnumerateInstanceVersion(&loader_version)==VK_SUCCESS && loader_version>=VK_API_VERSION_1_2)application.apiVersion=VK_API_VERSION_1_2;
     VkInstanceCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = renderer->validation_enabled ? &debug_info : NULL,
@@ -422,8 +431,24 @@ static bool create_device(af_renderer *renderer)
             .queueFamilyIndex = families[i], .queueCount = 1, .pQueuePriorities = &priority
         };
     }
-    const char *extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, AF_PORTABILITY_SUBSET};
-    uint32_t extension_count = device_extension_available(renderer->physical_device, AF_PORTABILITY_SUBSET) ? 2u : 1u;
+    const char *extensions[5] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    uint32_t extension_count=1;
+    if(device_extension_available(renderer->physical_device,AF_PORTABILITY_SUBSET))extensions[extension_count++]=AF_PORTABILITY_SUBSET;
+    VkPhysicalDeviceRayQueryFeaturesKHR ray={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,.pNext=&ray};
+    VkPhysicalDeviceBufferDeviceAddressFeatures address={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,.pNext=&acceleration};
+    bool query_available=selected_properties.apiVersion>=VK_API_VERSION_1_2 &&
+        device_extension_available(renderer->physical_device,VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
+        device_extension_available(renderer->physical_device,VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) &&
+        device_extension_available(renderer->physical_device,VK_KHR_RAY_QUERY_EXTENSION_NAME);
+    if(query_available){VkPhysicalDeviceFeatures2 features={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,.pNext=&address};vkGetPhysicalDeviceFeatures2(renderer->physical_device,&features);}
+    renderer->ray_supported=query_available && ray.rayQuery && acceleration.accelerationStructure && address.bufferDeviceAddress && !getenv("AFTERLIGHT_DISABLE_RAY_QUERY");
+    if(renderer->ray_supported){extensions[extension_count++]=VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME;extensions[extension_count++]=VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME;extensions[extension_count++]=VK_KHR_RAY_QUERY_EXTENSION_NAME;
+        // Enable the needed feature bits only, not all queried optional features.
+        address=(VkPhysicalDeviceBufferDeviceAddressFeatures){.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,.pNext=&acceleration,.bufferDeviceAddress=VK_TRUE};
+        acceleration=(VkPhysicalDeviceAccelerationStructureFeaturesKHR){.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,.pNext=&ray,.accelerationStructure=VK_TRUE};
+        ray=(VkPhysicalDeviceRayQueryFeaturesKHR){.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,.rayQuery=VK_TRUE};}
+    af_log("info","Hardware ray-query sun shadows: %s.",renderer->ray_supported?"available":"unavailable (raster fallback)");
     VkPhysicalDeviceFeatures supported;vkGetPhysicalDeviceFeatures(renderer->physical_device,&supported);
     VkPhysicalDeviceFeatures enabled={.samplerAnisotropy=supported.samplerAnisotropy,.independentBlend=supported.independentBlend};
     renderer->temporal_supported=supported.independentBlend!=0;if(!renderer->temporal_supported)af_log("info","TAA requires independent attachment blending; TAA scenes will use FXAA on this device.");
@@ -431,6 +456,7 @@ static bool create_device(af_renderer *renderer)
     VkDeviceCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = queue_count, .pQueueCreateInfos = queues,
+        .pNext=renderer->ray_supported?&address:NULL,
         .pEnabledFeatures=&enabled,
         .enabledExtensionCount = extension_count, .ppEnabledExtensionNames = extensions
     };
@@ -449,6 +475,7 @@ static bool create_device(af_renderer *renderer)
 static bool create_pipeline(af_renderer *renderer)
 {
     af_swapchain *swapchain = &renderer->swapchain;
+    if((swapchain->resource_config&AF_RESOURCE_RAY_QUERY)&&getenv("AFTERLIGHT_TEST_RAY_PIPELINE_FAIL"))return false;
     VkShaderModule vertex_shader = VK_NULL_HANDLE, fragment_shader = VK_NULL_HANDLE;
     VkShaderModuleCreateInfo shader_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -459,6 +486,7 @@ static bool create_pipeline(af_renderer *renderer)
     bool success = false;
     shader_info.codeSize = sizeof(af_mesh_frag);
     shader_info.pCode = af_mesh_frag;
+    if(swapchain->resource_config&AF_RESOURCE_RAY_QUERY){shader_info.pCode=af_mesh_ray_frag;shader_info.codeSize=sizeof(af_mesh_ray_frag);}
     if (!vk_ok(vkCreateShaderModule(renderer->device, &shader_info, NULL, &fragment_shader),
         "vkCreateShaderModule (fragment)")) goto cleanup;
     VkPipelineShaderStageCreateInfo stages[] = {
@@ -592,6 +620,8 @@ static void destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh)
 static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size,
     VkBufferUsageFlags usage, af_gpu_buffer *buffer)
 {
+    bool ray_input=renderer->ray_supported && (usage&(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
+    if(ray_input)usage|=VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT|VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
     VkBufferCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size,
         .usage = usage, .sharingMode = VK_SHARING_MODE_EXCLUSIVE
@@ -612,8 +642,9 @@ static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize 
         af_log("error", "No host-visible memory type for mesh data.");
         return false;
     }
+    VkMemoryAllocateFlagsInfo ray_flags={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,.flags=VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT};
     VkMemoryAllocateInfo allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.pNext=ray_input?&ray_flags:NULL,
         .allocationSize = requirements.size, .memoryTypeIndex = memory_type
     };
     if (!vk_ok(vkAllocateMemory(renderer->device, &allocation, NULL, &buffer->memory), "vkAllocateMemory") ||
@@ -666,7 +697,7 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &uploaded.vertices) ||
         !upload_buffer(renderer, mesh->indices, (VkDeviceSize)mesh->index_count * sizeof(uint32_t),
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &uploaded.indices)) goto fail;
-    uploaded.index_count = mesh->index_count;
+    uploaded.vertex_count=mesh->vertex_count;uploaded.index_count = mesh->index_count;
     uploaded.minimum = uploaded.maximum = mesh->vertices[0].position;
     for (uint32_t i = 0; i < mesh->vertex_count; ++i) {
         const af_vertex *v=&mesh->vertices[i];float weights[]={v->weights.x,v->weights.y,v->weights.z,v->weights.w};float sum=0;
@@ -1044,18 +1075,19 @@ static bool create_environment(af_renderer *renderer,uint32_t profile){
     if(renderer->frame_pool)update_environment_descriptors(renderer);return true;
 }
 static bool create_frame_layout(af_renderer *renderer){
-    VkDescriptorSetLayoutBinding bindings[10]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
+    VkDescriptorSetLayoutBinding bindings[11]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
     for(uint32_t i=1;i<6;++i)bindings[i]=(VkDescriptorSetLayoutBinding){i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
     bindings[6]=(VkDescriptorSetLayoutBinding){6,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,NULL};
     bindings[7]=(VkDescriptorSetLayoutBinding){7,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};bindings[8]=(VkDescriptorSetLayoutBinding){8,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
     bindings[9]=(VkDescriptorSetLayoutBinding){9,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,NULL};
-    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=10,.pBindings=bindings};
+    bindings[10]=(VkDescriptorSetLayoutBinding){10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
+    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=renderer->ray_supported?11u:10u,.pBindings=bindings};
     return vk_ok(vkCreateDescriptorSetLayout(renderer->device,&layout,NULL,&renderer->frame_layout),"frame layout");
 }
 static bool create_uniforms(af_renderer *renderer)
 {
-    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,7*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2*AF_FRAMES_IN_FLIGHT}};
-    VkDescriptorPoolCreateInfo pool={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,.maxSets=AF_FRAMES_IN_FLIGHT,.poolSizeCount=3,.pPoolSizes=sizes};
+    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,7*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,AF_FRAMES_IN_FLIGHT}};
+    VkDescriptorPoolCreateInfo pool={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,.maxSets=AF_FRAMES_IN_FLIGHT,.poolSizeCount=renderer->ray_supported?4u:3u,.pPoolSizes=sizes};
     if(!vk_ok(vkCreateDescriptorPool(renderer->device,&pool,NULL,&renderer->frame_pool),"frame pool"))return false;
     for(unsigned i=0;i<AF_FRAMES_IN_FLIGHT;++i){af_frame *frame=&renderer->frames[i];af_frame_uniform initial={0};
         af_mat4 *bones=calloc(2*AF_SKIN_MATRICES,sizeof(*bones));if(!bones)return false;for(unsigned j=0;j<2*AF_SKIN_MATRICES;++j)bones[j]=af_mat4_identity();
@@ -1105,6 +1137,7 @@ void af_renderer_destroy(af_renderer *renderer)
     if (renderer->device) {
         (void)vk_ok(vkDeviceWaitIdle(renderer->device), "vkDeviceWaitIdle during shutdown");
         destroy_swapchain(renderer);
+        af_vk_ray_query_destroy(renderer->rays);
         destroy_buffer(renderer,&renderer->capture_buffer);
         af_vk_ui_destroy(renderer->ui);
         af_vk_shadows_destroy(renderer->local_shadows);af_vk_shadows_destroy(renderer->shadows);free(renderer->shadow_draws);free(renderer->shadow_bounds);
@@ -1133,6 +1166,7 @@ void af_renderer_destroy(af_renderer *renderer)
         if (destroy_debug) destroy_debug(renderer->instance, renderer->debug_messenger, NULL);
     }
     if (renderer->instance) vkDestroyInstance(renderer->instance, NULL);
+    free(renderer->ray_inputs);
     free(renderer->motion_previous);free(renderer->motion_next);free(renderer->motion_records);
     free(renderer);
 }
@@ -1258,7 +1292,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
         if(mesh==renderer->mesh_count||!object_world(renderer,scene,i,&model))continue;
         size_t n=renderer->shadow_count++;
         af_vk_texture *texture=renderer->white;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;break;}
-        renderer->shadow_draws[n]=(af_shadow_draw){model,mesh,skin_base(renderer,object->id,&renderer->meshes[mesh].gpu),texture,object->material.base_color.a,object->material.alpha_cutoff,(uint32_t)object->material.alpha_mode};
+        renderer->shadow_draws[n]=(af_shadow_draw){model,mesh,skin_base(renderer,object->id,&renderer->meshes[mesh].gpu),texture,object->material.base_color.a,object->material.alpha_cutoff,(uint32_t)object->material.alpha_mode,false,af_scene_get_water(scene,object->id)!=NULL};
         renderer->shadow_bounds[n]=object_bounds(renderer,object->id,model,&renderer->meshes[mesh].gpu);
     }
     af_directional_light light=af_scene_get_light(scene);af_vec3 direction=af_vec3_normalize(light.direction),forward=af_camera_forward(camera);
@@ -1308,10 +1342,21 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     memcpy(uniform->shadow_matrices,view->matrices,sizeof(view->matrices));return true;
 }
 static uint64_t shadow_hash(uint64_t h,const void *data,size_t size){const unsigned char *p=data;for(size_t i=0;i<size;++i){h^=p[i];h*=UINT64_C(1099511628211);}return h;}
+static bool prepare_ray_shadows(af_renderer *r,af_frame *frame){
+    if(r->rays && r->ray_revision!=r->mesh_revision){if(!af_renderer_wait_idle(r))return false;af_vk_ray_query_destroy(r->rays);r->rays=NULL;}
+    if(!r->rays){r->rays=af_vk_ray_query_create(r->physical_device,r->device,AF_FRAMES_IN_FLIGHT,r->timestamp_bits,r->timestamp_period);r->ray_revision=r->mesh_revision;if(!r->rays)return false;}
+    if(r->shadow_count>r->ray_input_capacity){af_ray_instance *inputs=realloc(r->ray_inputs,r->shadow_count*sizeof(*inputs));if(!inputs)return false;r->ray_inputs=inputs;r->ray_input_capacity=r->shadow_count;}
+    size_t count=0;r->ray_raster_casters=0;
+    for(size_t i=0;i<r->shadow_count;++i){af_shadow_draw *draw=&r->shadow_draws[i];const af_mesh_asset *asset=&r->meshes[draw->mesh];af_mat4 inverse;
+        draw->ray_caster=!draw->liquid&&!asset->dynamic&&!asset->gpu.skinned&&draw->alpha_mode==AF_ALPHA_OPAQUE&&af_mat4_inverse(draw->model,&inverse);
+        if(!draw->ray_caster){++r->ray_raster_casters;continue;}
+        r->ray_inputs[count++]=(af_ray_instance){draw->mesh+1,asset->gpu.vertices.handle,asset->gpu.indices.handle,asset->gpu.vertex_count,asset->gpu.index_count,draw->model};}
+    return af_vk_ray_query_prepare(r->rays,r->frame_index,r->ray_inputs,count,frame->descriptor);
+}
 static uint64_t shadow_signature(af_renderer *r,af_mat4 matrix,af_shadow_settings settings,bool enabled){
     uint64_t h=shadow_hash(UINT64_C(14695981039346656037),&matrix,sizeof(matrix));
     h=shadow_hash(h,&settings.constant_bias,sizeof(float));h=shadow_hash(h,&settings.slope_bias,sizeof(float));h=shadow_hash(h,&r->mesh_revision,sizeof(r->mesh_revision));h=shadow_hash(h,&r->texture_revision,sizeof(r->texture_revision));h=shadow_hash(h,&enabled,sizeof(enabled));h=shadow_hash(h,&r->skin_revision,sizeof(r->skin_revision));
-    if(enabled)for(size_t i=0;i<r->shadow_count;++i){h=shadow_hash(h,&r->shadow_draws[i].model,sizeof(af_mat4));h=shadow_hash(h,&r->shadow_draws[i].mesh,sizeof(size_t));h=shadow_hash(h,&r->shadow_draws[i].alpha,sizeof(float));h=shadow_hash(h,&r->shadow_draws[i].cutoff,sizeof(float));h=shadow_hash(h,&r->shadow_draws[i].alpha_mode,sizeof(uint32_t));h=shadow_hash(h,&r->shadow_draws[i].texture,sizeof(void*));}
+    if(enabled)for(size_t i=0;i<r->shadow_count;++i){h=shadow_hash(h,&r->shadow_draws[i].model,sizeof(af_mat4));h=shadow_hash(h,&r->shadow_draws[i].mesh,sizeof(size_t));h=shadow_hash(h,&r->shadow_draws[i].alpha,sizeof(float));h=shadow_hash(h,&r->shadow_draws[i].cutoff,sizeof(float));h=shadow_hash(h,&r->shadow_draws[i].alpha_mode,sizeof(uint32_t));h=shadow_hash(h,&r->shadow_draws[i].ray_caster,sizeof(bool));h=shadow_hash(h,&r->shadow_draws[i].texture,sizeof(void*));}
     return h?h:1;
 }
 /* Previous rendered transforms are independent of fixed-step interpolation. */
@@ -1346,6 +1391,7 @@ static float halton(unsigned n, unsigned base) {
   return value;
 }
 static uint64_t temporal_settings_hash(uint64_t h, af_render_settings value) {
+  h=shadow_hash(h,&value.ray_traced_shadows,sizeof(value.ray_traced_shadows));
   h = shadow_hash(h, &value.anti_aliasing, sizeof(value.anti_aliasing));
   h = shadow_hash(h, &value.aa_sharpness, sizeof(value.aa_sharpness));
   h = shadow_hash(h, &value.taa_history_weight,
@@ -1591,11 +1637,15 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     af_render_settings environment_settings=af_scene_get_render_settings(scene);
     if(renderer->debug_view!=AF_DEBUG_SHADED)environment_settings.anti_aliasing=AF_AA_TAA;
     if(environment_settings.anti_aliasing==AF_AA_TAA&&!renderer->temporal_supported)environment_settings.anti_aliasing=AF_AA_FXAA;
-    uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u);
+    uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u)|((environment_settings.ray_traced_shadows&&renderer->ray_supported&&!renderer->ray_failed&&af_scene_get_shadows(scene).enabled)?AF_RESOURCE_RAY_QUERY:0u);
     if (renderer->resize_pending || !renderer->swapchain.handle || renderer->swapchain.resource_config!=resource_config) {
-        if (!create_swapchain(renderer,environment_settings,resource_config)) return false;
+        if (!create_swapchain(renderer,environment_settings,resource_config)) {
+            if(resource_config&AF_RESOURCE_RAY_QUERY){af_log("warning","Optional ray-query pipeline unavailable; retrying raster rendering.");renderer->ray_failed=true;renderer->resize_pending=renderer->swapchain_invalid=true;return true;}
+            return false;
+        }
         if (renderer->resize_pending || !renderer->swapchain.handle) return true;
     }
+    if(!(resource_config&AF_RESOURCE_RAY_QUERY)&&renderer->rays){if(!af_renderer_wait_idle(renderer))return false;af_vk_ray_query_destroy(renderer->rays);renderer->rays=NULL;renderer->ray_raster_casters=0;}
     if((environment_settings.environment_enabled||environment_settings.skybox)&&!environment_settings.environment_asset[0]&&environment_settings.environment_profile!=renderer->environment_profile&&!create_environment(renderer,environment_settings.environment_profile))return false;
     bool environment_found=!environment_settings.environment_asset[0];
     for(size_t i=0;i<renderer->environment_count;++i)if(!strcmp(renderer->environments[i].name,environment_settings.environment_asset))environment_found=true;
@@ -1612,6 +1662,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         return false;
     renderer->cpu_fence_ms=(double)(SDL_GetPerformanceCounter()-wait_start)*1000/(double)SDL_GetPerformanceFrequency();
     if(!stream_prepare(renderer))return false;
+    if((resource_config&AF_RESOURCE_RAY_QUERY)&&!prepare_ray_shadows(renderer,frame)){
+        af_log("warning","Ray-query initialization/build preparation failed; retaining raster shadows.");
+        renderer->ray_failed=true;renderer->resize_pending=true;return true;
+    }
     if(frame->timestamp_submitted){uint64_t values[5];
         VkResult query=vkGetQueryPoolResults(renderer->device,frame->timestamps,0,5,sizeof(values),values,sizeof(uint64_t),VK_QUERY_RESULT_64_BIT);
         if(query==VK_SUCCESS){uint64_t mask=renderer->timestamp_bits==64?UINT64_MAX:((UINT64_C(1)<<renderer->timestamp_bits)-1);
@@ -1653,14 +1707,16 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     af_vk_refraction_prepare(renderer->swapchain.refraction,frame->command,image_index);
     if(renderer->ui)af_vk_ui_record_uploads(renderer->ui,frame->command,renderer->frame_index);
     if(frame->timestamps){vkCmdResetQueryPool(frame->command,frame->timestamps,0,5);vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,frame->timestamps,0);}
+    if(resource_config&AF_RESOURCE_RAY_QUERY)af_vk_ray_query_record(renderer->rays,renderer->frame_index,frame->command);
     renderer->shadow_draw_calls=0;renderer->shadow_passes=renderer->shadow_cached_passes=0;
     for(uint32_t layer=0;layer<shadow_view.count;++layer){
         uint64_t signature=shadow_signature(renderer,shadow_view.matrices[layer],af_scene_get_shadows(scene),uniform.shadow_params.x>.5f);
+        signature=shadow_hash(signature,&resource_config,sizeof(resource_config));
         if(frame->shadow_signatures[layer]==signature){++renderer->shadow_cached_passes;continue;}frame->shadow_signatures[layer]=signature;++renderer->shadow_passes;
         af_vk_shadows_begin(renderer->shadows,frame->command,renderer->frame_index,layer,af_scene_get_shadows(scene),frame->descriptor);
         for(size_t i=0;uniform.shadow_params.x>.5f&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(shadow_view.matrices[layer],&renderer->shadow_bounds[i]))continue;
-            af_shadow_draw draw=renderer->shadow_draws[i];const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
+            af_shadow_draw draw=renderer->shadow_draws[i];if((resource_config&AF_RESOURCE_RAY_QUERY)&&draw.ray_caster)continue;const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
             af_mat4 mvp=af_mat4_mul(shadow_view.matrices[layer],draw.model);af_vk_shadows_push(renderer->shadows,frame->command,mvp.elements,draw.skin_base,draw.alpha_mode,draw.alpha,draw.cutoff,af_vk_texture_descriptor(draw.texture));
             VkDeviceSize offset=0;vkCmdBindVertexBuffers(frame->command,0,1,&mesh->vertices.handle,&offset);
             vkCmdBindIndexBuffer(frame->command,mesh->indices.handle,0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++renderer->shadow_draw_calls;
@@ -1856,8 +1912,11 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer)
     for(uint32_t i=0;i<renderer->swapchain.image_count;++i)other+=renderer->swapchain.depths[i].allocation_bytes;
     af_vk_texture *fixed[]={renderer->white,renderer->flat_normal,renderer->environment,renderer->irradiance,renderer->brdf};for(unsigned i=0;i<5;++i)if(fixed[i])other+=af_vk_texture_info(fixed[i]).allocation_bytes;
     for(size_t i=0;i<renderer->environment_count;++i){other+=af_vk_texture_info(renderer->environments[i].sky).allocation_bytes+af_vk_texture_info(renderer->environments[i].specular).allocation_bytes+af_vk_texture_info(renderer->environments[i].diffuse).allocation_bytes;}
+    af_ray_stats ray=af_vk_ray_query_stats(renderer->rays);other+=ray.bytes;
     uint64_t post=af_vk_post_allocation_bytes(renderer->swapchain.post),shadows=af_vk_shadows_allocation_bytes(renderer->shadows)+af_vk_shadows_allocation_bytes(renderer->local_shadows),refraction=af_vk_refraction_allocation_bytes(renderer->swapchain.refraction),tracked=post+shadows+refraction+mesh_bytes+texture_bytes+other;
     return (af_engine_stats){
+        .ray_query_supported=renderer->ray_supported,.ray_traced_shadows_active=(renderer->swapchain.resource_config&AF_RESOURCE_RAY_QUERY)!=0&&!renderer->ray_failed,
+        .ray_tracing_failed=renderer->ray_failed,.ray_tracing_bytes=ray.bytes,.ray_blas_builds=ray.blas_builds,.ray_tlas_builds=ray.tlas_builds,.ray_instances=ray.instances,.ray_meshes=ray.meshes,.ray_raster_casters=renderer->ray_raster_casters,.gpu_ray_build_ms=ray.gpu_build_ms,
         .post_bytes=post,.shadow_bytes=shadows,.refraction_bytes=refraction,.mesh_bytes=mesh_bytes,.tracked_gpu_bytes=tracked,.gpu_budget_ms=renderer->gpu_budget_ms,.gpu_budget_bytes=renderer->gpu_budget_bytes,.gpu_time_over_budget=renderer->timing_valid&&renderer->gpu_ms[0]>renderer->gpu_budget_ms,.gpu_memory_over_budget=tracked>renderer->gpu_budget_bytes,.debug_view=renderer->debug_view,.effective_aa=(af_anti_aliasing)(renderer->swapchain.resource_config&AF_RESOURCE_AA_MASK),.visible_objects=renderer->visible_objects,.culled_objects=renderer->culled_objects,
         .gpu_timing_supported=renderer->timestamp_bits!=0,.gpu_timing_valid=renderer->timing_valid,
         .gpu_frame_ms=renderer->gpu_ms[0],.gpu_shadow_ms=renderer->gpu_ms[1],.gpu_scene_ms=renderer->gpu_ms[2],.gpu_post_ms=renderer->gpu_ms[3],.gpu_overlay_ms=renderer->gpu_ms[4],

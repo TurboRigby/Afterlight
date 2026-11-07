@@ -46,6 +46,10 @@ typedef struct af_engine_stats {
     uint64_t post_bytes,shadow_bytes,refraction_bytes,mesh_bytes,tracked_gpu_bytes,gpu_budget_bytes;
     double gpu_budget_ms;bool gpu_time_over_budget,gpu_memory_over_budget;
     af_debug_view debug_view;af_anti_aliasing effective_aa;
+    bool ray_query_supported,ray_traced_shadows_active,ray_tracing_failed;
+    uint64_t ray_tracing_bytes,ray_blas_builds,ray_tlas_builds;
+    size_t ray_instances,ray_meshes,ray_raster_casters;
+    double gpu_ray_build_ms;
     size_t loaded_meshes;
     size_t loaded_textures;
     uint64_t texture_bytes; /* Loaded scene textures, excluding UI/shadow maps. */

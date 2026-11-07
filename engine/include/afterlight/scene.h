@@ -102,7 +102,7 @@ const af_scene_asset *af_scene_asset_at(const af_scene *scene,size_t index);
 const af_scene_asset *af_scene_find_asset(const af_scene *scene,const char *name);
 bool af_scene_set_asset(af_scene *scene,const char *name,af_asset_kind kind,const char *path);
 
-#define AF_SCENE_FILE_VERSION 23
+#define AF_SCENE_FILE_VERSION 24
 #define AF_SCENE_FILE_MAX_BYTES (16u * 1024u * 1024u)
 #define AF_SCENE_FILE_MAX_OBJECTS 65536u
 

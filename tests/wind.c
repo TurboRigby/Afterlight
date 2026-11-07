@@ -112,7 +112,7 @@ int main(void) {
   CHECK(rejects(j));
   cJSON_SetNumberValue(cJSON_GetObjectItemCaseSensitive(root, "version"), 21);
   cJSON_DeleteItemFromObjectCaseSensitive(root, "wind");
-    cJSON *legacy_render=cJSON_GetObjectItemCaseSensitive(root,"render");cJSON_DeleteItemFromObjectCaseSensitive(legacy_render,"anti_aliasing");cJSON_DeleteItemFromObjectCaseSensitive(legacy_render,"aa_sharpness");cJSON_DeleteItemFromObjectCaseSensitive(legacy_render,"taa_history_weight");
+    cJSON *legacy_render=cJSON_GetObjectItemCaseSensitive(root,"render");cJSON_DeleteItemFromObjectCaseSensitive(legacy_render,"ray_traced_shadows");cJSON_DeleteItemFromObjectCaseSensitive(legacy_render,"anti_aliasing");cJSON_DeleteItemFromObjectCaseSensitive(legacy_render,"aa_sharpness");cJSON_DeleteItemFromObjectCaseSensitive(legacy_render,"taa_history_weight");
   cJSON *w =
       cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(root, "water"), 0);
   cJSON_DeleteItemFromObjectCaseSensitive(w, "ripple_scale");

@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.24)
-project(Afterlight VERSION 0.21.0 LANGUAGES C)
+project(Afterlight VERSION 0.22.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -31,6 +31,15 @@ foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fulls
     )
     list(APPEND afterlight_shader_headers "${shader_header}")
 endforeach()
+
+set(ray_shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/mesh_ray_frag.h")
+add_custom_command(OUTPUT "${ray_shader_header}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND Vulkan::glslangValidator --target-env vulkan1.2 --spirv-val -DAF_RAY_QUERY=1
+        --vn af_mesh_ray_frag -o "${ray_shader_header}" "${PROJECT_SOURCE_DIR}/engine/shaders/mesh.frag"
+    DEPENDS engine/shaders/mesh.frag engine/shaders/water_fog.glsl engine/shaders/water_ripples.glsl Vulkan::glslangValidator
+    COMMENT "Compiling optional ray-query sun-shadow shader" VERBATIM)
+list(APPEND afterlight_shader_headers "${ray_shader_header}")
 
 add_library(afterlight_json STATIC third_party/cjson/cJSON.c)
 target_compile_definitions(afterlight_json PRIVATE ENABLE_LOCALES=1 CJSON_NESTING_LIMIT=32 CJSON_HIDE_SYMBOLS)
@@ -104,6 +113,7 @@ add_library(afterlight STATIC
     engine/src/refraction_vulkan.c
     engine/src/post_vulkan.c
     engine/src/renderer_vulkan.c
+    engine/src/ray_query_vulkan.c
 )
 add_library(Afterlight::Engine ALIAS afterlight)
 target_include_directories(afterlight PUBLIC engine/include PRIVATE
@@ -584,7 +594,25 @@ add_executable(afterlight_renderer_benchmark tests/renderer_benchmark.c)
 target_include_directories(afterlight_renderer_benchmark PRIVATE engine/src sandbox)
 target_link_libraries(afterlight_renderer_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_renderer_benchmark)
+add_executable(afterlight_ray_shadow_benchmark tests/ray_shadows.c)
+target_include_directories(afterlight_ray_shadow_benchmark PRIVATE engine/src sandbox)
+target_link_libraries(afterlight_ray_shadow_benchmark PRIVATE Afterlight::Engine)
+afterlight_warnings(afterlight_ray_shadow_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_ray_shadows_test tests/ray_shadows.c)
+    target_include_directories(afterlight_ray_shadows_test PRIVATE engine/src sandbox)
+    target_link_libraries(afterlight_ray_shadows_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_ray_shadows_test)
+    add_test(NAME afterlight.water_ray_shadows COMMAND afterlight_water_render_test)
+    set_tests_properties(afterlight.water_ray_shadows PROPERTIES TIMEOUT 60 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;AFTERLIGHT_TEST_RAY_WATER=1;AFTERLIGHT_TEST_AA=taa")
+    add_test(NAME afterlight.ray_shadows COMMAND afterlight_ray_shadows_test)
+    add_test(NAME afterlight.ray_fallback COMMAND afterlight_ray_shadows_test)
+    add_test(NAME afterlight.ray_allocation_failure COMMAND afterlight_ray_shadows_test)
+    add_test(NAME afterlight.ray_pipeline_fallback COMMAND afterlight_ray_shadows_test)
+    set_tests_properties(afterlight.ray_shadows afterlight.ray_fallback afterlight.ray_allocation_failure afterlight.ray_pipeline_fallback PROPERTIES TIMEOUT 90 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    set_property(TEST afterlight.ray_fallback APPEND PROPERTY ENVIRONMENT "AFTERLIGHT_DISABLE_RAY_QUERY=1")
+    set_property(TEST afterlight.ray_allocation_failure APPEND PROPERTY ENVIRONMENT "AFTERLIGHT_TEST_RAY_FAIL_ALLOC=2")
+    set_property(TEST afterlight.ray_pipeline_fallback APPEND PROPERTY ENVIRONMENT "AFTERLIGHT_TEST_RAY_PIPELINE_FAIL=1")
     add_executable(afterlight_allocation_failure_test tests/allocation_failure.c)
     target_link_libraries(afterlight_allocation_failure_test PRIVATE Afterlight::Engine SDL3::SDL3)
     afterlight_warnings(afterlight_allocation_failure_test)

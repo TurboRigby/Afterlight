@@ -914,6 +914,10 @@ static void environment_panel(editor *app,float width,float height){
         int aa=nk_combo(ctx,aa_modes,4,(int)render.anti_aliasing,26,nk_vec2(280,150));if(aa!=(int)render.anti_aliasing){render.anti_aliasing=(af_anti_aliasing)aa;changed=true;}
         if(render.anti_aliasing==AF_AA_TAA){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"History weight",0,&render.taa_history_weight,.98f,.05f,.005f)!=0;}
         if(render.anti_aliasing!=AF_AA_OFF){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"AA sharpening",0,&render.aa_sharpness,1,.05f,.005f)!=0;}
+        nk_layout_row_dynamic(ctx,28,1);nk_bool ray_shadows=render.ray_traced_shadows;if(nk_checkbox_label(ctx,"Ray-traced sun shadows (experimental)",&ray_shadows)){render.ray_traced_shadows=ray_shadows!=0;changed=true;}
+        af_engine_stats ray_stats=af_engine_get_stats(app->engine);
+        label(ctx,ray_stats.ray_query_supported?"Hardware ray queries available; unsupported casters use maps.":"Hardware ray queries unavailable: using raster shadows.",38);
+        if(ray_stats.ray_tracing_failed)label(ctx,"Ray resources unavailable: raster fallback active.",28);
         label(ctx,"Sun / directional light",28);
         float heading=atan2f(-sun.direction.z,-sun.direction.x)*180/AF_PI;
         float elevation=atan2f(-sun.direction.y,hypotf(sun.direction.x,sun.direction.z))*180/AF_PI;
@@ -971,6 +975,8 @@ static void performance_panel(editor *app,float width,float height)
         snprintf(text,sizeof(text),"Simulation %" PRIu64 " ticks / %u steps / %.3f alpha",stats.simulation_ticks,stats.simulation_steps,stats.simulation_alpha);label(ctx,text,24);
         snprintf(text,sizeof(text),"Dropped catch-up %.3f s",stats.simulation_dropped_seconds);label(ctx,text,24);
         static const char *views[]={"Shaded","Depth (log scale)","Motion vectors","Previous history","History rejection"};nk_layout_row_dynamic(ctx,28,1);int view=nk_combo(ctx,views,5,(int)stats.debug_view,26,nk_vec2(320,190));if(view!=(int)stats.debug_view)af_engine_set_debug_view(app->engine,(af_debug_view)view);
+        snprintf(text,sizeof(text),"Ray shadows: %s / %zu instances / %zu meshes",stats.ray_traced_shadows_active?"active":stats.ray_query_supported?"off":"unsupported",stats.ray_instances,stats.ray_meshes);label(ctx,text,26);
+        snprintf(text,sizeof(text),"Ray AS %.2f MiB / build %.3f ms / %zu raster casters",(double)stats.ray_tracing_bytes/1048576,stats.gpu_ray_build_ms,stats.ray_raster_casters);label(ctx,text,26);
         snprintf(text,sizeof(text),"Visible %zu / culled %zu",stats.visible_objects,stats.culled_objects);label(ctx,text,24);
         snprintf(text,sizeof(text),"Tracked GPU %.1f / %.0f MiB%s",(double)stats.tracked_gpu_bytes/1048576,(double)stats.gpu_budget_bytes/1048576,stats.gpu_memory_over_budget?" OVER BUDGET":"");label(ctx,text,24);
         snprintf(text,sizeof(text),"Post %.1f / shadows %.1f / refraction %.1f MiB",(double)stats.post_bytes/1048576,(double)stats.shadow_bytes/1048576,(double)stats.refraction_bytes/1048576);label(ctx,text,24);

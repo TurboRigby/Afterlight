@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='afterlight-water-export-') as temp:
         run(command);shutil.rmtree(source);moved=folder/'relocated water';output.rename(moved)
         resources=moved/'Game.app/Contents/Resources' if sys.platform=='darwin' else moved
         for name in names:
-            scene=json.loads((resources/'scenes'/(name+'.afterlight.json')).read_text());assert scene['water'] and scene['version'] in (17,18,19,20,21,22,23)
+            scene=json.loads((resources/'scenes'/(name+'.afterlight.json')).read_text());assert scene['water'] and scene['version'] in (17,18,19,20,21,22,23,24)
         packed=json.loads((resources/'game.afterlight.project').read_text())
         run([a.play_test,resources/packed['startup_scene'] if a.courses else resources/'scenes',resources/packed['game_module'],resources/'game.afterlight.project'])
         exe=moved/'Game.app/Contents/MacOS/afterlight_player' if sys.platform=='darwin' else moved/('afterlight_player.exe' if sys.platform=='win32' else 'run.sh')

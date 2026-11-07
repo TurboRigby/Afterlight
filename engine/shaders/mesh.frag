@@ -1,5 +1,9 @@
-#version 450
+#version 460
 #extension GL_GOOGLE_include_directive : require
+#ifdef AF_RAY_QUERY
+#extension GL_EXT_ray_query : require
+layout(set=0,binding=10) uniform accelerationStructureEXT sun_scene;
+#endif
 /* SPDX-License-Identifier: MPL-2.0
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -61,7 +65,7 @@ int cascade_index(float depth){
     for(int i=0;i<count-1;++i)if(depth>frame.cascade_splits[i])layer=i+1;
     return layer;
 }
-float shadow_visibility(vec3 n){
+float raster_shadow_visibility(vec3 n){
     if(frame.shadow_params.x<0.5||draw.params.y<0.5||((uint(draw.params.x)&1u)!=0u))return 1;
     float depth=dot(world_position-frame.camera_position.xyz,frame.camera_forward.xyz);
     int count=int(frame.cascade_params.x);
@@ -74,6 +78,25 @@ float shadow_visibility(vec3 n){
         float next=layer+1<count?sample_shadow(layer+1,receiver):1.0;
         visibility=mix(visibility,next,smoothstep(end-width,end,depth));
     }return visibility;
+}
+float shadow_visibility(vec3 n){
+    float raster=raster_shadow_visibility(n);
+#ifdef AF_RAY_QUERY
+    if(frame.shadow_params.x<.5||draw.params.y<.5||((uint(draw.params.x)&1u)!=0u))return 1;
+    vec3 l=-frame.direction_intensity.xyz;
+    if(dot(n,l)<=0)return raster;
+    // Geometric-normal offset avoids normal-map self-intersections.
+    vec3 geometric=normalize(cross(dFdx(world_position),dFdy(world_position)));
+    if(dot(geometric,l)<0)geometric=-geometric;
+    float bias=max(.001,frame.shadow_params.w*.1);
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query,sun_scene,gl_RayFlagsTerminateOnFirstHitEXT|gl_RayFlagsOpaqueEXT,
+        255,world_position+geometric*bias,.001,l,10000.0);
+    while(rayQueryProceedEXT(query)){}
+    return rayQueryGetIntersectionTypeEXT(query,true)==gl_RayQueryCommittedIntersectionNoneEXT?raster:0.0;
+#else
+    return raster;
+#endif
 }
 bool water_surface(){return (uint(draw.params.x)&(1u<<19u))!=0u;}
 #include "water_ripples.glsl"
