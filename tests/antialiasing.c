@@ -96,7 +96,7 @@ static void update(af_engine *e, double dt, void *data) {
   } else
     for (unsigned i = 0; i < sizeof(pixels); i += 4)
       CHECK(pixels[i] < 3 && pixels[i + 1] < 3 && pixels[i + 2] < 3);
-  if (++s->mode > (unsigned)AF_AA_FXAA) {
+  if (++s->mode > (unsigned)AF_AA_SMAA) {
     s->mode = 0;
     if (++s->view == 1) {
       CHECK(af_engine_set_window_size(e, 640, 480));

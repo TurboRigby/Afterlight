@@ -12,6 +12,7 @@ copyright, license and warranty notices when redistributing these components.
 | stb_image 2.30 | `third_party/stb/` | MIT option; see its dual `LICENSE` |
 | Fira Sans Regular | `editor/assets/` | SIL OFL 1.1; see `OFL.txt` |
 | SDL3 | External build/runtime dependency | zlib; preserve the supplied `LICENSE.txt` |
+| SMAA shader and lookup tables | `third_party/smaa` | MIT; original headers and LICENSE retained |
 | Vulkan Loader | External runtime dependency | Apache-2.0 and upstream exceptions; preserve its supplied license/notices |
 | MoltenVK (macOS) | External runtime dependency | Apache-2.0; preserve its supplied license/notices |
 

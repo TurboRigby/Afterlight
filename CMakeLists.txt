@@ -25,7 +25,7 @@ foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fulls
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
         COMMAND Vulkan::glslangValidator --target-env vulkan1.1 --spirv-val
             --vn af_${shader_name} -o "${shader_header}" "${shader_source}"
-        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/water_ripples.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/fxaa.glsl" Vulkan::glslangValidator
+        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/water_ripples.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/fxaa.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/smaa.glsl" "${PROJECT_SOURCE_DIR}/third_party/smaa/SMAA.hlsl" Vulkan::glslangValidator
         COMMENT "Compiling Afterlight ${shader} shader"
         VERBATIM
     )
@@ -227,13 +227,15 @@ endif()
 # Keep dependency notices with runnable applications.
 if(APPLE)
     foreach(target afterlight_sandbox afterlight_editor)
-        target_sources(${target} PRIVATE third_party/stb/LICENSE third_party/cjson/LICENSE)
+        target_sources(${target} PRIVATE third_party/stb/LICENSE third_party/cjson/LICENSE third_party/smaa/LICENSE)
     endforeach()
+    set_source_files_properties(third_party/smaa/LICENSE PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/licenses/smaa")
     set_source_files_properties(third_party/stb/LICENSE PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/licenses/stb")
     set_source_files_properties(third_party/cjson/LICENSE PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/licenses/cjson")
 else()
     add_custom_target(afterlight_license_copy
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/licenses/stb" "${CMAKE_CURRENT_BINARY_DIR}/licenses/cjson" "${CMAKE_CURRENT_BINARY_DIR}/licenses/cgltf"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/licenses/smaa" "${CMAKE_CURRENT_BINARY_DIR}/licenses/stb" "${CMAKE_CURRENT_BINARY_DIR}/licenses/cjson" "${CMAKE_CURRENT_BINARY_DIR}/licenses/cgltf"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/third_party/smaa/LICENSE" "${CMAKE_CURRENT_BINARY_DIR}/licenses/smaa/LICENSE"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb/LICENSE" "${CMAKE_CURRENT_BINARY_DIR}/licenses/stb/LICENSE"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cjson/LICENSE" "${CMAKE_CURRENT_BINARY_DIR}/licenses/cjson/LICENSE"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf/LICENSE" "${CMAKE_CURRENT_BINARY_DIR}/licenses/cgltf/LICENSE")
@@ -356,7 +358,7 @@ if(APPLE)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}" MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
     set_source_files_properties("${obstacle_scene}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/scenes")
     target_sources(afterlight_editor PRIVATE "${obstacle_scene}")
-    target_sources(afterlight_playground PRIVATE "${obstacle_scene}" third_party/stb/LICENSE third_party/cjson/LICENSE)
+    target_sources(afterlight_playground PRIVATE "${obstacle_scene}" third_party/stb/LICENSE third_party/cjson/LICENSE third_party/smaa/LICENSE)
     add_custom_command(TARGET afterlight_playground_game POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:afterlight_playground_game>" "${CMAKE_CURRENT_BINARY_DIR}/afterlight_editor.app/Contents/Resources/game/$<TARGET_FILE_NAME:afterlight_playground_game>")
@@ -382,7 +384,7 @@ if(APPLE)
     foreach(target afterlight_editor afterlight_sandbox afterlight_playground)
         target_sources(${target} PRIVATE third_party/cgltf/LICENSE)
     endforeach()
-    target_sources(afterlight_playground PRIVATE ${afterlight_sound_assets} editor/assets/FiraSans-Regular.ttf editor/assets/OFL.txt third_party/nuklear/LICENSE)
+    target_sources(afterlight_playground PRIVATE third_party/smaa/LICENSE ${afterlight_sound_assets} editor/assets/FiraSans-Regular.ttf editor/assets/OFL.txt third_party/nuklear/LICENSE)
 else()
     add_dependencies(afterlight_playground afterlight_sample_assets_copy afterlight_editor_assets)
 endif()
@@ -462,7 +464,7 @@ target_link_libraries(afterlight_player PRIVATE afterlight_editor_document after
 afterlight_warnings(afterlight_player)
 if(APPLE)
     set_target_properties(afterlight_player PROPERTIES MACOSX_BUNDLE TRUE MACOSX_BUNDLE_BUNDLE_NAME "Afterlight Player" MACOSX_BUNDLE_GUI_IDENTIFIER "dev.afterlight.player" MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}" MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
-    target_sources(afterlight_player PRIVATE editor/assets/FiraSans-Regular.ttf editor/assets/OFL.txt third_party/nuklear/LICENSE third_party/stb/LICENSE third_party/cjson/LICENSE third_party/cgltf/LICENSE)
+    target_sources(afterlight_player PRIVATE editor/assets/FiraSans-Regular.ttf editor/assets/OFL.txt third_party/nuklear/LICENSE third_party/stb/LICENSE third_party/cjson/LICENSE third_party/cgltf/LICENSE third_party/smaa/LICENSE)
 else()
     add_dependencies(afterlight_player afterlight_editor_assets afterlight_license_copy)
 endif()

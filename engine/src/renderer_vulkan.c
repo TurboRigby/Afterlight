@@ -960,7 +960,7 @@ static bool create_swapchain(af_renderer *renderer)
     }
     VkImageView *depth_views=calloc(swapchain->image_count,sizeof(*depth_views));if(!depth_views)return false;
     for(uint32_t i=0;i<swapchain->image_count;++i)depth_views[i]=swapchain->depths[i].view;
-    swapchain->post=af_vk_post_create(renderer->physical_device,renderer->device,extent,swapchain->image_count,swapchain->views,format.format,swapchain->render_pass,depth_views);
+    swapchain->post=af_vk_post_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,extent,swapchain->image_count,swapchain->views,format.format,swapchain->render_pass,depth_views);
     free(depth_views);swapchain->refraction=af_vk_refraction_create(renderer->physical_device,renderer->device,extent,swapchain->image_count,swapchain->depth_format);if(!swapchain->post||!swapchain->refraction||!create_pipeline(renderer)||!create_sky_pipeline(renderer))return false;
     if (renderer->ui && !af_vk_ui_create_pipeline(renderer->ui, af_vk_post_output_pass(swapchain->post))) return false;
     renderer->resize_pending = false;

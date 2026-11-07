@@ -910,8 +910,8 @@ static void environment_panel(editor *app,float width,float height){
         nk_layout_row_dynamic(ctx,32,2);
         if(nk_button_label(ctx,"Day preset")){ed_environment_preset(scene,false,&sun,&render);changed=preset=true;}
         if(nk_button_label(ctx,"Night preset")){ed_environment_preset(scene,true,&sun,&render);changed=preset=true;}
-        label(ctx,"Anti-aliasing",28);static const char *aa_modes[]={"Off","FXAA"};nk_layout_row_dynamic(ctx,28,1);
-        int aa=nk_combo(ctx,aa_modes,2,(int)render.anti_aliasing,26,nk_vec2(280,100));if(aa!=(int)render.anti_aliasing){render.anti_aliasing=(af_anti_aliasing)aa;changed=true;}
+        label(ctx,"Anti-aliasing",28);static const char *aa_modes[]={"Off","FXAA","SMAA"};nk_layout_row_dynamic(ctx,28,1);
+        int aa=nk_combo(ctx,aa_modes,3,(int)render.anti_aliasing,26,nk_vec2(280,100));if(aa!=(int)render.anti_aliasing){render.anti_aliasing=(af_anti_aliasing)aa;changed=true;}
         if(render.anti_aliasing!=AF_AA_OFF){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"AA sharpening",0,&render.aa_sharpness,1,.05f,.005f)!=0;}
         label(ctx,"Sun / directional light",28);
         float heading=atan2f(-sun.direction.z,-sun.direction.x)*180/AF_PI;

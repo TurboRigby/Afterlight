@@ -23,7 +23,7 @@ assert (resources / 'source/afterlight-source.zip').read_bytes() == args.archive
 with zipfile.ZipFile(args.archive) as archive:
     names = set(archive.namelist())
     assert {'LICENSE', 'NOTICE', 'CMakeLists.txt', 'scripts/package_source.py',
-            'game/playground_game.c', 'editor/assets/OFL.txt', 'third_party/cgltf/cgltf.h'} <= names
+            'game/playground_game.c', 'editor/assets/OFL.txt', 'third_party/cgltf/cgltf.h', 'third_party/smaa/SMAA.hlsl', 'third_party/smaa/AreaTex.h', 'third_party/smaa/SearchTex.h'} <= names
     for name in names:
         assert not any(part in {'.git', 'build', '__pycache__', '.cache'} for part in pathlib.PurePosixPath(name).parts), name
         assert 'CMakeUserPresets' not in name and not name.endswith(('.source.zip', '.pyc')), name
@@ -33,7 +33,7 @@ with zipfile.ZipFile(args.archive) as archive:
             if path.suffix in {'.c', '.h', '.vert', '.frag', '.glsl', '.py', '.cmake'}:
                 assert b'SPDX-License-Identifier: MPL-2.0' in path.read_bytes()[:2048], path
                 assert path.relative_to(root).as_posix() in names, path
-for folder, upstream in (('cgltf', 'cgltf'), ('cjson', 'cjson'), ('nuklear', 'nuklear'), ('stb', 'stb')):
+for folder, upstream in (('smaa', 'smaa'), ('cgltf', 'cgltf'), ('cjson', 'cjson'), ('nuklear', 'nuklear'), ('stb', 'stb')):
     assert (resources / 'licenses' / folder / 'LICENSE').read_bytes() == (root / 'third_party' / upstream / 'LICENSE').read_bytes()
 assert (resources / 'licenses/firasans/OFL.txt').read_bytes() == (root / 'editor/assets/OFL.txt').read_bytes()
 print('Licensing: official MPL, original file headers, corresponding source and retained third-party notices passed.')
