@@ -633,3 +633,7 @@ Version 24 adds required Boolean `render.ray_traced_shadows`. Older versions loa
 with it disabled. Clone, undo and saved/exported scenes retain the request; actual
 GPU activation depends on capabilities and resource availability. See the
 [ray-shadow guide](development-022.md). The existing AA fields remain unchanged.
+
+Version 24 also accepts optional Boolean `render.ray_traced_water_reflections`.
+A missing field selects environment reflections. The editor writes the field
+when saving.

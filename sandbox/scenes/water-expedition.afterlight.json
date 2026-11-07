@@ -7867,7 +7867,7 @@
     }
   ],
   "format": "afterlight.scene",
-  "version": 22,
+  "version": 24,
   "next_id": "56",
   "render": {
     "exposure": 0,
@@ -7886,7 +7886,12 @@
     "skybox_intensity": 0.8,
     "underwater": true,
     "refraction": true,
-    "refraction_strength": 1
+    "refraction_strength": 1,
+    "anti_aliasing": "off",
+    "aa_sharpness": 0.1,
+    "taa_history_weight": 0.9,
+    "ray_traced_shadows": false,
+    "ray_traced_water_reflections": true
   },
   "local_lights": [],
   "shadows": {

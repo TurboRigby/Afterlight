@@ -48,7 +48,7 @@ host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 24 modules.
+to use newly built ABI 25 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -211,3 +211,7 @@ callbacks. The requested scene preference and actual active path are separate;
 check `ray_traced_shadows_active` and `ray_query_supported`. The
 [ray lab](../game/ray_shadow_game.c) demonstrates toggling and reporting fallback.
 Scene format is 24; rebuild modules and restart old processes.
+
+ABI 25 adds `af_render_settings.ray_traced_water_reflections` and the active
+reflection flag in `af_engine_stats`. The C game ABI is independent of the
+0.22 release version.

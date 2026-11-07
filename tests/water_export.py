@@ -28,4 +28,10 @@ with tempfile.TemporaryDirectory(prefix='afterlight-water-export-') as temp:
         for name in names:
             packed['startup_scene']='scenes/'+name+'.afterlight.json';(resources/'game.afterlight.project').write_text(json.dumps(packed))
             log=run([exe,'--frames','15','--validation']);assert '0 validation errors' in log
+            if name=='water-expedition':
+                scene=json.loads((resources/'scenes'/f'{name}.afterlight.json').read_text())
+                assert scene['render']['ray_traced_water_reflections']
+                assert 'Ray water reflections:' in log
+                if os.environ.get('AFTERLIGHT_REQUIRE_RAY_QUERY')=='1':
+                    assert 'Ray water reflections: hardware ray queries.' in log,log
 print('Water export: sanitizer runtime rejected.' if a.sanitized else 'Water export: courses/labs retain water definitions, rebuild transient surfaces and run C Play after source removal and relocation.')

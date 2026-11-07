@@ -9,6 +9,10 @@ player_template=copy.deepcopy(next(o for o in json.loads((root/'sandbox/scenes/p
 def create(name,hard):
     s=copy.deepcopy(base);s.update(version=22,objects=[],water=[],assets=[],collider_parts=[],next_part='1',joints=[],next_joint='1',next_id='1')
     s['render'].update(underwater=True,refraction=True,refraction_strength=1,environment_enabled=True,environment_intensity=.5,skybox=True,skybox_intensity=.8,tone_mapping=True)
+    if hard:
+        s['version']=24
+        s['render'].update(anti_aliasing='off',aa_sharpness=.1,taa_history_weight=.9,
+                           ray_traced_shadows=False,ray_traced_water_reflections=True)
     s['wind']=dict(enabled=True,direction=[.8,0,-.6],speed=4,gust_strength=.35,gust_frequency=.25,air_density=1.225)
     def obj(label,p,half=None,color=(.3,.4,.45,1),parent='0',density=0):
         o=copy.deepcopy(template);o.update(id=s['next_id'],name=label,parent=parent,mesh='cube' if half else '__node',position=p,rotation=[0,0,0],scale=[v/.65 for v in half] if half else [1,1,1]);s['next_id']=str(int(s['next_id'])+1);o['collider'].update(type='box' if half else 'none',enabled=bool(half),trigger=False,half_extents=[.65]*3,center=[0,0,0]);o['body'].update(enabled=density>0,type='dynamic' if density else 'static',mass=density*8*half[0]*half[1]*half[2] if density else 1,velocity=[0,0,0],angular_velocity=[0,0,0],continuous=True,restitution=.02);o['material']['base_color']=list(color);s['objects'].append(o);return o

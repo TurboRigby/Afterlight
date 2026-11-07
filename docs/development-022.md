@@ -1,4 +1,4 @@
-# Optional ray-traced sun shadows in 0.22
+# Optional ray-traced sun shadows and water reflections in 0.22
 
 The first hardware ray-tracing effect is deterministic hard sun shadows, using
 Vulkan ray queries in the existing raster material shader.
@@ -45,6 +45,36 @@ The TLAS uses rigid geometry only.
 scene's master shadow toggle control participation. The traced contribution
 uses hard edges and deterministic sampling. Ordinary TAA filters the result.
 
+## Try water reflections
+
+```sh
+cmake --build --preset debug --target run_water-expedition_editor
+```
+
+The expedition requests hardware reflections for its pools and river. Use
+**Environment → Ray-traced water reflections** to compare with the environment
+map. Both ray options can run independently or together. **Performance** shows
+which effects are active.
+
+The water shader traces a single reflection ray from each eligible visible
+surface sample. Ripple normals bend the ray, and Fresnel and roughness control
+how the result blends into the water. Rays can hit off-screen opaque rigid
+geometry up to 150 world units away. A miss samples the environment map. Rough
+water blends toward that map. Unsupported devices also use the environment map.
+
+Hit shading uses vertex and material base colors, emission, and an approximation
+of sun and environment lighting. A reflection can therefore look simpler than
+the directly rendered object. Skinned, cutout and translucent objects are
+outside this first reflection path. The feature traces the upper surfaces of
+pools and rivers. Droplets use environment lighting. Refraction remains a
+separate optical pass.
+
+Shadow and reflection rays share acceleration structures and use separate
+instance masks. A rigid object can appear in reflections even when its material
+disables shadow casting. Per-frame hit records contain material data and
+addresses for the existing mesh buffers, so material edits can update the
+reflected color without rebuilding the geometry.
+
 ## Resources and synchronization
 
 The optional path requires Vulkan 1.2 plus `VK_KHR_acceleration_structure`,
@@ -71,7 +101,8 @@ for that engine session. Restarting retries the optional path.
 ## Compatibility
 
 Scene format is **24** and requires Boolean `render.ray_traced_shadows`. Formats
-1–23 still load with rays disabled. Game module ABI is **24**. Rebuild modules and
+1–23 still load with rays disabled. The optional Boolean
+`render.ray_traced_water_reflections` defaults to off in existing scenes. Game module ABI is **25**. Rebuild modules and
 restart old editor/player processes. The C host adds `get_render_settings` and
 `get_stats` so game code can select an effect and report its actual availability.
 Older progress files remain subject to the existing ABI compatibility check.
@@ -115,11 +146,11 @@ initial AS construction and FIFO presentation.
 
 [Recorded Linux Release benchmark](benchmarks/022-linux-ray-shadows.csv)
 
-The broad Debug sweeps covered 174 macOS and 173 Linux tests. The source archive
+The initial shadow-only Debug sweeps covered 174 macOS and 173 Linux tests. The source archive
 changed during those runs, so the licensing check was rerun against the rebuilt
 archive. The final ray suite covered hardware queries on Linux and raster
 fallback on both platforms. The relocated Release lab passed on both platforms.
-The macOS ASan/UBSan selection passed 23 checks. The Linux selection passed after
+The initial macOS ASan/UBSan selection passed 23 checks. The Linux selection passed after
 aligning the exporter with the sanitizer policy and rerunning the failed export
 check. The Linux exporter now rejects ASan runtime dependencies in the player
 or game module.
