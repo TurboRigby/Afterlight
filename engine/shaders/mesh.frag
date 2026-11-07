@@ -196,6 +196,7 @@ void main(){
     vec3 eye=frame.camera_position.xyz-world_position;
     vec3 v=dot(eye,eye)>1e-12?normalize(eye):n;
     bool water=water_surface();
+    bool bulk_water=water&&(uint(draw.params.x)&(1u<<18u))!=0u;
     if(water&&(uint(draw.params.x)&(1u<<21u))!=0u){
         bool inside=(uint(draw.params.x)&(1u<<23u))!=0u;
         if(inside?dot(n,v)>=0:dot(n,v)<=0)discard;
@@ -205,8 +206,12 @@ void main(){
     vec4 mr=texture(metallic_roughness_texture,uv);
     float roughness=draw.surface.x*mr.g,metal=water?0:draw.surface.y*mr.b;
     vec3 ambient=base.rgb*frame.color_ambient.w*(draw.params.z>0.5?1.0-metal:1.0);
-    vec3 output_rgb=((uint(draw.params.x)&1u)!=0u)?base.rgb:ambient+direct_light(base.rgb,n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w,roughness,metal)*shadow_visibility(n);
-    if(water)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*frame.color_ambient.w+water_scatter(n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w)*shadow_visibility(n);
+    float sun_visibility=shadow_visibility(n);
+    vec3 output_rgb=((uint(draw.params.x)&1u)!=0u)?base.rgb:ambient+direct_light(base.rgb,n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w,roughness,metal)*sun_visibility;
+    // The scattering term approximates the whole path through the water.
+    // A hard shadow at the entry point cannot describe visibility along that
+    // path. Applying it stamps a second silhouette over the shadowed pool bed.
+    if(water)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*frame.color_ambient.w+water_scatter(n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w)*(bulk_water?1.0:sun_visibility);
     if(((uint(draw.params.x)&1u)==0u))for(int i=0;i<int(frame.light_count.x);++i){
         LocalLight light=frame.lights[i];vec3 offset=light.position_range.xyz-world_position;
         float distance_squared=dot(offset,offset),distance_to_light=sqrt(distance_squared);
@@ -218,8 +223,9 @@ void main(){
             float blend=clamp((cone-light.params.x)/max(light.direction_inner.w-light.params.x,0.00001),0.0,1.0);
             attenuation*=blend*blend*(3.0-2.0*blend);
         }
-        if(water)output_rgb+=water_scatter(n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation)*local_visibility(light,n);
-        output_rgb+=direct_light(base.rgb,n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation,roughness,metal)*local_visibility(light,n);
+        float visibility=local_visibility(light,n);
+        if(water)output_rgb+=water_scatter(n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation)*(bulk_water?1.0:visibility);
+        output_rgb+=direct_light(base.rgb,n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation,roughness,metal)*visibility;
     }
     if(((uint(draw.params.x)&1u)==0u))output_rgb+=environment_light(base.rgb,n,v,roughness,metal);
     if(water&&frame.render_params.z>0)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*textureLod(irradiance_map,environment_uv(n),0).rgb*frame.render_params.z;
