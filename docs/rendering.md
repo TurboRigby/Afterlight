@@ -105,3 +105,8 @@ IOR and strength bend the lookup, viewport bounds clamp it, and foreground depth
 prevents dragging nearby opaque objects into the water. Refraction covers visible
 opaque geometry; off-screen objects and layered transparent refraction are not
 reconstructed. Both effects can be disabled in scene render settings.
+
+Pools/rivers now have visible side and bottom boundaries as well as their top.
+A filtered world-space ripple normal texture responds to wind and simulation time.
+It changes optical shading without an external image dependency; see the
+[0.19 guide](development-019.md) for controls and approximations.

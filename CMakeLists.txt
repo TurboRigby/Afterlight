@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.24)
-project(Afterlight VERSION 0.18.0 LANGUAGES C)
+project(Afterlight VERSION 0.19.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -25,7 +25,7 @@ foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fulls
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
         COMMAND Vulkan::glslangValidator --target-env vulkan1.1 --spirv-val
             --vn af_${shader_name} -o "${shader_header}" "${shader_source}"
-        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" Vulkan::glslangValidator
+        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/water_ripples.glsl" Vulkan::glslangValidator
         COMMENT "Compiling Afterlight ${shader} shader"
         VERBATIM
     )
@@ -56,6 +56,8 @@ add_library(afterlight STATIC
     engine/src/body.c
     engine/src/water.c
     engine/src/water_io.c
+    engine/src/wind.c
+    engine/src/physics_wind.c
     engine/src/water_particles.c
     engine/src/water_particle_mesh.c
     engine/src/water_river.c
@@ -573,6 +575,17 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    add_executable(afterlight_water_contact_render_test tests/water_contact_render.c)
+    target_include_directories(afterlight_water_contact_render_test PRIVATE engine/src sandbox)
+    target_link_libraries(afterlight_water_contact_render_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_contact_render_test)
+    add_test(NAME afterlight.water_contact_render COMMAND afterlight_water_contact_render_test)
+    set_tests_properties(afterlight.water_contact_render PROPERTIES TIMEOUT 40 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_executable(afterlight_wind_test tests/wind.c editor/document.c)
+    target_include_directories(afterlight_wind_test PRIVATE editor third_party/cjson)
+    target_link_libraries(afterlight_wind_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_wind_test)
+    add_test(NAME afterlight.wind COMMAND afterlight_wind_test)
     add_executable(afterlight_water_volume_test tests/water_volume.c)
     target_include_directories(afterlight_water_volume_test PRIVATE engine/src)
     target_link_libraries(afterlight_water_volume_test PRIVATE Afterlight::Engine)

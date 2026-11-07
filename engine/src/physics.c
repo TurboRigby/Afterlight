@@ -8,6 +8,7 @@
 af_physics *af_physics_create(void) {
     return calloc(1, sizeof(af_physics));
 }
+double af_physics_time(const af_physics *p){return p?p->simulation_time:0;}
 void af_physics_destroy(af_physics *p) {
     if(p){wa_destroy(p->water);free(p->water);}
     free(p);
@@ -382,6 +383,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
     float h = dt / (float)steps;
     p->stats.substeps = steps;
     for (unsigned sub = 0; sub < steps; ++sub) {
+        ph_wind_step(p,h);
         ph_hold(p, h);
         for (size_t i = 0; i < p->count; ++i) {
             ph_body *b = &p->bodies[i];
@@ -406,6 +408,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
             return fail(p, "Physics exceeds 8192 contact points.");
         stamp = ph_clock(p);
         ph_solve(p, h);
+        p->simulation_time+=h;
         p->stats.solver_ms += ph_clock(p) - stamp;
     }
     ph_sleep(p, dt);

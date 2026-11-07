@@ -22,6 +22,7 @@ typedef struct af_water {
     af_vec3 path[AF_WATER_MAX_PATH];
     float particle_spacing, initial_volume, emission_rate, viscosity;
     af_vec3 emission_velocity;
+    float ripple_scale,ripple_strength;
 } af_water;
 typedef struct af_water_sample {
     bool inside;

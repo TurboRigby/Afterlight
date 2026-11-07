@@ -268,3 +268,10 @@ time, water controls and the receiving-cup objective. All markers are normal
 scene objects. Rendering controls include underwater absorption, scene refraction
 and its strength. Edit/Stop and history keep authored water definitions separate
 from transient Play state.
+
+## Wind and ripple detail (0.19)
+
+The global Wind controls below the selected object expose enable, heading, speed,
+gust strength/frequency and air density. Water controls expose ripple size/detail;
+local wave forcing is separate from global wind. These edits support undo and
+scene persistence. Play advances wind, waves and ripple detail; pause freezes them.

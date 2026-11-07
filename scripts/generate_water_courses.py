@@ -7,14 +7,15 @@ base=json.loads((root/'sandbox/scenes/water-pool.afterlight.json').read_text())
 template=copy.deepcopy(base['objects'][0])
 player_template=copy.deepcopy(next(o for o in json.loads((root/'sandbox/scenes/physics-drop.afterlight.json').read_text())['objects'] if o['gameplay']['player']['enabled']))
 def create(name,hard):
-    s=copy.deepcopy(base);s.update(version=21,objects=[],water=[],assets=[],collider_parts=[],next_part='1',joints=[],next_joint='1',next_id='1')
-    s['render'].update(underwater=True,refraction=True,refraction_strength=1)
+    s=copy.deepcopy(base);s.update(version=22,objects=[],water=[],assets=[],collider_parts=[],next_part='1',joints=[],next_joint='1',next_id='1')
+    s['render'].update(underwater=True,refraction=True,refraction_strength=1,environment_enabled=True,environment_intensity=.5,skybox=True,skybox_intensity=.8,tone_mapping=True)
+    s['wind']=dict(enabled=True,direction=[.8,0,-.6],speed=4,gust_strength=.35,gust_frequency=.25,air_density=1.225)
     def obj(label,p,half=None,color=(.3,.4,.45,1),parent='0',density=0):
         o=copy.deepcopy(template);o.update(id=s['next_id'],name=label,parent=parent,mesh='cube' if half else '__node',position=p,rotation=[0,0,0],scale=[v/.65 for v in half] if half else [1,1,1]);s['next_id']=str(int(s['next_id'])+1);o['collider'].update(type='box' if half else 'none',enabled=bool(half),trigger=False,half_extents=[.65]*3,center=[0,0,0]);o['body'].update(enabled=density>0,type='dynamic' if density else 'static',mass=density*8*half[0]*half[1]*half[2] if density else 1,velocity=[0,0,0],angular_velocity=[0,0,0],continuous=True,restitution=.02);o['material']['base_color']=list(color);s['objects'].append(o);return o
     def marker(label,p,order=0,parent='0',goal=False):
         o=obj(label,p,[.65,.85,.65],(.15,.8,.35,1) if goal else (.9,.6,.08,1),parent);o['collider']['trigger']=True;o['gameplay'].update(role='goal' if goal else 'checkpoint',checkpoint_order=order);o['material'].update(alpha_mode='blend',base_color=[.15,.8,.35,.2] if goal else [.9,.6,.08,.18],cast_shadows=False);return o
     def water(label,p,mode='pool',half=(4,5),depth=2,path=None):
-        o=obj(label,p);w=copy.deepcopy(base['water'][0]);w.update(owner=o['id'],mode=mode,half_size=list(half),depth=depth,quality=1,flow_speed=1.2,path=path or [[0,0,-4],[0,0,4]],particle_spacing=.16,initial_volume=.4096,emission_rate=0,viscosity=3,emission_velocity=[0,0,0]);s['water'].append(w);return o,w
+        o=obj(label,p);w=copy.deepcopy(base['water'][0]);w.update(owner=o['id'],mode=mode,half_size=list(half),depth=depth,quality=1,flow_speed=1.2,path=path or [[0,0,-4],[0,0,4]],particle_spacing=.16,initial_volume=.4096,emission_rate=0,viscosity=3,emission_velocity=[0,0,0],ripple_scale=1,ripple_strength=.25);s['water'].append(w);return o,w
     def raft(label,p,order):
         o=obj(label,p,[1.25,.16,1.0],(.6,.3,.12,1),density=500);marker(label+' marker',[0,1.0,0],order,o['id']);return o
     obj('Pool bed',[0,-2.12,0],[4.3,.12,5.3],(.15,.3,.36,1))

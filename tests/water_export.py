@@ -7,7 +7,7 @@ names=('water-course','water-expedition') if a.courses else ('water-pool','water
 def run(args,success=True):
     env=os.environ.copy();env.update(SDL_AUDIO_DRIVER='dummy',VK_LAYER_VALIDATE_SYNC='1')
     result=subprocess.run([str(x) for x in args],capture_output=True,text=True,env=env,timeout=120)
-    assert (result.returncode==0)==success,(args,result.stdout,result.stderr)
+    assert (result.returncode==0)==success,(args,result.returncode,result.stdout,result.stderr)
     return result.stdout+result.stderr
 with tempfile.TemporaryDirectory(prefix='afterlight-water-export-') as temp:
     folder=Path(temp);source=folder/'water project';(source/'scenes').mkdir(parents=True);(source/'game').mkdir()
@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='afterlight-water-export-') as temp:
         run(command);shutil.rmtree(source);moved=folder/'relocated water';output.rename(moved)
         resources=moved/'Game.app/Contents/Resources' if sys.platform=='darwin' else moved
         for name in names:
-            scene=json.loads((resources/'scenes'/(name+'.afterlight.json')).read_text());assert scene['water'] and scene['version'] in (17,18,19,20,21)
+            scene=json.loads((resources/'scenes'/(name+'.afterlight.json')).read_text());assert scene['water'] and scene['version'] in (17,18,19,20,21,22)
         packed=json.loads((resources/'game.afterlight.project').read_text())
         run([a.play_test,resources/packed['startup_scene'] if a.courses else resources/'scenes',resources/packed['game_module'],resources/'game.afterlight.project'])
         exe=moved/'Game.app/Contents/MacOS/afterlight_player' if sys.platform=='darwin' else moved/('afterlight_player.exe' if sys.platform=='win32' else 'run.sh')

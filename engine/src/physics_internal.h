@@ -66,6 +66,7 @@ struct af_physics {
     af_physics_stats stats;
     unsigned water_substep;
     float last_dt;
+    double simulation_time;
     bool profiling;
     char error[256];
 };
@@ -92,6 +93,7 @@ af_world_collider ph_part_world(const ph_body *, size_t);
 af_vec3 ph_vector(const ph_body *, af_vec3);
 af_vec3 ph_inverse_inertia(const ph_body *, af_vec3);
 void ph_impulse(ph_body *, af_vec3, af_vec3);
+void ph_wind_step(af_physics *,float);
 void ph_shape(ph_body *);
 bool ph_water_sync(af_physics *, const af_scene *);
 void ph_water_step(af_physics *, float);

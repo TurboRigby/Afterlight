@@ -12,7 +12,7 @@ layout(set=0,binding=0) uniform Frame {
     vec4 cascade_splits,camera_position,camera_forward,shadow_params,cascade_params,render_params;
     LocalLight lights[16];vec4 light_count;mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;vec4 sky_params;
-    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport;
+    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport,wind_time;
 } frame;
 layout(set=0,binding=5) uniform sampler2D sky_map;
 #include "water_fog.glsl"

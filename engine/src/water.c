@@ -6,6 +6,7 @@
 #include <string.h>
 af_water af_water_default(void) {
     return (af_water){.enabled = true,
+                      .ripple_scale=1,.ripple_strength=.18f,
                       .quality = AF_WATER_MEDIUM,
                       .half_size = {4, 4},
                       .depth = 2,
@@ -74,7 +75,7 @@ bool af_water_valid(af_water w) {
             }
         }
     }
-    return range(w.particle_spacing, .06f, .5f) && range(w.initial_volume, 0, 100) &&
+    return range(w.ripple_scale,.1f,20) && range(w.ripple_strength,0,1) && range(w.particle_spacing, .06f, .5f) && range(w.initial_volume, 0, 100) &&
            range(w.emission_rate, 0, 2) && range(w.viscosity, 0, 20) &&
            range(w.emission_velocity.x, -20, 20) && range(w.emission_velocity.y, -20, 20) &&
            range(w.emission_velocity.z, -20, 20) &&

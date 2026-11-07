@@ -21,6 +21,8 @@ typedef struct af_water_runtime {
     size_t count;
     af_water_stats stats;
     uint64_t key, disturbance;
+    af_wind wind;
+    double time;
 } af_water_runtime;
 float wa_river_length(const af_water *);
 af_vec3 wa_river_point(const af_water *, float, af_vec3 *);

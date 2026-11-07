@@ -32,11 +32,11 @@ layout(set=0,binding=0) uniform Frame {
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;vec4 sky_params;
-    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport;
+    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport,wind_time;
 } frame;
 layout(push_constant) uniform Draw {mat4 model;vec4 tint;vec4 params;vec4 surface;vec4 emission;} draw;
 void main(){
-    mat4 deformation=mat4(1);uint base=uint(draw.surface.w);
+    mat4 deformation=mat4(1);uint base=(uint(draw.params.x)&(1u<<19u))!=0u?0u:uint(draw.surface.w);
     if(base>0&&dot(in_weights,vec4(1))>0)deformation=skin.bones[base+in_joints.x]*in_weights.x+skin.bones[base+in_joints.y]*in_weights.y+skin.bones[base+in_joints.z]*in_weights.z+skin.bones[base+in_joints.w]*in_weights.w;
     vec4 world=draw.model*deformation*vec4(in_position,1);
     gl_Position=frame.view_projection*world;

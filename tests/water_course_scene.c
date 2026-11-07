@@ -81,7 +81,9 @@ int main(int argc, char **argv) {
             }
             CHECK(maximum >= .05f);
         }
-        CHECK(af_scene_save(s, "course-roundtrip.json", NULL));
+        bool saved=af_scene_save(s, "course-roundtrip.json", &error);
+        if(!saved)fprintf(stderr,"Course roundtrip save: %s\n",error.message);
+        CHECK(saved);
         af_scene *copy = af_scene_load("course-roundtrip.json", NULL);
         CHECK(copy && af_scene_water_count(copy) == af_scene_water_count(s));
         af_scene_destroy(copy);

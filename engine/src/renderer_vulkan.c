@@ -52,9 +52,9 @@ typedef struct af_frame_uniform {
     af_vec4 light_count;
     af_mat4 local_shadow_matrices[AF_LOCAL_SHADOW_LAYERS];
     af_mat4 inverse_view_projection;af_vec4 sky_params;
-    af_vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport;
+    af_vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport,wind_time;
 } af_frame_uniform;
-_Static_assert(sizeof(af_frame_uniform)==3200,"Shader frame layout");
+_Static_assert(sizeof(af_frame_uniform)==3216,"Shader frame layout");
 typedef struct af_blend_draw {size_t index;float depth;} af_blend_draw;
 static int blend_compare(const void *a,const void *b){const af_blend_draw *x=a,*y=b;if(x->depth!=y->depth)return x->depth>y->depth?-1:1;return (x->index>y->index)-(x->index<y->index);}
 typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;af_vk_texture *texture;float alpha,cutoff;uint32_t alpha_mode;} af_shadow_draw;
@@ -528,6 +528,9 @@ static bool create_pipeline(af_renderer *renderer)
     success = vk_ok(vkCreateGraphicsPipelines(renderer->device, VK_NULL_HANDLE, 1, &pipeline_info,
         NULL, &swapchain->pipeline), "vkCreateGraphicsPipelines");
     if(success){depth.depthWriteEnable=VK_FALSE;attachment.blendEnable=VK_TRUE;attachment.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;attachment.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;attachment.colorBlendOp=VK_BLEND_OP_ADD;attachment.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE;attachment.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;attachment.alphaBlendOp=VK_BLEND_OP_ADD;success=vk_ok(vkCreateGraphicsPipelines(renderer->device,VK_NULL_HANDLE,1,&pipeline_info,NULL,&swapchain->blend_pipeline),"blend pipeline");}
+    /* Prefer opaque walls/floors at coincident liquid boundaries. Both water
+       passes need identical depth bias to avoid alternating attenuation/scatter. */
+    raster.depthBiasEnable=VK_TRUE;raster.depthBiasConstantFactor=4;raster.depthBiasSlopeFactor=1;
     if(success){attachment.srcColorBlendFactor=VK_BLEND_FACTOR_ZERO;attachment.dstColorBlendFactor=VK_BLEND_FACTOR_SRC_COLOR;success=vk_ok(vkCreateGraphicsPipelines(renderer->device,VK_NULL_HANDLE,1,&pipeline_info,NULL,&swapchain->water_attenuation),"water attenuation pipeline");}
     if(success){attachment.srcColorBlendFactor=VK_BLEND_FACTOR_ONE;attachment.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;success=vk_ok(vkCreateGraphicsPipelines(renderer->device,VK_NULL_HANDLE,1,&pipeline_info,NULL,&swapchain->water_scattering),"water scattering pipeline");}
 
@@ -1248,6 +1251,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     if(!af_mat4_inverse(uniform->view_projection,&uniform->inverse_view_projection))return false;
     uniform->sky_params=(af_vec4){render_settings.skybox_intensity,0,0,0};
     int logical_width=1,logical_height=1;SDL_GetWindowSize(renderer->window,&logical_width,&logical_height);uniform->water_screen=(af_vec4){(float)renderer->swapchain.extent.width,(float)renderer->swapchain.extent.height,render_settings.refraction_strength,render_settings.refraction?1.f:0};uniform->water_viewport=(af_vec4){area.x/(float)logical_width,area.y/(float)logical_height,(area.x+area.width)/(float)logical_width,(area.y+area.height)/(float)logical_height};
+    double water_time=af_physics_time(renderer->water_physics);af_vec3 air=af_wind_velocity(af_scene_get_wind(scene),water_time);uniform->wind_time=(af_vec4){air.x,air.z,(float)water_time,0};
     af_water_sample underwater=af_physics_sample_water(renderer->water_physics,scene,camera->position);const af_water *water=af_scene_get_water(scene,underwater.owner);
     if(render_settings.underwater&&water&&underwater.inside&&camera->position.y>underwater.bottom&&camera->position.y<underwater.height+.1f){const af_scene_object *o=af_scene_get_object(scene,water->owner);float blend=fmaxf(0,fminf(1,(underwater.height+.1f-camera->position.y)/.2f));blend=blend*blend*(3-2*blend);float yaw=o->transform.rotation.y;af_vec3 origin=o->transform.position;af_vec2 size=water->half_size;
         if(water->mode==AF_WATER_RIVER){float c=cosf(yaw),s=sinf(yaw);af_vec3 d=af_vec3_sub(camera->position,origin),local={c*d.x-s*d.z,d.y,s*d.x+c*d.z},tangent;float side,along,height;if(wa_river_coordinates(water,local,&side,&along,&height,&tangent)){float length=wa_river_length(water);local=af_vec3_add(local,af_vec3_add((af_vec3){-side*tangent.z,0,side*tangent.x},af_vec3_scale(tangent,length*.5f-along)));origin.x+=c*local.x+s*local.z;origin.z+=-s*local.x+c*local.z;yaw+=atan2f(tangent.x,tangent.z);size.y=length*.5f;}}
@@ -1436,7 +1440,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
             af_mat4 world;if(!object_world(renderer,scene,i,&world))continue;
             struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{(float)((object->material.unlit?1u:0u)|((uint32_t)object->material.alpha_mode<<1u)|((uint32_t)lroundf(object->material.alpha_cutoff*65535)<<3u)),object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,(float)skin_base(renderer,object->id,mesh)},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
-            if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(1u<<21u)|(2u<<1u)),1,1,0};if(refract)transform.params.x+=(float)(1u<<22u);if(water->mode!=AF_WATER_PARTICLES&&wa_contains(ph_water_runtime(renderer->water_physics),scene,water->owner,camera->position))transform.params.x+=(float)(1u<<23u);transform.surface=(af_vec4){water->roughness,0,water->mode==AF_WATER_PARTICLES?water->particle_spacing:water->depth,0};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
+            if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(1u<<21u)|(2u<<1u)),1,1,water->wind};if(refract)transform.params.x+=(float)(1u<<22u);if(water->mode!=AF_WATER_PARTICLES&&wa_contains(ph_water_runtime(renderer->water_physics),scene,water->owner,camera->position))transform.params.x+=(float)(1u<<23u);transform.surface=(af_vec4){water->roughness,water->ripple_scale,water->mode==AF_WATER_PARTICLES?water->particle_spacing:water->depth,water->mode==AF_WATER_PARTICLES?0:water->ripple_strength};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
             _Static_assert(sizeof(transform)==128,"Portable draw push constant limit");
             af_vk_texture *texture=renderer->white;
             if(object->material.texture[0]){bool found=false;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;found=true;break;}

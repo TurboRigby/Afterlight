@@ -1,4 +1,4 @@
-# Afterlight scene format, version 21
+# Afterlight scene format, version 22
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
@@ -7,7 +7,7 @@ manifest into the renderer separately. Game library selection stays outside the
 scene file.
 
 The following version 10 example shows the base fields; newer extensions are
-documented below. Current saves include all version 21 tables.
+documented below. Current saves include all version 22 tables.
 
 ```json
 {
@@ -515,7 +515,7 @@ Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
 and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
 200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
 positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
-body defaults. Saving writes version 21. Physics runtime limits and diagnostics
+body defaults. Saving writes version 22. Physics runtime limits and diagnostics
 are documented in [0.13](development-013.md).
 
 ## Version 14: mesh colliders and scene joints
@@ -578,7 +578,7 @@ Versions 1–15 remain readable with an empty part table. Game ABI is 15.
 
 Version 17 adds the required root `water` array (maximum eight definitions).
 Version 18 adds river paths/current. Version 19 adds particle source settings.
-Earlier definitions receive defaults. Saving writes version 21, including the
+Earlier definitions receive defaults. Saving writes version 22, including the
 array when empty. Each entry has exactly these fields:
 
 | Field | Meaning |
@@ -609,3 +609,12 @@ required boolean `render.refraction` and finite `render.refraction_strength` in
 [0,2]. Earlier scenes receive enabled defaults and strength 1. These fields
 round-trip with render settings, scene cloning and editor history. Version 21
 keeps the same water definitions introduced in 17–19.
+
+## Wind and ripple detail (version 22)
+
+The root `wind` object has exactly `enabled`, `direction` (world XZ vector),
+`speed` (0–60 m/s), `gust_strength` (0–1), `gust_frequency` (0–2 Hz) and
+`air_density` (0.01–10 kg/m3). Direction has zero Y, nonzero XZ length and
+components within −1…1. Water definitions add `ripple_scale` (0.1–20 metres)
+and `ripple_strength` (0–1). Older scenes receive disabled world wind and
+ripple controls 1 / 0.18. These fields participate in clone, history and export.

@@ -18,6 +18,7 @@
 #include <afterlight/gameplay.h>
 #include <afterlight/rig.h>
 #include <afterlight/body.h>
+#include <afterlight/wind.h>
 
 #define AF_OBJECT_NAME_CAPACITY 64
 #define AF_OBJECT_NONE UINT64_C(0)
@@ -81,6 +82,8 @@ bool af_scene_set_object_collider(af_scene *scene,af_object_id id,af_collider co
 bool af_scene_set_object_material(af_scene *scene,af_object_id id,af_material material);
 bool af_scene_set_light(af_scene *scene,af_directional_light light);
 af_directional_light af_scene_get_light(const af_scene *scene);
+bool af_scene_set_wind(af_scene *,af_wind);
+af_wind af_scene_get_wind(const af_scene *);
 
 size_t af_scene_local_light_count(const af_scene *scene);
 const af_local_light *af_scene_local_light_at(const af_scene *scene,size_t index);
@@ -99,7 +102,7 @@ const af_scene_asset *af_scene_asset_at(const af_scene *scene,size_t index);
 const af_scene_asset *af_scene_find_asset(const af_scene *scene,const char *name);
 bool af_scene_set_asset(af_scene *scene,const char *name,af_asset_kind kind,const char *path);
 
-#define AF_SCENE_FILE_VERSION 21
+#define AF_SCENE_FILE_VERSION 22
 #define AF_SCENE_FILE_MAX_BYTES (16u * 1024u * 1024u)
 #define AF_SCENE_FILE_MAX_OBJECTS 65536u
 

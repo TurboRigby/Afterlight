@@ -6008,23 +6008,23 @@
     }
   ],
   "format": "afterlight.scene",
-  "version": 21,
+  "version": 22,
   "next_id": "43",
   "render": {
     "exposure": 0,
-    "tone_mapping": false,
+    "tone_mapping": true,
     "bloom": false,
     "bloom_strength": 0.119999997317791,
     "bloom_threshold": 1,
     "bloom_radius": 1.5,
-    "environment_enabled": false,
+    "environment_enabled": true,
     "environment_profile": 0,
-    "environment_intensity": 1,
+    "environment_intensity": 0.5,
     "environment_rotation": 0,
     "local_shadow_resolution": 512,
     "environment_asset": "",
-    "skybox": false,
-    "skybox_intensity": 1,
+    "skybox": true,
+    "skybox_intensity": 0.8,
     "underwater": true,
     "refraction": true,
     "refraction_strength": 1
@@ -6402,7 +6402,9 @@
         0,
         0,
         0
-      ]
+      ],
+      "ripple_scale": 1,
+      "ripple_strength": 0.25
     },
     {
       "owner": "8",
@@ -6457,7 +6459,9 @@
         0,
         0,
         0
-      ]
+      ],
+      "ripple_scale": 1,
+      "ripple_strength": 0.25
     },
     {
       "owner": "35",
@@ -6507,7 +6511,21 @@
         0,
         0,
         0
-      ]
+      ],
+      "ripple_scale": 1,
+      "ripple_strength": 0.25
     }
-  ]
+  ],
+  "wind": {
+    "enabled": true,
+    "direction": [
+      0.8,
+      0,
+      -0.6
+    ],
+    "speed": 4,
+    "gust_strength": 0.35,
+    "gust_frequency": 0.25,
+    "air_density": 1.225
+  }
 }

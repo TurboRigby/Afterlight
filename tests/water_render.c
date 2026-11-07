@@ -60,6 +60,7 @@ static void update(af_engine *e, double dt, void *data) {
         return;
     if (s->phase == 9 && af_engine_get_stats(e).simulation_ticks <= s->kick_ticks)
         return;
+    if(s->phase==19&&af_engine_get_stats(e).simulation_ticks<s->kick_ticks+54)return;
     unsigned char p[4] = {0};
     if (s->phase)
         CHECK(af_engine_test_read_pixel(e, p));
@@ -174,6 +175,32 @@ static void update(af_engine *e, double dt, void *data) {
     case 15:
         CHECK(p[0]>150 && p[2]<60);
         puts("Closed water: side, bottom, inside exit surface and disabled volume pixels passed.");
+        w.enabled=true;w.ripple_strength=0;w.wind=.03f;w.roughness=.3f;
+        w.scattering=(af_vec3){0};w.absorption=(af_vec3){2,2,2};
+        l.ambient=0;l.intensity=2;l.color=(af_vec3){1,1,1};l.direction=(af_vec3){0,-3,5};
+        {
+            af_wind wind=af_wind_default();wind.enabled=true;wind.speed=10;wind.gust_frequency=0;
+            CHECK(af_scene_set_wind(s->scene,wind));
+            af_camera camera=af_camera_default();camera.position=(af_vec3){0,3,5};
+            camera.yaw=-AF_PI/2;camera.pitch=-atan2f(3,5);af_engine_set_camera(e,&camera);
+        }
+        break;
+    case 16:
+        CHECK(p[1]>150);memcpy(s->green,p,4);w.ripple_strength=1;
+        break;
+    case 17:
+        CHECK(abs((int)p[1]-s->green[1])>20);memcpy(s->red,p,4);
+        break;
+    case 18:
+        CHECK(abs((int)p[1]-s->red[1])<3);
+        s->kick_ticks=af_engine_get_stats(e).simulation_ticks;
+        af_engine_set_simulation_paused(e,false);
+        break;
+    case 19:
+        break;
+    case 20:
+        CHECK(abs((int)p[1]-s->red[1])>3 && af_engine_water_stats(e).max_wave>0);
+        puts("Ripple normal texture changes actual lit pixels, freezes on pause and animates with wind.");
         af_engine_request_quit(e);
         return;
     default:
@@ -203,5 +230,5 @@ int main(void) {
     int r = af_engine_run(e, &game);
     af_engine_stats stats = af_engine_get_stats(e);
     af_engine_destroy(e);
-    return r || s.failed || s.phase != 15 || stats.validation_errors ? 1 : 0;
+    return r || s.failed || s.phase != 20 || stats.validation_errors ? 1 : 0;
 }

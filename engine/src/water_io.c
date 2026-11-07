@@ -9,7 +9,7 @@ static const char *fields[] = {
     "owner",          "enabled",       "mode",       "quality",          "half_size", "depth",
     "density",        "drag",          "wave_speed", "damping",          "wind",      "absorption",
     "scattering",     "roughness",     "ior",        "flow_speed",       "path",      "particle_spacing",
-    "initial_volume", "emission_rate", "viscosity",  "emission_velocity"};
+    "initial_volume", "emission_rate", "viscosity",  "emission_velocity", "ripple_scale", "ripple_strength"};
 static bool number(const cJSON *j, float *v) {
     if (!cJSON_IsNumber(j) || !isfinite(j->valuedouble) || fabs(j->valuedouble) > 1e9)
         return false;
@@ -28,7 +28,8 @@ bool wa_decode(af_scene *s, const cJSON *root) {
     const cJSON *array = cJSON_GetObjectItemCaseSensitive(root, "water"), *j;
     if (!cJSON_IsArray(array) || cJSON_GetArraySize(array) > (int)AF_SCENE_MAX_WATERS)
         return false;
-    unsigned fields_count = cJSON_GetObjectItemCaseSensitive(root, "version")->valueint >= 19   ? 22u
+    unsigned fields_count = cJSON_GetObjectItemCaseSensitive(root, "version")->valueint >= 22 ? 24u
+                            : cJSON_GetObjectItemCaseSensitive(root, "version")->valueint >= 19   ? 22u
                             : cJSON_GetObjectItemCaseSensitive(root, "version")->valueint >= 18 ? 17u
                                                                                                 : 15u;
     cJSON_ArrayForEach(j, array) {
@@ -86,6 +87,7 @@ bool wa_decode(af_scene *s, const cJSON *root) {
             w.emission_velocity = (af_vec3){xyz[0], xyz[1], xyz[2]};
         } else if (w.mode == AF_WATER_PARTICLES)
             return false;
+        if(fields_count>=24 && (!number(cJSON_GetObjectItemCaseSensitive(j,"ripple_scale"),&w.ripple_scale)||!number(cJSON_GetObjectItemCaseSensitive(j,"ripple_strength"),&w.ripple_strength)))return false;
         w.enabled = cJSON_IsTrue(enabled) != 0;
         float quality;
         if (!number(cJSON_GetObjectItemCaseSensitive(j, "quality"), &quality) || quality < 0 ||
@@ -156,6 +158,7 @@ bool wa_encode(const af_scene *s, cJSON *root) {
         float velocity[] = {w.emission_velocity.x, w.emission_velocity.y, w.emission_velocity.z};
         if (!addvec(j, "emission_velocity", velocity, 3))
             return false;
+        if(!cJSON_AddNumberToObject(j,"ripple_scale",w.ripple_scale)||!cJSON_AddNumberToObject(j,"ripple_strength",w.ripple_strength))return false;
         float values[] = {w.depth,   w.density, w.drag,      w.wave_speed,
                           w.damping, w.wind,    w.roughness, w.ior};
         unsigned indexes[] = {5, 6, 7, 8, 9, 10, 13, 14};

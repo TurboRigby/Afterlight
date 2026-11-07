@@ -3,9 +3,9 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.18** makes water playable: swim, dive, ride buoyant rafts and solve
-a pouring puzzle. Water meshes stream through frame-owned buffers, calm fluid
-can sleep, and rendering includes underwater absorption and scene refraction.
+Afterlight **0.19** adds closed water volumes, an animated ripple normal texture
+and gusting wind that drives waves and exposed physics props. Swim, dive, ride
+buoyant rafts and solve a pouring puzzle in the two playable water courses.
 
 ## Build and run
 
@@ -23,7 +23,7 @@ Press **Play**. **WASD** moves, **Space** jumps/swims up, **Ctrl** dives, and
 
 Start with `run_water-course_editor`, then `run_water-expedition_editor`. The
 expedition adds a river, cargo and a receiving-cup objective; **E** near the source
-cup starts pouring. Both have `_player` targets. See the [0.18 guide](docs/development-018.md)
+cup starts pouring. Both have `_player` targets. See the [water and wind guide](docs/development-019.md)
 for controls, settings, benchmarks and limits, or the [water laboratory guide](docs/development-017.md)
 for the six focused demos.
 

@@ -25,7 +25,7 @@ static af_scene_object *find_object(const af_scene *scene, af_object_id id)
 af_scene *af_scene_create(void)
 {
     af_scene *scene = calloc(1, sizeof(*scene));
-    if (scene) {scene->next_id = 1;scene->next_joint_id=1;scene->next_part_id=1;scene->light=af_directional_light_default();scene->shadows=af_shadow_settings_default();scene->render_settings=af_render_settings_default();}
+    if (scene) {scene->wind=af_wind_default();scene->next_id = 1;scene->next_joint_id=1;scene->next_part_id=1;scene->light=af_directional_light_default();scene->shadows=af_shadow_settings_default();scene->render_settings=af_render_settings_default();}
     return scene;
 }
 
@@ -125,7 +125,7 @@ af_scene *af_scene_clone(const af_scene *source)
     memcpy(copy->joints,source->joints,sizeof(copy->joints));copy->joint_count=source->joint_count;copy->next_joint_id=source->next_joint_id;
     memcpy(copy->waters,source->waters,sizeof(copy->waters));copy->water_count=source->water_count;
     memcpy(copy->parts,source->parts,sizeof(copy->parts));copy->part_count=source->part_count;copy->next_part_id=source->next_part_id;
-    copy->next_id = source->next_id;copy->light=source->light;copy->shadows=source->shadows;copy->render_settings=source->render_settings;copy->local_light_count=source->local_light_count;
+    copy->wind=source->wind;copy->next_id = source->next_id;copy->light=source->light;copy->shadows=source->shadows;copy->render_settings=source->render_settings;copy->local_light_count=source->local_light_count;
     memcpy(copy->local_lights,source->local_lights,sizeof(copy->local_lights));
     if (source->count) {
         copy->objects = malloc(source->count * sizeof(*copy->objects));

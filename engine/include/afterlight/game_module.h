@@ -11,7 +11,7 @@
 #include <afterlight/prefab.h>
 #include <afterlight/joint.h>
 #include <afterlight/compound.h>
-#define AF_GAME_ABI_VERSION 20u
+#define AF_GAME_ABI_VERSION 21u
 #define AF_GAME_STATE_MAX_BYTES (16u*1024u*1024u)
 #ifdef _WIN32
 #define AF_GAME_EXPORT __declspec(dllexport)
@@ -49,6 +49,10 @@ typedef struct af_game_host {
     const af_collider_part *(*get_part)(const af_scene*,af_collider_part_id);
     const af_collider_part *(*part_at)(const af_scene*,af_object_id,size_t);
     size_t (*part_count)(const af_scene*,af_object_id);
+    af_wind (*wind_default)(void);
+    af_wind (*get_wind)(const af_scene*);
+    bool (*set_wind)(af_scene*,af_wind);
+    af_vec3 (*wind_velocity)(af_wind,double);
     bool (*set_water)(af_scene*,af_object_id,af_water);
     bool (*remove_water)(af_scene*,af_object_id);
     const af_water *(*get_water)(const af_scene*,af_object_id);

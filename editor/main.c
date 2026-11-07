@@ -500,8 +500,9 @@ static void water_controls(editor *app,af_scene_object object){const af_water *s
     label(ctx,"Water",30);static const char *modes[]={"Pool / lake","River / stream","Pourable fluid"};nk_layout_row_dynamic(ctx,28,1);w.mode=(af_water_mode)nk_combo(ctx,modes,3,(int)w.mode,26,nk_vec2(260,100));nk_layout_row_dynamic(ctx,28,1);nk_bool enabled=w.enabled;if(nk_checkbox_label(ctx,"Simulate water",&enabled))w.enabled=enabled!=0;
     static const char *qualities[]={"Low: 16 x 16","Medium: 32 x 32","High: 64 x 64"};nk_layout_row_dynamic(ctx,28,1);w.quality=(af_water_quality)nk_combo(ctx,qualities,3,(int)w.quality,26,nk_vec2(260,120));
     nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Half width (m)",.25f,&w.half_size.x,1000,.25f,.05f);nk_property_float(ctx,"Half length (m)",.25f,&w.half_size.y,1000,.25f,.05f);nk_property_float(ctx,"Depth (m)",.05f,&w.depth,100,.1f,.02f);
-    nk_property_float(ctx,"Density (kg/m3)",.01f,&w.density,20000,50,5);nk_property_float(ctx,"Drag",0,&w.drag,20,.1f,.02f);nk_property_float(ctx,"Wave speed (m/s)",.01f,&w.wave_speed,20,.1f,.02f);nk_property_float(ctx,"Damping",0,&w.damping,20,.1f,.02f);nk_property_float(ctx,"Wind",0,&w.wind,1,.01f,.002f);
+    nk_property_float(ctx,"Density (kg/m3)",.01f,&w.density,20000,50,5);nk_property_float(ctx,"Drag",0,&w.drag,20,.1f,.02f);nk_property_float(ctx,"Wave speed (m/s)",.01f,&w.wave_speed,20,.1f,.02f);nk_property_float(ctx,"Damping",0,&w.damping,20,.1f,.02f);nk_property_float(ctx,"Local wave forcing",0,&w.wind,1,.01f,.002f);
     vector_fields(ctx,"Absorption (RGB / m)",&w.absorption,.05f,.01f);vector_fields(ctx,"Scattering color",&w.scattering,.05f,.01f);nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Roughness",.04f,&w.roughness,1,.02f,.005f);nk_property_float(ctx,"IOR",1,&w.ior,2.5f,.01f,.002f);
+    nk_property_float(ctx,"Ripple size (m)",.1f,&w.ripple_scale,20,.1f,.01f);nk_property_float(ctx,"Ripple detail",0,&w.ripple_strength,1,.05f,.005f);
     if(w.mode==AF_WATER_RIVER){nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Current (m/s)",0,&w.flow_speed,20,.1f,.02f);int count=(int)w.path_count;nk_property_int(ctx,"Path points",2,&count,AF_WATER_MAX_PATH,1,1);if(count>(int)w.path_count)for(unsigned i=w.path_count;i<(unsigned)count;++i){w.path[i]=w.path[i-1];w.path[i].z+=2;}w.path_count=(unsigned)count;for(unsigned i=0;i<w.path_count;++i){char title[48];snprintf(title,sizeof(title),"Path point %u",i+1);vector_fields(ctx,title,&w.path[i],.25f,.05f);}}
     if(w.mode==AF_WATER_PARTICLES){nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Particle spacing (m)",.06f,&w.particle_spacing,.5f,.01f,.002f);nk_property_float(ctx,"Initial volume (m3)",0,&w.initial_volume,100,.01f,.002f);nk_property_float(ctx,"Emitter (m3/s)",0,&w.emission_rate,2,.01f,.002f);nk_property_float(ctx,"Viscosity (1/s)",0,&w.viscosity,20,.1f,.02f);vector_fields(ctx,"Emission velocity",&w.emission_velocity,.1f,.02f);label(ctx,"Low / Medium / High: 256 / 1024 / 4096 particles",40);}
     label(ctx,"Move/yaw the surface; edit its size above.",34);
@@ -757,6 +758,16 @@ static void inspector(editor *app,float width,float height)
             nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import texture"))start_import(app,AF_ASSET_TEXTURE);
             nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import normal map"))start_import(app,AF_ASSET_NORMAL_MAP);
         }
+        label(context,"Wind",30);af_wind wind=af_scene_get_wind(app->document.scene),wind_before=wind;
+        nk_layout_row_dynamic(context,26,1);nk_bool wind_enabled=wind.enabled;nk_checkbox_label(context,"Enable world wind",&wind_enabled);wind.enabled=wind_enabled!=0;
+        float heading=atan2f(wind.direction.z,wind.direction.x)*180/AF_PI,old_heading=heading;
+        nk_layout_row_dynamic(context,28,1);nk_property_float(context,"Direction (degrees)",-180,&heading,180,5,.5f);
+        if(heading!=old_heading)wind.direction=(af_vec3){cosf(heading*AF_PI/180),0,sinf(heading*AF_PI/180)};
+        nk_property_float(context,"Speed (m/s)",0,&wind.speed,60,.5f,.05f);
+        nk_property_float(context,"Gust strength",0,&wind.gust_strength,1,.05f,.005f);
+        nk_property_float(context,"Gust frequency (Hz)",0,&wind.gust_frequency,2,.05f,.005f);
+        nk_property_float(context,"Air density (kg/m3)",.01f,&wind.air_density,10,.1f,.01f);
+        if(memcmp(&wind,&wind_before,sizeof(wind)))ed_document_wind(&app->document,wind);
         label(context,"Directional light",30);af_directional_light light=af_scene_get_light(app->document.scene);
         bool light_changed=vector_fields(context,"Direction",&light.direction,0.1f,0.01f);
         nk_layout_row_dynamic(context,30,1);

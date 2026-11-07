@@ -20,6 +20,7 @@ static const wa_slot *slot(const af_water_runtime *r, af_object_id id) {
     return NULL;
 }
 bool wa_sync(af_water_runtime *r, const af_scene *s) {
+    r->wind=af_scene_get_wind(s);
     size_t n = af_scene_water_count(s);
     /* Preserve by owner even when an earlier definition is removed. */
     for (size_t i = 0; i < n; ++i) {
@@ -62,6 +63,12 @@ bool wa_sync(af_water_runtime *r, const af_scene *s) {
     }
     r->count = n;
     uint64_t key = UINT64_C(1469598103934665603) ^ r->disturbance;
+    float wind_values[]={r->wind.direction.x,r->wind.direction.z,r->wind.speed,r->wind.gust_strength,r->wind.gust_frequency,r->wind.air_density};
+    key^=r->wind.enabled?1u:0u;
+    for(size_t k=0;k<sizeof(wind_values)/sizeof(*wind_values);++k){
+        uint32_t bits=0;memcpy(&bits,&wind_values[k],sizeof(bits));
+        for(unsigned byte=0;byte<4;++byte)key=(key^((bits>>(byte*8))&255u))*UINT64_C(1099511628211);
+    }
     for (size_t i = 0; i < n; ++i) {
         const unsigned char *bytes = (const unsigned char *)&r->slots[i].config;
         for (size_t k = 0; k < sizeof(af_water); ++k)
@@ -95,12 +102,19 @@ static float grid(const wa_slot *a, float x, float z, float alpha) {
     return (h[0] * (1 - u) + h[1] * u) * (1 - v) + (h[2] * (1 - u) + h[3] * u) * v;
 }
 void wa_step(af_water_runtime *r, float dt) {
+    af_vec3 air=af_wind_velocity(r->wind,r->time);
+    float air_speed=af_vec3_length(air);
+    r->time+=dt;
     for (size_t i = 0; i < r->count; ++i) {
         wa_slot *a = &r->slots[i];
         af_water w = a->config;
         if (!w.enabled || w.mode == AF_WATER_PARTICLES)
             continue;
-        if (a->sleeping && w.wind == 0)
+        float drive=w.wind+fminf(.25f,.0015f*air_speed*air_speed);
+        float yaw=a->transform.rotation.y,cosa=cosf(yaw),sina=sinf(yaw);
+        af_vec3 direction=air_speed>.001f?af_vec3_scale(air,1/air_speed):(af_vec3){.8f,0,.6f};
+        float wind_x=cosa*direction.x-sina*direction.z,wind_z=sina*direction.x+cosa*direction.z;
+        if (a->sleeping && drive == 0)
             continue;
         a->sleeping = false;
         unsigned n = a->n;
@@ -123,7 +137,10 @@ void wa_step(af_water_runtime *r, float dt) {
                             (dx * dx) +
                         (a->h[(z ? z - 1 : z) * n + x] - 2 * v + a->h[(z + 1 < n ? z + 1 : z) * n + x]) /
                             (dz * dz);
-                    float wind = w.wind * sinf((float)x * .37f + (float)z * .19f + a->time * 1.7f);
+                    float along=(2*(float)x/(float)(n-1)-1)*w.half_size.x,
+                          across=(2*(float)z/(float)(n-1)-1)*length(&w);
+                    float phase=along*wind_x+across*wind_z;
+                    float wind = drive * sinf(phase*1.6f - a->time*(1.7f+air_speed*.1f));
                     float advect = w.mode == AF_WATER_RIVER
                                        ? w.flow_speed * (old_v[k] - old_v[(z ? z - 1 : z) * n + x]) / dz
                                        : 0;
@@ -158,7 +175,7 @@ void wa_step(af_water_runtime *r, float dt) {
             amplitude = fmaxf(amplitude, fabsf(a->h[k]));
             speed = fmaxf(speed, fabsf(a->v[k]));
         }
-        a->quiet_time = w.wind == 0 && amplitude < .0002f && speed < .0005f ? a->quiet_time + dt : 0;
+        a->quiet_time = drive == 0 && amplitude < .0002f && speed < .0005f ? a->quiet_time + dt : 0;
         if (a->quiet_time > .5f) {
             memset(a->h, 0, sizeof(a->h));
             memset(a->v, 0, sizeof(a->v));

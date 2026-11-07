@@ -36,6 +36,7 @@ bool af_physics_disturb_water(af_physics *p, const af_scene *s, af_object_id id,
         return false;
     if (!wa_sync(p->water, s))
         return false;
+    p->water->time=p->simulation_time;
     return wa_disturb(p->water, s, id, point, radius, velocity);
 }
 bool ph_water_sync(af_physics *p, const af_scene *s) {
@@ -47,6 +48,7 @@ bool ph_water_sync(af_physics *p, const af_scene *s) {
         return false;
     if (!wa_sync(p->water, s))
         return false;
+    p->water->time=p->simulation_time;
     for (size_t i = 0; i < p->count; ++i) {
         ph_body *b = &p->bodies[i];
         if (!b->sleeping)

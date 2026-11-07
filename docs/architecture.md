@@ -123,7 +123,7 @@ transform and camera changes do not re-upload geometry or wait for the GPU.
 
 The math module is independent of SDL and Vulkan. Matrices use column-major
 storage and column vectors, so the shader receives `projection * view * model`
-in a 3200-byte per-frame camera/light/shadow/water uniform plus a 128-byte per-draw push constant
+in a 3216-byte per-frame camera/light/shadow/water uniform plus a 128-byte per-draw push constant
 (model matrix, material/selection tint, flags, surface values and emission). World space is right-handed with Y up,
 angles use radians, and the camera looks along -Z by default. Perspective maps
 near/far planes to Vulkan's [0,1] depth and flips clip Y for the positive-height
@@ -546,3 +546,11 @@ Refraction snapshots opaque HDR/depth, then resumes a compatible transparent
 load pass. It uses separate sampled images, explicit barriers and per-frame
 descriptor updates; it does not sample its active attachment. Opaque depth
 rejects foreground lookups. Render settings expose effect toggles/strength.
+
+## Wind and water boundaries (0.19)
+
+Water meshes include outward side/bottom faces, with inside/outside boundary selection.
+The fragment shader layers a filtered procedural ripple normal texture over surface
+normals. Scene wind is sampled at fixed simulation time for wave forcing, normal
+advection and projected-area rigid-body drag. Drag accounts for mass, exposed area,
+angular response and a bounded upstream shelter ray. See [limits](development-019.md).

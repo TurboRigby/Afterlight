@@ -376,7 +376,7 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](game-code.md).
 
-The scene format is version 21 and still reads versions 1–20. Asset bytes stay in
+The scene format is version 22 and still reads versions 1–21. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](assets.md),
 [scene format](scene-format.md) and [editor controls](editor.md).
 
@@ -399,3 +399,6 @@ code and bundled library implementations compile as C; shaders are GLSL.
 - [Vulkan vertex input and buffers](https://docs.vulkan.org/tutorial/latest/04_Vertex_buffers/00_Vertex_input_description.html)
 - [Vulkan depth buffering](https://docs.vulkan.org/tutorial/latest/07_Depth_buffering.html)
 - [Vulkan swapchain semaphore reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)
+
+Water courses now include directional gusting wind and a procedural ripple normal texture.
+See the [0.19 water/wind guide](development-019.md) for Inspector controls and limits.

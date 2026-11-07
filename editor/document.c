@@ -382,3 +382,9 @@ bool ed_document_fit_part(ed_document *d,af_collider_part_id id){const af_collid
 bool ed_document_add_water(ed_document *d){af_scene *next=af_scene_clone(d->scene);if(!next)return false;af_object_id id=af_scene_add_object(next,"Water","__node");if(!id||!af_scene_set_water(next,id,af_water_default())){af_scene_destroy(next);status(d,"Cannot add water: maximum eight root surfaces.");return false;}return commit(d,next,id,0);}
 bool ed_document_water(ed_document *d,af_water w){const af_water *before=af_scene_get_water(d->scene,d->selection);if(before&&!memcmp(before,&w,sizeof(w)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_water(next,d->selection,w)){af_scene_destroy(next);status(d,"Water needs a root node with unit scale and yaw rotation only.");return false;}return commit(d,next,d->selection,52);}
 bool ed_document_remove_water(ed_document *d){af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_remove_water(next,d->selection)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);}
+
+bool ed_document_wind(ed_document *d,af_wind w){
+    af_wind before=af_scene_get_wind(d->scene);if(!memcmp(&before,&w,sizeof(w)))return true;
+    af_scene *next=af_scene_clone(d->scene);if(!next)return false;
+    if(!af_scene_set_wind(next,w)){af_scene_destroy(next);status(d,"Invalid wind settings.");return false;}return commit(d,next,d->selection,53);
+}

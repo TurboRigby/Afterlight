@@ -279,3 +279,14 @@ restart and scene transition, then operates the real pouring objective.
 `water_course_export` removes sources, relocates both maps and repeats C Play.
 Release CPU/mesh and native render benchmarks are separate executable targets;
 their timings are diagnostics, without machine-specific CI thresholds.
+
+## 0.19 wind and water-boundary checks
+
+`water_volume` checks closed, consistently oriented pool/river meshes at each
+quality. `water_render` verifies side, bottom and inside pixels, ripple normal
+detail, pause and wind animation. `wind` verifies persistence/legacy/history,
+limits, deterministic gusts, frame-rate agreement, mass, reversal, shelter,
+submersion, partial-exposure torque and sleeping-island wake.
+
+`water_contact_render` compares 64 pixels per wall/floor view with water on/off
+and refraction on/off, catching depth competition at solid/liquid boundaries.

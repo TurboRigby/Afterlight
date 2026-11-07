@@ -27,7 +27,7 @@ layout(set=0,binding=0) uniform Frame {
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;vec4 sky_params;
-    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport;
+    vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport,wind_time;
 } frame;
 layout(set=0,binding=1) uniform sampler2DArray local_shadow_map;
 layout(set=0,binding=2) uniform sampler2D environment_map;
@@ -71,6 +71,7 @@ float shadow_visibility(vec3 n){
     }return visibility;
 }
 bool water_surface(){return (uint(draw.params.x)&(1u<<19u))!=0u;}
+#include "water_ripples.glsl"
 float water_f0(){float f=(draw.emission.w-1.0)/(draw.emission.w+1.0);return f*f;}
 vec3 water_transmission(vec3 n,vec3 v){return exp(-draw.emission.rgb*draw.surface.z/max(abs(dot(n,v)),.15));}
 vec3 water_scatter(vec3 n,vec3 v,vec3 l,vec3 radiance){return draw.tint.rgb*(vec3(1)-water_transmission(n,v))*radiance*max(dot(n,l),0.0)/3.14159265359;}
@@ -131,7 +132,7 @@ void main(){
     vec3 n=dot(world_normal,world_normal)>1e-12?normalize(world_normal):(dot(geometric,geometric)>1e-12?normalize(geometric):vec3(0,1,0));
     vec3 px=dFdx(world_position),py=dFdy(world_position);vec2 ux=dFdx(uv),uy=dFdy(uv);
     float determinant=ux.x*uy.y-ux.y*uy.x;
-    if(draw.params.w>0.5&&abs(determinant)>1e-10){
+    if(!water_surface()&&draw.params.w>0.5&&abs(determinant)>1e-10){
         vec3 tangent=(px*uy.y-py*ux.y)/determinant;
         vec3 bitangent=(py*ux.x-px*uy.x)/determinant;
         tangent-=n*dot(n,tangent);
@@ -149,9 +150,10 @@ void main(){
         bool inside=(uint(draw.params.x)&(1u<<23u))!=0u;
         if(inside?dot(n,v)>=0:dot(n,v)<=0)discard;
     }
+    if(water)n=water_ripple_normal(n);
     if(water){if(dot(n,v)<0)n=-n;float f=water_f0()+(1.0-water_f0())*pow(1.0-max(dot(n,v),0.0),5.0);if((uint(draw.params.x)&(1u<<20u))!=0u){out_color=vec4((uint(draw.params.x)&(1u<<22u))!=0u?vec3(0):water_transmission(n,v)*(1.0-f),1);return;}base.rgb=vec3(0);}
     vec4 mr=texture(metallic_roughness_texture,uv);
-    float roughness=draw.surface.x*mr.g,metal=draw.surface.y*mr.b;
+    float roughness=draw.surface.x*mr.g,metal=water?0:draw.surface.y*mr.b;
     vec3 ambient=base.rgb*frame.color_ambient.w*(draw.params.z>0.5?1.0-metal:1.0);
     vec3 output_rgb=((uint(draw.params.x)&1u)!=0u)?base.rgb:ambient+direct_light(base.rgb,n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w,roughness,metal)*shadow_visibility(n);
     if(water)output_rgb+=draw.tint.rgb*(vec3(1)-water_transmission(n,v))*frame.color_ambient.w+water_scatter(n,v,-frame.direction_intensity.xyz,frame.color_ambient.rgb*frame.direction_intensity.w)*shadow_visibility(n);

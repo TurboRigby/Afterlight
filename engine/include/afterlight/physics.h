@@ -8,6 +8,7 @@
 #define AF_PHYSICS_MAX_BODIES 1024u
 #define AF_PHYSICS_MAX_CONTACTS 8192u
 typedef struct af_physics af_physics;
+double af_physics_time(const af_physics *);
 typedef struct af_physics_state {
     bool available, sleeping;
     af_body_type type;

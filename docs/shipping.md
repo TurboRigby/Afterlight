@@ -187,3 +187,7 @@ Both rebuild streamed water, underwater/refraction resources and C gameplay on
 launch. The course export test removes sources and relocates the distribution.
 Shared GLSL includes are covered by the source archive/header checks. Scene
 format is 21 and C ABI is 20; rebuild modules and restart older editors/players.
+
+0.19 saves wind and ripple settings in scene format 22 and uses C ABI 21. Rebuild
+game modules and refresh copied public headers. Ripple detail is embedded GLSL,
+so exports need no extra texture image; corresponding-source archives include it.
