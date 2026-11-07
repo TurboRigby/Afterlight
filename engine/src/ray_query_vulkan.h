@@ -4,11 +4,15 @@
 #include <afterlight/mesh.h>
 #include <vulkan/vulkan.h>
 typedef struct af_vk_ray_query af_vk_ray_query;
+enum { AF_RAY_SHADOW_MASK = 1, AF_RAY_REFLECTION_MASK = 2 };
 typedef struct af_ray_instance {
   uint64_t mesh_key;
   VkBuffer vertices, indices;
   uint32_t vertex_count, index_count;
   af_mat4 world;
+  uint8_t mask;
+  af_color color;
+  af_vec4 emission_unlit;
 } af_ray_instance;
 typedef struct af_ray_stats {
   uint64_t bytes, blas_builds, tlas_builds;
@@ -24,7 +28,7 @@ void af_vk_ray_query_destroy(af_vk_ray_query *r);
 /* Called after this frame's fence, before acquiring a presentation image. */
 bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame,
                              const af_ray_instance *instances, size_t count,
-                             VkDescriptorSet descriptor);
+                             bool reflections, VkDescriptorSet descriptor);
 void af_vk_ray_query_record(af_vk_ray_query *r, unsigned frame,
                             VkCommandBuffer command);
 af_ray_stats af_vk_ray_query_stats(const af_vk_ray_query *r);

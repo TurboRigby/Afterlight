@@ -915,6 +915,12 @@ static void environment_panel(editor *app,float width,float height){
         if(render.anti_aliasing==AF_AA_TAA){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"History weight",0,&render.taa_history_weight,.98f,.05f,.005f)!=0;}
         if(render.anti_aliasing!=AF_AA_OFF){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"AA sharpening",0,&render.aa_sharpness,1,.05f,.005f)!=0;}
         nk_layout_row_dynamic(ctx,28,1);nk_bool ray_shadows=render.ray_traced_shadows;if(nk_checkbox_label(ctx,"Ray-traced sun shadows (experimental)",&ray_shadows)){render.ray_traced_shadows=ray_shadows!=0;changed=true;}
+        nk_bool ray_reflections=render.ray_traced_water_reflections;
+        nk_layout_row_dynamic(ctx,28,1);
+        if(nk_checkbox_label(ctx,"Ray-traced water reflections",&ray_reflections)){
+            render.ray_traced_water_reflections=ray_reflections!=0;
+            changed=true;
+        }
         af_engine_stats ray_stats=af_engine_get_stats(app->engine);
         label(ctx,ray_stats.ray_query_supported?"Hardware ray queries available; unsupported casters use maps.":"Hardware ray queries unavailable: using raster shadows.",38);
         if(ray_stats.ray_tracing_failed)label(ctx,"Ray resources unavailable: raster fallback active.",28);
@@ -976,6 +982,8 @@ static void performance_panel(editor *app,float width,float height)
         snprintf(text,sizeof(text),"Dropped catch-up %.3f s",stats.simulation_dropped_seconds);label(ctx,text,24);
         static const char *views[]={"Shaded","Depth (log scale)","Motion vectors","Previous history","History rejection"};nk_layout_row_dynamic(ctx,28,1);int view=nk_combo(ctx,views,5,(int)stats.debug_view,26,nk_vec2(320,190));if(view!=(int)stats.debug_view)af_engine_set_debug_view(app->engine,(af_debug_view)view);
         snprintf(text,sizeof(text),"Ray shadows: %s / %zu instances / %zu meshes",stats.ray_traced_shadows_active?"active":stats.ray_query_supported?"off":"unsupported",stats.ray_instances,stats.ray_meshes);label(ctx,text,26);
+        snprintf(text,sizeof(text),"Ray water reflections: %s",stats.ray_traced_water_reflections_active?"active":stats.ray_query_supported?"off":"unsupported");
+        label(ctx,text,26);
         snprintf(text,sizeof(text),"Ray AS %.2f MiB / build %.3f ms / %zu raster casters",(double)stats.ray_tracing_bytes/1048576,stats.gpu_ray_build_ms,stats.ray_raster_casters);label(ctx,text,26);
         snprintf(text,sizeof(text),"Visible %zu / culled %zu",stats.visible_objects,stats.culled_objects);label(ctx,text,24);
         snprintf(text,sizeof(text),"Tracked GPU %.1f / %.0f MiB%s",(double)stats.tracked_gpu_bytes/1048576,(double)stats.gpu_budget_bytes/1048576,stats.gpu_memory_over_budget?" OVER BUDGET":"");label(ctx,text,24);

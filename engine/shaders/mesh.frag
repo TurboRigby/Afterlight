@@ -2,7 +2,9 @@
 #extension GL_GOOGLE_include_directive : require
 #ifdef AF_RAY_QUERY
 #extension GL_EXT_ray_query : require
-layout(set=0,binding=10) uniform accelerationStructureEXT sun_scene;
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference_uvec2 : require
+layout(set=0,binding=10) uniform accelerationStructureEXT scene_acceleration;
 #endif
 /* SPDX-License-Identifier: MPL-2.0
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -82,6 +84,7 @@ float raster_shadow_visibility(vec3 n){
 float shadow_visibility(vec3 n){
     float raster=raster_shadow_visibility(n);
 #ifdef AF_RAY_QUERY
+    if(frame.sky_params.z<.5)return raster;
     if(frame.shadow_params.x<.5||draw.params.y<.5||((uint(draw.params.x)&1u)!=0u))return 1;
     vec3 l=-frame.direction_intensity.xyz;
     if(dot(n,l)<=0)return raster;
@@ -90,8 +93,8 @@ float shadow_visibility(vec3 n){
     if(dot(geometric,l)<0)geometric=-geometric;
     float bias=max(.001,frame.shadow_params.w*.1);
     rayQueryEXT query;
-    rayQueryInitializeEXT(query,sun_scene,gl_RayFlagsTerminateOnFirstHitEXT|gl_RayFlagsOpaqueEXT,
-        255,world_position+geometric*bias,.001,l,10000.0);
+    rayQueryInitializeEXT(query,scene_acceleration,gl_RayFlagsTerminateOnFirstHitEXT|gl_RayFlagsOpaqueEXT,
+        1,world_position+geometric*bias,.001,l,10000.0);
     while(rayQueryProceedEXT(query)){}
     return rayQueryGetIntersectionTypeEXT(query,true)==gl_RayQueryCommittedIntersectionNoneEXT?raster:0.0;
 #else
@@ -143,16 +146,30 @@ float local_visibility(LocalLight light,vec3 n){
     }return sum/9.0;
 }
 vec2 environment_uv(vec3 d){return vec2((atan(d.z,d.x)-frame.render_params.w)/(2.0*3.14159265359)+0.5,acos(clamp(d.y,-1.0,1.0))/3.14159265359);}
+#ifdef AF_RAY_QUERY
+#include "water_reflection.glsl"
+#endif
 vec3 environment_light(vec3 base,vec3 n,vec3 v,float roughness,float metal){
-    if(frame.render_params.z<=0)return vec3(0);
+    if(frame.render_params.z<=0
+#ifdef AF_RAY_QUERY
+       && !(water_surface() && frame.sky_params.w>.5)
+#endif
+    )return vec3(0);
     vec3 diffuse=textureLod(irradiance_map,environment_uv(n),0).rgb;
     if(draw.params.z<0.5)return diffuse*base*frame.render_params.z;
     float rough=clamp(roughness,0.04,1.0),nv=max(dot(n,v),0.0);
     vec3 f0=mix(vec3(water_surface()?water_f0():0.04),base,metal);
     vec3 fresnel=f0+(max(vec3(1.0-rough),f0)-f0)*pow(1.0-nv,5.0);
-    vec3 radiance=textureLod(environment_map,environment_uv(reflect(-v,n)),rough*5.0).rgb;
+    vec3 direction=reflect(-v,n);
+    vec3 radiance=textureLod(environment_map,environment_uv(direction),rough*5.0).rgb*frame.render_params.z;
+#ifdef AF_RAY_QUERY
+    vec3 hit;
+    if(water_surface() && trace_water_reflection(n,direction,rough,hit))
+        radiance=mix(hit,radiance,smoothstep(.12,.6,rough));
+#endif
     vec2 brdf=texture(brdf_lut,vec2(nv,rough)).rg;
-    return ((vec3(1)-fresnel)*(1.0-metal)*diffuse*base+radiance*(f0*brdf.x+brdf.y))*frame.render_params.z;
+    return (vec3(1)-fresnel)*(1.0-metal)*diffuse*base*frame.render_params.z+
+           radiance*(f0*brdf.x+brdf.y);
 }
 #include "water_fog.glsl"
 void main(){

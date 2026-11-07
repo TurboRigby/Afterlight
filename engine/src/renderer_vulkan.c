@@ -36,7 +36,8 @@
 
 #define AF_FRAMES_IN_FLIGHT AF_UI_FRAMES_IN_FLIGHT
 _Static_assert(AF_FRAMES_IN_FLIGHT==AF_SHADOW_FRAME_COUNT,"Independent shadow maps for each frame");
-enum {AF_RESOURCE_AA_MASK=3u,AF_RESOURCE_BLOOM=4u,AF_RESOURCE_MOTION=8u,AF_RESOURCE_REFRACTION=16u,AF_RESOURCE_RAY_QUERY=32u};
+enum {AF_RESOURCE_AA_MASK=3u,AF_RESOURCE_BLOOM=4u,AF_RESOURCE_MOTION=8u,AF_RESOURCE_REFRACTION=16u,AF_RESOURCE_RAY_SHADOWS=32u,AF_RESOURCE_RAY_REFLECTIONS=64u,
+      AF_RESOURCE_RAY_QUERY=AF_RESOURCE_RAY_SHADOWS|AF_RESOURCE_RAY_REFLECTIONS};
 #define AF_PORTABILITY_SUBSET "VK_KHR_portability_subset"
 
 typedef struct af_gpu_buffer {
@@ -61,7 +62,7 @@ typedef struct af_frame_uniform {
 _Static_assert(sizeof(af_frame_uniform)==3344,"Shader frame layout");
 typedef struct af_blend_draw {size_t index;float depth;} af_blend_draw;
 static int blend_compare(const void *a,const void *b){const af_blend_draw *x=a,*y=b;if(x->depth!=y->depth)return x->depth>y->depth?-1:1;return (x->index>y->index)-(x->index<y->index);}
-typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;af_vk_texture *texture;float alpha,cutoff;uint32_t alpha_mode;bool ray_caster,liquid;} af_shadow_draw;
+typedef struct af_shadow_draw {af_mat4 model;size_t mesh;uint32_t skin_base;af_vk_texture *texture;float alpha,cutoff;uint32_t alpha_mode;bool ray_caster;size_t object_index;} af_shadow_draw;
 #define AF_SKIN_INSTANCES 128u
 #define AF_SKIN_MATRICES (AF_SKIN_INSTANCES*AF_ANIMATION_MAX_JOINTS+1u)
 typedef struct af_skin_instance {af_object_id object;af_mat4 matrices[AF_ANIMATION_MAX_JOINTS];size_t count;} af_skin_instance;
@@ -448,7 +449,7 @@ static bool create_device(af_renderer *renderer)
         address=(VkPhysicalDeviceBufferDeviceAddressFeatures){.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,.pNext=&acceleration,.bufferDeviceAddress=VK_TRUE};
         acceleration=(VkPhysicalDeviceAccelerationStructureFeaturesKHR){.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,.pNext=&ray,.accelerationStructure=VK_TRUE};
         ray=(VkPhysicalDeviceRayQueryFeaturesKHR){.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,.rayQuery=VK_TRUE};}
-    af_log("info","Hardware ray-query sun shadows: %s.",renderer->ray_supported?"available":"unavailable (raster fallback)");
+    af_log("info","Hardware ray queries: %s.",renderer->ray_supported?"available":"unavailable (raster fallback)");
     VkPhysicalDeviceFeatures supported;vkGetPhysicalDeviceFeatures(renderer->physical_device,&supported);
     VkPhysicalDeviceFeatures enabled={.samplerAnisotropy=supported.samplerAnisotropy,.independentBlend=supported.independentBlend};
     renderer->temporal_supported=supported.independentBlend!=0;if(!renderer->temporal_supported)af_log("info","TAA requires independent attachment blending; TAA scenes will use FXAA on this device.");
@@ -1075,18 +1076,19 @@ static bool create_environment(af_renderer *renderer,uint32_t profile){
     if(renderer->frame_pool)update_environment_descriptors(renderer);return true;
 }
 static bool create_frame_layout(af_renderer *renderer){
-    VkDescriptorSetLayoutBinding bindings[11]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
+    VkDescriptorSetLayoutBinding bindings[12]={{.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.descriptorCount=1,.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT}};
     for(uint32_t i=1;i<6;++i)bindings[i]=(VkDescriptorSetLayoutBinding){i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
     bindings[6]=(VkDescriptorSetLayoutBinding){6,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,NULL};
     bindings[7]=(VkDescriptorSetLayoutBinding){7,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};bindings[8]=(VkDescriptorSetLayoutBinding){8,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
     bindings[9]=(VkDescriptorSetLayoutBinding){9,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,NULL};
     bindings[10]=(VkDescriptorSetLayoutBinding){10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
-    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=renderer->ray_supported?11u:10u,.pBindings=bindings};
+    bindings[11]=(VkDescriptorSetLayoutBinding){11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL};
+    VkDescriptorSetLayoutCreateInfo layout={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,.bindingCount=renderer->ray_supported?12u:10u,.pBindings=bindings};
     return vk_ok(vkCreateDescriptorSetLayout(renderer->device,&layout,NULL,&renderer->frame_layout),"frame layout");
 }
 static bool create_uniforms(af_renderer *renderer)
 {
-    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,7*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,AF_FRAMES_IN_FLIGHT}};
+    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,7*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,(renderer->ray_supported?3u:2u)*AF_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,AF_FRAMES_IN_FLIGHT}};
     VkDescriptorPoolCreateInfo pool={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,.maxSets=AF_FRAMES_IN_FLIGHT,.poolSizeCount=renderer->ray_supported?4u:3u,.pPoolSizes=sizes};
     if(!vk_ok(vkCreateDescriptorPool(renderer->device,&pool,NULL,&renderer->frame_pool),"frame pool"))return false;
     for(unsigned i=0;i<AF_FRAMES_IN_FLIGHT;++i){af_frame *frame=&renderer->frames[i];af_frame_uniform initial={0};
@@ -1292,7 +1294,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
         if(mesh==renderer->mesh_count||!object_world(renderer,scene,i,&model))continue;
         size_t n=renderer->shadow_count++;
         af_vk_texture *texture=renderer->white;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;break;}
-        renderer->shadow_draws[n]=(af_shadow_draw){model,mesh,skin_base(renderer,object->id,&renderer->meshes[mesh].gpu),texture,object->material.base_color.a,object->material.alpha_cutoff,(uint32_t)object->material.alpha_mode,false,af_scene_get_water(scene,object->id)!=NULL};
+        renderer->shadow_draws[n]=(af_shadow_draw){model,mesh,skin_base(renderer,object->id,&renderer->meshes[mesh].gpu),texture,object->material.base_color.a,object->material.alpha_cutoff,(uint32_t)object->material.alpha_mode,false,i};
         renderer->shadow_bounds[n]=object_bounds(renderer,object->id,model,&renderer->meshes[mesh].gpu);
     }
     af_directional_light light=af_scene_get_light(scene);af_vec3 direction=af_vec3_normalize(light.direction),forward=af_camera_forward(camera);
@@ -1342,16 +1344,66 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     memcpy(uniform->shadow_matrices,view->matrices,sizeof(view->matrices));return true;
 }
 static uint64_t shadow_hash(uint64_t h,const void *data,size_t size){const unsigned char *p=data;for(size_t i=0;i<size;++i){h^=p[i];h*=UINT64_C(1099511628211);}return h;}
-static bool prepare_ray_shadows(af_renderer *r,af_frame *frame){
-    if(r->rays && r->ray_revision!=r->mesh_revision){if(!af_renderer_wait_idle(r))return false;af_vk_ray_query_destroy(r->rays);r->rays=NULL;}
-    if(!r->rays){r->rays=af_vk_ray_query_create(r->physical_device,r->device,AF_FRAMES_IN_FLIGHT,r->timestamp_bits,r->timestamp_period);r->ray_revision=r->mesh_revision;if(!r->rays)return false;}
-    if(r->shadow_count>r->ray_input_capacity){af_ray_instance *inputs=realloc(r->ray_inputs,r->shadow_count*sizeof(*inputs));if(!inputs)return false;r->ray_inputs=inputs;r->ray_input_capacity=r->shadow_count;}
-    size_t count=0;r->ray_raster_casters=0;
-    for(size_t i=0;i<r->shadow_count;++i){af_shadow_draw *draw=&r->shadow_draws[i];const af_mesh_asset *asset=&r->meshes[draw->mesh];af_mat4 inverse;
-        draw->ray_caster=!draw->liquid&&!asset->dynamic&&!asset->gpu.skinned&&draw->alpha_mode==AF_ALPHA_OPAQUE&&af_mat4_inverse(draw->model,&inverse);
-        if(!draw->ray_caster){++r->ray_raster_casters;continue;}
-        r->ray_inputs[count++]=(af_ray_instance){draw->mesh+1,asset->gpu.vertices.handle,asset->gpu.indices.handle,asset->gpu.vertex_count,asset->gpu.index_count,draw->model};}
-    return af_vk_ray_query_prepare(r->rays,r->frame_index,r->ray_inputs,count,frame->descriptor);
+static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *scene,
+                              bool shadows, bool reflections)
+{
+    if(r->rays && r->ray_revision!=r->mesh_revision){
+        if(!af_renderer_wait_idle(r))return false;
+        af_vk_ray_query_destroy(r->rays);
+        r->rays=NULL;
+    }
+    if(!r->rays){
+        r->rays=af_vk_ray_query_create(r->physical_device,r->device,AF_FRAMES_IN_FLIGHT,
+                                      r->timestamp_bits,r->timestamp_period);
+        r->ray_revision=r->mesh_revision;
+        if(!r->rays)return false;
+    }
+    size_t objects=af_scene_object_count(scene);
+    if(objects>r->ray_input_capacity){
+        af_ray_instance *inputs=realloc(r->ray_inputs,objects*sizeof(*inputs));
+        if(!inputs)return false;
+        r->ray_inputs=inputs;
+        r->ray_input_capacity=objects;
+    }
+
+    size_t count=0,shadow_index=0;
+    r->ray_raster_casters=0;
+    for(size_t i=0;i<objects;++i){
+        af_shadow_draw *caster=NULL;
+        if(shadow_index<r->shadow_count && r->shadow_draws[shadow_index].object_index==i)
+            caster=&r->shadow_draws[shadow_index++];
+        if(!reflections && !caster)continue;
+
+        const af_scene_object *object=af_scene_object_at(scene,i);
+        const af_material *material=&object->material;
+        uint8_t mask=(shadows && caster?AF_RAY_SHADOW_MASK:0) |
+                     (reflections?AF_RAY_REFLECTION_MASK:0);
+        if(!mask || material->alpha_mode!=AF_ALPHA_OPAQUE ||
+           af_scene_get_water(scene,object->id) ||
+           (!caster && !af_scene_object_visible(scene,object->id)))continue;
+        size_t mesh=caster?caster->mesh:find_mesh_index(r,object->mesh);
+        if(mesh==r->mesh_count)continue;
+        const af_mesh_asset *asset=&r->meshes[mesh];
+        if(asset->dynamic || asset->gpu.skinned)continue;
+        af_mat4 world,inverse;
+        if(caster)world=caster->model;
+        else if(!object_world(r,scene,i,&world))continue;
+        if(!af_mat4_inverse(world,&inverse))continue;
+        if(caster && shadows)caster->ray_caster=true;
+
+        r->ray_inputs[count++]=(af_ray_instance){
+            .mesh_key=mesh+1,.vertices=asset->gpu.vertices.handle,
+            .indices=asset->gpu.indices.handle,.vertex_count=asset->gpu.vertex_count,
+            .index_count=asset->gpu.index_count,.world=world,.mask=mask,
+            .color=material->base_color,.emission_unlit={
+                material->emission.x*material->emission_strength,
+                material->emission.y*material->emission_strength,
+                material->emission.z*material->emission_strength,material->unlit?1.f:0.f}};
+    }
+    if(shadows)for(size_t i=0;i<r->shadow_count;++i)
+        if(!r->shadow_draws[i].ray_caster)++r->ray_raster_casters;
+    return af_vk_ray_query_prepare(r->rays,r->frame_index,r->ray_inputs,count,
+                                   reflections,frame->descriptor);
 }
 static uint64_t shadow_signature(af_renderer *r,af_mat4 matrix,af_shadow_settings settings,bool enabled){
     uint64_t h=shadow_hash(UINT64_C(14695981039346656037),&matrix,sizeof(matrix));
@@ -1392,6 +1444,7 @@ static float halton(unsigned n, unsigned base) {
 }
 static uint64_t temporal_settings_hash(uint64_t h, af_render_settings value) {
   h=shadow_hash(h,&value.ray_traced_shadows,sizeof(value.ray_traced_shadows));
+  h=shadow_hash(h,&value.ray_traced_water_reflections,sizeof(value.ray_traced_water_reflections));
   h = shadow_hash(h, &value.anti_aliasing, sizeof(value.anti_aliasing));
   h = shadow_hash(h, &value.aa_sharpness, sizeof(value.aa_sharpness));
   h = shadow_hash(h, &value.taa_history_weight,
@@ -1637,7 +1690,21 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     af_render_settings environment_settings=af_scene_get_render_settings(scene);
     if(renderer->debug_view!=AF_DEBUG_SHADED)environment_settings.anti_aliasing=AF_AA_TAA;
     if(environment_settings.anti_aliasing==AF_AA_TAA&&!renderer->temporal_supported)environment_settings.anti_aliasing=AF_AA_FXAA;
-    uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u)|((environment_settings.ray_traced_shadows&&renderer->ray_supported&&!renderer->ray_failed&&af_scene_get_shadows(scene).enabled)?AF_RESOURCE_RAY_QUERY:0u);
+    uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u);
+    if(renderer->ray_supported && !renderer->ray_failed){
+        if(environment_settings.ray_traced_shadows && af_scene_get_shadows(scene).enabled)
+            resource_config|=AF_RESOURCE_RAY_SHADOWS;
+        if(environment_settings.ray_traced_water_reflections){
+            for(size_t i=0;i<af_scene_water_count(scene);++i){
+                const af_water *water=af_scene_water_at(scene,i);
+                if(water->enabled && water->mode!=AF_WATER_PARTICLES &&
+                   af_scene_object_visible(scene,water->owner)){
+                    resource_config|=AF_RESOURCE_RAY_REFLECTIONS;
+                    break;
+                }
+            }
+        }
+    }
     if (renderer->resize_pending || !renderer->swapchain.handle || renderer->swapchain.resource_config!=resource_config) {
         if (!create_swapchain(renderer,environment_settings,resource_config)) {
             if(resource_config&AF_RESOURCE_RAY_QUERY){af_log("warning","Optional ray-query pipeline unavailable; retrying raster rendering.");renderer->ray_failed=true;renderer->resize_pending=renderer->swapchain_invalid=true;return true;}
@@ -1662,8 +1729,12 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         return false;
     renderer->cpu_fence_ms=(double)(SDL_GetPerformanceCounter()-wait_start)*1000/(double)SDL_GetPerformanceFrequency();
     if(!stream_prepare(renderer))return false;
-    if((resource_config&AF_RESOURCE_RAY_QUERY)&&!prepare_ray_shadows(renderer,frame)){
-        af_log("warning","Ray-query initialization/build preparation failed; retaining raster shadows.");
+    bool ray_shadows=(resource_config&AF_RESOURCE_RAY_SHADOWS)!=0;
+    bool ray_reflections=(resource_config&AF_RESOURCE_RAY_REFLECTIONS)!=0;
+    uniform.sky_params.z=ray_shadows?1.f:0.f;
+    uniform.sky_params.w=ray_reflections?1.f:0.f;
+    if((ray_shadows||ray_reflections)&&!prepare_ray_scene(renderer,frame,scene,ray_shadows,ray_reflections)){
+        af_log("warning","Ray-query initialization/build preparation failed; using raster and environment fallbacks.");
         renderer->ray_failed=true;renderer->resize_pending=true;return true;
     }
     if(frame->timestamp_submitted){uint64_t values[5];
@@ -1716,7 +1787,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         af_vk_shadows_begin(renderer->shadows,frame->command,renderer->frame_index,layer,af_scene_get_shadows(scene),frame->descriptor);
         for(size_t i=0;uniform.shadow_params.x>.5f&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(shadow_view.matrices[layer],&renderer->shadow_bounds[i]))continue;
-            af_shadow_draw draw=renderer->shadow_draws[i];if((resource_config&AF_RESOURCE_RAY_QUERY)&&draw.ray_caster)continue;const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
+            af_shadow_draw draw=renderer->shadow_draws[i];if(ray_shadows&&draw.ray_caster)continue;const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
             af_mat4 mvp=af_mat4_mul(shadow_view.matrices[layer],draw.model);af_vk_shadows_push(renderer->shadows,frame->command,mvp.elements,draw.skin_base,draw.alpha_mode,draw.alpha,draw.cutoff,af_vk_texture_descriptor(draw.texture));
             VkDeviceSize offset=0;vkCmdBindVertexBuffers(frame->command,0,1,&mesh->vertices.handle,&offset);
             vkCmdBindIndexBuffer(frame->command,mesh->indices.handle,0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++renderer->shadow_draw_calls;
@@ -1802,7 +1873,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             af_color base=object->material.base_color;
             if(object->id==highlighted){base.r*=1.25f;base.g*=1.1f;base.b*=0.75f;}
             struct {af_mat4 model;af_color tint;af_vec4 params,surface,emission;} transform={world,base,{(float)((object->material.unlit?1u:0u)|((uint32_t)object->material.alpha_mode<<1u)|((uint32_t)lroundf(object->material.alpha_cutoff*65535)<<3u)),object->material.receive_shadows?1.0f:0.0f,object->material.physically_based?1.0f:0.0f,object->material.normal_map[0]?1.0f:0.0f},{object->material.roughness,object->material.metallic,object->material.normal_strength,(float)skin_base(renderer,object->id,mesh)},{object->material.emission.x,object->material.emission.y,object->material.emission.z,object->material.emission_strength}};
-            if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(1u<<21u)|(2u<<1u)),1,1,water->wind};if(refract)transform.params.x+=(float)(1u<<22u);if(water->mode!=AF_WATER_PARTICLES&&wa_contains(ph_water_runtime(renderer->water_physics),scene,water->owner,camera->position))transform.params.x+=(float)(1u<<23u);transform.surface=(af_vec4){water->roughness,water->ripple_scale,water->mode==AF_WATER_PARTICLES?water->particle_spacing:water->depth,water->mode==AF_WATER_PARTICLES?0:water->ripple_strength};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
+            if(water){transform.tint=(af_color){water->scattering.x,water->scattering.y,water->scattering.z,1};transform.params=(af_vec4){(float)((1u<<19u)|(1u<<21u)|(2u<<1u)),1,1,water->wind};if(water->mode!=AF_WATER_PARTICLES)transform.params.x+=(float)(1u<<18u);if(refract)transform.params.x+=(float)(1u<<22u);if(water->mode!=AF_WATER_PARTICLES&&wa_contains(ph_water_runtime(renderer->water_physics),scene,water->owner,camera->position))transform.params.x+=(float)(1u<<23u);transform.surface=(af_vec4){water->roughness,water->ripple_scale,water->mode==AF_WATER_PARTICLES?water->particle_spacing:water->depth,water->mode==AF_WATER_PARTICLES?0:water->ripple_strength};transform.emission=(af_vec4){water->absorption.x,water->absorption.y,water->absorption.z,water->ior};}
             _Static_assert(sizeof(transform)==128,"Portable draw push constant limit");
             af_vk_texture *texture=renderer->white;
             if(object->material.texture[0]){bool found=false;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;found=true;break;}
@@ -1915,7 +1986,8 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer)
     af_ray_stats ray=af_vk_ray_query_stats(renderer->rays);other+=ray.bytes;
     uint64_t post=af_vk_post_allocation_bytes(renderer->swapchain.post),shadows=af_vk_shadows_allocation_bytes(renderer->shadows)+af_vk_shadows_allocation_bytes(renderer->local_shadows),refraction=af_vk_refraction_allocation_bytes(renderer->swapchain.refraction),tracked=post+shadows+refraction+mesh_bytes+texture_bytes+other;
     return (af_engine_stats){
-        .ray_query_supported=renderer->ray_supported,.ray_traced_shadows_active=(renderer->swapchain.resource_config&AF_RESOURCE_RAY_QUERY)!=0&&!renderer->ray_failed,
+        .ray_query_supported=renderer->ray_supported,.ray_traced_shadows_active=(renderer->swapchain.resource_config&AF_RESOURCE_RAY_SHADOWS)!=0&&!renderer->ray_failed,
+        .ray_traced_water_reflections_active=(renderer->swapchain.resource_config&AF_RESOURCE_RAY_REFLECTIONS)!=0&&!renderer->ray_failed,
         .ray_tracing_failed=renderer->ray_failed,.ray_tracing_bytes=ray.bytes,.ray_blas_builds=ray.blas_builds,.ray_tlas_builds=ray.tlas_builds,.ray_instances=ray.instances,.ray_meshes=ray.meshes,.ray_raster_casters=renderer->ray_raster_casters,.gpu_ray_build_ms=ray.gpu_build_ms,
         .post_bytes=post,.shadow_bytes=shadows,.refraction_bytes=refraction,.mesh_bytes=mesh_bytes,.tracked_gpu_bytes=tracked,.gpu_budget_ms=renderer->gpu_budget_ms,.gpu_budget_bytes=renderer->gpu_budget_bytes,.gpu_time_over_budget=renderer->timing_valid&&renderer->gpu_ms[0]>renderer->gpu_budget_ms,.gpu_memory_over_budget=tracked>renderer->gpu_budget_bytes,.debug_view=renderer->debug_view,.effective_aa=(af_anti_aliasing)(renderer->swapchain.resource_config&AF_RESOURCE_AA_MASK),.visible_objects=renderer->visible_objects,.culled_objects=renderer->culled_objects,
         .gpu_timing_supported=renderer->timestamp_bits!=0,.gpu_timing_valid=renderer->timing_valid,

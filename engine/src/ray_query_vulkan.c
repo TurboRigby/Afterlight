@@ -26,10 +26,23 @@ typedef struct ray_acceleration {
 typedef struct ray_mesh {
   uint64_t key;
   ray_acceleration as;
+  VkDeviceAddress vertices, indices;
 } ray_mesh;
+typedef struct ray_surface {
+  af_color color;
+  af_vec4 emission_unlit;
+  uint32_t addresses[4];
+} ray_surface;
+_Static_assert(sizeof(ray_surface) == 48 &&
+                   offsetof(ray_surface, addresses) == 32,
+               "Reflection hit record matches std430");
+_Static_assert(sizeof(af_vertex) == 72 && offsetof(af_vertex, position) == 0 &&
+                   offsetof(af_vertex, color) == 12 &&
+                   offsetof(af_vertex, normal) == 28,
+               "Reflection geometry matches the shader's packed vertex layout");
 typedef struct ray_frame {
   ray_acceleration as;
-  ray_buffer instances;
+  ray_buffer instances, surfaces;
   size_t capacity;
   uint64_t hash;
   VkQueryPool query;
@@ -57,7 +70,7 @@ static bool result(VkResult code) {
   if (code == VK_SUCCESS)
     return true;
   af_log("warning",
-         "Ray-query resource operation failed (%d); using raster shadows.",
+         "Ray-query resource operation failed (%d); using renderer fallbacks.",
          (int)code);
   return false;
 }
@@ -219,6 +232,7 @@ void af_vk_ray_query_destroy(af_vk_ray_query *r) {
     for (unsigned i = 0; i < r->frame_count; ++i) {
       acceleration_free(r, &r->frames[i].as);
       buffer_free(r, &r->frames[i].instances);
+      buffer_free(r, &r->frames[i].surfaces);
       if (r->frames[i].query)
         vkDestroyQueryPool(r->device, r->frames[i].query, NULL);
     }
@@ -250,6 +264,10 @@ static ray_mesh *mesh_get(af_vk_ray_query *r, const af_ray_instance *in) {
             .buffer = in->vertices},
       ii = vi;
   ii.buffer = in->indices;
+  m->vertices = r->buffer_address(r->device, &vi);
+  m->indices = r->buffer_address(r->device, &ii);
+  if (!m->vertices || !m->indices)
+    return NULL;
   VkAccelerationStructureGeometryKHR geometry = {
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
       .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
@@ -259,11 +277,11 @@ static ray_mesh *mesh_get(af_vk_ray_query *r, const af_ray_instance *in) {
               VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
           .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
           .vertexData.deviceAddress =
-              r->buffer_address(r->device, &vi) + offsetof(af_vertex, position),
+              m->vertices + offsetof(af_vertex, position),
           .vertexStride = sizeof(af_vertex),
           .maxVertex = in->vertex_count - 1,
           .indexType = VK_INDEX_TYPE_UINT32,
-          .indexData.deviceAddress = r->buffer_address(r->device, &ii)}};
+          .indexData.deviceAddress = m->indices}};
   return acceleration_create(r, &m->as,
                              VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
                              geometry, in->index_count / 3)
@@ -280,7 +298,7 @@ static uint64_t hash_bytes(uint64_t h, const void *data, size_t bytes) {
 }
 bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame,
                              const af_ray_instance *in, size_t count,
-                             VkDescriptorSet descriptor) {
+                             bool reflections, VkDescriptorSet descriptor) {
   if (!r || frame >= r->frame_count || count > MAX_INSTANCES ||
       count > r->limits.maxInstanceCount)
     return false;
@@ -303,6 +321,24 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame,
       calloc(count ? count : 1, sizeof(*instances));
   if (!instances)
     return false;
+  size_t surface_count = reflections && count ? count : 1;
+  size_t surface_bytes = surface_count * sizeof(ray_surface);
+  if (f->surfaces.capacity < surface_bytes ||
+      (!reflections && f->surfaces.capacity > surface_bytes)) {
+    buffer_free(r, &f->surfaces);
+    if (!buffer_create(r, &f->surfaces, surface_bytes,
+                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true)) {
+      free(instances);
+      return false;
+    }
+  }
+  ray_surface *surfaces = NULL;
+  if (!result(vkMapMemory(r->device, f->surfaces.memory, 0, VK_WHOLE_SIZE, 0,
+                          (void **)&surfaces))) {
+    free(instances);
+    return false;
+  }
+  surfaces[0] = (ray_surface){0};
   bool ok = true;
   uint64_t hash =
       hash_bytes(UINT64_C(14695981039346656037), &count, sizeof(count));
@@ -316,12 +352,27 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame,
       for (unsigned col = 0; col < 4; ++col)
         instances[i].transform.matrix[row][col] =
             in[i].world.elements[col * 4 + row];
-    instances[i].mask = 255;
+    instances[i].mask = in[i].mask;
+    instances[i].instanceCustomIndex = reflections ? (uint32_t)i : 0;
+    if (reflections) {
+      surfaces[i] = (ray_surface){
+          .color = in[i].color,
+          .emission_unlit = in[i].emission_unlit,
+          .addresses = {(uint32_t)m->vertices, (uint32_t)(m->vertices >> 32),
+                        (uint32_t)m->indices, (uint32_t)(m->indices >> 32)}};
+    }
     instances[i].flags =
         VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
     instances[i].accelerationStructureReference = m->as.address;
     hash = hash_bytes(hash, &instances[i], sizeof(instances[i]));
   }
+  if (ok && !f->surfaces.coherent) {
+    VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                                 .memory = f->surfaces.memory,
+                                 .size = VK_WHOLE_SIZE};
+    ok = result(vkFlushMappedMemoryRanges(r->device, 1, &range));
+  }
+  vkUnmapMemory(r->device, f->surfaces.memory);
   if (!ok) {
     free(instances);
     return false;
@@ -388,7 +439,17 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame,
       .dstBinding = 10,
       .descriptorCount = 1,
       .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR};
-  vkUpdateDescriptorSets(r->device, 1, &write, 0, NULL);
+  VkDescriptorBufferInfo surface_buffer = {f->surfaces.buffer, 0,
+                                           surface_bytes};
+  VkWriteDescriptorSet surface_write = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = descriptor,
+      .dstBinding = 11,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .pBufferInfo = &surface_buffer};
+  VkWriteDescriptorSet writes[] = {write, surface_write};
+  vkUpdateDescriptorSets(r->device, 2, writes, 0, NULL);
   r->stats.instances = count;
   r->stats.meshes = r->mesh_count;
   return true;

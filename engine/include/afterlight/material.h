@@ -45,6 +45,7 @@ typedef enum af_anti_aliasing { AF_AA_OFF, AF_AA_FXAA, AF_AA_SMAA, AF_AA_TAA } a
 typedef enum af_debug_view {AF_DEBUG_SHADED,AF_DEBUG_DEPTH,AF_DEBUG_MOTION,AF_DEBUG_HISTORY,AF_DEBUG_REJECTION,AF_DEBUG_COUNT} af_debug_view;
 typedef struct af_render_settings {
     bool ray_traced_shadows; /* Optional hardware ray-query sun shadows; raster fallback. */
+    bool ray_traced_water_reflections; /* Optional single-bounce reflection. */
     af_anti_aliasing anti_aliasing;
     float aa_sharpness,taa_history_weight;
     float exposure; bool tone_mapping;

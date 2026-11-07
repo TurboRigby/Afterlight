@@ -435,7 +435,7 @@ static void fixed(af_engine *engine, double delta, void *memory) {
 }
 static void shutdown(af_engine *engine, void *memory) {
   player *app = memory;
-  bool ray_requested=af_scene_get_render_settings(app->runtime.scene).ray_traced_shadows;
+  af_render_settings render=af_scene_get_render_settings(app->runtime.scene);
   af_engine_set_scene(engine, NULL);
   ed_runtime_stop(&app->runtime);
   af_asset_watch_destroy(app->watch);
@@ -448,7 +448,11 @@ static void shutdown(af_engine *engine, void *memory) {
   af_engine_stats stats = af_engine_get_stats(engine);
   printf("Player: %" PRIu64 " frames; %u validation errors.\n",
          stats.rendered_frames, stats.validation_errors);
-  if(ray_requested)printf("Ray shadows: %s; %zu instances; %llu retained bytes.\n",stats.ray_traced_shadows_active?"hardware ray queries":"raster fallback",stats.ray_instances,(unsigned long long)stats.ray_tracing_bytes);
+  if(render.ray_traced_shadows)printf("Ray shadows: %s; %zu instances; %llu retained bytes.\n",stats.ray_traced_shadows_active?"hardware ray queries":"raster fallback",stats.ray_instances,(unsigned long long)stats.ray_tracing_bytes);
+  if (render.ray_traced_water_reflections)
+    printf("Ray water reflections: %s.\n",
+           stats.ray_traced_water_reflections_active ? "hardware ray queries"
+                                                    : "environment fallback");
 }
 int main(int argc, char **argv) {
   player app = {0};

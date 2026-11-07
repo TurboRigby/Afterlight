@@ -37,8 +37,8 @@ add_custom_command(OUTPUT "${ray_shader_header}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
     COMMAND Vulkan::glslangValidator --target-env vulkan1.2 --spirv-val -DAF_RAY_QUERY=1
         --vn af_mesh_ray_frag -o "${ray_shader_header}" "${PROJECT_SOURCE_DIR}/engine/shaders/mesh.frag"
-    DEPENDS engine/shaders/mesh.frag engine/shaders/water_fog.glsl engine/shaders/water_ripples.glsl Vulkan::glslangValidator
-    COMMENT "Compiling optional ray-query sun-shadow shader" VERBATIM)
+    DEPENDS engine/shaders/mesh.frag engine/shaders/water_fog.glsl engine/shaders/water_ripples.glsl engine/shaders/water_reflection.glsl Vulkan::glslangValidator
+    COMMENT "Compiling optional ray-query material shader" VERBATIM)
 list(APPEND afterlight_shader_headers "${ray_shader_header}")
 
 add_library(afterlight_json STATIC third_party/cjson/cJSON.c)
@@ -617,6 +617,12 @@ if(BUILD_TESTING)
     target_include_directories(afterlight_ray_shadows_test PRIVATE engine/src sandbox)
     target_link_libraries(afterlight_ray_shadows_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_ray_shadows_test)
+    add_executable(afterlight_water_reflection_test tests/water_reflection.c)
+    target_include_directories(afterlight_water_reflection_test PRIVATE engine/src)
+    target_link_libraries(afterlight_water_reflection_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_water_reflection_test)
+    add_test(NAME afterlight.water_reflection COMMAND afterlight_water_reflection_test)
+    set_tests_properties(afterlight.water_reflection PROPERTIES TIMEOUT 45 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     add_test(NAME afterlight.water_ray_shadows COMMAND afterlight_water_render_test)
     set_tests_properties(afterlight.water_ray_shadows PROPERTIES TIMEOUT 60 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;AFTERLIGHT_TEST_RAY_WATER=1;AFTERLIGHT_TEST_AA=taa")
     add_test(NAME afterlight.ray_lab COMMAND afterlight_player --project "${PROJECT_BINARY_DIR}/ray-shadow-lab.afterlight.project" --frames 120 --validation)
