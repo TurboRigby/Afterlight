@@ -94,6 +94,7 @@ static bool init(af_engine *e, void *data) {
     s->source = af_scene_load(s->scene_path, NULL);
     af_mesh_data mesh = cube_mesh_data();
     if (!s->source || !af_engine_upload_mesh(e, "cube", &mesh) ||
+        !af_engine_load_scene_assets(e,s->source,NULL) ||
         !ed_runtime_set_project(&s->runtime, s->project, s->scene_path) ||
         !ed_runtime_start_file(&s->runtime, s->source, e, s->module))
         return false;

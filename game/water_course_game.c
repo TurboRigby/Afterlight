@@ -100,8 +100,9 @@ static void frame(void *memory, const af_game_host *h, double dt) {
             h->capture_mouse(h->engine, true);
         if (h->mouse_captured(h->engine)) {
             af_vec2 m = h->mouse_delta(h->engine);
-            s->camera.yaw += m.x * .0025f;
-            s->camera.pitch = fmaxf(-1.5f, fminf(1.5f, s->camera.pitch - m.y * .0025f));
+            const af_scene_object *body=h->get_object(h->scene,s->body);float sensitivity=body?body->gameplay.player.mouse_sensitivity:.0025f;
+            s->camera.yaw += m.x * sensitivity;
+            s->camera.pitch = fmaxf(-1.5f, fminf(1.5f, s->camera.pitch - m.y * sensitivity));
         }
     }
     camera(s, h);
@@ -213,14 +214,14 @@ static void update(void *memory, const af_game_host *h, double delta) {
             if (h->world_matrix(h->scene, o->id, &m)) {
                 s->status.checkpoint = o->gameplay.checkpoint_order;
                 s->checkpoint = (af_vec3){m.elements[12], m.elements[13], m.elements[14]};
-                h->log("Water checkpoint reached.");
+                h->log("Water checkpoint reached.");h->play_sound(h->engine,"checkpoint",.7f);
             }
         }
-        if (o->gameplay.role == AF_ROLE_GOAL && s->status.checkpoint == s->status.checkpoint_count &&
+        if (!s->status.finished && o->gameplay.role == AF_ROLE_GOAL && s->status.checkpoint == s->status.checkpoint_count &&
             (!s->hard || s->received >= .05f)) {
             s->status.finished = true;
             s->status.running = false;
-            s->status.finish_time = s->status.elapsed;
+            s->status.finish_time = s->status.elapsed;h->play_sound(h->engine,"finish",.8f);
         }
     }
     publish(s, h);

@@ -6005,11 +6005,1870 @@
           0
         ]
       }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "Guide_animation",
+        "clip": 0,
+        "speed": 0.65,
+        "autoplay": true,
+        "loop": true
+      },
+      "model": {
+        "root": "0",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "0",
+      "id": "43",
+      "name": "Course guide",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        -2.3,
+        0.25,
+        5.7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.649999976158142,
+        0.649999976158142,
+        0.649999976158142
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 10,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 10,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "43",
+      "id": "44",
+      "name": "Rig",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 0,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "44",
+      "id": "45",
+      "name": "Body",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 0,
+        "skin": 0,
+        "primitive": true
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": true,
+        "roughness": 0.41999998688697815,
+        "metallic": 0.3499999940395355,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 1,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "45",
+      "id": "46",
+      "name": "Character_m0_p0",
+      "mesh": "Guide_mesh",
+      "visible": true,
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 1,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "44",
+      "id": "47",
+      "name": "Hips",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0,
+        1.100000023841858,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 2,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "47",
+      "id": "48",
+      "name": "Torso",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0,
+        0.5,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 3,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "48",
+      "id": "49",
+      "name": "Head",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0,
+        0.800000011920929,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 4,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "48",
+      "id": "50",
+      "name": "Left arm",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        -0.550000011920929,
+        0.4000000059604645,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 5,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "50",
+      "id": "51",
+      "name": "Left forearm",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        -0.550000011920929,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 6,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "48",
+      "id": "52",
+      "name": "Right arm",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0.550000011920929,
+        0.4000000059604645,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 7,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "52",
+      "id": "53",
+      "name": "Right forearm",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0.550000011920929,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 8,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "47",
+      "id": "54",
+      "name": "Left leg",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        -0.23000000417232513,
+        -0.5,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "gameplay": {
+        "player": {
+          "enabled": false,
+          "spawn": "0",
+          "radius": 0.3499999940395355,
+          "half_height": 0.550000011920929,
+          "speed": 4.5,
+          "jump_speed": 6.5,
+          "gravity": 18,
+          "slope_limit": 0.7853981852531433,
+          "skin": 0.0020000000949949026,
+          "ground_snap": 0.15000000596046448,
+          "mouse_sensitivity": 0.0024999999441206455
+        },
+        "camera": {
+          "enabled": false,
+          "primary": false,
+          "eye_height": 0.75,
+          "vertical_fov": 1.0471975803375244,
+          "near_clip": 0.07999999821186066,
+          "far_clip": 160
+        },
+        "role": "none",
+        "checkpoint_order": 0
+      },
+      "animation": {
+        "asset": "",
+        "clip": 0,
+        "speed": 1,
+        "autoplay": false,
+        "loop": true
+      },
+      "model": {
+        "root": "43",
+        "node": 9,
+        "skin": -1,
+        "primitive": false
+      },
+      "material": {
+        "base_color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "texture": "",
+        "unlit": false,
+        "cast_shadows": true,
+        "receive_shadows": true,
+        "physically_based": false,
+        "roughness": 0.600000023841858,
+        "metallic": 0,
+        "emission": [
+          0,
+          0,
+          0
+        ],
+        "emission_strength": 0,
+        "normal_map": "",
+        "normal_strength": 1,
+        "metallic_roughness_map": "",
+        "alpha_mode": "opaque",
+        "alpha_cutoff": 0.5
+      },
+      "collider": {
+        "type": "none",
+        "enabled": true,
+        "trigger": false,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "half_extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "radius": 0.5,
+        "half_height": 0.5,
+        "layer": 1
+      },
+      "parent": "47",
+      "id": "55",
+      "name": "Right leg",
+      "mesh": "__node",
+      "visible": true,
+      "position": [
+        0.23000000417232513,
+        -0.5,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "rig": {
+        "enabled": false,
+        "root_motion": false,
+        "root_node": 0,
+        "clips": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "walk_speed": 2,
+        "run_speed": 5,
+        "camera_distance": 5.5,
+        "camera_height": 0.65,
+        "turn_speed": 12
+      },
+      "body": {
+        "enabled": false,
+        "type": "static",
+        "mass": 1,
+        "friction": 0.6,
+        "restitution": 0.02,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_scale": 1,
+        "allow_sleep": true,
+        "continuous": true,
+        "velocity": [
+          0,
+          0,
+          0
+        ],
+        "angular_velocity": [
+          0,
+          0,
+          0
+        ]
+      }
     }
   ],
   "format": "afterlight.scene",
   "version": 22,
-  "next_id": "43",
+  "next_id": "56",
   "render": {
     "exposure": 0,
     "tone_mapping": true,
@@ -6057,7 +7916,38 @@
     "intensity": 1.2000000476837158,
     "ambient": 0.2199999988079071
   },
-  "assets": [],
+  "assets": [
+    {
+      "name": "jump",
+      "kind": "audio",
+      "path": "../assets/jump.wav"
+    },
+    {
+      "name": "land",
+      "kind": "audio",
+      "path": "../assets/land.wav"
+    },
+    {
+      "name": "checkpoint",
+      "kind": "audio",
+      "path": "../assets/checkpoint.wav"
+    },
+    {
+      "name": "finish",
+      "kind": "audio",
+      "path": "../assets/finish.wav"
+    },
+    {
+      "name": "Guide_animation",
+      "kind": "animation",
+      "path": "../assets/locomotion.gltf"
+    },
+    {
+      "name": "Guide_mesh",
+      "kind": "mesh",
+      "path": "../assets/locomotion.gltf#mesh=0,primitive=0"
+    }
+  ],
   "joints": [],
   "next_joint": "1",
   "collider_parts": [

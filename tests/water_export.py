@@ -10,7 +10,7 @@ def run(args,success=True):
     assert (result.returncode==0)==success,(args,result.returncode,result.stdout,result.stderr)
     return result.stdout+result.stderr
 with tempfile.TemporaryDirectory(prefix='afterlight-water-export-') as temp:
-    folder=Path(temp);source=folder/'water project';(source/'scenes').mkdir(parents=True);(source/'game').mkdir()
+    folder=Path(temp);source=folder/'water project';(source/'scenes').mkdir(parents=True);(source/'game').mkdir();shutil.copytree(a.root/'sandbox/assets',source/'assets')
     for name in names:shutil.copy2(a.root/'sandbox/scenes'/(name+'.afterlight.json'),source/'scenes')
     shutil.copy2(a.module,source/'game'/a.module.name)
     project=source/'water.afterlight.project';project.write_text(json.dumps(dict(format='afterlight.project',version=1,name='Water labs',startup_scene='scenes/'+names[0]+'.afterlight.json',game_module='game/'+a.module.name)))
