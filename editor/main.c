@@ -194,7 +194,10 @@ static void poll_dialog(editor *app)
     ed_dialog_release(app->dialog);app->dialog=NULL;
     if(result<0){set_status(app,error);app->after_save=ED_NONE;return;}
     if(result==2){set_status(app,"File dialog canceled.");app->after_save=ED_NONE;app->pending=ED_NONE;return;}
-    if(app->dialog_asset==5){
+    const char *extension = strrchr(path, '.');
+    bool open_project_file = !app->dialog_asset && !app->dialog_save &&
+                             extension && SDL_strcasecmp(extension, ".project") == 0;
+    if(app->dialog_asset==5 || open_project_file){
         app->module_override=false;if(open_project(app,path,false))load_assets(app);app->dialog_asset=0;
     }else if(app->dialog_asset==6){
         af_project project=app->project;af_asset_error project_error;

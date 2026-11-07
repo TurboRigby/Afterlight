@@ -58,7 +58,9 @@ int ed_dialog_poll(ed_file_dialog *dialog, char *path, size_t capacity, char *er
 }
 
 ed_file_dialog *ed_dialog_begin(af_engine *engine,bool save,const char *suggested_path){
-    static const SDL_DialogFileFilter filter={"Afterlight scenes","json"};return begin_dialog(engine,save,suggested_path,&filter);
+    static const SDL_DialogFileFilter scenes = {"Afterlight scenes", "json"};
+    static const SDL_DialogFileFilter documents = {"Afterlight scenes and projects", "json;project"};
+    return begin_dialog(engine, save, suggested_path, save ? &scenes : &documents);
 }
 ed_file_dialog *ed_dialog_begin_asset(af_engine *engine,af_asset_kind kind){
     static const SDL_DialogFileFilter mesh={"Static 3D models","obj;gltf;glb"},texture={"Images","png;jpg;jpeg;bmp;tga"},audio={"WAV sound effects","wav"},environment={"HDR equirectangular panoramas","hdr"};

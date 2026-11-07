@@ -4,8 +4,9 @@ For the generic player, New Project wizard, model materials/hierarchy, asset
 reload and export workflow, see [the 0.7 engine/tooling milestone](shipping.md).
 The finished-game milestone remains deferred.
 
-The editor's **Project** button opens the project panel. **Open project** loads
-its startup scene and selects its C game module together. Unsaved scene changes
+The toolbar's **Open** dialog accepts both scenes and projects. You can also
+choose **Project → Open project**. Opening a project loads its startup scene
+and selects its C game module together. Unsaved scene changes
 use the existing Save/Discard/Cancel flow. Opening a project does not execute its
 module until Play. **Save project as** records the current saved scene and selected
 module; save the scene first. Project changes do not go into scene undo history.
