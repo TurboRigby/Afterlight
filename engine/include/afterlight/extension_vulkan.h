@@ -11,6 +11,30 @@ extern "C" {
 
 #define AF_VULKAN_UPSCALER_ABI_VERSION 1u
 #define AF_VULKAN_UPSCALER_SPATIAL 1u
+#define AF_VULKAN_STARTUP_ABI_VERSION 1u
+#define AF_VULKAN_STARTUP_MAX_EXTENSIONS 32u
+#define AF_VULKAN_DEVICE_STORAGE_IMAGE_EXTENDED_FORMATS UINT64_C(1)
+
+typedef struct af_vulkan_requirements {
+    uint32_t struct_size, extension_count;
+    /* Extension name strings stay valid until engine creation completes. */
+    const char *extensions[AF_VULKAN_STARTUP_MAX_EXTENSIONS];
+    /* Device stage only. Requires Vulkan 1.2 buffer device address support. */
+    bool buffer_device_address;
+    /* Device stage only. Enables formatless storage image writes in shaders. */
+    bool storage_image_write_without_format;
+    /* Optional device-stage tail. Mask of AF_VULKAN_DEVICE_* features. */
+    uint64_t device_features;
+} af_vulkan_requirements;
+
+typedef struct af_vulkan_startup_api {
+    uint32_t abi_version, struct_size;
+    /* Optional callbacks receive zeroed requirements with struct_size set.
+       Return false to keep the module disabled on this Vulkan configuration. */
+    bool (*instance_requirements)(void *state, af_vulkan_requirements *);
+    bool (*device_requirements)(void *state, VkInstance, VkPhysicalDevice,
+                                af_vulkan_requirements *);
+} af_vulkan_startup_api;
 
 typedef struct af_vulkan_upscaler_config {
     uint32_t struct_size;
@@ -39,6 +63,8 @@ typedef struct af_vulkan_upscaler_frame {
     /* Projection offset in render pixels, positive right/down. */
     float jitter_pixels[2];
     float exposure_multiplier;
+    /* Optional ABI 1 tail for depth reconstruction and temporal weighting. */
+    float camera_near, camera_far, vertical_fov_radians, frame_time_ms;
 } af_vulkan_upscaler_frame;
 
 typedef struct af_vulkan_upscaler_api {

@@ -5,6 +5,7 @@
  */
 
 #include "renderer.h"
+#include "extension_runtime.h"
 #include "water_internal.h"
 #include "water_particles_internal.h"
 #include "log.h"
@@ -40,6 +41,7 @@ enum {AF_RESOURCE_AA_MASK=3u,AF_RESOURCE_BLOOM=4u,AF_RESOURCE_MOTION=8u,AF_RESOU
       AF_RESOURCE_UPSCALER=128u,
       AF_RESOURCE_RAY_QUERY=AF_RESOURCE_RAY_SHADOWS|AF_RESOURCE_RAY_REFLECTIONS};
 #define AF_PORTABILITY_SUBSET "VK_KHR_portability_subset"
+#define AF_STARTUP_EXTENSION_CAPACITY (AF_EXTENSION_LIMIT * AF_VULKAN_STARTUP_MAX_EXTENSIONS)
 
 typedef struct af_gpu_buffer {
     VkBuffer handle;
@@ -169,6 +171,7 @@ struct af_renderer {
     VkDescriptorSetLayout frame_layout;
     VkDescriptorPool frame_pool;
     VkInstance instance;
+    uint32_t instance_api_version;
     VkDebugUtilsMessengerEXT debug_messenger;
     VkSurfaceKHR surface;
     VkPhysicalDevice physical_device;
@@ -252,7 +255,17 @@ static bool validation_layer_available(void)
     return found;
 }
 
-static bool create_instance(af_renderer *renderer, bool enable_validation)
+static void negotiate_startup(af_renderer *, af_extensions *, const char **, uint32_t *,
+                              const af_vulkan_requirements *supported, af_vulkan_requirements *enabled);
+
+static void reject_startup(af_extensions *extensions)
+{
+    for (size_t i = 0; i < extensions->count; ++i)
+        if (extensions->modules[i].startup)
+            extensions->modules[i].startup_status = AF_EXTENSION_STARTUP_UNAVAILABLE;
+}
+
+static bool create_instance(af_renderer *renderer, bool enable_validation, af_extensions *startup)
 {
     Uint32 sdl_count = 0;
     const char *const *sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_count);
@@ -260,7 +273,8 @@ static bool create_instance(af_renderer *renderer, bool enable_validation)
         af_log("error", "SDL Vulkan extensions: %s", SDL_GetError());
         return false;
     }
-    const char **extensions = calloc((size_t)sdl_count + 2, sizeof(*extensions));
+    const char **extensions = calloc((size_t)sdl_count + 2 + AF_STARTUP_EXTENSION_CAPACITY,
+                                      sizeof(*extensions));
     if (!extensions) return false;
     uint32_t extension_count = sdl_count;
     for (Uint32 i = 0; i < sdl_count; ++i) extensions[i] = sdl_extensions[i];
@@ -298,6 +312,9 @@ static bool create_instance(af_renderer *renderer, bool enable_validation)
     };
     uint32_t loader_version=VK_API_VERSION_1_0;
     if(vkEnumerateInstanceVersion(&loader_version)==VK_SUCCESS && loader_version>=VK_API_VERSION_1_2)application.apiVersion=VK_API_VERSION_1_2;
+    renderer->instance_api_version = application.apiVersion;
+    uint32_t core_extension_count = extension_count;
+    negotiate_startup(renderer, startup, extensions, &extension_count, NULL, NULL);
     VkInstanceCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = renderer->validation_enabled ? &debug_info : NULL,
@@ -309,6 +326,12 @@ static bool create_instance(af_renderer *renderer, bool enable_validation)
         .ppEnabledLayerNames = renderer->validation_enabled ? &validation_layer : NULL
     };
     VkResult result = vkCreateInstance(&info, NULL, &renderer->instance);
+    if (result != VK_SUCCESS && extension_count > core_extension_count) {
+        af_log("warning", "Vulkan instance rejected extension requirements. Retrying built-in rendering.");
+        reject_startup(startup);
+        info.enabledExtensionCount = core_extension_count;
+        result = vkCreateInstance(&info, NULL, &renderer->instance);
+    }
     free(extensions);
     if (!vk_ok(result, "vkCreateInstance")) return false;
     if (renderer->validation_enabled) {
@@ -335,6 +358,56 @@ static bool device_extension_available(VkPhysicalDevice device, const char *name
     }
     free(extensions);
     return found;
+}
+
+static void negotiate_startup(af_renderer *renderer, af_extensions *startup,
+                              const char **names, uint32_t *count,
+                              const af_vulkan_requirements *supported, af_vulkan_requirements *enabled)
+{
+    bool device_stage = supported != NULL;
+    for (size_t i = 0; i < startup->count; ++i) {
+        af_loaded_extension *module = &startup->modules[i];
+        const af_vulkan_startup_api *api = module->startup;
+        if (!api || module->startup_status == AF_EXTENSION_STARTUP_UNAVAILABLE) continue;
+        af_vulkan_requirements requirements = {.struct_size = sizeof(requirements)};
+        bool ok = device_stage
+            ? (!api->device_requirements || api->device_requirements(module->state, renderer->instance,
+                                                  renderer->physical_device, &requirements))
+            : (!api->instance_requirements || api->instance_requirements(module->state, &requirements));
+        uint32_t previous_count = *count;
+        ok = ok && requirements.extension_count <= AF_VULKAN_STARTUP_MAX_EXTENSIONS &&
+             (!requirements.buffer_device_address || (device_stage && supported->buffer_device_address)) &&
+             (!requirements.storage_image_write_without_format ||
+              (device_stage && supported->storage_image_write_without_format)) &&
+             (!requirements.device_features ||
+              (device_stage && !(requirements.device_features & ~supported->device_features)));
+        for (uint32_t j = 0; ok && j < requirements.extension_count; ++j) {
+            const char *name = requirements.extensions[j];
+            if (!name || !*name || strlen(name) >= VK_MAX_EXTENSION_NAME_SIZE) {
+                ok = false;
+                break;
+            }
+            bool exists = false;
+            for (uint32_t n = 0; n < *count; ++n)
+                if (!strcmp(names[n], name)) { exists = true; break; }
+            if (exists) continue;
+            ok = device_stage ? device_extension_available(renderer->physical_device, name)
+                              : instance_extension_available(name);
+            if (ok) names[(*count)++] = name;
+            else af_log("warning", "Extension %s requires unavailable Vulkan extension %s.", module->api->id, name);
+        }
+        if (!ok) {
+            *count = previous_count;
+            module->startup_status = AF_EXTENSION_STARTUP_UNAVAILABLE;
+            af_log("warning", "Vulkan %s requirements unavailable for %s.",
+                   device_stage ? "device" : "instance", module->api->id);
+        } else if (device_stage) {
+            module->startup_status = AF_EXTENSION_STARTUP_READY;
+            enabled->buffer_device_address |= requirements.buffer_device_address;
+            enabled->storage_image_write_without_format |= requirements.storage_image_write_without_format;
+            enabled->device_features |= requirements.device_features;
+        }
+    }
 }
 
 static bool find_queue_families(af_renderer *renderer, VkPhysicalDevice device,
@@ -364,7 +437,7 @@ static bool find_queue_families(af_renderer *renderer, VkPhysicalDevice device,
     return *graphics != UINT32_MAX && *present != UINT32_MAX;
 }
 
-static bool create_device(af_renderer *renderer)
+static bool create_device(af_renderer *renderer, af_extensions *startup)
 {
     uint32_t count = 0;
     if (!vk_ok(vkEnumeratePhysicalDevices(renderer->instance, &count, NULL), "vkEnumeratePhysicalDevices"))
@@ -438,7 +511,7 @@ static bool create_device(af_renderer *renderer)
             .queueFamilyIndex = families[i], .queueCount = 1, .pQueuePriorities = &priority
         };
     }
-    const char *extensions[5] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    const char *extensions[5 + AF_STARTUP_EXTENSION_CAPACITY] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     uint32_t extension_count=1;
     if(device_extension_available(renderer->physical_device,AF_PORTABILITY_SUBSET))extensions[extension_count++]=AF_PORTABILITY_SUBSET;
     VkPhysicalDeviceRayQueryFeaturesKHR ray={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
@@ -448,7 +521,14 @@ static bool create_device(af_renderer *renderer)
         device_extension_available(renderer->physical_device,VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
         device_extension_available(renderer->physical_device,VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) &&
         device_extension_available(renderer->physical_device,VK_KHR_RAY_QUERY_EXTENSION_NAME);
-    if(query_available){VkPhysicalDeviceFeatures2 features={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,.pNext=&address};vkGetPhysicalDeviceFeatures2(renderer->physical_device,&features);}
+    bool address_available = renderer->instance_api_version >= VK_API_VERSION_1_2 &&
+                             selected_properties.apiVersion >= VK_API_VERSION_1_2;
+    if (address_available) {
+        address.pNext = query_available ? &acceleration : NULL;
+        VkPhysicalDeviceFeatures2 features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &address};
+        vkGetPhysicalDeviceFeatures2(renderer->physical_device, &features);
+    }
+    bool address_supported = address.bufferDeviceAddress != 0;
     renderer->ray_supported=query_available && ray.rayQuery && acceleration.accelerationStructure && address.bufferDeviceAddress && !getenv("AFTERLIGHT_DISABLE_RAY_QUERY");
     if(renderer->ray_supported){extensions[extension_count++]=VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME;extensions[extension_count++]=VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME;extensions[extension_count++]=VK_KHR_RAY_QUERY_EXTENSION_NAME;
         // Enable the needed feature bits only, not all queried optional features.
@@ -460,14 +540,42 @@ static bool create_device(af_renderer *renderer)
     VkPhysicalDeviceFeatures enabled={.samplerAnisotropy=supported.samplerAnisotropy,.independentBlend=supported.independentBlend};
     renderer->temporal_supported=supported.independentBlend!=0;if(!renderer->temporal_supported)af_log("info","TAA requires independent attachment blending; TAA scenes will use FXAA on this device.");
     renderer->anisotropy=supported.samplerAnisotropy?fminf(8,selected_properties.limits.maxSamplerAnisotropy):1;
+    uint32_t core_extension_count = extension_count;
+    af_vulkan_requirements supported_startup = {
+        .buffer_device_address = address_supported,
+        .storage_image_write_without_format = supported.shaderStorageImageWriteWithoutFormat != VK_FALSE,
+        .device_features = supported.shaderStorageImageExtendedFormats ?
+                           AF_VULKAN_DEVICE_STORAGE_IMAGE_EXTENDED_FORMATS : 0,
+    };
+    af_vulkan_requirements enabled_startup = {0};
+    negotiate_startup(renderer, startup, extensions, &extension_count, &supported_startup, &enabled_startup);
+    bool address_requested = enabled_startup.buffer_device_address;
+    enabled.shaderStorageImageWriteWithoutFormat = enabled_startup.storage_image_write_without_format;
+    enabled.shaderStorageImageExtendedFormats =
+        (enabled_startup.device_features & AF_VULKAN_DEVICE_STORAGE_IMAGE_EXTENDED_FORMATS) != 0;
+    if (address_requested && !renderer->ray_supported)
+        address = (VkPhysicalDeviceBufferDeviceAddressFeatures){
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES, .bufferDeviceAddress = VK_TRUE};
     VkDeviceCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = queue_count, .pQueueCreateInfos = queues,
-        .pNext=renderer->ray_supported?&address:NULL,
+        .pNext=(renderer->ray_supported || address_requested)?&address:NULL,
         .pEnabledFeatures=&enabled,
         .enabledExtensionCount = extension_count, .ppEnabledExtensionNames = extensions
     };
-    if (!vk_ok(vkCreateDevice(renderer->physical_device, &info, NULL, &renderer->device), "vkCreateDevice"))
+    VkResult result = vkCreateDevice(renderer->physical_device, &info, NULL, &renderer->device);
+    if (result != VK_SUCCESS && (extension_count > core_extension_count || address_requested ||
+                                  enabled.shaderStorageImageWriteWithoutFormat ||
+                                  enabled.shaderStorageImageExtendedFormats)) {
+        af_log("warning", "Vulkan device rejected extension requirements. Retrying built-in rendering.");
+        reject_startup(startup);
+        info.enabledExtensionCount = core_extension_count;
+        info.pNext = renderer->ray_supported ? &address : NULL;
+        enabled.shaderStorageImageWriteWithoutFormat = VK_FALSE;
+        enabled.shaderStorageImageExtendedFormats = VK_FALSE;
+        result = vkCreateDevice(renderer->physical_device, &info, NULL, &renderer->device);
+    }
+    if (!vk_ok(result, "vkCreateDevice"))
         return false;
     vkGetDeviceQueue(renderer->device, renderer->graphics_family, 0, &renderer->graphics_queue);
     vkGetDeviceQueue(renderer->device, renderer->present_family, 0, &renderer->present_queue);
@@ -1184,19 +1292,19 @@ static bool create_uniforms(af_renderer *renderer)
         VkDescriptorBufferInfo motion_buffer={frame->motion_buffer.handle,0,VK_WHOLE_SIZE};write.dstBinding=9;write.pBufferInfo=&motion_buffer;vkUpdateDescriptorSets(renderer->device,1,&write,0,NULL);
     }update_environment_descriptors(renderer);return true;
 }
-af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation)
+af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation, af_extensions *startup)
 {
     af_renderer *renderer = calloc(1, sizeof(*renderer));
     if (!renderer) return NULL;
     atomic_init(&renderer->validation_errors, 0);
     renderer->window = window;renderer->gpu_budget_ms=1000.0/60;renderer->gpu_budget_bytes=UINT64_C(512)*1024*1024;
     renderer->resize_pending = true;
-    if (!create_instance(renderer, enable_validation)) goto fail;
+    if (!create_instance(renderer, enable_validation, startup)) goto fail;
     if (!SDL_Vulkan_CreateSurface(window, renderer->instance, NULL, &renderer->surface)) {
         af_log("error", "Vulkan surface creation: %s", SDL_GetError());
         goto fail;
     }
-    if (!create_device(renderer) || !create_frames(renderer)||!create_frame_layout(renderer)) goto fail;
+    if (!create_device(renderer, startup) || !create_frames(renderer)||!create_frame_layout(renderer)) goto fail;
     const unsigned char white[]={255,255,255,255};
     renderer->white=af_vk_texture_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,white,1,1,true,true,renderer->anisotropy);
     const unsigned char flat[]={128,128,255,255};
@@ -1629,7 +1737,10 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame,
   r->temporal_camera = *camera;
   r->temporal_viewport = area;
   r->temporal_signature = signature;
-  unsigned phase = (unsigned)(r->temporal_frame % 16) + 1;
+  double ratio = fmax((double)r->swapchain.extent.width / r->swapchain.render_extent.width,
+                      (double)r->swapchain.extent.height / r->swapchain.render_extent.height);
+  unsigned phases = (unsigned)fmax(16, ceil(8 * ratio * ratio));
+  unsigned phase = (unsigned)(r->temporal_frame % phases) + 1;
   int width = 1, height = 1;
   SDL_GetWindowSize(r->window, &width, &height);
   float pixels_x = area.width * (float)r->swapchain.render_extent.width /
@@ -1778,7 +1889,7 @@ static VkImageMemoryBarrier upscaler_barrier(VkImage image, VkImageAspectFlags a
 }
 
 static bool record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t image,
-                            af_rect area, float exposure)
+                            af_rect area, float exposure, const af_camera *camera, float frame_time_ms)
 {
     af_swapchain *swapchain = &r->swapchain;
     af_depth_attachment depth = swapchain->depths[image];
@@ -1790,6 +1901,8 @@ static bool record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t im
         .jitter_pixels = {r->temporal_jitter.x * (float)swapchain->render_extent.width,
                           r->temporal_jitter.y * (float)swapchain->render_extent.height},
         .exposure_multiplier = exp2f(exposure),
+        .camera_near = camera->near_clip, .camera_far = camera->far_clip,
+        .vertical_fov_radians = camera->vertical_fov, .frame_time_ms = frame_time_ms,
     };
     af_vk_post_upscaler_images(swapchain->post, image, &frame);
     VkImageAspectFlags depth_aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -1821,7 +1934,7 @@ static bool record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t im
     return true;
 }
 
-bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera, af_rect viewport_rect, af_object_id highlighted, const af_overlay_frame *overlay, bool *rendered)
+bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera, af_rect viewport_rect, af_object_id highlighted, const af_overlay_frame *overlay, float frame_time_ms, bool *rendered)
 {
     *rendered = false;renderer->missing_textures=0;
     af_render_settings environment_settings=af_scene_get_render_settings(scene);
@@ -2054,7 +2167,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     af_rect post_area=resolve_viewport(renderer,viewport_rect);post_area.x/=(float)(logical_w?logical_w:1);post_area.y/=(float)(logical_h?logical_h:1);post_area.width/=(float)(logical_w?logical_w:1);post_area.height/=(float)(logical_h?logical_h:1);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,2);
     bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
-                                                environment_settings.exposure);
+                                                environment_settings.exposure, camera, frame_time_ms);
     af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,environment_settings,post_area,renderer->temporal_jitter,renderer->debug_view,upscaled);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,3);
     if (renderer->ui && overlay->index_count)

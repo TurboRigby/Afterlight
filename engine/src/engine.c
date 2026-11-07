@@ -122,11 +122,13 @@ af_engine_config af_engine_config_default(void)
     };
 }
 
-af_engine *af_engine_create(const af_engine_config *config)
+af_engine *af_engine_create_with_extensions(const af_engine_config *config,
+                                            const char *const *paths, size_t count)
 {
     af_engine_config defaults = af_engine_config_default();
     if (!config) config = &defaults;
-    if (engine_active || !config->title || config->width <= 0 || config->height <= 0) {
+    if (engine_active || !config->title || config->width <= 0 || config->height <= 0 ||
+        count > AF_EXTENSION_LIMIT || (count && !paths)) {
         af_log("error", "Invalid configuration or an engine is already active.");
         return NULL;
     }
@@ -165,7 +167,13 @@ af_engine *af_engine_create(const af_engine_config *config)
         af_engine_destroy(engine);
         return NULL;
     }
-    engine->renderer = af_renderer_create(engine->window, config->enable_validation);
+    for (size_t i = 0; i < count; ++i) {
+        if (!af_extensions_load(&engine->extensions, paths[i])) {
+            af_engine_destroy(engine);
+            return NULL;
+        }
+    }
+    engine->renderer = af_renderer_create(engine->window, config->enable_validation, &engine->extensions);
     if (!engine->renderer) {
         af_engine_destroy(engine);
         return NULL;
@@ -175,8 +183,15 @@ af_engine *af_engine_create(const af_engine_config *config)
     engine->animations=af_animation_runtime_create(engine->renderer);if(!engine->animations){af_engine_destroy(engine);return NULL;}engine->animation_enabled=true;
     engine->clear_color = (af_color){0.035f, 0.025f, 0.07f, 1.0f};
     engine->camera = af_camera_default();
+    for (size_t i = 0; i < count; ++i)
+        (void)af_engine_set_extension_enabled(engine, i, true);
     update_fps_title(engine);
     return engine;
+}
+
+af_engine *af_engine_create(const af_engine_config *config)
+{
+    return af_engine_create_with_extensions(config, NULL, 0);
 }
 
 static void update_actions(af_engine *e,double dt){
@@ -194,6 +209,7 @@ bool af_engine_load_extension(af_engine *engine, const char *path)
         return false;
     }
     if (!af_extensions_load(&engine->extensions, path)) return false;
+    if (engine->extensions.modules[engine->extensions.count - 1].startup) return true;
     return af_engine_set_extension_enabled(engine, engine->extensions.count - 1, true);
 }
 
@@ -207,7 +223,8 @@ bool af_engine_get_extension(const af_engine *engine, size_t index, af_extension
     if (!engine || !info || index >= engine->extensions.count) return false;
     const af_loaded_extension *module = &engine->extensions.modules[index];
     *info = (af_extension_info){
-        .id = module->api->id, .enabled = module->enabled,
+        .id = module->api->id, .path = module->path, .enabled = module->enabled,
+        .startup_status = module->startup_status,
         .vulkan_upscaler = module->upscaler != NULL,
         .upscaler_active = module->enabled && module->upscaler &&
                            af_renderer_upscaler_active(engine->renderer),
@@ -219,6 +236,7 @@ bool af_engine_set_extension_enabled(af_engine *engine, size_t index, bool enabl
 {
     if (!engine || engine->in_fixed || index >= engine->extensions.count) return false;
     af_loaded_extension *module = &engine->extensions.modules[index];
+    if (enabled && module->startup && module->startup_status != AF_EXTENSION_STARTUP_READY) return false;
     if (module->enabled == enabled) return true;
     if (module->upscaler && enabled) {
         for (size_t i = 0; i < engine->extensions.count; ++i)
@@ -412,7 +430,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
         if(!af_animation_runtime_update(engine->animations,engine->previous_scene,alpha,animation_delta,engine->animation_enabled)){result=1;break;}
         engine->cpu_animation_ms=(double)(SDL_GetPerformanceCounter()-animation_start)*1000/frequency;
         if(!af_renderer_update_water(engine->renderer,engine->physics,engine->scene,engine->previous_scene?alpha:1)){result=1;break;}
-        if (!af_renderer_draw(engine->renderer, engine->clear_color, engine->scene, &render_camera, engine->viewport, engine->highlighted, &engine->overlay, &rendered)) {
+        if (!af_renderer_draw(engine->renderer, engine->clear_color, engine->scene, &render_camera, engine->viewport, engine->highlighted, &engine->overlay, (float)(delta * 1000.0), &rendered)) {
             result = 1;
             break;
         }

@@ -25,7 +25,9 @@ extern "C" {
 #endif
 
 typedef struct af_engine af_engine;
+struct af_engine_config;
 struct af_vulkan_upscaler_api;
+struct af_vulkan_startup_api;
 
 typedef struct af_extension_host {
     uint32_t abi_version, struct_size;
@@ -52,6 +54,8 @@ typedef struct af_extension_api {
     void (*stop)(void *state);
     /* Optional ABI 1 tail. Hosts check struct_size before reading this field. */
     const struct af_vulkan_upscaler_api *vulkan_upscaler;
+    /* Optional ABI 1 tail for modules that need Vulkan creation options. */
+    const struct af_vulkan_startup_api *vulkan_startup;
 } af_extension_api;
 
 typedef const af_extension_api *(*af_extension_get_api_fn)(uint32_t abi_version);
@@ -62,17 +66,28 @@ typedef const af_extension_api *(*af_extension_get_api_fn)(uint32_t abi_version)
 AF_EXTENSION_EXPORT const af_extension_api *af_extension_get_api(uint32_t abi_version);
 #endif
 
+typedef enum af_extension_startup_status {
+    AF_EXTENSION_LIVE, AF_EXTENSION_STARTUP_READY,
+    AF_EXTENSION_RESTART_REQUIRED, AF_EXTENSION_STARTUP_UNAVAILABLE
+} af_extension_startup_status;
+
 typedef struct af_extension_info {
-    const char *id;
+    const char *id, *path;
     bool enabled, vulkan_upscaler, upscaler_active;
+    af_extension_startup_status startup_status;
 } af_extension_info;
 
+/* Loads explicit paths before Vulkan instance/device creation. Unavailable
+   Vulkan requirements leave their extension disabled. */
+af_engine *af_engine_create_with_extensions(const struct af_engine_config *config,
+                                            const char *const *paths, size_t count);
 /* Load a trusted native library before af_engine_run or from a game update
    callback on the main thread. Successfully started extensions stay resident
-   and stop in reverse order during engine destruction. */
+   and stop in reverse order during engine destruction. Startup extensions
+   loaded here wait for an engine created with af_engine_create_with_extensions. */
 bool af_engine_load_extension(af_engine *engine, const char *path);
 size_t af_engine_extension_count(const af_engine *engine);
-/* The ID remains valid until engine destruction. */
+/* The ID and path remain valid until engine destruction. */
 bool af_engine_get_extension(const af_engine *engine, size_t index, af_extension_info *info);
 /* Disabled extensions skip presentation callbacks. Enabling an upscaler
    disables the previous provider. The change applies on the next draw. */

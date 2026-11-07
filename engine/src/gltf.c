@@ -16,6 +16,8 @@
 #include <string.h>
 #define VERTEX_LIMIT 1048576u
 #define MEMORY_LIMIT (128u*1024u*1024u)
+#define MODEL_MESH_LIMIT 1024u
+#define SKIN_SET_LIMIT 8u
 typedef union allocation {max_align_t alignment;size_t size;} allocation;
 typedef struct memory_budget {size_t bytes;} memory_budget;
 static void *allocate(void *user,cgltf_size size){memory_budget *budget=user;if(size>MEMORY_LIMIT||budget->bytes>MEMORY_LIMIT-size)return NULL;allocation *p=malloc(sizeof(*p)+size);if(!p)return NULL;p->size=size;budget->bytes+=size;return p+1;}
@@ -36,13 +38,83 @@ static bool reserve(builder *b,size_t extra){if(extra>VERTEX_LIMIT||b->count>VER
 }
 static const cgltf_accessor *attribute(const cgltf_primitive *primitive,cgltf_attribute_type type){for(size_t i=0;i<primitive->attributes_count;++i)if(primitive->attributes[i].type==type&&primitive->attributes[i].index==0)return primitive->attributes[i].data;return NULL;}
 static bool values(const cgltf_accessor *accessor,size_t index,float *out,size_t count){if(index>=accessor->count||!cgltf_accessor_read_float(accessor,index,out,count))return false;for(size_t i=0;i<count;++i)if(!isfinite(out[i]))return false;return true;}
-static bool primitive(builder *b,const cgltf_primitive *p,af_mat4 world){
-    if(p->type!=cgltf_primitive_type_triangles||p->targets_count||p->has_draco_mesh_compression)return reject(b,"Static triangle glTF meshes required (no morph targets/Draco).");
+typedef struct skin_set {
+    const cgltf_accessor *joints, *weights;
+} skin_set;
+
+static bool unsigned_skin_component(cgltf_component_type type)
+{
+    return type == cgltf_component_type_r_8u || type == cgltf_component_type_r_16u;
+}
+
+static bool collect_skin_sets(const cgltf_primitive *primitive, skin_set sets[SKIN_SET_LIMIT],
+                              size_t *count, size_t vertices)
+{
+    for (size_t i = 0; i < primitive->attributes_count; ++i) {
+        const cgltf_attribute *attribute = &primitive->attributes[i];
+        if (attribute->type != cgltf_attribute_type_joints &&
+            attribute->type != cgltf_attribute_type_weights) continue;
+        size_t index = (size_t)attribute->index;
+        if (index >= SKIN_SET_LIMIT) return false;
+        const cgltf_accessor **slot = attribute->type == cgltf_attribute_type_joints ?
+                                      &sets[index].joints : &sets[index].weights;
+        if (*slot) return false;
+        *slot = attribute->data;
+        if (*count <= index) *count = index + 1;
+    }
+    for (size_t i = 0; i < *count; ++i) {
+        const cgltf_accessor *joints = sets[i].joints, *weights = sets[i].weights;
+        if (!joints || !weights || joints->type != cgltf_type_vec4 || weights->type != cgltf_type_vec4 ||
+            joints->count != vertices || weights->count != vertices ||
+            joints->normalized || !unsigned_skin_component(joints->component_type) ||
+            (weights->component_type != cgltf_component_type_r_32f &&
+             (!weights->normalized || !unsigned_skin_component(weights->component_type)))) return false;
+    }
+    return true;
+}
+
+static bool skin_vertex(af_vertex *vertex, const skin_set *sets, size_t count, size_t index,
+                        size_t joint_limit)
+{
+    float strongest[4] = {0};
+    for (size_t set = 0; set < count; ++set) {
+        cgltf_uint joints[4];
+        float weights[4];
+        if (!cgltf_accessor_read_uint(sets[set].joints, index, joints, 4) ||
+            !values(sets[set].weights, index, weights, 4)) return false;
+        for (unsigned i = 0; i < 4; ++i) {
+            if (joints[i] >= joint_limit || weights[i] < 0) return false;
+            if (count == 1) {
+                vertex->joints[i] = (uint16_t)joints[i];
+                strongest[i] = weights[i];
+                continue;
+            }
+            for (unsigned slot = 0; slot < 4; ++slot) {
+                if (weights[i] <= strongest[slot]) continue;
+                for (unsigned j = 3; j > slot; --j) {
+                    vertex->joints[j] = vertex->joints[j - 1];
+                    strongest[j] = strongest[j - 1];
+                }
+                vertex->joints[slot] = (uint16_t)joints[i];
+                strongest[slot] = weights[i];
+                break;
+            }
+        }
+    }
+    float sum = strongest[0] + strongest[1] + strongest[2] + strongest[3];
+    if (!isfinite(sum) || sum < 1e-8f) return false;
+    vertex->weights = (af_vec4){strongest[0] / sum, strongest[1] / sum,
+                                strongest[2] / sum, strongest[3] / sum};
+    return true;
+}
+
+static bool primitive(builder *b,const cgltf_primitive *p,af_mat4 world,size_t joint_limit){
+    if(p->type!=cgltf_primitive_type_triangles||p->targets_count||p->has_draco_mesh_compression)return reject(b,"glTF import requires triangle meshes without morph targets or Draco compression.");
     const cgltf_accessor *position=attribute(p,cgltf_attribute_type_position),*normal=attribute(p,cgltf_attribute_type_normal),*uv=attribute(p,cgltf_attribute_type_texcoord),*color=attribute(p,cgltf_attribute_type_color);
     if(!position||position->type!=cgltf_type_vec3||(normal&&normal->type!=cgltf_type_vec3)||(uv&&uv->type!=cgltf_type_vec2)||(color&&color->type!=cgltf_type_vec3&&color->type!=cgltf_type_vec4))return reject(b,"Invalid glTF position/normal/UV/color accessor.");
-    const cgltf_accessor *joints=attribute(p,cgltf_attribute_type_joints),*weights=attribute(p,cgltf_attribute_type_weights);
-    for(size_t i=0;i<p->attributes_count;++i)if((p->attributes[i].type==cgltf_attribute_type_joints||p->attributes[i].type==cgltf_attribute_type_weights)&&p->attributes[i].index!=0)return reject(b,"Only four skin influences (JOINTS_0/WEIGHTS_0) are supported.");
-    if((joints!=NULL)!=(weights!=NULL)||(joints&&(joints->type!=cgltf_type_vec4||weights->type!=cgltf_type_vec4||joints->normalized||(joints->component_type!=cgltf_component_type_r_8u&&joints->component_type!=cgltf_component_type_r_16u)||(weights->component_type!=cgltf_component_type_r_32f&&(!weights->normalized||(weights->component_type!=cgltf_component_type_r_8u&&weights->component_type!=cgltf_component_type_r_16u))))))return reject(b,"Invalid joint/weight accessor types.");
+    skin_set sets[SKIN_SET_LIMIT]={0};size_t skin_sets=0;
+    if(!collect_skin_sets(p,sets,&skin_sets,position->count))
+        return reject(b,"glTF skinning requires up to eight consecutive, matching JOINTS and WEIGHTS sets.");
     size_t count=p->indices?p->indices->count:position->count;if(!count||count%3||!reserve(b,count))return reject(b,"Invalid or oversized glTF triangle indices.");
     af_mat4 inverse;if(!af_mat4_inverse(world,&inverse))return reject(b,"glTF contains a singular node transform.");
     float *m=world.elements;float determinant=m[0]*(m[5]*m[10]-m[6]*m[9])-m[4]*(m[1]*m[10]-m[2]*m[9])+m[8]*(m[1]*m[6]-m[2]*m[5]);
@@ -54,9 +126,8 @@ static bool primitive(builder *b,const cgltf_primitive *p,af_mat4 world){
             if(normal){if(!values(normal,index,data,3))return reject(b,"Invalid glTF normal.");float *n=inverse.elements;v->normal=af_vec3_normalize((af_vec3){n[0]*data[0]+n[1]*data[1]+n[2]*data[2],n[4]*data[0]+n[5]*data[1]+n[6]*data[2],n[8]*data[0]+n[9]*data[1]+n[10]*data[2]});}
             if(uv){if(!values(uv,index,data,2))return reject(b,"Invalid glTF UV.");v->uv=(af_vec2){data[0],data[1]};}
             if(color){size_t channels=color->type==cgltf_type_vec4?4:3;data[3]=1;if(!values(color,index,data,channels))return reject(b,"Invalid glTF vertex color.");v->color=(af_color){data[0],data[1],data[2],data[3]};}
-            if(joints){cgltf_uint joint[4];float weight[4];if(index>=joints->count||!cgltf_accessor_read_uint(joints,index,joint,4)||!values(weights,index,weight,4))return reject(b,"Invalid skin influence accessors.");
-                float sum=0;for(unsigned i=0;i<4;++i){if(joint[i]>=AF_ANIMATION_MAX_JOINTS||weight[i]<0)return reject(b,"Skin joint/weight outside supported range.");v->joints[i]=(uint16_t)joint[i];sum+=weight[i];}
-                if(!isfinite(sum)||sum<1e-8f)return reject(b,"Skin weights must have a positive finite sum.");v->weights=(af_vec4){weight[0]/sum,weight[1]/sum,weight[2]/sum,weight[3]/sum};}
+            if(skin_sets&&!skin_vertex(v,sets,skin_sets,index,joint_limit))
+                return reject(b,"glTF skin contains an out-of-range joint or invalid weights.");
             if(p->material&&p->material->has_pbr_metallic_roughness){const float *factor=p->material->pbr_metallic_roughness.base_color_factor;v->color.r*=factor[0];v->color.g*=factor[1];v->color.b*=factor[2];v->color.a*=factor[3];}
             float rgba[]={v->color.r,v->color.g,v->color.b,v->color.a};for(unsigned i=0;i<4;++i)if(!isfinite(rgba[i])||rgba[i]<0||rgba[i]>1)return reject(b,"glTF color factor outside [0,1].");
         }
@@ -66,9 +137,10 @@ static bool primitive(builder *b,const cgltf_primitive *p,af_mat4 world){
 }
 static bool node(builder *b,const cgltf_node *n,af_mat4 parent,unsigned depth){
     if(depth>128||++b->visits>65536)return reject(b,"glTF node hierarchy too deep or large.");
-    if(n->skin||n->has_mesh_gpu_instancing)return reject(b,"Skinned/instanced glTF nodes need a static export.");
+    if(n->skin)return reject(b,"Import this rigged file as a model to preserve its skeleton.");
+    if(n->has_mesh_gpu_instancing)return reject(b,"glTF GPU instancing requires an uninstanced export.");
     af_mat4 local;cgltf_node_transform_local(n,local.elements);af_mat4 world=af_mat4_mul(parent,local);
-    if(n->mesh)for(size_t i=0;i<n->mesh->primitives_count;++i)if(!primitive(b,&n->mesh->primitives[i],world))return false;
+    if(n->mesh)for(size_t i=0;i<n->mesh->primitives_count;++i)if(!primitive(b,&n->mesh->primitives[i],world,AF_ANIMATION_MAX_JOINTS))return false;
     for(size_t i=0;i<n->children_count;++i)if(!node(b,n->children[i],world,depth+1))return false;return true;
 }
 bool af_mesh_file_load_gltf(const char *path,af_mesh_file *out,af_asset_error *error){
@@ -100,7 +172,7 @@ bool af_mesh_file_load(const char *path,af_mesh_file *out,af_asset_error *error)
     return !strcmp(lower,".gltf")||!strcmp(lower,".glb")?af_mesh_file_load_gltf(path,out,error):af_mesh_file_load_obj(path,out,error);
 }
 
-/* Rich static import shares the bounded parser/geometry reader above. */
+/* Hierarchical model import shares the bounded parser and geometry reader above. */
 #include <afterlight/model.h>
 #include "scene_internal.h"
 #include "stb_image.h"
@@ -165,7 +237,18 @@ bool af_model_file_load(const char *path,af_model_file *out,af_asset_error *erro
     memory_budget budget={0};cgltf_data *data=NULL;af_model_file result={0};bool ok=false;const char *message="Invalid/unsupported glTF model or allocation limit exceeded.";
     cgltf_options options={.memory={allocate,release,&budget},.file={read_file,release_file,NULL}};
     if(!parse_model(path,&budget,&data))goto done;
-    if(data->meshes_count>1024||data->nodes_count>16384||data->images_count>128)goto done;
+    if(data->meshes_count>MODEL_MESH_LIMIT||data->nodes_count>AF_ANIMATION_MAX_NODES||data->images_count>128)goto done;
+    size_t joint_limits[MODEL_MESH_LIMIT];
+    for(size_t i=0;i<data->meshes_count;++i)joint_limits[i]=AF_ANIMATION_MAX_JOINTS;
+    for(size_t i=0;i<data->nodes_count;++i){
+        const cgltf_node *node=&data->nodes[i];
+        if(!node->skin||!node->mesh)continue;
+        if(!node->skin->joints_count||node->skin->joints_count>AF_ANIMATION_MAX_JOINTS){
+            message="A glTF skin must have between 1 and 256 joints.";goto done;
+        }
+        size_t mesh=(size_t)(node->mesh-data->meshes);
+        if(node->skin->joints_count<joint_limits[mesh])joint_limits[mesh]=node->skin->joints_count;
+    }
     if(!dependency(&result,path))goto done;
     for(size_t i=0;i<data->buffers_count;++i)if(data->buffers[i].uri&&strncmp(data->buffers[i].uri,"data:",5)){char uri[AF_ASSET_PATH_CAPACITY],resolved[AF_ASSET_PATH_CAPACITY];if(strlen(data->buffers[i].uri)>=sizeof(uri))goto done;snprintf(uri,sizeof(uri),"%s",data->buffers[i].uri);cgltf_decode_uri(uri);if(!af_asset_resolve_path(path,uri,resolved,sizeof(resolved))||!dependency(&result,resolved))goto done;}
     result.image_count=data->images_count;result.images=calloc(result.image_count?result.image_count:1,sizeof(*result.images));if(!result.images)goto done;size_t image_bytes=0;
@@ -173,7 +256,7 @@ bool af_model_file_load(const char *path,af_model_file *out,af_asset_error *erro
     size_t vertices=0;
     for(size_t mi=0;mi<data->meshes_count;++mi)for(size_t pi=0;pi<data->meshes[mi].primitives_count;++pi){
         if(result.primitive_count>=1024)goto done;cgltf_primitive source=data->meshes[mi].primitives[pi];cgltf_material *material=source.material;source.material=NULL;builder b={0};
-        if(!primitive(&b,&source,af_mat4_identity())){message=b.error;free(b.vertices);goto done;}
+        if(!primitive(&b,&source,af_mat4_identity(),joint_limits[mi])){message=b.error;free(b.vertices);goto done;}
         vertices+=b.count;if(vertices>VERTEX_LIMIT){free(b.vertices);goto done;}
         uint32_t *indices=malloc(b.count*sizeof(*indices));if(!indices){free(b.vertices);goto done;}for(size_t i=0;i<b.count;++i)indices[i]=(uint32_t)i;
         af_model_primitive value={.mesh={{b.vertices,(uint32_t)b.count,indices,(uint32_t)b.count}},.material=af_material_default(),.base_image=-1,.normal_image=-1,.surface_image=-1,.source_mesh=(unsigned)mi,.source_primitive=(unsigned)pi};
@@ -191,11 +274,24 @@ bool af_model_file_load(const char *path,af_model_file *out,af_asset_error *erro
         void *p=realloc(result.primitives,(result.primitive_count+1)*sizeof(*result.primitives));if(!p){af_mesh_file_free(&value.mesh);goto done;}result.primitives=p;result.primitives[result.primitive_count++]=value;
     }
     const cgltf_scene *scene=data->scene?data->scene:(data->scenes_count?&data->scenes[0]:NULL);
-    if(scene){for(size_t i=0;i<scene->nodes_count;++i)if(!add_node(&result,scene->nodes[i],data,-1,0)){message="Invalid/skinned/sheared glTF node transform or hierarchy.";goto done;}}
+    if(scene){for(size_t i=0;i<scene->nodes_count;++i)if(!add_node(&result,scene->nodes[i],data,-1,0)){message="Invalid glTF transform or hierarchy. Shear and GPU instancing are unsupported.";goto done;}}
     else for(size_t i=0;i<data->nodes_count;++i)if(!data->nodes[i].parent&&!add_node(&result,&data->nodes[i],data,-1,0))goto done;
-    for(size_t i=0;i<result.node_count;++i){af_model_node *n=&result.nodes[i];if(n->skin<0)continue;const cgltf_skin *skin=&data->skins[n->skin];if(!skin->joints_count||skin->joints_count>AF_ANIMATION_MAX_JOINTS)goto done;
-        for(size_t j=0;j<result.primitive_count;++j)if(n->mesh>=0&&result.primitives[j].source_mesh==(unsigned)n->mesh){const af_mesh_data *mesh=&result.primitives[j].mesh.data;
-            for(uint32_t v=0;v<mesh->vertex_count;++v){const af_vertex *vertex=&mesh->vertices[v];if(vertex->weights.x+vertex->weights.y+vertex->weights.z+vertex->weights.w<.99f)goto done;for(unsigned k=0;k<4;++k)if(vertex->joints[k]>=skin->joints_count)goto done;}}}
+    bool imported_nodes[AF_ANIMATION_MAX_NODES]={0};
+    for(size_t i=0;i<result.node_count;++i)imported_nodes[result.nodes[i].source_node]=true;
+    for(size_t i=0;i<result.node_count;++i){
+        const af_model_node *node=&result.nodes[i];
+        if(node->skin<0)continue;
+        const cgltf_skin *skin=&data->skins[node->skin];
+        for(size_t j=0;j<skin->joints_count;++j)if(!imported_nodes[skin->joints[j]-data->nodes]){
+            message="A glTF skin references a joint outside the imported scene.";goto done;
+        }
+        if(node->mesh<0)continue;
+        const cgltf_mesh *mesh=&data->meshes[node->mesh];
+        for(size_t j=0;j<mesh->primitives_count;++j)
+            if(!attribute(&mesh->primitives[j],cgltf_attribute_type_joints)){
+                message="A skinned glTF primitive is missing joint and weight attributes.";goto done;
+            }
+    }
     if(!result.node_count||!result.primitive_count)goto done;*out=result;result=(af_model_file){0};ok=true;
 done:
     cgltf_free(data);af_model_file_free(&result);if(!ok)error_message(error,message);return ok;

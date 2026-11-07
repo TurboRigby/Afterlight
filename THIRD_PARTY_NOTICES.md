@@ -16,6 +16,8 @@ copyright, license and warranty notices when redistributing these components.
 | Vulkan Loader | External runtime dependency | Apache-2.0 and upstream exceptions; preserve its supplied license/notices |
 | MoltenVK (macOS) | External runtime dependency | Apache-2.0; preserve its supplied license/notices |
 | AMD FidelityFX Super Resolution 1.0.2 | Optional external shader SDK for `engine/extensions/amd-fsr1` | MIT. The extension build copies `AMD-FSR1-LICENSE.txt` beside the module. |
+| AMD FidelityFX SDK 1.1.4 | Optional external sources and shaders for `engine/extensions/amd-fsr` | MIT. The extension build copies `AMD-FIDELITYFX-LICENSE.txt` beside the modules. |
+| NVIDIA NGX DLSS SDK v310.9.16 | Optional external build and runtime dependency for `engine/extensions/nvidia-ngx` | [NVIDIA SDK license](https://github.com/NVIDIA/DLSS/blob/v310.9.16/LICENSE.txt) |
 
 Vendored component READMEs record the original sources, versions and local
 changes. The Fira Sans font is distributed unmodified with its original OFL and

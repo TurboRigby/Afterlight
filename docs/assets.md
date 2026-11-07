@@ -1,6 +1,6 @@
 # Assets and materials
 
-Use **Import mesh (OBJ/glTF)** to load a model and create a selected object. The
+Use **Import model** to load an OBJ, glTF or GLB and select its root. The
 editor stores a named asset reference in the scene. The inspector's Mesh asset
 field can assign that asset to other objects; GPU mesh memory is shared.
 
@@ -40,7 +40,7 @@ and descendants of hidden parents do not cast. The **Shadows** section below
 the directional light controls one map or four stabilized cascades, filtered
 edges, distance and bias. See [shadows](shadows.md).
 
-## Static glTF and GLB
+## glTF and GLB models
 
 The editor imports glTF 2.0/GLB hierarchy, per-primitive materials, base color,
 normal and packed metallic/roughness textures, including embedded images. CPU
@@ -128,5 +128,10 @@ See [0.9 asset workflow and limits](assets-09.md).
 
 Animated/skinned glTF imports also register an `animation` asset and source-node
 bindings. The animation panel and C host functions drive independent runtime
-players without changing authored transforms. HDR file-dialog imports now decode
-and bake on a cancellable worker. See [0.10 details](development-010.md).
+players without changing authored transforms. Import a rigged GLB using
+**Import model**, then open **Animation clips** in the Inspector to preview an
+exported clip or show its posed skeleton. Each skin can have up to 256 joints.
+For a vertex with more than four influences, the importer keeps and renormalizes
+the four strongest across up to eight joint/weight sets. Export the armature and
+animations from Blender as GLB. Morph targets and compressed meshes remain
+outside the skeletal import path. See [the animation workflow](development-010.md).

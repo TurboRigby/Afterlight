@@ -8,6 +8,7 @@
 #define AF_EXTENSION_RUNTIME_H
 
 #include <SDL3/SDL_loadso.h>
+#include <afterlight/asset.h>
 #include <afterlight/extension.h>
 #include <stddef.h>
 
@@ -15,6 +16,9 @@ typedef struct af_loaded_extension {
     SDL_SharedObject *library;
     const af_extension_api *api;
     const struct af_vulkan_upscaler_api *upscaler;
+    const struct af_vulkan_startup_api *startup;
+    af_extension_startup_status startup_status;
+    char path[AF_ASSET_PATH_CAPACITY];
     void *state;
     bool enabled;
 } af_loaded_extension;

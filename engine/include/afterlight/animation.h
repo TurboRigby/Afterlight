@@ -5,7 +5,7 @@
 
 #define AF_ANIMATION_MAX_NODES 16384u
 #define AF_ANIMATION_MAX_CLIPS 128u
-#define AF_ANIMATION_MAX_JOINTS 64u
+#define AF_ANIMATION_MAX_JOINTS 256u
 /* Quaternion is xyzw. Pose composition is T * quaternion rotation * S. */
 typedef struct af_animation_pose {af_vec3 translation,scale;af_vec4 rotation;} af_animation_pose;
 typedef enum af_animation_path {AF_ANIM_TRANSLATION,AF_ANIM_ROTATION,AF_ANIM_SCALE} af_animation_path;

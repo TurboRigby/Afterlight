@@ -520,7 +520,7 @@ int main(int argc, char **argv) {
   }
   if (check)
     return check_project(&app.project);
-  af_engine *engine = af_engine_create(&config);
+  af_engine *engine = af_engine_create_with_extensions(&config, extensions, extension_count);
   if (!engine)
     return 1;
   const char *required = getenv("AFTERLIGHT_REQUIRE_VALIDATION");
@@ -528,12 +528,6 @@ int main(int argc, char **argv) {
       !af_engine_get_stats(engine).validation_enabled) {
     af_engine_destroy(engine);
     return 1;
-  }
-  for (size_t i = 0; i < extension_count; ++i) {
-    if (!af_engine_load_extension(engine, extensions[i])) {
-      af_engine_destroy(engine);
-      return 1;
-    }
   }
   af_game game = {.init = init,
                   .update = update,

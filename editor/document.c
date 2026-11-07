@@ -223,7 +223,8 @@ bool ed_document_redo(ed_document *d)
 bool ed_document_import_mesh(ed_document *d,const char *name,const char *path){
     af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
     if(af_asset_is_model_path(path)){af_object_id root;af_asset_error error;
-        if(!af_scene_import_model(next,name,path,&root,&error)){af_scene_destroy(next);status(d,error.message);return false;}return commit(d,next,root,0);}
+        if(!af_scene_import_model(next,name,path,&root,&error)){af_scene_destroy(next);status(d,error.message);return false;}
+        (void)af_scene_set_object_name(next,root,ed_path_name(path));return commit(d,next,root,0);}
     if(!af_scene_set_asset(next,name,AF_ASSET_MESH,path)){af_scene_destroy(next);status(d,"Cannot add mesh reference.");return false;}
     af_object_id id=af_scene_add_object(next,ed_path_name(path),name);
     if(!id){af_scene_destroy(next);return false;}return commit(d,next,id,0);

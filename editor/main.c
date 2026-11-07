@@ -24,6 +24,8 @@
 #include "render_test.h"
 #include "cube.h"
 #include <SDL3/SDL_process.h>
+#include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_iostream.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
@@ -50,6 +52,7 @@ typedef struct editor {
     char project_path[AF_ASSET_PATH_CAPACITY];
     const char *initial_project;
     bool show_project,show_extensions,module_override,project_is_template;
+    char startup_pref[AF_ASSET_PATH_CAPACITY], startup_extension[AF_ASSET_PATH_CAPACITY];
     af_camera edit_camera;
     char module_path[AF_ASSET_PATH_CAPACITY];
     char runtime_status[256];
@@ -110,6 +113,51 @@ static void set_status(editor *app,const char *text)
 {
     snprintf(app->document.status,sizeof(app->document.status),"%s",text);
 }
+
+static void read_startup_extension(editor *app)
+{
+    char *directory = SDL_GetPrefPath("Afterlight", "Editor");
+    if (!directory) return;
+    int length = snprintf(app->startup_pref, sizeof(app->startup_pref), "%sstartup-extension.path", directory);
+    SDL_free(directory);
+    if (length < 0 || (size_t)length >= sizeof(app->startup_pref)) {
+        app->startup_pref[0] = 0;
+        return;
+    }
+    SDL_IOStream *file = SDL_IOFromFile(app->startup_pref, "rb");
+    if (!file) return;
+    Sint64 size = SDL_GetIOSize(file);
+    if (size > 0 && size < (Sint64)sizeof(app->startup_extension) &&
+        SDL_ReadIO(file, app->startup_extension, (size_t)size) == (size_t)size &&
+        !memchr(app->startup_extension, 0, (size_t)size)) {
+        app->startup_extension[size] = 0;
+    } else app->startup_extension[0] = 0;
+    SDL_CloseIO(file);
+}
+
+static void schedule_startup_extension(editor *app, const char *path)
+{
+    if (!app->startup_pref[0]) {
+        set_status(app, "Cannot access editor startup preferences.");
+        return;
+    }
+    if (!path) {
+        if (SDL_RemovePath(app->startup_pref)) {
+            app->startup_extension[0] = 0;
+            set_status(app, "Startup extension preference cleared.");
+        } else set_status(app, SDL_GetError());
+        return;
+    }
+    char temporary[AF_ASSET_PATH_CAPACITY + 32];
+    snprintf(temporary, sizeof(temporary), "%s.%" PRIu64, app->startup_pref, (uint64_t)SDL_GetTicksNS());
+    if (!SDL_SaveFile(temporary, path, strlen(path)) || !SDL_RenamePath(temporary, app->startup_pref)) {
+        set_status(app, SDL_GetError());
+        SDL_RemovePath(temporary);
+        return;
+    }
+    snprintf(app->startup_extension, sizeof(app->startup_extension), "%s", path);
+    set_status(app, "Restart Afterlight Editor to activate the startup extension.");
+}
 static void refresh(editor *app) { app->refresh_fields=true;ed_document_end_edit(&app->document); }
 static void stop_play(editor *app)
 {
@@ -146,10 +194,11 @@ static void start_import(editor *app,af_asset_kind kind)
     app->dialog_save=false;
     if(!app->dialog)set_status(app,"Cannot open import dialog.");
 }
-static void load_assets(editor *app)
+static bool load_assets(editor *app)
 {
     af_asset_error error;
-    if(!af_engine_load_scene_assets(app->engine,app->document.scene,&error))set_status(app,error.message);
+    if(af_engine_load_scene_assets(app->engine,app->document.scene,&error))return true;
+    set_status(app,error.message);return false;
 }
 static bool open_project(editor *app,const char *path,bool untitled)
 {
@@ -200,8 +249,11 @@ static void poll_dialog(editor *app)
                              extension && SDL_strcasecmp(extension, ".project") == 0;
     if (app->dialog_asset == ED_DIALOG_EXTENSION) {
         bool loaded = af_engine_load_extension(app->engine, path);
-        set_status(app, loaded ? "Engine extension enabled." :
-                                 "Extension load failed. Check its dependencies, ABI and ID.");
+        af_extension_info info;
+        if (loaded && af_engine_get_extension(app->engine, af_engine_extension_count(app->engine) - 1, &info) &&
+            info.startup_status == AF_EXTENSION_RESTART_REQUIRED) schedule_startup_extension(app, info.path);
+        else set_status(app, loaded ? "Engine extension enabled." :
+                                     "Extension load failed. Check its dependencies, ABI and ID.");
         app->dialog_asset = 0;
     }else if(app->dialog_asset==5 || open_project_file){
         app->module_override=false;if(open_project(app,path,false))load_assets(app);app->dialog_asset=0;
@@ -220,7 +272,12 @@ static void poll_dialog(editor *app)
         af_asset_error asset_error;
         if(app->dialog_asset==1){
             bool model=af_asset_is_model_path(path);
-            if(model){if(ed_document_import_mesh(&app->document,name,path)){load_assets(app);refresh(app);}}
+            if(model){if(ed_document_import_mesh(&app->document,name,path)){
+                bool loaded=load_assets(app);refresh(app);
+                const af_scene_object *root=af_scene_get_object(app->document.scene,app->document.selection);
+                if(loaded&&root&&root->animation.asset[0])
+                    set_status(app,"Model imported. Open Animation clips in the Inspector to preview.");
+            }}
             else if(af_engine_load_mesh(app->engine,name,path,&asset_error)){ed_document_import_mesh(&app->document,name,path);refresh(app);}
             else set_status(app,asset_error.message);
         }else if(app->dialog_asset==9){
@@ -388,32 +445,41 @@ static void toolbar(editor *app,float width)
 {
     struct nk_context *context=&app->gui.context;
     if(nk_begin(context,"Toolbar",nk_rect(0,0,width,64),(NK_WINDOW_BORDER|((app->modal||app->dialog)?NK_WINDOW_NO_INPUT:0))|NK_WINDOW_NO_SCROLLBAR)){
+        bool compact=width<1160;
         if(app->runtime.playing){
-            nk_layout_row_dynamic(context,34,9);if(nk_button_label(context,app->maximize_play?"Restore (F6)":"Maximize (F6)"))app->maximize_play=!app->maximize_play;
+            const char *maximize=app->maximize_play?(compact?"Restore":"Restore (F6)"):(compact?"Maximize":"Maximize (F6)");
+            nk_layout_row_dynamic(context,34,10);if(nk_button_label(context,maximize))app->maximize_play=!app->maximize_play;
             if(nk_button_label(context,app->runtime.paused?"Resume":"Pause"))app->runtime.paused=!app->runtime.paused;
             if(nk_button_label(context,"Step 1/60")){app->runtime.paused=true;af_engine_set_simulation_paused(app->engine,true);af_engine_step_simulation(app->engine);}
             if(nk_button_label(context,"Stop (F5)"))stop_play(app);
             if(nk_button_label(context,"Reload game"))ed_runtime_reload(&app->runtime);
-            nk_bool automatic=app->runtime.auto_reload;nk_checkbox_label(context,"Auto reload",&automatic);app->runtime.auto_reload=automatic!=0;
+            nk_bool automatic=app->runtime.auto_reload;nk_checkbox_label(context,compact?"Auto":"Auto reload",&automatic);app->runtime.auto_reload=automatic!=0;
+            if(nk_button_label(context,"Extensions"))app->show_extensions=!app->show_extensions;
             if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
             if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
             if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
         }else{
-        nk_layout_row_begin(context,NK_STATIC,34,12);
-        nk_layout_row_push(context,132);nk_label_colored(context,"Afterlight",NK_TEXT_LEFT,nk_rgb(245,190,112));
-        nk_layout_row_push(context,64);if(nk_button_label(context,"New"))request_action(app,ED_NEW);
-        nk_layout_row_push(context,64);if(nk_button_label(context,"Open"))request_action(app,ED_OPEN);
-        nk_layout_row_push(context,64);if(nk_button_label(context,"Save"))save_document(app,false,ED_NONE);
-        nk_layout_row_push(context,80);if(nk_button_label(context,"Save As"))save_document(app,true,ED_NONE);
-        nk_layout_row_push(context,64);if(nk_button_label(context,"Undo")){ed_document_undo(&app->document);refresh(app);}
-        nk_layout_row_push(context,64);if(nk_button_label(context,"Redo")){ed_document_redo(&app->document);refresh(app);}
-        nk_layout_row_push(context,80);if(nk_button_label(context,"Play"))toggle_play(app);
-        nk_layout_row_push(context,120);if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
-        nk_layout_row_push(context,120);if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
-        nk_layout_row_push(context,70);if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
-        nk_layout_row_push(context,fmaxf(60,width-1070));
-        char title[512];snprintf(title,sizeof(title),"%s%s",app->document.path[0]?ed_path_name(app->document.path):"Untitled scene",ed_document_dirty(&app->document)?" *":"");
-        nk_label(context,title,NK_TEXT_RIGHT);nk_layout_row_end(context);
+        bool show_title=width>=1220;
+        float basic=compact?54:64;
+        nk_layout_row_begin(context,NK_STATIC,34,show_title?13:12);
+        nk_layout_row_push(context,compact?86:132);nk_label_colored(context,"Afterlight",NK_TEXT_LEFT,nk_rgb(245,190,112));
+        nk_layout_row_push(context,basic);if(nk_button_label(context,"New"))request_action(app,ED_NEW);
+        nk_layout_row_push(context,basic);if(nk_button_label(context,"Open"))request_action(app,ED_OPEN);
+        nk_layout_row_push(context,basic);if(nk_button_label(context,"Save"))save_document(app,false,ED_NONE);
+        nk_layout_row_push(context,compact?74:80);if(nk_button_label(context,"Save As"))save_document(app,true,ED_NONE);
+        nk_layout_row_push(context,basic);if(nk_button_label(context,"Undo")){ed_document_undo(&app->document);refresh(app);}
+        nk_layout_row_push(context,basic);if(nk_button_label(context,"Redo")){ed_document_redo(&app->document);refresh(app);}
+        nk_layout_row_push(context,compact?70:80);if(nk_button_label(context,"Play"))toggle_play(app);
+        nk_layout_row_push(context,104);if(nk_button_label(context,"Extensions"))app->show_extensions=!app->show_extensions;
+        nk_layout_row_push(context,compact?100:120);if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
+        nk_layout_row_push(context,compact?100:120);if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
+        nk_layout_row_push(context,compact?64:70);if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
+        if(show_title){
+            nk_layout_row_push(context,width-1160);
+            char title[512];snprintf(title,sizeof(title),"%s%s",app->document.path[0]?ed_path_name(app->document.path):"Untitled scene",ed_document_dirty(&app->document)?" *":"");
+            nk_label(context,title,NK_TEXT_RIGHT);
+        }
+        nk_layout_row_end(context);
         }
     }nk_end(context);
 }
@@ -442,7 +508,7 @@ static void object_list(editor *app,float height)
         nk_layout_row_dynamic(context,32,2);
         if(nk_button_label(context,"Add cube")){ed_document_add_cube(&app->document);refresh(app);}
         if(nk_button_label(context,"Duplicate")){ed_document_duplicate(&app->document);refresh(app);}
-        nk_layout_row_dynamic(context,30,2);if(nk_button_label(context,"Import mesh"))start_import(app,AF_ASSET_MESH);if(nk_button_label(context,"Add water")){ed_document_add_water(&app->document);refresh(app);}
+        nk_layout_row_dynamic(context,30,2);if(nk_button_label(context,"Import model"))start_import(app,AF_ASSET_MESH);if(nk_button_label(context,"Add water")){ed_document_add_water(&app->document);refresh(app);}
         nk_layout_row_dynamic(context,30,1);
         if(nk_button_label(context,"Choose C game module")){app->dialog=ed_dialog_begin_module(app->engine);app->dialog_asset=3;app->dialog_save=false;}
         nk_layout_row_dynamic(context,fmaxf(60,height-338),1);
@@ -1119,18 +1185,30 @@ static void extensions_panel(editor *app, float width, float height)
 {
     if (!app->show_extensions) return;
     struct nk_context *ctx = &app->gui.context;
-    nk_flags flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_MOVABLE;
-    if (app->modal || app->dialog) flags |= NK_WINDOW_NO_INPUT;
+    nk_flags flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE;
+    flags |= app->modal || app->dialog ? NK_WINDOW_NO_INPUT : NK_WINDOW_MOVABLE;
     if (nk_begin(ctx, "Extensions", nk_rect(fmaxf(20, (width - 540) / 2), 100, 540,
                  fminf(440, height - 140)), flags)) {
         nk_layout_row_dynamic(ctx, 46, 1);
-        nk_label_wrap(ctx, "Load trusted native libraries for this editor session.");
+        nk_label_wrap(ctx, "Load trusted native libraries. Startup extensions take effect after restart.");
         size_t count = af_engine_extension_count(app->engine);
         if (!count) label(ctx, "Built-in rendering. No extensions loaded.", 28);
         for (size_t i = 0; i < count; ++i) {
             af_extension_info info;
             if (!af_engine_get_extension(app->engine, i, &info)) continue;
             nk_layout_row_dynamic(ctx, 30, 2);
+            if (info.startup_status == AF_EXTENSION_RESTART_REQUIRED) {
+                nk_bool scheduled = !strcmp(app->startup_extension, info.path);
+                if (nk_checkbox_label(ctx, info.id, &scheduled))
+                    schedule_startup_extension(app, scheduled ? info.path : NULL);
+                nk_label(ctx, "Restart required", NK_TEXT_LEFT);
+                continue;
+            }
+            if (info.startup_status == AF_EXTENSION_STARTUP_UNAVAILABLE) {
+                nk_label(ctx, info.id, NK_TEXT_LEFT);
+                nk_label(ctx, "Vulkan requirements unavailable", NK_TEXT_LEFT);
+                continue;
+            }
             nk_bool enabled = info.enabled;
             if (nk_checkbox_label(ctx, info.id, &enabled))
                 (void)af_engine_set_extension_enabled(app->engine, i, enabled != 0);
@@ -1138,6 +1216,10 @@ static void extensions_panel(editor *app, float width, float height)
             if (info.vulkan_upscaler && info.enabled)
                 state = info.upscaler_active ? "Upscaler active" : "Built-in rendering";
             nk_label(ctx, state, NK_TEXT_LEFT);
+        }
+        if (app->startup_extension[0]) {
+            nk_layout_row_dynamic(ctx, 32, 1);
+            if (nk_button_label(ctx, "Forget startup extension")) schedule_startup_extension(app, NULL);
         }
         nk_layout_row_dynamic(ctx, 34, 2);
         if (nk_button_label(ctx, "Load extension") && !app->dialog) {
@@ -1618,16 +1700,18 @@ int main(int argc,char **argv)
         else if(!strcmp(argv[i],"--no-validation"))config.enable_validation=false;
         else{fprintf(stderr,"Unknown/incomplete argument: %s\n",argv[i]);return 1;}
     }
-    af_engine *engine=af_engine_create(&config);if(!engine)return 1;
+    read_startup_extension(&app);
+    af_engine *engine = NULL;
+    if (!extension_count && !app.frame_limit && app.startup_extension[0]) {
+        const char *saved[] = {app.startup_extension};
+        engine = af_engine_create_with_extensions(&config, saved, 1);
+        if (!engine) fputs("Saved startup extension failed to load. Starting the editor without it.\n", stderr);
+    }
+    if (!engine) engine = af_engine_create_with_extensions(&config, extensions, extension_count);
+    if (!engine) return 1;
     const char *require_validation=getenv("AFTERLIGHT_REQUIRE_VALIDATION");
     if((app.smoke_path||app.play_controls_test)&&require_validation&&!strcmp(require_validation,"1")&&!af_engine_get_stats(engine).validation_enabled){
         fputs("Editor smoke test requires validation.\n",stderr);af_engine_destroy(engine);return 1;
-    }
-    for (size_t i = 0; i < extension_count; ++i) {
-        if (!af_engine_load_extension(engine, extensions[i])) {
-            af_engine_destroy(engine);
-            return 1;
-        }
     }
     af_game game={.init=init,.update=update,.shutdown=shutdown,.user_data=&app,.should_close=should_close,.fixed_update=fixed_update};
     int result=af_engine_run(engine,&game);af_engine_destroy(engine);

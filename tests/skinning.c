@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <afterlight/afterlight.h>
+#include <afterlight/animation.h>
 #include "render_test.h"
 #include "cube.h"
 #include <math.h>
@@ -9,12 +10,20 @@
 typedef struct state {af_scene *scene;af_camera camera;af_object_id object;unsigned phase,ticks;bool failed;unsigned char shadow[4];} state;
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Skin pixels phase %u line %d: %s\n",s->phase,__LINE__,#c);s->failed=true;af_engine_request_quit(engine);return;}}while(0)
 static af_vec2 project(state *s,af_vec3 p){af_mat4 vp=af_mat4_mul(af_mat4_perspective(s->camera.vertical_fov,4.0f/3,s->camera.near_clip,s->camera.far_clip),af_camera_view(&s->camera));af_vec4 c=af_mat4_transform(vp,(af_vec4){p.x,p.y,p.z,1});return (af_vec2){(c.x/c.w+1)*200,(c.y/c.w+1)*150};}
+static bool set_high_joint(af_engine *engine,af_object_id object,af_mat4 transform)
+{
+    af_mat4 palette[AF_ANIMATION_MAX_JOINTS];
+    for(size_t i=0;i<AF_ANIMATION_MAX_JOINTS-1;++i)palette[i]=af_mat4_identity();
+    palette[AF_ANIMATION_MAX_JOINTS-1]=transform;
+    return af_engine_set_skin_palette(engine,object,palette,AF_ANIMATION_MAX_JOINTS);
+}
 static bool init(af_engine *engine,void *user){
     state *s=user;s->scene=af_scene_create();if(!s->scene)return false;
     af_vertex vertices[]={ {.position={-.5f,-.5f,0},.color={1,0,0,1},.normal={0,1,0},.weights={1,0,0,0}}, {.position={.5f,-.5f,0},.color={1,0,0,1},.normal={0,1,0},.weights={1,0,0,0}}, {.position={.5f,.5f,0},.color={1,0,0,1},.normal={0,1,0},.weights={1,0,0,0}}, {.position={-.5f,.5f,0},.color={1,0,0,1},.normal={0,1,0},.weights={1,0,0,0}}};uint32_t indices[]={0,1,2,0,2,3};af_mesh_data mesh={vertices,4,indices,6};
+    for(size_t i=0;i<4;++i)vertices[i].joints[0]=AF_ANIMATION_MAX_JOINTS-1;
     if(!af_engine_upload_mesh(engine,"skin",&mesh))return false;s->object=af_scene_add_object(s->scene,"Skin","skin");af_material material=af_material_default();material.unlit=true;af_scene_set_object_material(s->scene,s->object,material);
     af_shadow_settings shadows=af_shadow_settings_default();shadows.enabled=false;shadows.resolution=512;af_scene_set_shadows(s->scene,shadows);
-    s->camera=af_camera_default();s->camera.position.z=6;af_engine_set_camera(engine,&s->camera);af_engine_set_scene(engine,s->scene);af_engine_set_clear_color(engine,(af_color){0,0,0,1});af_mat4 palette=af_mat4_identity();return af_engine_set_skin_palette(engine,s->object,&palette,1);
+    s->camera=af_camera_default();s->camera.position.z=6;af_engine_set_camera(engine,&s->camera);af_engine_set_scene(engine,s->scene);af_engine_set_clear_color(engine,(af_color){0,0,0,1});return set_high_joint(engine,s->object,af_mat4_identity());
 }
 static bool shadow_scene(af_engine *engine,state *s){
     af_engine_set_scene(engine,NULL);af_scene_destroy(s->scene);s->scene=af_scene_create();if(!s->scene)return false;
@@ -28,11 +37,11 @@ static void update(af_engine *engine,double delta,void *user){
     (void)delta;state *s=user;if(++s->ticks<3)return;unsigned char pixel[4];if(s->phase)CHECK(af_engine_test_read_pixel(engine,pixel));af_vec3 sample={0};
     switch(s->phase){
     case 0:break;
-    case 1:{CHECK(pixel[0]>240&&pixel[1]<5);af_mat4 move=af_mat4_translation((af_vec3){2,0,0});CHECK(af_engine_set_skin_palette(engine,s->object,&move,1));break;}
+    case 1:{CHECK(pixel[0]>240&&pixel[1]<5);af_mat4 move=af_mat4_translation((af_vec3){2,0,0});CHECK(set_high_joint(engine,s->object,move));break;}
     case 2:CHECK(pixel[0]<5);sample.x=2;break;
     case 3:{CHECK(pixel[0]>240);CHECK(af_engine_pick_object(engine,project(s,(af_vec3){2,0,0}))==s->object);af_mat4 bad=af_mat4_identity();bad.elements[0]=NAN;CHECK(!af_engine_set_skin_palette(engine,s->object,&bad,1));sample.x=2;break;}
-    case 4:{CHECK(pixel[0]>240);af_mat4 identity=af_mat4_identity();CHECK(af_engine_set_skin_palette(engine,s->object,&identity,1));af_material m=af_material_default();CHECK(af_scene_set_object_material(s->scene,s->object,m));af_directional_light light=af_directional_light_default();light.direction=(af_vec3){0,-1,0};light.ambient=0;light.intensity=1;CHECK(af_scene_set_light(s->scene,light));break;}
-    case 5:{CHECK(pixel[0]>230);af_mat4 rotation=af_mat4_rotation_z(AF_PI/2);CHECK(af_engine_set_skin_palette(engine,s->object,&rotation,1));break;}
+    case 4:{CHECK(pixel[0]>240);CHECK(set_high_joint(engine,s->object,af_mat4_identity()));af_material m=af_material_default();CHECK(af_scene_set_object_material(s->scene,s->object,m));af_directional_light light=af_directional_light_default();light.direction=(af_vec3){0,-1,0};light.ambient=0;light.intensity=1;CHECK(af_scene_set_light(s->scene,light));break;}
+    case 5:{CHECK(pixel[0]>230);af_mat4 rotation=af_mat4_rotation_z(AF_PI/2);CHECK(set_high_joint(engine,s->object,rotation));break;}
     case 6:CHECK(pixel[0]<5);CHECK(shadow_scene(engine,s));sample=(af_vec3){-1,0,-.6f};break;
     case 7:memcpy(s->shadow,pixel,4);{af_mat4 move=af_mat4_translation((af_vec3){4,0,0});CHECK(af_engine_set_skin_palette(engine,s->object,&move,1));}sample=(af_vec3){-1,0,-.6f};break;
     case 8:CHECK(pixel[0]>s->shadow[0]+30);{af_mat4 identity=af_mat4_identity();CHECK(af_engine_set_skin_palette(engine,s->object,&identity,1));}sample=(af_vec3){-1,0,-.6f};break;

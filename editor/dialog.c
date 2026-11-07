@@ -7,6 +7,7 @@
 #include "dialog.h"
 #include "platform_sdl.h"
 #include <SDL3/SDL_dialog.h>
+#include <SDL3/SDL_filesystem.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,7 +64,7 @@ ed_file_dialog *ed_dialog_begin(af_engine *engine,bool save,const char *suggeste
     return begin_dialog(engine, save, suggested_path, save ? &scenes : &documents);
 }
 ed_file_dialog *ed_dialog_begin_asset(af_engine *engine,af_asset_kind kind){
-    static const SDL_DialogFileFilter mesh={"Static 3D models","obj;gltf;glb"},texture={"Images","png;jpg;jpeg;bmp;tga"},audio={"WAV sound effects","wav"},environment={"HDR equirectangular panoramas","hdr"};
+    static const SDL_DialogFileFilter mesh={"3D models (static or rigged)","obj;gltf;glb"},texture={"Images","png;jpg;jpeg;bmp;tga"},audio={"WAV sound effects","wav"},environment={"HDR equirectangular panoramas","hdr"};
     return begin_dialog(engine,false,NULL,kind==AF_ASSET_ENVIRONMENT?&environment:kind==AF_ASSET_MESH?&mesh:kind==AF_ASSET_AUDIO?&audio:&texture);
 }
 
@@ -74,6 +75,15 @@ ed_file_dialog *ed_dialog_begin_module(af_engine *engine){
 ed_file_dialog *ed_dialog_begin_extension(af_engine *engine)
 {
     static const SDL_DialogFileFilter filter = {"Afterlight extension libraries", "so;dylib;dll"};
+    const char *base = af_engine_get_base_path(engine);
+    char directory[AF_ASSET_PATH_CAPACITY];
+    SDL_PathInfo info;
+    if (base) {
+        int length = snprintf(directory, sizeof(directory), "%s../extensions/", base);
+        if (length > 0 && (size_t)length < sizeof(directory) &&
+            SDL_GetPathInfo(directory, &info) && info.type == SDL_PATHTYPE_DIRECTORY)
+            return begin_dialog(engine, false, directory, &filter);
+    }
     return begin_dialog(engine, false, NULL, &filter);
 }
 

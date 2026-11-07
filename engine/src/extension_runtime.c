@@ -60,12 +60,20 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
             goto fail;
         }
     }
-    const af_vulkan_upscaler_api *upscaler = api->struct_size >= sizeof(*api) ? api->vulkan_upscaler : NULL;
+    const af_vulkan_upscaler_api *upscaler =
+        api->struct_size >= offsetof(af_extension_api, vulkan_startup) ? api->vulkan_upscaler : NULL;
     if (upscaler && (upscaler->abi_version != AF_VULKAN_UPSCALER_ABI_VERSION ||
         upscaler->struct_size < offsetof(af_vulkan_upscaler_api, flags) ||
         !(upscaler->render_scale >= .5f && upscaler->render_scale <= 1.f) ||
         !upscaler->create || !upscaler->record || !upscaler->destroy)) {
         af_log("error", "Extension %s has an incompatible Vulkan upscaler.", api->id);
+        goto fail;
+    }
+    const af_vulkan_startup_api *startup = api->struct_size >= sizeof(*api) ? api->vulkan_startup : NULL;
+    if (startup && (startup->abi_version != AF_VULKAN_STARTUP_ABI_VERSION ||
+                    startup->struct_size < sizeof(*startup) ||
+                    (!startup->instance_requirements && !startup->device_requirements))) {
+        af_log("error", "Extension %s has an incompatible Vulkan startup descriptor.", api->id);
         goto fail;
     }
     void *state = NULL;
@@ -74,9 +82,12 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
         af_log("error", "Engine extension %s failed to start (status %" PRId32 ").", api->id, status);
         goto fail;
     }
-    extensions->modules[extensions->count++] = (af_loaded_extension){
-        .library = library, .api = api, .upscaler = upscaler, .state = state,
+    af_loaded_extension *module = &extensions->modules[extensions->count++];
+    *module = (af_loaded_extension){
+        .library = library, .api = api, .upscaler = upscaler, .startup = startup, .state = state,
+        .startup_status = startup ? AF_EXTENSION_RESTART_REQUIRED : AF_EXTENSION_LIVE,
     };
+    memcpy(module->path, absolute, strlen(absolute) + 1);
     af_log("info", "Loaded engine extension %s.", api->id);
     return true;
 

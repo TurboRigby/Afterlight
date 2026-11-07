@@ -90,8 +90,9 @@ URI glTF and GLB. It checks parent transforms, mirrored winding, normals, UV0,
 normalized colors and base-color factors, then loads the real beacon. Malformed
 buffers, oversized declarations, singular transforms and truncated GLB are
 rejected. Playground graphics tests upload/render the beacon and show the shared
-HUD with Vulkan synchronization validation. The model importer is static-only;
-see assets.md for its explicit material/animation limits.
+HUD with Vulkan synchronization validation. The skeleton data test also imports
+an animated GLB with 80 joints and sparse interleaved weight sets, and rejects
+invalid secondary influences. See [asset import limits](assets.md).
 
 ## 0.7 engine/tooling checks
 

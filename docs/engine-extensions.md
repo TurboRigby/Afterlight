@@ -7,12 +7,19 @@ modules have independent ABI versions.
 
 ## Enable extensions in the editor
 
-Open **Project → Extensions → Load extension** and choose a trusted native
-library. The panel lists loaded extensions and lets you disable or re-enable
+Open **Extensions → Load extension** from the top toolbar and choose a trusted
+native library. The Linux installation opens its bundled extensions directory.
+The panel lists loaded extensions and lets you disable or re-enable
 each one during the current session. The **Upscaler active** label confirms the
 selected provider is rendering. Disabling it restores the scene's built-in
 anti-aliasing and native resolution. You can also load libraries at launch with
 `--extension` in the editor or standalone player.
+
+Libraries that need Vulkan startup negotiation show **Restart required** when
+loaded in a running editor. Close and reopen the editor to activate the queued
+library. The editor remembers one startup extension per user. Use **Forget
+startup extension** to clear it for future launches. Explicit `--extension`
+arguments take precedence over the saved selection.
 
 ## Try the C++ telemetry extension
 
@@ -87,7 +94,8 @@ completed frame slot for per-slot descriptors and temporary resources.
   previous view-space depth or negative for invalid motion. Motion A contains
   current view-space depth.
 - The frame also supplies the normalized viewport, projection jitter in render
-  pixels, exposure multiplier and the history-reset flag. Resizing recreates
+  pixels, exposure multiplier and the history-reset flag. An optional tail
+  supplies camera clip planes, vertical field of view and frame time. Resizing recreates
   the provider context after device idle. Camera cuts and scene changes reset
   temporal history. Spatial providers can request zero projection jitter with
   `AF_VULKAN_UPSCALER_SPATIAL`.
@@ -97,8 +105,12 @@ completed frame slot for per-slot descriptors and temporary resources.
   composites its current scene color and restores native rendering on the
   next frame. A failed resource setup also restores native rendering.
 
-The hook configures providers after the Vulkan device exists. SDKs that need
-instance or device extensions require a separate pre-device negotiation step.
+An extension can optionally declare a `vulkan_startup` descriptor to request
+Vulkan instance and device extensions and the supported feature bits documented
+in the header. Pass those libraries to `af_engine_create_with_extensions` or
+`--extension` so the callbacks can run before Vulkan creation. If the selected
+device cannot meet the requirements, Afterlight leaves the extension disabled
+and starts with its built-in renderer.
 
 ## AMD FidelityFX Super Resolution 1.0
 
@@ -120,13 +132,65 @@ cmake --build build/amd-fsr1
 Load `afterlight_fsr1.so` through the editor or pass its path to
 `--extension`. Keep `AMD-FSR1-LICENSE.txt` with the built module when sharing it.
 
-## Other SDKs
+## AMD FidelityFX Super Resolution 2 and 3
 
-NVIDIA documents Streamline for Windows. NGX supplies a Vulkan API and Linux
-libraries, including calls to query the Vulkan extensions a DLSS feature
-requires. [Streamline programming guide](https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuide.md),
-[NGX Vulkan header](https://github.com/NVIDIA/DLSS/blob/main/include/nvsdk_ngx_vk.h),
-[NGX Linux libraries](https://github.com/NVIDIA/DLSS/tree/main/lib/Linux_x86_64).
+The optional Linux Vulkan adapters use the FSR 2.3.3 and FSR 3.1.4 temporal
+upscalers from AMD's FidelityFX SDK 1.1.4. Both use Quality mode at a 1.5×
+ratio, with HDR scene color, depth, motion vectors and automatic exposure.
+Tone mapping, bloom and UI composition run at output resolution. The FSR 3
+module provides Super Resolution. Frame generation requires separate
+swapchain and presentation integration.
+[AMD FidelityFX SDK 1.1.4](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/v1.1.4)
+
+The standalone build needs a C++20 compiler, Python 3, Vulkan 1.2 headers,
+`glslangValidator` and `spirv-dis`. It compiles AMD's GLSL passes for HDR and
+render-resolution motion vectors. It uses FP32 shaders on the device's
+native subgroup size. Keep the SDK checkout external to Afterlight.
+
+```sh
+git clone --depth 1 --branch v1.1.4 --filter=blob:none --sparse \
+  https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK.git ../FidelityFX-SDK
+git -C ../FidelityFX-SDK sparse-checkout set sdk/include sdk/src
+cmake -S engine/extensions/amd-fsr -B build/amd-fsr -G Ninja \
+  -DAFTERLIGHT_FIDELITYFX_SDK="$PWD/../FidelityFX-SDK"
+cmake --build build/amd-fsr
+```
+
+Choose `afterlight_fsr2.so` or `afterlight_fsr3.so` under **Extensions →
+Load extension**, then restart the editor. Both request
+storage-image features at Vulkan startup. The standalone player accepts
+the same libraries with `--extension`. If you pass both, the last upscaler
+starts active and the editor panel can switch between them. Keep
+`AMD-FIDELITYFX-LICENSE.txt` with the built modules when sharing them.
+
+## NVIDIA NGX DLSS Super Resolution
+
+The optional C adapter uses NVIDIA's native NGX Vulkan API on Linux x86-64
+with a supported NVIDIA RTX GPU and driver. It runs DLSS Super Resolution
+in Quality mode, rendering at roughly two thirds of the output width and
+height. It uses HDR scene color, depth, motion vectors and temporal jitter.
+Tone mapping and editor UI composition run at output resolution. If NGX
+cannot initialize or evaluate, Afterlight restores the scene's built-in AA
+and native resolution. [NVIDIA DLSS SDK v310.9.16](https://github.com/NVIDIA/DLSS/tree/v310.9.16)
+
+Keep the SDK in a separate directory. Its headers and binaries are provided
+under [NVIDIA's SDK license](https://github.com/NVIDIA/DLSS/blob/v310.9.16/LICENSE.txt)
+and remain external to the Afterlight repository and standard exports.
+
+```sh
+git clone --depth 1 --branch v310.9.16 https://github.com/NVIDIA/DLSS.git ../NVIDIA-DLSS
+cmake -S engine/extensions/nvidia-ngx -B build/nvidia-ngx -G Ninja \
+  -DAFTERLIGHT_NGX_SDK="$PWD/../NVIDIA-DLSS"
+cmake --build build/nvidia-ngx
+```
+
+Select `afterlight_ngx.so` in **Extensions → Load extension**,
+then restart the editor. For the standalone player, supply the module with
+`--extension build/nvidia-ngx/afterlight_ngx.so`. The module looks for NVIDIA's
+DLSS runtime in the SDK's `lib/Linux_x86_64/rel` directory. Set
+`AFTERLIGHT_NGX_RUNTIME_DIR` to use a different runtime directory.
+
+## Other SDKs
 
 AMD documents a C-facing FidelityFX API and C++ convenience wrappers.
 Available effects and backends depend on the SDK version and platform.

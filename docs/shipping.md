@@ -61,9 +61,9 @@ engine link. Refresh its copied public headers when changing engine ABI.
 The macOS editor bundles templates and the player for its wizard/export tools;
 a Python 3 installation is still needed for authoring, not for exported play.
 
-## Rich static glTF import
+## Hierarchical glTF and GLB import
 
-Editor **Import mesh (OBJ/glTF)** preserves a glTF/GLB model's node hierarchy and
+Editor **Import model** preserves a glTF/GLB model's node hierarchy and
 node-local TRS. Every primitive becomes a child object with its own material;
 mesh geometry is shared by stable source-mesh/primitive keys. Transform-only
 objects use the reserved mesh name `__node` and produce no draw or missing-asset
@@ -86,8 +86,9 @@ that data. The older `af_mesh_file_load_gltf` remains a flattened geometry API f
 existing callers; the editor uses the richer path.
 
 Current limits: triangle meshes, one UV set (UV0), repeat wrapping and no
-texture transforms. Core TRS animation and four-influence skins are supported
-within the [0.10 budgets](development-010.md). Morphs,
+texture transforms. Core TRS animation and skins with up to 256 joints are
+supported. Import reads up to eight joint/weight sets and retains the four
+strongest influences per vertex. See [animation budgets](development-010.md). Morphs,
 mesh compression, material texture extensions, emissive textures and imported
 cameras/lights are not implemented. Unsupported required features are rejected. Sampler
 filtering uses the engine's trilinear/anisotropic policy. Node-local shear and
