@@ -5,6 +5,7 @@
  */
 
 #include <afterlight/afterlight.h>
+#include <afterlight/extension_vulkan.h>
 #include "log.h"
 #include "renderer.h"
 #include "environment_job.h"
@@ -192,7 +193,15 @@ bool af_engine_load_extension(af_engine *engine, const char *path)
         af_log("error", "Load engine extensions before starting the engine loop.");
         return false;
     }
-    return af_extensions_load(&engine->extensions, path);
+    if (!af_extensions_load(&engine->extensions, path)) return false;
+    const af_loaded_extension *module = &engine->extensions.modules[engine->extensions.count - 1];
+    if (module->upscaler) af_renderer_set_upscaler(engine->renderer, module->upscaler, module->state);
+    return true;
+}
+
+bool af_engine_set_upscaler_enabled(af_engine *engine, bool enabled)
+{
+    return engine && af_renderer_set_upscaler_enabled(engine->renderer, enabled);
 }
 
 int af_engine_run(af_engine *engine, const af_game *game)
@@ -392,6 +401,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
 void af_engine_destroy(af_engine *engine)
 {
     if (!engine) return;
+    af_renderer_release_upscaler(engine->renderer);
     af_extensions_destroy(&engine->extensions);
     af_environment_job_destroy(engine->environment_job);af_animation_runtime_destroy(engine->animations);
     af_scene_destroy(engine->previous_scene);

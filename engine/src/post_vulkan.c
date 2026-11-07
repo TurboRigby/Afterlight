@@ -15,10 +15,11 @@ typedef struct post_image {
   VkImageView view;
   VkFramebuffer framebuffer;
 } post_image;
+enum { UPSCALED_EXTRACT_SET = 14, UPSCALED_COMPOSITE_SET };
 typedef struct post_frame {
-  post_image hdr, motion, blur[2];
+  post_image hdr, motion, blur[2], upscaled;
   VkFramebuffer scene, output;
-  VkDescriptorSet sets[14];
+  VkDescriptorSet sets[UPSCALED_COMPOSITE_SET + 1];
 } post_frame;
 struct af_vk_post {
   VkPhysicalDevice physical;
@@ -58,7 +59,8 @@ static bool framebuffer(af_vk_post *p, VkRenderPass pass,
                                   .layers = 1};
   return ok(vkCreateFramebuffer(p->device, &info, NULL, out));
 }
-static bool image(af_vk_post *p, post_image *out, VkExtent2D extent) {
+static bool allocate_image(af_vk_post *p, post_image *out, VkExtent2D extent,
+                           VkImageUsageFlags usage) {
   const char *fault = getenv("AFTERLIGHT_TEST_POST_FAIL_AT");
   if (fault && strtoul(fault, NULL, 10) == ++p->allocation_attempts) {
     af_log("info", "Injected post allocation failure for cleanup regression.");
@@ -72,10 +74,7 @@ static bool image(af_vk_post *p, post_image *out, VkExtent2D extent) {
                             .arrayLayers = 1,
                             .samples = VK_SAMPLE_COUNT_1_BIT,
                             .tiling = VK_IMAGE_TILING_OPTIMAL,
-                            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                     VK_IMAGE_USAGE_SAMPLED_BIT |
-                                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            .usage = usage,
                             .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
   if (!ok(vkCreateImage(p->device, &info, NULL, &out->image)))
     return false;
@@ -109,6 +108,11 @@ static bool image(af_vk_post *p, post_image *out, VkExtent2D extent) {
       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
   return ok(vkCreateImageView(p->device, &view, NULL, &out->view));
 }
+static bool image(af_vk_post *p, post_image *out, VkExtent2D extent) {
+  return allocate_image(p, out, extent, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+}
+
 static bool pass(af_vk_post *p, VkFormat format, bool output,
                  VkRenderPass *out) {
   VkAttachmentDescription attachment = {
@@ -237,8 +241,8 @@ void af_vk_post_destroy(af_vk_post *p) {
       vkDestroyFramebuffer(p->device, f->scene, NULL);
     if (f->output)
       vkDestroyFramebuffer(p->device, f->output, NULL);
-    post_image *images[] = {&f->hdr, &f->motion, &f->blur[0], &f->blur[1]};
-    for (unsigned j = 0; j < 4; ++j) {
+    post_image *images[] = {&f->hdr, &f->motion, &f->blur[0], &f->blur[1], &f->upscaled};
+    for (unsigned j = 0; j < sizeof(images) / sizeof(images[0]); ++j) {
       post_image *im = images[j];
       if (im->framebuffer)
         vkDestroyFramebuffer(p->device, im->framebuffer, NULL);
@@ -285,10 +289,10 @@ void af_vk_post_destroy(af_vk_post *p) {
 }
 af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
                               VkQueue queue, uint32_t family, VkExtent2D extent,
-                              uint32_t count, const VkImageView *outputs,
+                              VkExtent2D render_extent, uint32_t count, const VkImageView *outputs,
                               VkFormat format, VkRenderPass scene_pass,
                               const VkImageView *depths,
-                              af_render_settings settings, bool motion) {
+                              af_render_settings settings, bool motion, bool upscale) {
   VkFormatProperties properties;
   vkGetPhysicalDeviceFormatProperties(physical, VK_FORMAT_R16G16B16A16_SFLOAT,
                                       &properties);
@@ -296,6 +300,7 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
       VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
       VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
       VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+  if (upscale) required |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
   if ((properties.optimalTilingFeatures & required) != required) {
     af_log("error",
            "RGBA16F HDR color attachments with linear sampling are required.");
@@ -348,11 +353,12 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
       .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
   if (!ok(vkCreateSampler(device, &sampler, NULL, &p->sampler)))
     goto fail;
+  unsigned set_count = upscale ? UPSCALED_COMPOSITE_SET + 1u : UPSCALED_EXTRACT_SET;
   VkDescriptorPoolSize size = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                               count * 42};
+                               count * set_count * 3};
   VkDescriptorPoolCreateInfo pool = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = count * 14,
+      .maxSets = count * set_count,
       .poolSizeCount = 1,
       .pPoolSizes = &size};
   if (!ok(vkCreateDescriptorPool(device, &pool, NULL, &p->pool)))
@@ -401,13 +407,15 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
   }
   for (uint32_t i = 0; i < count; ++i) {
     post_frame *f = &p->frames[i];
-    if (!image(p, &f->hdr, extent) ||
-        (motion && !image(p, &f->motion, extent)) ||
+    if (!image(p, &f->hdr, render_extent) ||
+        (motion && !image(p, &f->motion, render_extent)) ||
+        (upscale && !allocate_image(p, &f->upscaled, extent, VK_IMAGE_USAGE_STORAGE_BIT |
+                             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)) ||
         (settings.bloom &&
          (!image(p, &f->blur[0], p->half) || !image(p, &f->blur[1], p->half))))
       goto fail;
     VkImageView views[] = {f->hdr.view, depths[i], f->motion.view};
-    if (!framebuffer(p, scene_pass, views, motion ? 3u : 2u, extent,
+    if (!framebuffer(p, scene_pass, views, motion ? 3u : 2u, render_extent,
                      &f->scene) ||
         !framebuffer(p, p->output_pass, &outputs[i], 1, extent, &f->output))
       goto fail;
@@ -415,13 +423,13 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
       if (!framebuffer(p, p->blur_pass, &f->blur[j].view, 1, p->half,
                        &f->blur[j].framebuffer))
         goto fail;
-    VkDescriptorSetLayout layouts[14];
-    for (unsigned j = 0; j < 14; ++j)
+    VkDescriptorSetLayout layouts[UPSCALED_COMPOSITE_SET + 1];
+    for (unsigned j = 0; j < set_count; ++j)
       layouts[j] = p->layout;
     VkDescriptorSetAllocateInfo allocate = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = p->pool,
-        .descriptorSetCount = 14,
+        .descriptorSetCount = set_count,
         .pSetLayouts = layouts};
     if (!ok(vkAllocateDescriptorSets(device, &allocate, f->sets)))
       goto fail;
@@ -431,15 +439,15 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
         f->blur[1].view,    f->hdr.view,        p->display.view,
         p->history[0].view, p->display.view,    f->hdr.view,
         f->hdr.view,        p->history[0].view, p->history[1].view,
-        p->history[0].view, p->history[1].view};
-    for (unsigned j = 0; j < 14; ++j)
+        p->history[0].view, p->history[1].view, f->upscaled.view, f->upscaled.view};
+    for (unsigned j = 0; j < set_count; ++j)
       if (!sources[j])
         sources[j] = f->hdr.view;
-    for (unsigned j = 0; j < 14; ++j) {
+    for (unsigned j = 0; j < set_count; ++j) {
       VkDescriptorImageInfo images[] = {
           {p->sampler, sources[j], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
           {p->sampler,
-           j == 0 || j == 10 || j == 11 ? f->blur[0].view
+           j == 0 || j == 10 || j == 11 || j == UPSCALED_COMPOSITE_SET ? f->blur[0].view
            : j == 7                     ? p->history[1].view
            : j == 8                     ? p->history[1].view
            : j == 9                     ? p->history[0].view
@@ -480,6 +488,13 @@ VkImage af_vk_post_motion_image(const af_vk_post *p, uint32_t index) {
 }
 VkImage af_vk_post_scene_image(const af_vk_post *p, uint32_t image_index) {
   return p->frames[image_index].hdr.image;
+}
+void af_vk_post_upscaler_images(const af_vk_post *p, uint32_t index,
+                                af_vulkan_upscaler_frame *frame) {
+  const post_frame *f = &p->frames[index];
+  frame->color = (af_vulkan_upscaler_image){f->hdr.image, f->hdr.view};
+  frame->motion = (af_vulkan_upscaler_image){f->motion.image, f->motion.view};
+  frame->output = (af_vulkan_upscaler_image){f->upscaled.image, f->upscaled.view};
 }
 VkFramebuffer af_vk_post_scene_framebuffer(const af_vk_post *p,
                                            uint32_t image_index) {
@@ -524,7 +539,7 @@ static void draw_pass(af_vk_post *p, VkCommandBuffer command,
 }
 void af_vk_post_draw(af_vk_post *p, VkCommandBuffer command, uint32_t index,
                      af_render_settings settings, af_rect area, af_vec2 jitter,
-                     af_debug_view debug_view) {
+                     af_debug_view debug_view, bool upscaled) {
   post_frame *f = &p->frames[index];
   struct {
     af_vec4 settings, filter, viewport, aa, temporal;
@@ -612,6 +627,10 @@ void af_vk_post_draw(af_vk_post *p, VkCommandBuffer command, uint32_t index,
       set = 12 + parity;
     if (taa && stage == 4)
       set = bloom ? 10 + parity : 12 + parity;
+    if (upscaled && stage == 1)
+      set = UPSCALED_EXTRACT_SET;
+    if (upscaled && stage == 4)
+      set = UPSCALED_COMPOSITE_SET;
     draw_pass(p, command, target, output, extent, f->sets[set], &push);
   }
 }

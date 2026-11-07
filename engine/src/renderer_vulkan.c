@@ -37,6 +37,7 @@
 #define AF_FRAMES_IN_FLIGHT AF_UI_FRAMES_IN_FLIGHT
 _Static_assert(AF_FRAMES_IN_FLIGHT==AF_SHADOW_FRAME_COUNT,"Independent shadow maps for each frame");
 enum {AF_RESOURCE_AA_MASK=3u,AF_RESOURCE_BLOOM=4u,AF_RESOURCE_MOTION=8u,AF_RESOURCE_REFRACTION=16u,AF_RESOURCE_RAY_SHADOWS=32u,AF_RESOURCE_RAY_REFLECTIONS=64u,
+      AF_RESOURCE_UPSCALER=128u,
       AF_RESOURCE_RAY_QUERY=AF_RESOURCE_RAY_SHADOWS|AF_RESOURCE_RAY_REFLECTIONS};
 #define AF_PORTABILITY_SUBSET "VK_KHR_portability_subset"
 
@@ -92,7 +93,9 @@ typedef struct af_depth_attachment {
 
 typedef struct af_swapchain {
     VkSwapchainKHR handle;
-    VkExtent2D extent;
+    VkExtent2D extent, render_extent;
+    void *upscaler_context;
+    bool upscaler_created;
     uint32_t resource_config;
     VkSurfaceFormatKHR surface_format;
     af_vk_post *post;af_vk_refraction *refraction;
@@ -147,6 +150,9 @@ struct af_renderer {
     af_skin_instance previous_skins[AF_SKIN_INSTANCES];size_t previous_skin_count;
     af_motion_snapshot *motion_previous,*motion_next;size_t motion_count,motion_next_count,motion_previous_capacity,motion_next_capacity;
     af_motion_record *motion_records;size_t motion_records_capacity;
+    const af_vulkan_upscaler_api *upscaler;
+    void *upscaler_state;
+    bool upscaler_enabled, upscaler_failed;
     af_mat4 previous_view_projection;af_camera temporal_camera;af_rect temporal_viewport;
     const af_scene *temporal_scene;uint64_t temporal_signature,temporal_frame,temporal_resets;
     uint32_t temporal_objects,temporal_skins;bool temporal_valid,temporal_supported;af_vec2 temporal_jitter;
@@ -775,11 +781,13 @@ static bool create_depth_attachment(af_renderer *renderer, af_depth_attachment *
     VkImageCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
         .format = swapchain->depth_format,
-        .extent = {swapchain->extent.width, swapchain->extent.height, 1},
+        .extent = {swapchain->render_extent.width, swapchain->render_extent.height, 1},
         .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
     };
+    if (swapchain->resource_config & AF_RESOURCE_UPSCALER)
+        info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
     if (!vk_ok(vkCreateImage(renderer->device, &info, NULL, &depth->image), "vkCreateImage (depth)")) return false;
     VkMemoryRequirements requirements;
     vkGetImageMemoryRequirements(renderer->device, depth->image, &requirements);depth->allocation_bytes=requirements.size;
@@ -811,9 +819,44 @@ static bool create_depth_attachment(af_renderer *renderer, af_depth_attachment *
     return vk_ok(vkCreateImageView(renderer->device, &view_info, NULL, &depth->view), "vkCreateImageView (depth)");
 }
 
+static void destroy_upscaler_context(af_renderer *renderer)
+{
+    af_swapchain *swapchain = &renderer->swapchain;
+    if (swapchain->upscaler_created) {
+        renderer->upscaler->destroy(swapchain->upscaler_context);
+        swapchain->upscaler_created = false;
+        swapchain->upscaler_context = NULL;
+    }
+}
+
+void af_renderer_set_upscaler(af_renderer *renderer, const af_vulkan_upscaler_api *api, void *state)
+{
+    renderer->upscaler = api;
+    renderer->upscaler_state = state;
+    renderer->upscaler_enabled = true;
+}
+
+bool af_renderer_set_upscaler_enabled(af_renderer *renderer, bool enabled)
+{
+    if (!renderer || !renderer->upscaler) return false;
+    if (renderer->upscaler_enabled != enabled) {
+        renderer->upscaler_enabled = enabled;
+        renderer->upscaler_failed = false;
+    }
+    return true;
+}
+
+void af_renderer_release_upscaler(af_renderer *renderer)
+{
+    if (!renderer || !renderer->swapchain.upscaler_created) return;
+    (void)af_renderer_wait_idle(renderer);
+    destroy_upscaler_context(renderer);
+}
+
 static void destroy_swapchain(af_renderer *renderer)
 {
     af_swapchain *swapchain = &renderer->swapchain;
+    destroy_upscaler_context(renderer);
     af_vk_ui_release_pipeline(renderer->ui);
     af_vk_post_destroy(swapchain->post);af_vk_refraction_destroy(swapchain->refraction);
     if(swapchain->water_pass)vkDestroyRenderPass(renderer->device,swapchain->water_pass,NULL);
@@ -919,6 +962,12 @@ static bool create_swapchain(af_renderer *renderer,af_render_settings settings,u
     destroy_swapchain(renderer);
     af_swapchain *swapchain = &renderer->swapchain;
     swapchain->extent = extent;swapchain->resource_config=config;
+    bool upscale = (config & AF_RESOURCE_UPSCALER) != 0;
+    float scale = upscale ? renderer->upscaler->render_scale : 1.f;
+    swapchain->render_extent = (VkExtent2D){
+        (uint32_t)fmaxf(1, (float)extent.width * scale),
+        (uint32_t)fmaxf(1, (float)extent.height * scale),
+    };
     swapchain->surface_format = format;
     renderer->capture_supported=(capabilities.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)&&
         (format.format==VK_FORMAT_B8G8R8A8_SRGB||format.format==VK_FORMAT_B8G8R8A8_UNORM||format.format==VK_FORMAT_R8G8B8A8_SRGB||format.format==VK_FORMAT_R8G8B8A8_UNORM);
@@ -984,6 +1033,7 @@ static bool create_swapchain(af_renderer *renderer,af_render_settings settings,u
         {.srcSubpass=0,.dstSubpass=VK_SUBPASS_EXTERNAL,.srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,.dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
          .srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,.dstAccessMask=VK_ACCESS_SHADER_READ_BIT}
     };
+    if (upscale) dependencies[0].srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     VkRenderPassCreateInfo pass_info = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = (config&AF_RESOURCE_MOTION)?3u:2u, .pAttachments = attachments,
@@ -1009,9 +1059,24 @@ static bool create_swapchain(af_renderer *renderer,af_render_settings settings,u
     }
     VkImageView *depth_views=calloc(swapchain->image_count,sizeof(*depth_views));if(!depth_views)return false;
     for(uint32_t i=0;i<swapchain->image_count;++i)depth_views[i]=swapchain->depths[i].view;
-    swapchain->post=af_vk_post_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,extent,swapchain->image_count,swapchain->views,format.format,swapchain->render_pass,depth_views,settings,(config&AF_RESOURCE_MOTION)!=0);
-    free(depth_views);swapchain->refraction=af_vk_refraction_create(renderer->physical_device,renderer->device,(config&AF_RESOURCE_REFRACTION)?extent:(VkExtent2D){1,1},swapchain->image_count,swapchain->depth_format);if(!swapchain->post||!swapchain->refraction||!create_pipeline(renderer)||!create_sky_pipeline(renderer))return false;
+    swapchain->post=af_vk_post_create(renderer->physical_device,renderer->device,renderer->graphics_queue,renderer->graphics_family,extent,swapchain->render_extent,swapchain->image_count,swapchain->views,format.format,swapchain->render_pass,depth_views,settings,(config&AF_RESOURCE_MOTION)!=0,upscale);
+    free(depth_views);swapchain->refraction=af_vk_refraction_create(renderer->physical_device,renderer->device,(config&AF_RESOURCE_REFRACTION)?swapchain->render_extent:(VkExtent2D){1,1},swapchain->image_count,swapchain->depth_format);if(!swapchain->post||!swapchain->refraction||!create_pipeline(renderer)||!create_sky_pipeline(renderer))return false;
     if (renderer->ui && !af_vk_ui_create_pipeline(renderer->ui, af_vk_post_output_pass(swapchain->post))) return false;
+    if (upscale) {
+        const af_vulkan_upscaler_config upscaler_config = {
+            .struct_size = sizeof(af_vulkan_upscaler_config),
+            .instance = renderer->instance, .physical_device = renderer->physical_device,
+            .device = renderer->device, .graphics_queue_family = renderer->graphics_family,
+            .frames_in_flight = AF_FRAMES_IN_FLIGHT, .render_extent = swapchain->render_extent,
+            .output_extent = extent, .depth_format = swapchain->depth_format,
+            .color_format = VK_FORMAT_R16G16B16A16_SFLOAT,
+            .motion_format = VK_FORMAT_R16G16B16A16_SFLOAT,
+            .output_format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        };
+        if (!renderer->upscaler->create(renderer->upscaler_state, &upscaler_config,
+                                        &swapchain->upscaler_context)) return false;
+        swapchain->upscaler_created = true;
+    }
     renderer->resize_pending = false;
     renderer->temporal_valid=false;
     renderer->swapchain_invalid = false;
@@ -1308,7 +1373,7 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
     af_render_settings render_settings=af_scene_get_render_settings(scene);uniform->render_params=(af_vec4){exp2f(render_settings.exposure),render_settings.tone_mapping?1.0f:0.0f,render_settings.environment_enabled?render_settings.environment_intensity:0,render_settings.environment_rotation};
     if(!af_mat4_inverse(uniform->view_projection,&uniform->inverse_view_projection))return false;
     uniform->sky_params=(af_vec4){render_settings.skybox_intensity,0,0,0};
-    int logical_width=1,logical_height=1;SDL_GetWindowSize(renderer->window,&logical_width,&logical_height);uniform->water_screen=(af_vec4){(float)renderer->swapchain.extent.width,(float)renderer->swapchain.extent.height,render_settings.refraction_strength,render_settings.refraction?1.f:0};uniform->water_viewport=(af_vec4){area.x/(float)logical_width,area.y/(float)logical_height,(area.x+area.width)/(float)logical_width,(area.y+area.height)/(float)logical_height};
+    int logical_width=1,logical_height=1;SDL_GetWindowSize(renderer->window,&logical_width,&logical_height);uniform->water_screen=(af_vec4){(float)renderer->swapchain.render_extent.width,(float)renderer->swapchain.render_extent.height,render_settings.refraction_strength,render_settings.refraction?1.f:0};uniform->water_viewport=(af_vec4){area.x/(float)logical_width,area.y/(float)logical_height,(area.x+area.width)/(float)logical_width,(area.y+area.height)/(float)logical_height};
     double water_time=af_physics_time(renderer->water_physics);af_vec3 air=af_wind_velocity(af_scene_get_wind(scene),water_time);uniform->wind_time=(af_vec4){air.x,air.z,(float)water_time,0};
     af_water_sample underwater=af_physics_sample_water(renderer->water_physics,scene,camera->position);const af_water *water=af_scene_get_water(scene,underwater.owner);
     if(render_settings.underwater&&water&&underwater.inside&&camera->position.y>underwater.bottom&&camera->position.y<underwater.height+.1f){const af_scene_object *o=af_scene_get_object(scene,water->owner);float blend=fmaxf(0,fminf(1,(underwater.height+.1f-camera->position.y)/.2f));blend=blend*blend*(3-2*blend);float yaw=o->transform.rotation.y;af_vec3 origin=o->transform.position;af_vec2 size=water->half_size;
@@ -1510,12 +1575,12 @@ static uint64_t temporal_light_hash(uint64_t h, af_local_light value) {
 static bool prepare_temporal(af_renderer *r, af_frame *frame,
                              const af_scene *scene, const af_camera *camera,
                              af_rect area, af_color clear,
-                             af_render_settings settings,
+                             af_render_settings settings, bool temporal,
                              af_frame_uniform *uniform) {
   uniform->unjittered_view_projection = uniform->view_projection;
   uniform->previous_view_projection = uniform->view_projection;
   r->temporal_jitter = (af_vec2){0};
-  if (settings.anti_aliasing != AF_AA_TAA) {
+  if (!temporal) {
     r->temporal_valid = false;
     return true;
   }
@@ -1553,13 +1618,13 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame,
   unsigned phase = (unsigned)(r->temporal_frame % 16) + 1;
   int width = 1, height = 1;
   SDL_GetWindowSize(r->window, &width, &height);
-  float pixels_x = area.width * (float)r->swapchain.extent.width /
+  float pixels_x = area.width * (float)r->swapchain.render_extent.width /
                    (float)(width ? width : 1),
-        pixels_y = area.height * (float)r->swapchain.extent.height /
+        pixels_y = area.height * (float)r->swapchain.render_extent.height /
                    (float)(height ? height : 1);
   float jx = halton(phase, 2) - .5f, jy = halton(phase, 3) - .5f;
-  r->temporal_jitter = (af_vec2){jx / (float)r->swapchain.extent.width,
-                                 jy / (float)r->swapchain.extent.height};
+  r->temporal_jitter = (af_vec2){jx / (float)r->swapchain.render_extent.width,
+                                 jy / (float)r->swapchain.render_extent.height};
   for (unsigned c = 0; c < 4; ++c) {
     uniform->view_projection.elements[4 * c] +=
         2 * jx / pixels_x * uniform->view_projection.elements[4 * c + 3];
@@ -1575,7 +1640,7 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame,
   uniform->sky_params.y = 1;
   size_t count = af_scene_object_count(scene);
   if (count > AF_SCENE_FILE_MAX_OBJECTS) {
-    af_log("error", "TAA supports at most %u objects.",
+    af_log("error", "Temporal rendering supports at most %u objects.",
            AF_SCENE_FILE_MAX_OBJECTS);
     return false;
   }
@@ -1684,13 +1749,75 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame,
   }
   return true;
 }
+static VkImageMemoryBarrier upscaler_barrier(VkImage image, VkImageAspectFlags aspect,
+    VkImageLayout old_layout, VkImageLayout new_layout, VkAccessFlags source, VkAccessFlags destination)
+{
+    return (VkImageMemoryBarrier){
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = source, .dstAccessMask = destination,
+        .oldLayout = old_layout, .newLayout = new_layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image, .subresourceRange = {aspect, 0, 1, 0, 1},
+    };
+}
+
+static bool record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t image,
+                            af_rect area, float exposure)
+{
+    af_swapchain *swapchain = &r->swapchain;
+    af_depth_attachment depth = swapchain->depths[image];
+    af_vulkan_upscaler_frame frame = {
+        .struct_size = sizeof(af_vulkan_upscaler_frame), .frame_slot = r->frame_index,
+        .reset_history = !r->temporal_valid, .command_buffer = command,
+        .depth = {depth.image, depth.view},
+        .viewport_uv = {area.x, area.y, area.width, area.height},
+        .jitter_pixels = {r->temporal_jitter.x * (float)swapchain->render_extent.width,
+                          r->temporal_jitter.y * (float)swapchain->render_extent.height},
+        .exposure_multiplier = exp2f(exposure),
+    };
+    af_vk_post_upscaler_images(swapchain->post, image, &frame);
+    VkImageAspectFlags depth_aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (swapchain->depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
+        swapchain->depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) depth_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    const VkImageLayout sampled = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkImageMemoryBarrier inputs[] = {
+        upscaler_barrier(frame.color.image, VK_IMAGE_ASPECT_COLOR_BIT, sampled, sampled,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT),
+        upscaler_barrier(frame.motion.image, VK_IMAGE_ASPECT_COLOR_BIT, sampled, sampled,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT),
+        upscaler_barrier(frame.depth.image, depth_aspects, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                         VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+        upscaler_barrier(frame.output.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                         VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_MEMORY_WRITE_BIT),
+    };
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         0, 0, NULL, 0, NULL, 4, inputs);
+    if (!r->upscaler->record(swapchain->upscaler_context, &frame)) {
+        af_log("warning", "Vulkan upscaler declined the frame. Restoring built-in rendering.");
+        r->upscaler_failed = true;
+        return false;
+    }
+    VkImageMemoryBarrier output = upscaler_barrier(frame.output.image, VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_IMAGE_LAYOUT_GENERAL, sampled, VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0, 0, NULL, 0, NULL, 1, &output);
+    return true;
+}
+
 bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera, af_rect viewport_rect, af_object_id highlighted, const af_overlay_frame *overlay, bool *rendered)
 {
     *rendered = false;renderer->missing_textures=0;
     af_render_settings environment_settings=af_scene_get_render_settings(scene);
+    bool upscale = renderer->upscaler_enabled && !renderer->upscaler_failed &&
+                   renderer->temporal_supported && renderer->debug_view == AF_DEBUG_SHADED &&
+                   !(renderer->capture_pending && renderer->capture_motion);
+    if (upscale) environment_settings.anti_aliasing = AF_AA_OFF;
     if(renderer->debug_view!=AF_DEBUG_SHADED)environment_settings.anti_aliasing=AF_AA_TAA;
     if(environment_settings.anti_aliasing==AF_AA_TAA&&!renderer->temporal_supported)environment_settings.anti_aliasing=AF_AA_FXAA;
     uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u);
+    if (upscale) resource_config |= AF_RESOURCE_UPSCALER | AF_RESOURCE_MOTION;
     if(renderer->ray_supported && !renderer->ray_failed){
         if(environment_settings.ray_traced_shadows && af_scene_get_shadows(scene).enabled)
             resource_config|=AF_RESOURCE_RAY_SHADOWS;
@@ -1707,10 +1834,17 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     }
     if (renderer->resize_pending || !renderer->swapchain.handle || renderer->swapchain.resource_config!=resource_config) {
         if (!create_swapchain(renderer,environment_settings,resource_config)) {
+            if (upscale) {
+                af_log("warning", "Vulkan upscaler resources unavailable. Restoring built-in rendering.");
+                renderer->upscaler_failed = true;
+                renderer->resize_pending = renderer->swapchain_invalid = true;
+                return true;
+            }
             if(resource_config&AF_RESOURCE_RAY_QUERY){af_log("warning","Optional ray-query pipeline unavailable; retrying raster rendering.");renderer->ray_failed=true;renderer->resize_pending=renderer->swapchain_invalid=true;return true;}
             return false;
         }
-        if (renderer->resize_pending || !renderer->swapchain.handle) return true;
+        if (renderer->resize_pending || !renderer->swapchain.handle ||
+            renderer->swapchain.resource_config != resource_config) return true;
     }
     if(!(resource_config&AF_RESOURCE_RAY_QUERY)&&renderer->rays){if(!af_renderer_wait_idle(renderer))return false;af_vk_ray_query_destroy(renderer->rays);renderer->rays=NULL;renderer->ray_raster_casters=0;}
     if((environment_settings.environment_enabled||environment_settings.skybox)&&!environment_settings.environment_asset[0]&&environment_settings.environment_profile!=renderer->environment_profile&&!create_environment(renderer,environment_settings.environment_profile))return false;
@@ -1762,7 +1896,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     }
     if (result == VK_SUBOPTIMAL_KHR) renderer->resize_pending = renderer->swapchain_invalid = true;
     else if (!vk_ok(result, "vkAcquireNextImageKHR")) return false;
-    if(!prepare_temporal(renderer,frame,scene,camera,resolve_viewport(renderer,viewport_rect),color,environment_settings,&uniform))return false;
+    bool temporal = upscale || environment_settings.anti_aliasing == AF_AA_TAA;
+    if(!prepare_temporal(renderer,frame,scene,camera,resolve_viewport(renderer,viewport_rect),color,environment_settings,temporal,&uniform))return false;
     VkDescriptorImageInfo refraction_images[]={af_vk_refraction_color(renderer->swapchain.refraction,image_index),af_vk_refraction_depth(renderer->swapchain.refraction,image_index)};VkWriteDescriptorSet water_writes[2];for(unsigned i=0;i<2;++i)water_writes[i]=(VkWriteDescriptorSet){.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=frame->descriptor,.dstBinding=7+i,.descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.pImageInfo=&refraction_images[i]};vkUpdateDescriptorSets(renderer->device,2,water_writes,0,NULL);
     if (overlay->index_count && (!renderer->ui || !af_vk_ui_prepare(renderer->ui, renderer->frame_index, overlay))) return false;
     void *mapped=NULL;if(!vk_ok(vkMapMemory(renderer->device,frame->uniform.memory,0,VK_WHOLE_SIZE,0,&mapped),"map frame uniform"))return false;
@@ -1816,7 +1951,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = renderer->swapchain.render_pass,
         .framebuffer = af_vk_post_scene_framebuffer(renderer->swapchain.post,image_index),
-        .renderArea = {.extent = renderer->swapchain.extent},
+        .renderArea = {.extent = renderer->swapchain.render_extent},
         .clearValueCount = 3, .pClearValues = clears
     };
     vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
@@ -1826,7 +1961,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     size_t draw_calls = 0, missing_meshes = 0;renderer->visible_objects=renderer->culled_objects=0;
     size_t object_count = af_scene_object_count(scene);
     if (object_count > 0||environment_settings.skybox) {
-        VkExtent2D extent = renderer->swapchain.extent;
+        VkExtent2D extent = renderer->swapchain.render_extent;
         int logical_width = 0, logical_height = 0;
         SDL_GetWindowSize(renderer->window, &logical_width, &logical_height);
         af_rect area = resolve_viewport(renderer, viewport_rect);
@@ -1901,7 +2036,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     int logical_w=0,logical_h=0;SDL_GetWindowSize(renderer->window,&logical_w,&logical_h);
     af_rect post_area=resolve_viewport(renderer,viewport_rect);post_area.x/=(float)(logical_w?logical_w:1);post_area.y/=(float)(logical_h?logical_h:1);post_area.width/=(float)(logical_w?logical_w:1);post_area.height/=(float)(logical_h?logical_h:1);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,2);
-    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,environment_settings,post_area,renderer->temporal_jitter,renderer->debug_view);
+    bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
+                                                environment_settings.exposure);
+    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,environment_settings,post_area,renderer->temporal_jitter,renderer->debug_view,upscaled);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,3);
     if (renderer->ui && overlay->index_count)
         af_vk_ui_draw(renderer->ui, frame->command, renderer->frame_index, overlay, renderer->swapchain.extent);
@@ -1941,7 +2078,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
        leave an unsignaled fence that hangs the next frame. */
     if (!vk_ok(vkResetFences(renderer->device, 1, &frame->fence), "vkResetFences") ||
         !vk_ok(vkQueueSubmit(renderer->graphics_queue, 1, &submit, frame->fence), "vkQueueSubmit")) return false;
-    if(environment_settings.anti_aliasing==AF_AA_TAA){
+    if(temporal){
         af_motion_snapshot *spare=renderer->motion_previous;size_t spare_capacity=renderer->motion_previous_capacity;
         renderer->motion_previous=renderer->motion_next;renderer->motion_previous_capacity=renderer->motion_next_capacity;renderer->motion_count=renderer->motion_next_count;
         renderer->motion_next=spare;renderer->motion_next_capacity=spare_capacity;

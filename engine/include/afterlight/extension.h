@@ -24,6 +24,7 @@ extern "C" {
 #endif
 
 typedef struct af_engine af_engine;
+struct af_vulkan_upscaler_api;
 
 typedef struct af_extension_host {
     uint32_t abi_version, struct_size;
@@ -48,6 +49,8 @@ typedef struct af_extension_api {
        data is borrowed for the call. No GPU completion guarantee. */
     void (*on_present)(void *state, const af_extension_frame *frame);
     void (*stop)(void *state);
+    /* Optional ABI 1 tail. Hosts check struct_size before reading this field. */
+    const struct af_vulkan_upscaler_api *vulkan_upscaler;
 } af_extension_api;
 
 typedef const af_extension_api *(*af_extension_get_api_fn)(uint32_t abi_version);

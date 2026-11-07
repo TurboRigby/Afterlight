@@ -12,8 +12,12 @@
 #include "render_test.h"
 
 typedef struct af_renderer af_renderer;
+struct af_vulkan_upscaler_api;
 af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation);
 void af_renderer_destroy(af_renderer *renderer);
+void af_renderer_set_upscaler(af_renderer *, const struct af_vulkan_upscaler_api *, void *state);
+bool af_renderer_set_upscaler_enabled(af_renderer *, bool enabled);
+void af_renderer_release_upscaler(af_renderer *);
 bool af_renderer_wait_idle(af_renderer *renderer);
 af_temporal_test_stats af_renderer_test_temporal(const af_renderer *);
 void af_renderer_reset_temporal(af_renderer *);

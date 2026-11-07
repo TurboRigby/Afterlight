@@ -7,6 +7,7 @@
 #include "extension_runtime.h"
 #include "log.h"
 #include <afterlight/asset.h>
+#include <afterlight/extension_vulkan.h>
 #include <inttypes.h>
 #include <string.h>
 
@@ -47,7 +48,8 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
         goto fail;
     }
     const af_extension_api *api = get_api(AF_EXTENSION_ABI_VERSION);
-    if (!api || api->abi_version != AF_EXTENSION_ABI_VERSION || api->struct_size < sizeof(*api) ||
+    if (!api || api->abi_version != AF_EXTENSION_ABI_VERSION ||
+        api->struct_size < offsetof(af_extension_api, vulkan_upscaler) ||
         !api->id || !api->id[0] || !api->start || !api->stop) {
         af_log("error", "Extension %s has an incompatible ABI or incomplete descriptor.", absolute);
         goto fail;
@@ -58,13 +60,23 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
             goto fail;
         }
     }
+    const af_vulkan_upscaler_api *upscaler = api->struct_size >= sizeof(*api) ? api->vulkan_upscaler : NULL;
+    if (upscaler && (extensions->has_upscaler ||
+        upscaler->abi_version != AF_VULKAN_UPSCALER_ABI_VERSION ||
+        upscaler->struct_size < sizeof(*upscaler) ||
+        !(upscaler->render_scale >= .5f && upscaler->render_scale <= 1.f) ||
+        !upscaler->create || !upscaler->record || !upscaler->destroy)) {
+        af_log("error", "Extension %s has an incompatible or duplicate Vulkan upscaler.", api->id);
+        goto fail;
+    }
     void *state = NULL;
     int32_t status = api->start(&host, &state);
     if (status != 0) {
         af_log("error", "Engine extension %s failed to start (status %" PRId32 ").", api->id, status);
         goto fail;
     }
-    extensions->modules[extensions->count++] = (af_loaded_extension){library, api, state};
+    extensions->modules[extensions->count++] = (af_loaded_extension){library, api, upscaler, state};
+    if (upscaler) extensions->has_upscaler = true;
     af_log("info", "Loaded engine extension %s.", api->id);
     return true;
 

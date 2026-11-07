@@ -46,13 +46,47 @@ eight libraries, in argument order.
   cleans up any partial state before returning. Keep the descriptor and ID
   valid through unload. Keep C++ exceptions and C++ types inside the module.
 
-## Rendering integrations
+## Vulkan upscaler hook
 
-The current ABI exposes lifecycle callbacks, logging and frame counters.
-An upscaler needs Vulkan instance and device capability negotiation before
-device creation and a render pass with scene color, depth, motion vectors,
-jitter, exposure and history reset information. That pass needs explicit
-image layout, synchronization and resource lifetime rules.
+An extension can provide a single upscaler through the optional descriptor
+field in [`extension_vulkan.h`](../engine/include/afterlight/extension_vulkan.h).
+ABI 1 extensions with the original descriptor size still load.
+
+Build the reference extension separately. It renders the scene at 75% of the
+output width and height and uses a linear Vulkan blit to expand HDR color.
+Tone mapping, bloom and UI composition run at their usual output sizes.
+
+```sh
+cmake -S engine/extensions/vulkan-blit -B build/vulkan-blit -G Ninja
+cmake --build build/vulkan-blit
+build/debug/afterlight_player --project build/debug/playground.afterlight.project \
+  --extension build/vulkan-blit/afterlight_vulkan_blit.so
+```
+
+The hook runs after transparent geometry and water, before post-processing.
+The provider records on the engine's graphics command buffer, outside a render
+pass. Afterlight allocates the input and output images, synchronizes their use
+and keeps their layouts as documented in the header. The provider can use the
+completed frame slot for per-slot descriptors and temporary resources.
+
+- HDR color is linear RGBA16F. The depth attachment uses standard Vulkan depth
+  with far at 1. Transparent passes may leave opaque depth beneath their color.
+- Motion RG contains previous UV minus current UV in full attachment
+  coordinates. Multiply by the render extent for pixel units. Motion B is
+  previous view-space depth or negative for invalid motion. Motion A contains
+  current view-space depth.
+- The frame also supplies the normalized viewport, projection jitter in render
+  pixels, exposure multiplier and the history-reset flag. Resizing recreates
+  the provider context after device idle. Camera cuts and scene changes reset
+  temporal history.
+- A loaded provider starts enabled and takes the place of built-in AA.
+  `af_engine_set_upscaler_enabled` switches back to native resolution and
+  the scene's AA setting. If the provider declines a frame, the renderer
+  composites its current scene color and restores native rendering on the
+  next frame. A failed resource setup also restores native rendering.
+
+The hook configures providers after the Vulkan device exists. SDKs that need
+instance or device extensions require a separate pre-device negotiation step.
 
 NVIDIA documents Streamline for Windows. NGX supplies a Vulkan API and Linux
 libraries, including calls to query the Vulkan extensions a DLSS feature
