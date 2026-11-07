@@ -123,6 +123,22 @@ def export_project(project_path, destination, player_path, icd=None):
     if not player_path.exists():raise ValueError('Build the generic player before export (--player PATH).')
     module=(project_path.parent/project['game_module']).resolve();startup=(project_path.parent/project['startup_scene']).resolve()
     if not module.is_file() or not startup.is_file():raise ValueError('Build the C module and save the startup scene before exporting.')
+    linux_libraries = []
+    if sys.platform.startswith('linux'):
+        # Check both binaries before preflight can load an instrumented module.
+        for binary in (player_path, module):
+            for line in subprocess.check_output(['ldd', str(binary)], text=True).splitlines():
+                if '=>' not in line:
+                    continue
+                name, value = line.strip().split('=>', 1)
+                name = pathlib.Path(name.strip()).name
+                if name.startswith('libasan.') or 'clang_rt.asan' in name:
+                    raise ValueError('Export a normal Release build, not an AddressSanitizer runtime.')
+                if binary == player_path:
+                    source = pathlib.Path(value.strip().split(' ', 1)[0])
+                    system_library = name.startswith(('libc.', 'libm.', 'libdl.', 'libpthread.', 'librt.', 'ld-linux'))
+                    if source.is_file() and not system_library:
+                        linux_libraries.append((source, name))
     validator=player_path/'Contents/MacOS/afterlight_player' if player_path.is_dir() else player_path
     subprocess.run([str(validator),'--project',str(project_path),'--check'],check=True)
     destination.parent.mkdir(parents=True,exist_ok=True);stage=pathlib.Path(tempfile.mkdtemp(prefix='.afterlight-export-',dir=destination.parent))
@@ -262,10 +278,8 @@ def export_project(project_path, destination, player_path, icd=None):
         else:
             # Hardware Vulkan drivers are supplied by the destination system.
             library_dir=stage/'lib';library_dir.mkdir()
-            for line in subprocess.check_output(['ldd',str(player_path)],text=True).splitlines():
-                if '=>' not in line:continue
-                name,value=line.strip().split('=>',1);name=pathlib.Path(name.strip()).name;source=pathlib.Path(value.strip().split(' ',1)[0])
-                if source.is_file() and not name.strip().startswith(('libc.','libm.','libdl.','libpthread.','librt.','ld-linux')):shutil.copy2(source,library_dir/name.strip())
+            for source, name in linux_libraries:
+                shutil.copy2(source, library_dir / name)
             launcher=stage/'run.sh';launcher.write_text('#!/bin/sh\ncd -- "$(dirname -- "$0")"\nexport LD_LIBRARY_PATH="$PWD/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec ./'+executable.name+' --project ./game.afterlight.project "$@"\n');launcher.chmod(0o755)
         write_json(stage/'export-manifest.json',{'format':'afterlight.export','version':1,'project':project['name'],'platform':sys.platform,'scenes':len(scenes),'assets':len(copied),'asset_bytes':total,'runtime_libraries':[p.name for p in libraries]})
         (stage/'README.txt').write_text('Afterlight export\n\n'+('Open Game.app to play.\n' if mac else 'Run '+('afterlight_player.exe\n' if sys.platform=='win32' else './run.sh\n'))+'\nThis build targets the exporting OS/CPU. macOS builds are ad-hoc signed; distribution notarization requires your own developer identity.\n\nAfterlight covered source is under MPL-2.0. '+('Inside Game.app/Contents/Resources/' if mac else 'Beside the executable, ')+'source/afterlight-source.zip contains the corresponding engine source. See LICENSE, NOTICE and THIRD_PARTY_NOTICES.md in that same resource directory; dependency licenses are in licenses/. Keep source and notices with distributions.\n'+('source/game-source.zip contains the game module\'s covered source.\n' if module_source.is_file() else 'The repository sample modules are included in the engine source archive. For a custom covered game module, the distributor must also provide its corresponding modified source.\n'))
