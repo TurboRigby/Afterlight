@@ -264,7 +264,7 @@ def export_project(project_path, destination, player_path, icd=None):
             library_dir=stage/'lib';library_dir.mkdir()
             for line in subprocess.check_output(['ldd',str(player_path)],text=True).splitlines():
                 if '=>' not in line:continue
-                name,value=line.strip().split('=>',1);source=pathlib.Path(value.strip().split(' ',1)[0])
+                name,value=line.strip().split('=>',1);name=pathlib.Path(name.strip()).name;source=pathlib.Path(value.strip().split(' ',1)[0])
                 if source.is_file() and not name.strip().startswith(('libc.','libm.','libdl.','libpthread.','librt.','ld-linux')):shutil.copy2(source,library_dir/name.strip())
             launcher=stage/'run.sh';launcher.write_text('#!/bin/sh\ncd -- "$(dirname -- "$0")"\nexport LD_LIBRARY_PATH="$PWD/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec ./'+executable.name+' --project ./game.afterlight.project "$@"\n');launcher.chmod(0o755)
         write_json(stage/'export-manifest.json',{'format':'afterlight.export','version':1,'project':project['name'],'platform':sys.platform,'scenes':len(scenes),'assets':len(copied),'asset_bytes':total,'runtime_libraries':[p.name for p in libraries]})
