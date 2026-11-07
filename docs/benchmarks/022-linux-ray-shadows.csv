@@ -1,0 +1,3 @@
+mode,samples,gpu_frame_ms,gpu_shadow_ms,gpu_scene_ms,gpu_as_build_ms,tracked_gpu_bytes,ray_as_bytes
+raster,69,0.019961,0.000108,0.014753,0.000000,18203424,0
+ray_query,69,0.025239,0.001011,0.019234,0.000033,18222624,19200

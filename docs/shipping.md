@@ -204,3 +204,11 @@ packaging normalizes absolute `ldd` entries to sonames before copying dependenci
 The loader and system C library remain system dependencies. This is evidence for
 the tested desktop, not a guarantee for every distribution/driver. Windows testing
 is deferred. Run [the native verifier](testing.md#native-linux-021) on other targets.
+
+## Optional ray shadows (0.22)
+
+The saved scene's `ray_traced_shadows` preference travels with the exported game.
+Exports include both embedded shader variants; no runtime shader compiler is
+required. Unsupported devices retain raster rendering and report fallback.
+`run_ray-shadow-lab_player` is the native comparison player; see the
+[ray-shadow guide](development-022.md) for requirements and limits.

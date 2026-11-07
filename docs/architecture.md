@@ -573,3 +573,14 @@ the active game. Checksums, module ABI/state versions, local scene keys and the
 authored scene's byte fingerprint are checked first. Failure retains the active
 scene/camera/input state. Hot reload preserves the live module state and original
 authored revision; it does not compare the moved player against its spawn.
+
+## 0.22 ray queries
+
+`ray_query_vulkan.c` owns cached BLAS objects and per-frame TLAS/instance/scratch
+resources. The renderer checks extension/feature support before device creation,
+selects a separate optional SPIR-V fragment shader, and prepares resources after
+the current frame fence and before image acquisition. Recording orders host
+uploads, BLAS builds, TLAS builds and fragment traversal. Failed optional
+preparation can therefore retry raster without consuming an acquired image.
+Shared geometry changes retire GPU use before invalidation; transforms rebuild
+the affected frame's TLAS without rebuilding BLAS. See the [0.22 lifecycle notes](development-022.md#resources-and-synchronization).

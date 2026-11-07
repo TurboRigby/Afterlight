@@ -5,7 +5,9 @@ physics, water, profiling and playable exports. The [0.21 baseline](development-
 exercises these together in the water expedition, adds persistence/diagnostics and records native Linux evidence. The
 order below remains the direction for continued hardening. Instancing, LOD and
 asynchronous geometry streaming still need workload evidence and implementation;
-Windows verification is deferred. Ray tracing remains deferred.
+Windows verification is deferred. The [0.22 experiment](development-022.md) now
+adds optional ray-query sun shadows with a raster fallback; the scalability and
+broader platform work still applies.
 
 1. **Finish one representative playable demo.** A complete start-to-finish loop,
    clean restart/checkpoints, camera/input behavior, pause/settings, understandable

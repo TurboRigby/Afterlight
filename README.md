@@ -3,12 +3,11 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.21** builds out the playable water expedition with player menus,
-saved preferences/progress, rendering diagnostics and measured visibility culling.
-Native Linux testing now covers GNOME Wayland on NVIDIA alongside macOS.
-See the [0.21 foundations guide](docs/development-021.md),
-[anti-aliasing guide](docs/development-020.md) and
-[foundation roadmap](docs/foundation-roadmap.md).
+Afterlight **0.22** adds optional hardware ray-traced sun shadows, with automatic
+raster fallback. Try the comparison lab on a capable Vulkan GPU; macOS/MoltenVK
+keeps the raster path. The engine also has FXAA/SMAA/TAA, player menus, saved
+progress and the playable water expedition. See the [ray-shadow guide](docs/development-022.md)
+and [0.21 foundations](docs/development-021.md).
 
 ## Build and run
 

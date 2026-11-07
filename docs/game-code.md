@@ -48,7 +48,7 @@ host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 23 modules.
+to use newly built ABI 24 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -204,3 +204,10 @@ and restart older editor/player processes after upgrading.
 ABI 23 extends `af_engine_stats` with visibility counts, retained GPU allocation
 bytes, render-budget diagnostics and effective AA/debug modes. Rebuild game
 modules against the matching public headers. Scene format remains 23.
+
+ABI 24 adds Boolean `af_render_settings.ray_traced_shadows`, ray capability/AS
+diagnostics in `af_engine_stats`, and host `get_render_settings` / `get_stats`
+callbacks. The requested scene preference and actual active path are separate;
+check `ray_traced_shadows_active` and `ray_query_supported`. The
+[ray lab](../game/ray_shadow_game.c) demonstrates toggling and reporting fallback.
+Scene format is 24; rebuild modules and restart old processes.

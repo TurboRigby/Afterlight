@@ -626,3 +626,10 @@ The render table adds `anti_aliasing` (`off`, `fxaa`, `smaa`, `taa`),
 are Off, 0.1 and 0.9 respectively. Older scene versions receive these defaults.
 Unknown modes, missing fields in version 23 and out-of-range values are rejected.
 These fields participate in clone, undo/redo, save/load and export.
+
+## Ray-shadow preference (v24)
+
+Version 24 adds required Boolean `render.ray_traced_shadows`. Older versions load
+with it disabled. Clone, undo and saved/exported scenes retain the request; actual
+GPU activation depends on capabilities and resource availability. See the
+[ray-shadow guide](development-022.md). The existing AA fields remain unchanged.

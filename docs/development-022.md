@@ -1,0 +1,129 @@
+# Optional ray-traced sun shadows in 0.22
+
+The first hardware ray-tracing effect is deterministic hard sun shadows, using
+Vulkan ray queries in the existing raster material shader.
+
+## Try the comparison lab
+
+```sh
+cmake --preset debug
+cmake --build --preset debug --target run_ray-shadow-lab_editor
+```
+
+Press **Play**. **Q** switches the scene's sun-shadow preference between maps and
+hardware rays, **Space** freezes the moving arm, and **R** resets its motion.
+Use the editor's usual right-mouse camera controls to inspect thin bars and contact
+shadows. `run_ray-shadow-lab_player` runs the same lab without the editor. The HUD
+reports the actual path. On unsupported hardware it reports raster maps.
+
+For any scene, open **Environment → Ray-traced sun shadows (experimental)**.
+The setting supports Undo/Save and is retained in exported scenes. **Performance**
+reports actual activation, ray instance/mesh counts, retained acceleration-structure
+bytes, build GPU time and the number of casters kept in directional shadow maps.
+The engine defaults to raster shadows. The comparison lab opts into rays.
+
+The tested Linux RTX 5060 exposes the required Vulkan features. The tested macOS
+MoltenVK path does not expose them and uses maps. Windows remains unverified.
+
+## What is traced
+
+Visible, opaque, non-skinned rigid mesh instances enter a top-level acceleration
+structure (TLAS), including off-screen casters and current parent/world transforms.
+Each distinct uploaded mesh has a cached bottom-level structure (BLAS), shared by
+its instances. Mirrored transforms work with rays. Non-invertible transforms stay
+on the map path. A geometric-normal offset and minimum ray distance limit
+self-intersection. Rays currently extend 10,000 world units toward the sun.
+
+Skinned meshes and alpha-cutout casters retain their existing directional
+shadow maps. The receiver shader combines ray visibility with the maps for
+casters outside the TLAS.
+Local point/spot shadows retain their full raster caster lists. Blended surfaces
+follow the existing blended-material policy. Water can receive sun shadows.
+The TLAS uses rigid geometry only.
+
+`cast_shadows`, `receive_shadows`, unlit materials, inherited visibility and the
+scene's master shadow toggle control participation. The traced contribution
+uses hard edges and deterministic sampling. Ordinary TAA filters the result.
+
+## Resources and synchronization
+
+The optional path requires Vulkan 1.2 plus `VK_KHR_acceleration_structure`,
+`VK_KHR_deferred_host_operations`, `VK_KHR_ray_query`, and their required feature
+bits. Raster rendering retains its Vulkan 1.1 floor. Devices without the optional
+features load the ordinary SPIR-V shader, which has no RayQuery capability.
+
+BLAS resources are created lazily when rays are requested. Each frame in flight
+owns its TLAS, instances, scratch and timing queries. Its fence retires prior use
+before CPU writes or reallocation. Changed instance lists/transforms rebuild that
+frame's TLAS, while unchanged lists reuse it. Shared BLAS builds precede TLAS
+builds, and build writes are made visible to fragment ray queries. Geometry
+replacement/reimport invalidates the cache after GPU retirement. Disabling rays
+releases retained ray resources. Mode switches can briefly wait while rebuilding
+swapchain-dependent pipelines, like the existing AA configuration switches.
+
+Ray AS storage, scratch and instance allocations are included in tracked GPU
+memory and budget warnings. Limits are 65,536 instances, 4,096 cached meshes and
+256 MiB per ray buffer, further constrained by queried device limits. This is a
+first implementation caches full BLAS builds and uses the existing graphics
+queue. A failed optional pipeline or ray resource allocation falls back to maps
+for that engine session. Restarting retries the optional path.
+
+## Compatibility
+
+Scene format is **24** and requires Boolean `render.ray_traced_shadows`. Formats
+1–23 still load with rays disabled. Game module ABI is **24**. Rebuild modules and
+restart old editor/player processes. The C host adds `get_render_settings` and
+`get_stats` so game code can select an effect and report its actual availability.
+Older progress files remain subject to the existing ABI compatibility check.
+
+## Verification and timing
+
+`ray_shadows` compares rendered shadow/lit pixels, verifies occlusion beyond a
+one-unit raster cascade range on hardware, and checks rigid motion, hidden
+casters, cutout/skinned map fallback, cast/receive flags, mesh replacement, parent
+and mirrored transforms, resize, an empty TLAS, TAA, scene detach and resource
+release. `ray_fallback` forces the capability off; `ray_allocation_failure` fails
+a partial AS allocation; `ray_pipeline_fallback` rejects the optional pipeline.
+All retain the raster scene. `water_ray_shadows` exercises water optics with
+ray queries and TAA. `ray_lab` runs the C lab module. `ray_export`
+removes source files, relocates the packaged game, then checks and runs it.
+
+Use `AFTERLIGHT_REQUIRE_RAY_QUERY=1` for hardware-path checks on a capable native
+desktop. Forced-capability fallback checks must run without that requirement.
+The Linux hardware checks use the same GNOME Wayland / RTX 5060 desktop as 0.21,
+with Vulkan synchronization validation. macOS covers the unsupported-device path.
+Sanitizer GPU checks use ASan/UBSan with leak detection disabled.
+
+Run the Release comparison with
+
+```sh
+build/release/afterlight_ray_shadow_benchmark --benchmark
+```
+
+This runs without validation, averages 69 delayed GPU samples after 20 warm-up
+frames per initial mode, then exercises the remaining regression phases. Its
+`RT_BENCH` records separate frame/shadow/scene/build times and retained bytes.
+The controlled fixture is one cube and one receiver at 640x480 on the tested Linux
+scale-1 desktop, with a 512-pixel single shadow map. Shadow timing includes the
+AS build interval. These are GPU timestamps for the warmed-up fixture, excluding
+initial AS construction and FIFO presentation.
+
+| Mode | GPU frame (ms) | GPU shadow (ms) | GPU scene (ms) | Ray AS bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Raster | 0.019961 | 0.000108 | 0.014753 | 0 |
+| Ray query | 0.025239 | 0.001011 | 0.019234 | 19,200 |
+
+[Recorded Linux Release benchmark](benchmarks/022-linux-ray-shadows.csv)
+
+The broad Debug sweeps covered 174 macOS and 173 Linux tests. The source archive
+changed during those runs, so the licensing check was rerun against the rebuilt
+archive. The final ray suite covered hardware queries on Linux and raster
+fallback on both platforms. The relocated Release lab passed on both platforms.
+The macOS ASan/UBSan selection passed 23 checks. The Linux selection passed after
+aligning the exporter with the sanitizer policy and rerunning the failed export
+check. The Linux exporter now rejects ASan runtime dependencies in the player
+or game module.
+
+[Khronos ray tracing overview](https://docs.vulkan.org/guide/latest/extensions/ray_tracing.html),
+[ray-query feature requirements](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceRayQueryFeaturesKHR.html)
+and [acceleration-structure lifetime/build rules](https://docs.vulkan.org/spec/latest/chapters/accelstructures.html).

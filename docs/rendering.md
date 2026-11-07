@@ -147,3 +147,11 @@ Conservative frustum culling uses unjittered camera bounds expanded by two
 framebuffer pixels, including skinned and water mesh bounds. There is still one
 draw per visible object. See the [measured benchmark](development-021.md#visibility-baseline)
 for the workload and limits; this does not establish dense-scene throughput.
+
+## Ray-query sun shadows (0.22)
+
+Optional ray queries replace opaque rigid casters in the sun's map pass, while
+other supported casters retain raster maps. Ray resources are lazy, per-frame
+TLAS ownership follows fences, and tracked GPU bytes include AS storage/scratch
+and instances. Disabling the effect releases them. The ordinary raster shader is
+kept for unsupported devices. See the [0.22 guide](development-022.md).

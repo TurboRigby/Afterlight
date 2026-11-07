@@ -342,3 +342,11 @@ Synthetic SDL events are explicitly cleared with `SDL_zero` before filling field
 The smoke test completes rendering assertions before minimize/restore. GNOME
 Wayland may refuse programmatic unminimize; this is reported explicitly and
 requires desktop activation. Other rendering/input assertions remain enforced.
+
+## Optional ray queries (0.22)
+
+`ray_shadows`, `ray_fallback`, `ray_allocation_failure`, `ray_pipeline_fallback`,
+`ray_lab` and `ray_export` exercise the optional path and its fallbacks. Require
+real hardware with `AFTERLIGHT_REQUIRE_RAY_QUERY=1` when selecting `ray_shadows`
+or `ray_export`; do not apply that requirement to `ray_fallback`. Tests report
+actual activation and compare pixels. See [the fixture and timing methodology](development-022.md#verification-and-timing).

@@ -73,3 +73,11 @@ parented/offscreen/tall casters and a distant caster on a large floor. Tests als
 change quality/mode, resize the window and detach/reattach the scene with Vulkan
 synchronization validation enabled. Document and scene IO tests cover undo/redo,
 material flags, shadow settings and legacy version 2 loading.
+
+## Optional hardware sun shadows (0.22)
+
+The Environment panel can enable ray queries for opaque rigid casters. Skinned,
+cutout and streamed casters retain directional maps; local-light shadows keep
+their full map path. Traced shadows have hard edges, independent of map PCF.
+Unsupported GPUs use raster shadows. The [comparison lab and limits](development-022.md)
+cover activation, lifecycle, diagnostics and validation.
