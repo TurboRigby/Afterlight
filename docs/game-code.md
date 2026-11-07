@@ -48,7 +48,7 @@ host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 22 modules.
+to use newly built ABI 23 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -200,3 +200,7 @@ ABI 22 extends `af_render_settings` with `anti_aliasing`, `aa_sharpness` and
 `taa_history_weight`. Use `AF_AA_OFF`, `AF_AA_FXAA`, `AF_AA_SMAA` or `AF_AA_TAA`
 and update through the existing render-settings host functions. Rebuild modules
 and restart older editor/player processes after upgrading.
+
+ABI 23 extends `af_engine_stats` with visibility counts, retained GPU allocation
+bytes, render-budget diagnostics and effective AA/debug modes. Rebuild game
+modules against the matching public headers. Scene format remains 23.

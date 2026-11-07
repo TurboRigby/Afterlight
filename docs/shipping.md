@@ -22,12 +22,16 @@ build/debug/afterlight_player.app/Contents/MacOS/afterlight_player \
 
 On non-macOS builds use `build/debug/afterlight_player`. The player loads the
 project scene/assets and a matching C game module, then runs its fixed/render
-callbacks. No obstacle-course code is built into the generic player. F6 pauses;
-Escape releases the mouse, then exits on a second press. Click to recapture if
-the C game supports it. `--hot-reload` enables C-module and asset watching during
+callbacks. No obstacle-course code is built into the generic player. Interactive
+runs open a start menu. Escape/F6 opens pause/settings, Save/Continue, Restart
+and Quit; completing a water course opens the finish menu. Graphics and mouse
+sensitivity preferences persist in SDL's project-specific user data directory.
+Progress saves restore module progress into the authored scene; see the
+[save compatibility limits](development-021.md). `--hot-reload` enables C-module and asset watching during
 development; packaged play does not watch by default. `--frames N` bounds a run.
 
 `--check --project PATH` validates scene JSON, decodes every referenced asset,
+checks object mesh/material/animation references and asset kinds,
 and validates the loaded C module's ABI/callback table without opening Vulkan or
 calling game callbacks. Native module constructors still run when loading the
 library, so use your own trusted game modules. Without `--project`, the player
@@ -191,3 +195,12 @@ format is 21 and C ABI is 20; rebuild modules and restart older editors/players.
 0.19 saves wind and ripple settings in scene format 22 and uses C ABI 21. Rebuild
 game modules and refresh copied public headers. Ripple detail is embedded GLSL,
 so exports need no extra texture image; corresponding-source archives include it.
+
+## Native Linux verification (0.21)
+
+Arch Linux / GNOME Wayland / NVIDIA RTX 5060 was exercised with real Vulkan
+windows, synchronization validation and relocated Release exports. Runtime-library
+packaging normalizes absolute `ldd` entries to sonames before copying dependencies.
+The loader and system C library remain system dependencies. This is evidence for
+the tested desktop, not a guarantee for every distribution/driver. Windows testing
+is deferred. Run [the native verifier](testing.md#native-linux-021) on other targets.

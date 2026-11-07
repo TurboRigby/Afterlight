@@ -1,9 +1,11 @@
 # Foundations before ray tracing
 
 Afterlight already has raster PBR, image-based lighting, shadow maps, animation,
-physics, water, profiling and playable exports. The next milestone should make
-these dependable together in one small, polished game built with the engine.
-This is a proposed engineering order, not a claim that these areas are absent.
+physics, water, profiling and playable exports. The [0.21 baseline](development-021.md)
+exercises these together in the water expedition, adds persistence/diagnostics and records native Linux evidence. The
+order below remains the direction for continued hardening. Instancing, LOD and
+asynchronous geometry streaming still need workload evidence and implementation;
+Windows verification is deferred. Ray tracing remains deferred.
 
 1. **Finish one representative playable demo.** A complete start-to-finish loop,
    clean restart/checkpoints, camera/input behavior, pause/settings, understandable
@@ -28,8 +30,9 @@ This is a proposed engineering order, not a claim that these areas are absent.
    stability across representative scenes. Improve import/reimport diagnostics,
    asset dependencies, hierarchy/prefabs and scene transitions as the demo needs.
 6. **Verify actual shipping targets.** Test the exported game, input, audio,
-   packaging and graphics on native Linux/Windows GPUs as well as macOS. Existing
-   Linux CPU tests do not establish native GPU correctness. Query capabilities
+   packaging and graphics on native Linux/Windows GPUs as well as macOS. Native
+   Linux GPU tests now cover one GNOME/NVIDIA target; expand driver and distribution
+   coverage. Query capabilities
    and provide understandable fallbacks for optional effects.
 7. **Add one optional ray-traced effect.** Start with a constrained reflection or
    shadow experiment, keep a raster fallback, and compare image quality, memory

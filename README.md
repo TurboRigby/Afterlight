@@ -3,10 +3,11 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.20** adds selectable FXAA, SMAA and TAA in the editor's
-**Environment** panel. Water has closed volumes, wind-driven waves and ripple
-normals; the two playable courses include swimming, buoyant rafts and pouring.
-See the [anti-aliasing guide](docs/development-020.md) and
+Afterlight **0.21** builds out the playable water expedition with player menus,
+saved preferences/progress, rendering diagnostics and measured visibility culling.
+Native Linux testing now covers GNOME Wayland on NVIDIA alongside macOS.
+See the [0.21 foundations guide](docs/development-021.md),
+[anti-aliasing guide](docs/development-020.md) and
 [foundation roadmap](docs/foundation-roadmap.md).
 
 ## Build and run

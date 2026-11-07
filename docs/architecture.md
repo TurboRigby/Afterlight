@@ -554,3 +554,22 @@ The fragment shader layers a filtered procedural ripple normal texture over surf
 normals. Scene wind is sampled at fixed simulation time for wave forcing, normal
 advection and projected-area rigid-body drag. Drag accounts for mass, exposed area,
 angular response and a bounded upstream shelter ray. See [limits](development-019.md).
+
+## 0.21 foundations
+
+Scenes retain authored object order and maintain an eager ID-to-index hash table.
+Insertion grows amortized; compaction, loading and prefab structural edits rebuild
+the index. Clones own independent tables, and lookups remain read-only.
+
+Swapchain-dependent post resources are configured from effective AA, bloom,
+motion and water-refraction needs. Inactive effect images are released; valid
+placeholder descriptors cover unused bindings. Allocation-failure tests destroy
+partially initialized resources and create a fresh engine in the same process.
+The [rendering guide](rendering.md#resource-and-visibility-diagnostics-021) describes
+transient debug modes, culling and allocation accounting.
+
+Progress loading constructs and initializes a candidate runtime before replacing
+the active game. Checksums, module ABI/state versions, local scene keys and the
+authored scene's byte fingerprint are checked first. Failure retains the active
+scene/camera/input state. Hot reload preserves the live module state and original
+authored revision; it does not compare the moved player against its spawn.

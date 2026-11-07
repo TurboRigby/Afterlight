@@ -12,8 +12,8 @@ The Debug suite covers the Apple M4/MoltenVK path, including
 Vulkan synchronization validation, actual pixel comparisons, fixed simulation,
 collisions, the controller and obstacle-course gameplay. Graphics tests require
 a desktop and Vulkan driver. The macOS-only module-unload regression is excluded
-on other platforms. Linux CPU coverage
-is described below; native Linux graphics and Windows still need verification.
+on other platforms. Native Linux GPU coverage is recorded below; Windows
+verification is deferred until hardware is available.
 
 `afterlight.editor_playground` opens the actual obstacle course and its C module.
 It also injects a real jump and verifies its audio cue/timer, checks loaded audio/GLB resources and F6 maximize/restore.
@@ -314,3 +314,31 @@ ran with zero validation errors. Logs are in `build/debug/020-all-tests.log`,
 `build/asan/020-final-tests.log`, `build/asan/020-cpu-tests.log` and
 `build/release/020-export-tests.log`. This records local macOS verification, not
 native Linux/Windows GPU coverage.
+
+## Native Linux (0.21)
+
+Run from a logged-in Linux desktop with SDL3, Vulkan development tools,
+`glslangValidator`, validation layers, Ninja, Python and a C17 compiler installed:
+
+```sh
+scripts/verify_linux.sh
+AF_NATIVE_CONFIGURATION=Sanitizers scripts/verify_linux.sh
+```
+
+The verifier selects the active Wayland socket when available, requires Vulkan
+validation, builds and runs CTest. Override `AF_NATIVE_BUILD_DIR`, `AF_BUILD_JOBS`
+or `AF_NATIVE_TEST_REGEX` as needed. Reports include hardware, configure/build/test
+logs and the source archive hash under the build directory's `native-report/`.
+Sanitizer runs enable ASan/UBSan, with leak detection disabled for GPU tests.
+Audio tests use SDL's dummy backend; speaker output was not evaluated.
+
+The tested target was Arch Linux x86_64, GNOME Wayland, GCC 16.2.1, SDL 3.4.18,
+NVIDIA RTX 5060 / driver 615.78.08. The focused 21-test graphics/persistence suite
+passed on both macOS and Linux, including ASan/UBSan. Additional progress, stale
+authored-scene and hot-reload checks passed after the final persistence revision.
+The [0.21 guide](development-021.md) records full-suite results and benchmark limits.
+
+Synthetic SDL events are explicitly cleared with `SDL_zero` before filling fields.
+The smoke test completes rendering assertions before minimize/restore. GNOME
+Wayland may refuse programmatic unminimize; this is reported explicitly and
+requires desktop activation. Other rendering/input assertions remain enforced.

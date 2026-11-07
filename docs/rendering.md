@@ -4,8 +4,7 @@ Afterlight **0.9** adds [imported HDR environments and skyboxes](assets-09.md).
 Afterlight **0.8** added floating-point HDR rendering, environment lighting, local
 shadows and bloom. Start with [the Lighting Lab and current controls](lighting-08.md).
 
-Afterlight 0.4 adds the [fifteen completed steps](development-15.md). Engine and
-game code remain C17; shaders are GLSL compiled to embedded SPIR-V.
+Engine and game code remain C17; shaders are GLSL compiled to embedded SPIR-V.
 
 ## Texture quality
 
@@ -123,3 +122,28 @@ filter perceptual color; TAA resolves HDR history using camera/object/bone motio
 depth rejection and neighborhood clipping. Water and blended surfaces use a
 reactive spatial finish. UI follows AA. See the [AA guide](development-020.md) for
 controls, fallback requirements, resource costs and known limits.
+
+## Resource and visibility diagnostics (0.21)
+
+The Performance panel offers shaded, logarithmic depth, motion, previous-history
+and history-rejection views. Diagnostic views temporarily use TAA resources
+without changing the scene's saved AA selection; unsupported independent blending
+rejects that selection. Invalid motion is magenta; rejection is red and accepted
+history is green. UI remains outside scene post processing.
+
+Post targets follow enabled effects: motion/history only for TAA, SMAA scratch
+and lookup tables only for SMAA, bloom scratch only when bloom is enabled.
+Refraction retains 1x1 placeholder snapshots until required by water. Switching
+resource configuration waits for the device once and can briefly pause rendering.
+
+`af_engine_set_render_budget` sets diagnostic GPU-time and retained-memory targets
+(default 16.67 ms / 512 MiB). Stats include actual Vulkan allocation requirements
+for tracked resources, with post/shadow/refraction/mesh breakdowns. They exclude
+UI buffers/fonts and driver/presentation allocations. Warnings do not impose hard
+allocation limits. GPU timestamps exclude presentation; CPU render time includes
+waits and presentation work.
+
+Conservative frustum culling uses unjittered camera bounds expanded by two
+framebuffer pixels, including skinned and water mesh bounds. There is still one
+draw per visible object. See the [measured benchmark](development-021.md#visibility-baseline)
+for the workload and limits; this does not establish dense-scene throughput.

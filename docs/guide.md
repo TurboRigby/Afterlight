@@ -13,6 +13,10 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
+Afterlight 0.21 adds player menus, saved progress/preferences, resource/debug
+views and measured culling, with native Linux verification; see the
+[foundations guide](development-021.md).
+
 Afterlight 0.20 adds selectable FXAA, SMAA and TAA in **Environment**; see the
 [AA guide](development-020.md). The playable water courses include wind,
 swimming, streamed meshes, underwater rendering and scene refraction. Start with

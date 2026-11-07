@@ -26,6 +26,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.21: engine foundations and native Linux](development-021.md)
 - [0.20: anti-aliasing](development-020.md)
 - [0.19: water boundaries, ripple texture and wind](development-019.md)
 - [0.18: water performance and gameplay](development-018.md)
