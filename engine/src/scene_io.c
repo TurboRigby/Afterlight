@@ -301,6 +301,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
             goto fail;
         }
     }
+    if(!af_scene_reindex(scene)){set_error(error,AF_SCENE_ERROR_MEMORY,"Cannot index scene object IDs.");goto fail;}
     for(size_t i=0;i<scene->count;++i){const af_scene_object *node=&scene->objects[i];unsigned depth=0;
         while(node->parent){if(++depth>=AF_SCENE_MAX_DEPTH||(node=af_scene_get_object(scene,node->parent))==NULL){set_error(error,AF_SCENE_ERROR_FORMAT,"Hierarchy contains a missing parent, cycle or excessive depth.");goto fail;}}
     }

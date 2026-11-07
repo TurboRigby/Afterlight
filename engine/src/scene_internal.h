@@ -18,6 +18,7 @@ struct af_scene {
     af_collider_part parts[AF_SCENE_MAX_COLLIDER_PARTS];size_t part_count;af_collider_part_id next_part_id;
     af_water waters[AF_SCENE_MAX_WATERS];size_t water_count;
     af_wind wind;
+    size_t *object_slots;size_t object_slot_capacity;
     af_scene_object *objects;
     size_t count;
     size_t capacity;
@@ -30,5 +31,6 @@ struct af_scene {
     af_local_light local_lights[AF_SCENE_MAX_LOCAL_LIGHTS];
     size_t local_light_count;
 };
+bool af_scene_reindex(af_scene *);
 bool af_scene_joints_valid(const af_scene*);
 #endif

@@ -14,12 +14,16 @@ static bool valid_name(const char *name, size_t capacity)
     return name && name[0] && strlen(name) < capacity;
 }
 
-static af_scene_object *find_object(const af_scene *scene, af_object_id id)
-{
-    if (!scene || id == AF_OBJECT_NONE) return NULL;
-    for (size_t i = 0; i < scene->count; ++i)
-        if (scene->objects[i].id == id) return &scene->objects[i];
-    return NULL;
+static size_t object_hash(af_object_id id){id^=id>>30;id*=UINT64_C(0xbf58476d1ce4e5b9);id^=id>>27;id*=UINT64_C(0x94d049bb133111eb);return (size_t)(id^(id>>31));}
+static void index_insert(af_scene *scene,size_t index){size_t at=object_hash(scene->objects[index].id)&(scene->object_slot_capacity-1);while(scene->object_slots[at])at=(at+1)&(scene->object_slot_capacity-1);scene->object_slots[at]=index+1;}
+static bool index_reserve(af_scene *scene,size_t count){
+    if(count>SIZE_MAX/2)return false;if(scene->object_slot_capacity>=count*2)return true;size_t capacity=16;while(capacity<count*2){if(capacity>SIZE_MAX/2)return false;capacity*=2;}size_t *slots=calloc(capacity,sizeof(*slots));if(!slots)return false;free(scene->object_slots);scene->object_slots=slots;scene->object_slot_capacity=capacity;for(size_t i=0;i<scene->count;++i)index_insert(scene,i);return true;
+}
+bool af_scene_reindex(af_scene *scene){if(!scene||!index_reserve(scene,scene->count))return false;if(scene->object_slot_capacity){memset(scene->object_slots,0,scene->object_slot_capacity*sizeof(*scene->object_slots));for(size_t i=0;i<scene->count;++i)index_insert(scene,i);}return true;}
+static af_scene_object *find_object(const af_scene *scene, af_object_id id){
+    if(!scene||!id)return NULL;
+    if(scene->object_slot_capacity){size_t at=object_hash(id)&(scene->object_slot_capacity-1);while(scene->object_slots[at]){size_t index=scene->object_slots[at]-1;if(scene->objects[index].id==id)return &scene->objects[index];at=(at+1)&(scene->object_slot_capacity-1);}return NULL;}
+    for(size_t i=0;i<scene->count;++i)if(scene->objects[i].id==id)return &scene->objects[i];return NULL;
 }
 
 af_scene *af_scene_create(void)
@@ -33,6 +37,7 @@ void af_scene_destroy(af_scene *scene)
 {
     if (!scene) return;
     for(size_t i=0;i<scene->collision_mesh_count;++i)cm_release(scene->collision_meshes[i].mesh);
+    free(scene->object_slots);
     free(scene->objects);
     free(scene->assets);
     free(scene);
@@ -46,6 +51,7 @@ af_object_id af_scene_add_object(af_scene *scene, const char *name, const char *
     af_scene_object object = {.id = scene->next_id, .transform = af_transform_identity(), .visible = true,.material=af_material_default(),.collider=af_collider_default(),.gameplay=af_gameplay_component_default(),.animation=af_animation_component_default(),.model=af_model_binding_default(),.rig=af_character_rig_default(),.body=af_rigid_body_default()};
     memcpy(object.name, name, strlen(name) + 1);
     memcpy(object.mesh, mesh, strlen(mesh) + 1);
+    if(!index_reserve(scene,scene->count+1))return AF_OBJECT_NONE;
     if (scene->count == scene->capacity) {
         if (scene->capacity > SIZE_MAX / 2 / sizeof(*scene->objects)) return AF_OBJECT_NONE;
         size_t capacity = scene->capacity ? scene->capacity * 2 : 16;
@@ -55,6 +61,7 @@ af_object_id af_scene_add_object(af_scene *scene, const char *name, const char *
         scene->capacity = capacity;
     }
     scene->objects[scene->count++] = object;
+    index_insert(scene,scene->count-1);
     ++scene->next_id; /* Unsigned wrap to zero permanently exhausts the ID space. */
     return object.id;
 }
@@ -66,7 +73,7 @@ bool af_scene_remove_object(af_scene *scene, af_object_id id)
     bool *removed=calloc(scene->count,sizeof(*removed));if(!removed)return false;
     for(size_t i=0;i<scene->count;++i)removed[i]=scene->objects[i].id==id||af_scene_is_descendant(scene,scene->objects[i].id,id);
     size_t write=0;for(size_t i=0;i<scene->count;++i)if(!removed[i])scene->objects[write++]=scene->objects[i];
-    scene->count=write;free(removed);
+    scene->count=write;free(removed);(void)af_scene_reindex(scene);
     write=0;for(size_t i=0;i<scene->water_count;++i)if(find_object(scene,scene->waters[i].owner))scene->waters[write++]=scene->waters[i];scene->water_count=write;
     write=0;for(size_t i=0;i<scene->part_count;++i)if(find_object(scene,scene->parts[i].owner))scene->parts[write++]=scene->parts[i];scene->part_count=write;
     for(size_t i=scene->joint_count;i>0;--i){af_joint *j=&scene->joints[i-1];if(!find_object(scene,j->a)||(j->b&&!find_object(scene,j->b)))af_scene_remove_joint(scene,j->id);}
@@ -140,6 +147,7 @@ af_scene *af_scene_clone(const af_scene *source)
         copy->asset_count=copy->asset_capacity=source->asset_count;
     }
     memcpy(copy->collision_meshes,source->collision_meshes,sizeof(copy->collision_meshes));copy->collision_mesh_count=source->collision_mesh_count;for(size_t i=0;i<copy->collision_mesh_count;++i)cm_retain(copy->collision_meshes[i].mesh);
+    if(!af_scene_reindex(copy)){af_scene_destroy(copy);return NULL;}
     return copy;
 }
 
