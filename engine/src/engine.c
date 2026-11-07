@@ -530,10 +530,11 @@ bool af_engine_load_mesh(af_engine *engine,const char *name,const char *path,af_
     bool result=af_engine_upload_mesh(engine,name,&mesh.data);af_mesh_file_free(&mesh);
     if(!result&&error)snprintf(error->message,sizeof(error->message),"GPU mesh upload failed.");return result;
 }
+static void asset_error_context(af_asset_error *error,const af_scene_asset *asset){if(!error||!asset)return;char reason[256];snprintf(reason,sizeof(reason),"%s",error->message);snprintf(error->message,sizeof(error->message),"Asset '%.48s' [%.100s]: %.85s",asset->name,asset->path,reason);}
 bool af_engine_load_scene_assets(af_engine *engine,const af_scene *scene,af_asset_error *error){
     if(!af_scene_prepare_collision_meshes((af_scene*)scene,error))return false;
     if(!engine||!scene){if(error)snprintf(error->message,sizeof(error->message),"An engine and scene are required.");return false;}
-    for(size_t i=0;i<af_scene_asset_count(scene);++i)if(!af_engine_load_asset(engine,af_scene_asset_at(scene,i),error))return false;return true;
+    for(size_t i=0;i<af_scene_asset_count(scene);++i)if(!af_engine_load_asset(engine,af_scene_asset_at(scene,i),error)){asset_error_context(error,af_scene_asset_at(scene,i));return false;}return true;
 }
 
 bool af_engine_upload_texture(af_engine *engine,const char *name,const unsigned char *rgba,uint32_t width,uint32_t height){return engine&&af_renderer_upload_texture(engine->renderer,name,rgba,width,height);}
@@ -607,7 +608,7 @@ bool af_engine_reload_asset_source(af_engine *engine,const af_scene *scene,const
         matched=true;
         if(a->kind==AF_ASSET_AUDIO){ok=af_engine_load_asset(engine,a,error);if(!ok)break;continue;}
         staged_asset *entry=&staged[count++];entry->asset=*a;do{snprintf(entry->temporary,sizeof(entry->temporary),"__reload_%u_%zu",++sequence,i);}while(af_scene_find_asset(scene,entry->temporary));af_scene_asset temporary=*a;snprintf(temporary.name,sizeof(temporary.name),"%s",entry->temporary);
-        if(!af_engine_load_asset(engine,&temporary,error)){ok=false;break;}
+        if(!af_engine_load_asset(engine,&temporary,error)){asset_error_context(error,a);ok=false;break;}
     }
     if(ok)for(size_t i=0;i<count;++i)if(!(staged[i].asset.kind==AF_ASSET_ANIMATION?af_animation_runtime_commit(engine->animations,staged[i].temporary,staged[i].asset.name):af_renderer_commit_asset(engine->renderer,staged[i].temporary,staged[i].asset.name,staged[i].asset.kind==AF_ASSET_MESH))){ok=false;break;}
     for(size_t i=0;i<count;++i){if(staged[i].asset.kind==AF_ASSET_ANIMATION)af_animation_runtime_remove(engine->animations,staged[i].temporary);else if(staged[i].asset.kind==AF_ASSET_MESH)af_engine_remove_mesh(engine,staged[i].temporary);else af_engine_remove_texture(engine,staged[i].temporary);}

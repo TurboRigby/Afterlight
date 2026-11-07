@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-typedef struct state {af_scene *scene;af_asset_watch *watch;const char *fixtures;unsigned frame;bool failed;char source[4096];unsigned char before[4],green[4];size_t meshes,textures;} state;
+typedef struct state {af_scene *scene;af_asset_watch *watch;const char *fixtures;unsigned frame;bool failed,saw_asset_error;char source[4096];unsigned char before[4],green[4];size_t meshes,textures;} state;
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Reload frame %u line %d: %s\n",s->frame,__LINE__,#c);s->failed=true;af_engine_request_quit(engine);return;}}while(0)
 static const af_vertex vertices[]={{{-2,-2,0},{1,1,1,1},{0,0,1},{0,0}},{{2,-2,0},{1,1,1,1},{0,0,1},{1,0}},{{2,2,0},{1,1,1,1},{0,0,1},{1,1}},{{-2,2,0},{1,1,1,1},{0,0,1},{0,1}}};static const uint32_t indices[]={0,1,2,0,2,3};
 static bool copy_fixture(state *s,const char *name,const char *target){char from[4096];snprintf(from,sizeof(from),"%s/%s",s->fixtures,name);return SDL_CopyFile(from,target);}
@@ -23,12 +23,12 @@ static bool init(af_engine *engine,void *memory){state *s=memory;const char *nam
     s->watch=af_asset_watch_create();s->meshes=af_engine_get_stats(engine).loaded_meshes;s->textures=af_engine_get_stats(engine).loaded_textures;return s->watch!=NULL;
 }
 static void capture(af_engine *engine,state *s){CHECK(af_engine_test_capture_pixel(engine,(af_vec2){320,240}));}
-static void update(af_engine *engine,double delta,void *memory){(void)delta;state *s=memory;++s->frame;af_asset_error message;af_asset_watch_update(s->watch,engine,s->scene,.3,&message);unsigned char pixel[4];
+static void update(af_engine *engine,double delta,void *memory){(void)delta;state *s=memory;++s->frame;af_asset_error message;af_asset_watch_update(s->watch,engine,s->scene,.3,&message);if(strstr(message.message,"Asset 'rich_")&&strstr(message.message,"rich.gltf"))s->saw_asset_error=true;unsigned char pixel[4];
     if(s->frame==3){CHECK(af_asset_watch_get_stats(s->watch).sources==1);capture(engine,s);}
     if(s->frame==4){CHECK(af_engine_test_read_pixel(engine,s->before));CHECK(s->before[0]>200&&s->before[1]<150);CHECK(copy_fixture(s,"green.png","base.png"));}
     if(s->frame==10){CHECK(af_asset_watch_get_stats(s->watch).reloads==1);capture(engine,s);}
     if(s->frame==11){CHECK(af_engine_test_read_pixel(engine,s->green));CHECK(s->green[1]>220&&s->green[0]<60);FILE *f=fopen("normal.png","wb");CHECK(f&&fputs("truncated image",f)>=0&&fclose(f)==0);}
-    if(s->frame==17){CHECK(af_asset_watch_get_stats(s->watch).rejections==1);capture(engine,s);}
+    if(s->frame==17){CHECK(af_asset_watch_get_stats(s->watch).rejections==1&&s->saw_asset_error);capture(engine,s);}
     if(s->frame==18){CHECK(af_engine_test_read_pixel(engine,pixel));CHECK(abs((int)pixel[1]-(int)s->green[1])<3);CHECK(copy_fixture(s,"normal.png","normal.png"));}
     if(s->frame==24){CHECK(af_asset_watch_get_stats(s->watch).reloads==2);CHECK(af_engine_get_stats(engine).loaded_meshes==s->meshes&&af_engine_get_stats(engine).loaded_textures==s->textures);CHECK(af_engine_get_stats(engine).missing_meshes==0&&af_engine_get_stats(engine).missing_textures==0);af_engine_request_quit(engine);}
 }

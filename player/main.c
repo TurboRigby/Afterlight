@@ -69,6 +69,26 @@ static int check_project(const af_project *project) {
     if (!ok)
       fprintf(stderr, "Asset %s: %s\n", a->name, asset_error.message);
   }
+  for (size_t i = 0; i < af_scene_object_count(scene); ++i) {
+    const af_scene_object *o = af_scene_object_at(scene, i);
+    const char *names[] = {o->mesh, o->material.texture, o->material.normal_map,
+                           o->material.metallic_roughness_map,
+                           o->animation.asset};
+    af_asset_kind kinds[] = {AF_ASSET_MESH, AF_ASSET_TEXTURE,
+                             AF_ASSET_NORMAL_MAP, AF_ASSET_METALLIC_ROUGHNESS,
+                             AF_ASSET_ANIMATION};
+    for (unsigned k = 0; k < 5; ++k) {
+      if (!names[k][0] || (k == 0 && (!strcmp(names[k], "cube") ||
+                                      !strcmp(names[k], "__node"))))
+        continue;
+      const af_scene_asset *asset = af_scene_find_asset(scene, names[k]);
+      if (!asset || asset->kind != kinds[k]) {
+        fprintf(stderr, "Object '%s': missing or wrong-kind asset '%s'.\n",
+                o->name, names[k]);
+        ok = false;
+      }
+    }
+  }
   SDL_SharedObject *library = ok ? SDL_LoadObject(project->game_module) : NULL;
   if (ok && !library) {
     fprintf(stderr, "Module: %s\n", SDL_GetError());
