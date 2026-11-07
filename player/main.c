@@ -226,6 +226,16 @@ static void update(af_engine *engine, double delta, void *memory) {
       apply_preferences(app);
       set_menu(app, engine, true);
     }
+    if (stage == 44) {
+      af_gameplay_status finish = af_engine_gameplay_status(engine);
+      finish.finished = true;
+      finish.running = false;
+      finish.finish_time = 12.34;
+      af_engine_set_gameplay_status(engine, finish);
+    }
+    if (stage == 50)
+      ok =
+          app->menu && app->finished_recorded && app->preferences.best_time > 0;
     if (stage == 40) {
       af_player_preferences saved;
       af_asset_error error;
@@ -264,6 +274,8 @@ static void update(af_engine *engine, double delta, void *memory) {
   af_gameplay_status status = af_engine_gameplay_status(engine);
   if (status.finished && !app->finished_recorded) {
     app->finished_recorded = true;
+    if (!app->frames || app->menu_test)
+      set_menu(app, engine, true);
     if (status.finish_time > 0 &&
         (app->preferences.best_time == 0 ||
          strcmp(app->preferences.best_scene, app->runtime.current_scene) ||
@@ -293,8 +305,14 @@ static void update(af_engine *engine, double delta, void *memory) {
                  NK_WINDOW_BORDER | NK_WINDOW_TITLE)) {
       nk_layout_row_dynamic(ctx, 30, 1);
       nk_label(ctx, app->project.name, NK_TEXT_LEFT);
-      nk_label(ctx, app->started ? "Paused" : "Ready to play", NK_TEXT_LEFT);
-      if (nk_button_label(ctx, app->started ? "Resume" : "Start")) {
+      nk_label(ctx,
+               status.finished ? "Course complete"
+               : app->started  ? "Paused"
+                               : "Ready to play",
+               NK_TEXT_LEFT);
+      if (nk_button_label(ctx, status.finished ? "Continue exploring"
+                               : app->started  ? "Resume"
+                                               : "Start")) {
         app->started = true;
         set_menu(app, engine, false);
       }
@@ -319,6 +337,21 @@ static void update(af_engine *engine, double delta, void *memory) {
           app->started = true;
           app->finished_recorded = false;
           set_menu(app, engine, false);
+        }
+      }
+      if (!strcmp(app->runtime.current_scene, "water-course") ||
+          !strcmp(app->runtime.current_scene, "water-expedition")) {
+        if (nk_button_label(ctx, "Next course")) {
+          const char *next = !strcmp(app->runtime.current_scene, "water-course")
+                                 ? "water-expedition"
+                                 : "water-course";
+          if (ed_runtime_request_scene(&app->runtime, next) &&
+              ed_runtime_transition(&app->runtime)) {
+            apply_preferences(app);
+            app->started = true;
+            app->finished_recorded = false;
+            set_menu(app, engine, false);
+          }
         }
       }
       static const char *modes[] = {"Off", "FXAA", "SMAA", "TAA"};
