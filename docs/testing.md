@@ -295,3 +295,22 @@ and refraction on/off, catching depth competition at solid/liquid boundaries.
 presets, checks atomic undo/redo and invalid-edit preservation, and reloads saved
 settings. Editor smoke coverage opens the Environment panel alongside other
 panels, including an unsaved-changes modal.
+
+The 0.20 AA checks are `antialiasing`, `temporal_antialiasing`, and
+`water_render_*` / `refraction_*` / `underwater_*` for `fxaa`, `smaa`, `taa`.
+They read actual rendered regions and run with synchronization validation. The
+temporal check measures static edge variation, moving props and bone palettes,
+background disocclusion, history resets, viewport/resize and mode switching.
+
+`motion_vectors` reads the GPU motion attachment directly and compares numeric
+object, bone, camera and combined velocities, previous/current linear depth,
+removed palettes, hidden geometry, AA Off and reactive alpha in an inset view.
+
+The 0.20 run passed all 158 then-registered Debug tests, including exports. After
+final buffer-reuse/readback refinements, 16 focused AA/optics/editor/data/license
+checks passed under ASan/UBSan and synchronization validation; 97 CPU tests also
+passed under ASan/UBSan. Release rebuilt and both relocated water-course exports
+ran with zero validation errors. Logs are in `build/debug/020-all-tests.log`,
+`build/asan/020-final-tests.log`, `build/asan/020-cpu-tests.log` and
+`build/release/020-export-tests.log`. This records local macOS verification, not
+native Linux/Windows GPU coverage.

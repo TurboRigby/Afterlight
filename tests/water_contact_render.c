@@ -54,6 +54,7 @@ static bool init(af_engine *e, void *data) {
   light.ambient = .5f;
   af_scene_set_light(s->scene, light);
   af_render_settings settings = af_render_settings_default();
+  const char *aa=getenv("AFTERLIGHT_TEST_AA");if(aa)settings.anti_aliasing=AF_AA_TAA;
   settings.underwater = false;
   settings.refraction = false;
   af_scene_set_render_settings(s->scene, settings);

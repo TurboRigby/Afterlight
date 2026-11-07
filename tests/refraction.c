@@ -3,6 +3,7 @@
 #include <afterlight/afterlight.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 typedef struct test {
     af_scene *scene;
@@ -77,6 +78,7 @@ static bool init(af_engine *e, void *data) {
     l.intensity = l.ambient = 0;
     af_scene_set_light(s->scene, l);
     af_render_settings r = af_render_settings_default();
+    const char *aa=getenv("AFTERLIGHT_TEST_AA");if(aa)r.anti_aliasing=!strcmp(aa,"taa")?AF_AA_TAA:!strcmp(aa,"smaa")?AF_AA_SMAA:AF_AA_FXAA;
     r.refraction = false;
     r.underwater = false;
     af_scene_set_render_settings(s->scene, r);

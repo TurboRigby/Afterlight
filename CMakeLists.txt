@@ -25,7 +25,7 @@ foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fulls
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
         COMMAND Vulkan::glslangValidator --target-env vulkan1.1 --spirv-val
             --vn af_${shader_name} -o "${shader_header}" "${shader_source}"
-        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/water_ripples.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/fxaa.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/smaa.glsl" "${PROJECT_SOURCE_DIR}/third_party/smaa/SMAA.hlsl" Vulkan::glslangValidator
+        DEPENDS "${shader_source}" "${PROJECT_SOURCE_DIR}/engine/shaders/water_fog.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/water_ripples.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/fxaa.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/smaa.glsl" "${PROJECT_SOURCE_DIR}/engine/shaders/taa.glsl" "${PROJECT_SOURCE_DIR}/third_party/smaa/SMAA.hlsl" Vulkan::glslangValidator
         COMMENT "Compiling Afterlight ${shader} shader"
         VERBATIM
     )
@@ -577,6 +577,26 @@ target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCH
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
 if(BUILD_TESTING)
+    foreach(optics water_render refraction underwater)
+        foreach(aa fxaa smaa taa)
+            add_test(NAME afterlight.${optics}_${aa} COMMAND afterlight_${optics}_test)
+            set_tests_properties(afterlight.${optics}_${aa} PROPERTIES TIMEOUT 60 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;AFTERLIGHT_TEST_AA=${aa}")
+        endforeach()
+    endforeach()
+    add_executable(afterlight_motion_vectors_test tests/motion_vectors.c)
+    target_include_directories(afterlight_motion_vectors_test PRIVATE engine/src)
+    target_link_libraries(afterlight_motion_vectors_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_motion_vectors_test)
+    add_test(NAME afterlight.motion_vectors COMMAND afterlight_motion_vectors_test)
+    set_tests_properties(afterlight.motion_vectors PROPERTIES TIMEOUT 30 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_test(NAME afterlight.water_contact_render_taa COMMAND afterlight_water_contact_render_test)
+    set_tests_properties(afterlight.water_contact_render_taa PROPERTIES TIMEOUT 60 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;AFTERLIGHT_TEST_AA=taa")
+    add_executable(afterlight_temporal_antialiasing_test tests/temporal_antialiasing.c)
+    target_include_directories(afterlight_temporal_antialiasing_test PRIVATE engine/src)
+    target_link_libraries(afterlight_temporal_antialiasing_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_temporal_antialiasing_test)
+    add_test(NAME afterlight.temporal_antialiasing COMMAND afterlight_temporal_antialiasing_test)
+    set_tests_properties(afterlight.temporal_antialiasing PROPERTIES TIMEOUT 60 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     add_executable(afterlight_antialiasing_test tests/antialiasing.c)
     target_include_directories(afterlight_antialiasing_test PRIVATE engine/src)
     target_link_libraries(afterlight_antialiasing_test PRIVATE Afterlight::Engine)

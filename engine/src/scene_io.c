@@ -365,8 +365,8 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         if(version->valuedouble>=21){const cJSON *r=cJSON_GetObjectItemCaseSensitive(render,"refraction");if(!cJSON_IsBool(r)||!read_float_field(render,"refraction_strength",&settings.refraction_strength)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid refraction settings.");goto fail;}settings.refraction=cJSON_IsTrue(r)!=0;}
         if(version->valuedouble>=23){
             const cJSON *aa=cJSON_GetObjectItemCaseSensitive(render,"anti_aliasing");
-            if(!cJSON_IsString(aa)||(strcmp(aa->valuestring,"off")&&strcmp(aa->valuestring,"fxaa")&&strcmp(aa->valuestring,"smaa"))||!read_float_field(render,"aa_sharpness",&settings.aa_sharpness)||!read_float_field(render,"taa_history_weight",&settings.taa_history_weight)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid anti-aliasing settings.");goto fail;}
-            settings.anti_aliasing=!strcmp(aa->valuestring,"smaa")?AF_AA_SMAA:!strcmp(aa->valuestring,"fxaa")?AF_AA_FXAA:AF_AA_OFF;
+            if(!cJSON_IsString(aa)||(strcmp(aa->valuestring,"off")&&strcmp(aa->valuestring,"fxaa")&&strcmp(aa->valuestring,"smaa")&&strcmp(aa->valuestring,"taa"))||!read_float_field(render,"aa_sharpness",&settings.aa_sharpness)||!read_float_field(render,"taa_history_weight",&settings.taa_history_weight)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid anti-aliasing settings.");goto fail;}
+            settings.anti_aliasing=!strcmp(aa->valuestring,"taa")?AF_AA_TAA:!strcmp(aa->valuestring,"smaa")?AF_AA_SMAA:!strcmp(aa->valuestring,"fxaa")?AF_AA_FXAA:AF_AA_OFF;
         }
         settings.tone_mapping=cJSON_IsTrue(tone)!=0;if(!af_scene_set_render_settings(scene,settings)){set_error(error,AF_SCENE_ERROR_FORMAT,"Exposure outside supported range.");goto fail;}
         const cJSON *lights=cJSON_GetObjectItemCaseSensitive(root,"local_lights");
@@ -521,7 +521,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
     cJSON *render=cJSON_AddObjectToObject(root,"render");
     if(!render||!cJSON_AddNumberToObject(render,"exposure",scene->render_settings.exposure)||!cJSON_AddBoolToObject(render,"tone_mapping",scene->render_settings.tone_mapping))goto fail;
     const af_render_settings *rs=&scene->render_settings;
-    if(!cJSON_AddStringToObject(render,"anti_aliasing",rs->anti_aliasing==AF_AA_SMAA?"smaa":rs->anti_aliasing==AF_AA_FXAA?"fxaa":"off")||!cJSON_AddNumberToObject(render,"aa_sharpness",rs->aa_sharpness)||!cJSON_AddNumberToObject(render,"taa_history_weight",rs->taa_history_weight))goto fail;
+    if(!cJSON_AddStringToObject(render,"anti_aliasing",rs->anti_aliasing==AF_AA_TAA?"taa":rs->anti_aliasing==AF_AA_SMAA?"smaa":rs->anti_aliasing==AF_AA_FXAA?"fxaa":"off")||!cJSON_AddNumberToObject(render,"aa_sharpness",rs->aa_sharpness)||!cJSON_AddNumberToObject(render,"taa_history_weight",rs->taa_history_weight))goto fail;
     if(!cJSON_AddBoolToObject(render,"underwater",rs->underwater)||!cJSON_AddBoolToObject(render,"refraction",rs->refraction)||!cJSON_AddNumberToObject(render,"refraction_strength",rs->refraction_strength))goto fail;
     if(!cJSON_AddBoolToObject(render,"bloom",rs->bloom)||!cJSON_AddNumberToObject(render,"bloom_strength",rs->bloom_strength)||!cJSON_AddNumberToObject(render,"bloom_threshold",rs->bloom_threshold)||!cJSON_AddNumberToObject(render,"bloom_radius",rs->bloom_radius)||
        !cJSON_AddBoolToObject(render,"environment_enabled",rs->environment_enabled)||!cJSON_AddNumberToObject(render,"environment_profile",rs->environment_profile)||!cJSON_AddNumberToObject(render,"environment_intensity",rs->environment_intensity)||!cJSON_AddNumberToObject(render,"environment_rotation",rs->environment_rotation)||!cJSON_AddNumberToObject(render,"local_shadow_resolution",rs->local_shadow_resolution))goto fail;

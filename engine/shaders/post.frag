@@ -6,9 +6,10 @@ layout(location=0) out vec4 out_color;
 layout(set=0,binding=0) uniform sampler2D source_image;
 layout(set=0,binding=1) uniform sampler2D bloom_image;
 layout(set=0,binding=2) uniform sampler2D lookup_image;
-layout(push_constant) uniform Post {vec4 settings;vec4 blur_params;vec4 viewport;vec4 aa;} post;
+layout(push_constant) uniform Post {vec4 settings;vec4 blur_params;vec4 viewport;vec4 aa;vec4 temporal;} post;
 #include "fxaa.glsl"
 #include "smaa.glsl"
+#include "taa.glsl"
 vec3 sample_source(vec2 position){
     vec2 half_texel=0.5/vec2(textureSize(source_image,0));
     vec2 midpoint=(post.viewport.xy+post.viewport.zw)*0.5;
@@ -16,10 +17,11 @@ vec3 sample_source(vec2 position){
 }
 void main(){
     int mode=int(post.blur_params.z);
+    if(mode==10){out_color=taa_resolve();return;}
     if(mode>=7){out_color=smaa_pass(mode);return;}
     if(mode==6){
         bool inside=all(greaterThanEqual(uv,post.viewport.xy))&&all(lessThan(uv,post.viewport.zw));
-        vec3 perceptual=inside?fxaa(uv):texture(source_image,uv).rgb;
+        vec3 perceptual=inside?(post.aa.x==3?taa_finish():fxaa(uv)):texture(source_image,uv).rgb;
         out_color=vec4(perceptual*perceptual,1);return;
     }
     if(mode==0||mode==5){

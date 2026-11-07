@@ -115,3 +115,11 @@ The editor's **Environment** panel groups sun, sky, environment lighting and
 exposure. Night presets lower all global sources together; sky brightness and
 image-based lighting remain separately adjustable. The sun is a directional
 light, and HDR image rotation is independent of its heading.
+
+## Anti-aliasing (0.20)
+
+The Environment panel selects Off, FXAA, SMAA or TAA per scene. Spatial modes
+filter perceptual color; TAA resolves HDR history using camera/object/bone motion,
+depth rejection and neighborhood clipping. Water and blended surfaces use a
+reactive spatial finish. UI follows AA. See the [AA guide](development-020.md) for
+controls, fallback requirements, resource costs and known limits.

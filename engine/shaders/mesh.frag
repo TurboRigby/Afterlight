@@ -11,6 +11,10 @@ layout(location=1) in vec3 world_position;
 layout(location=2) in vec3 world_normal;
 layout(location=3) in vec2 uv;
 layout(location=0) out vec4 out_color;
+layout(location=1) out vec4 out_motion;
+layout(location=4) in vec4 previous_clip;
+layout(location=5) in vec4 current_clip;
+layout(location=6) flat in uint motion_valid;
 struct LocalLight {vec4 position_range;vec4 color_intensity;vec4 direction_inner;vec4 params;};
 layout(set=0,binding=0) uniform Frame {
     mat4 view_projection;
@@ -28,6 +32,7 @@ layout(set=0,binding=0) uniform Frame {
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;vec4 sky_params;
     vec4 water_absorption,water_scattering,water_bounds,water_axes,water_screen,water_viewport,wind_time;
+    mat4 unjittered_view_projection,previous_view_projection;
 } frame;
 layout(set=0,binding=1) uniform sampler2DArray local_shadow_map;
 layout(set=0,binding=2) uniform sampler2D environment_map;
@@ -128,6 +133,11 @@ vec3 environment_light(vec3 base,vec3 n,vec3 v,float roughness,float metal){
 }
 #include "water_fog.glsl"
 void main(){
+    bool reactive=(uint(draw.params.x)&(1u<<19u))!=0u||((uint(draw.params.x)>>1u)&3u)==2u;
+    vec2 velocity=vec2(0);
+    bool valid=motion_valid!=0u&&previous_clip.w>0&&current_clip.w>0&&!reactive;
+    if(valid)velocity=(previous_clip.xy/previous_clip.w-current_clip.xy/current_clip.w)*.5*(frame.water_viewport.zw-frame.water_viewport.xy);
+    out_motion=vec4(velocity,valid?min(previous_clip.w,65000.0):-1.0,min(max(current_clip.w,0.0),65000.0));
     vec3 geometric=cross(dFdx(world_position),dFdy(world_position));
     vec3 n=dot(world_normal,world_normal)>1e-12?normalize(world_normal):(dot(geometric,geometric)>1e-12?normalize(geometric):vec3(0,1,0));
     vec3 px=dFdx(world_position),py=dFdy(world_position);vec2 ux=dFdx(uv),uy=dFdy(uv);

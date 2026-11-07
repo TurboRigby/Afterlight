@@ -44,6 +44,9 @@ static bool init(af_engine *e, void *data) {
   af_engine_set_camera(e, &camera);
   af_engine_set_scene(e, s->scene);
   af_engine_set_clear_color(e, (af_color){0, 0, 0, 1});
+  const unsigned char white[] = {255, 255, 255, 255};
+  if (!af_engine_upload_overlay_atlas(e, white, 1, 1))
+    return false;
   af_engine_set_simulation_paused(e, true);
   return true;
 }
@@ -56,8 +59,19 @@ static unsigned mixed(const unsigned char *pixels) {
 static void update(af_engine *e, double dt, void *data) {
   (void)dt;
   state *s = data;
+  if (s->view == 3) {
+    static const af_overlay_vertex vertices[] = {
+        {{4, 4}, {0, 0}, {255, 255, 255, 255}},
+        {{28, 16}, {0, 0}, {255, 255, 255, 255}},
+        {{4, 28}, {0, 0}, {255, 255, 255, 255}}};
+    static const uint32_t indices[] = {0, 1, 2};
+    static const af_overlay_command command = {.clip = {0, 0, 640, 480},
+                                               .index_count = 3};
+    af_overlay_frame overlay = {vertices, indices, &command, 3, 3, 1, 640, 480};
+    CHECK(af_engine_set_overlay(e, &overlay));
+  }
   if (!s->pending) {
-    if (++s->ticks < 8)
+    if (++s->ticks < 24)
       return;
     af_vec2 point = s->view == 0   ? (af_vec2){184, 134}
                     : s->view == 1 ? (af_vec2){224, 164}
@@ -93,17 +107,23 @@ static void update(af_engine *e, double dt, void *data) {
             CHECK(abs((int)pixels[at] - s->off[at]) < 4);
         }
     }
+  } else if (s->view == 3) {
+    if (!s->mode) {
+      CHECK(intermediates == 0);
+      memcpy(s->off, pixels, sizeof(pixels));
+    } else
+      CHECK(!memcmp(s->off, pixels, sizeof(pixels)));
   } else
     for (unsigned i = 0; i < sizeof(pixels); i += 4)
       CHECK(pixels[i] < 3 && pixels[i + 1] < 3 && pixels[i + 2] < 3);
-  if (++s->mode > (unsigned)AF_AA_SMAA) {
+  if (++s->mode > (unsigned)AF_AA_TAA) {
     s->mode = 0;
     if (++s->view == 1) {
       CHECK(af_engine_set_window_size(e, 640, 480));
       af_rect area = {80, 60, 320, 240};
       af_engine_set_viewport(e, &area);
     }
-    if (s->view == 3) {
+    if (s->view == 4) {
       af_render_settings settings = af_scene_get_render_settings(s->scene);
       settings.anti_aliasing = AF_AA_FXAA;
       settings.aa_sharpness = .3f;
@@ -116,7 +136,7 @@ static void update(af_engine *e, double dt, void *data) {
       af_scene_destroy(copy);
       remove("antialiasing.json");
       puts("AA: real diagonal-edge coverage, flat areas, inset viewport, "
-           "outside clipping, resize and persistence passed.");
+           "outside clipping, crisp overlay, resize and persistence passed.");
       af_engine_request_quit(e);
       return;
     }
@@ -148,5 +168,5 @@ int main(void) {
   int result = af_engine_run(e, &game);
   af_engine_stats stats = af_engine_get_stats(e);
   af_engine_destroy(e);
-  return result || s.failed || s.view != 3 || stats.validation_errors ? 1 : 0;
+  return result || s.failed || s.view != 4 || stats.validation_errors ? 1 : 0;
 }

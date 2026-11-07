@@ -1,4 +1,4 @@
-# Afterlight scene format, version 22
+# Afterlight scene format, version 23
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
@@ -7,7 +7,7 @@ manifest into the renderer separately. Game library selection stays outside the
 scene file.
 
 The following version 10 example shows the base fields; newer extensions are
-documented below. Current saves include all version 22 tables.
+documented below. Current saves include all version 23 tables.
 
 ```json
 {
@@ -515,7 +515,7 @@ Each object adds `body`, with `enabled`, `type` (static/kinematic/dynamic),
 and three-component `velocity`/`angular_velocity`. Magnitudes are limited to
 200/100. Dynamic bodies require a scene-root sphere/box collider, centered origin,
 positive scale and a nontrigger enabled collider. Versions 1–12 load disabled
-body defaults. Saving writes version 22. Physics runtime limits and diagnostics
+body defaults. Saving writes version 23. Physics runtime limits and diagnostics
 are documented in [0.13](development-013.md).
 
 ## Version 14: mesh colliders and scene joints
@@ -578,7 +578,7 @@ Versions 1–15 remain readable with an empty part table. Game ABI is 15.
 
 Version 17 adds the required root `water` array (maximum eight definitions).
 Version 18 adds river paths/current. Version 19 adds particle source settings.
-Earlier definitions receive defaults. Saving writes version 22, including the
+Earlier definitions receive defaults. Saving writes version 23, including the
 array when empty. Each entry has exactly these fields:
 
 | Field | Meaning |
@@ -618,3 +618,11 @@ The root `wind` object has exactly `enabled`, `direction` (world XZ vector),
 components within −1…1. Water definitions add `ripple_scale` (0.1–20 metres)
 and `ripple_strength` (0–1). Older scenes receive disabled world wind and
 ripple controls 1 / 0.18. These fields participate in clone, history and export.
+
+## Anti-aliasing (version 23)
+
+The render table adds `anti_aliasing` (`off`, `fxaa`, `smaa`, `taa`),
+`aa_sharpness` (finite 0–1) and `taa_history_weight` (finite 0–0.98). Defaults
+are Off, 0.1 and 0.9 respectively. Older scene versions receive these defaults.
+Unknown modes, missing fields in version 23 and out-of-range values are rejected.
+These fields participate in clone, undo/redo, save/load and export.

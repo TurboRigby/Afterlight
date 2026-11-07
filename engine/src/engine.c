@@ -544,6 +544,9 @@ bool af_engine_remove_texture(af_engine *engine,const char *name){return engine&
 
 bool af_engine_key_repeated(const af_engine *engine,af_key key){return engine&&key>=0&&key<AF_KEY_COUNT&&engine->repeated[key];}
 
+af_temporal_test_stats af_engine_test_temporal(const af_engine *e){return e?af_renderer_test_temporal(e->renderer):(af_temporal_test_stats){0};}
+bool af_engine_test_capture_motion(af_engine *e,af_vec2 p){return e&&af_renderer_test_capture_motion(e->renderer,p);}
+bool af_engine_test_read_motion(af_engine *e,af_vec4 *p){return e&&af_renderer_test_read_motion(e->renderer,p);}
 bool af_engine_test_capture_region(af_engine *e,af_vec2 p,uint32_t w,uint32_t h){return e&&af_renderer_test_capture_region(e->renderer,p,w,h);}
 bool af_engine_test_read_pixels(af_engine *e,unsigned char *p,size_t n,uint32_t *w,uint32_t *h){return e&&af_renderer_test_read_pixels(e->renderer,p,n,w,h);}
 bool af_engine_test_capture_pixel(af_engine *engine,af_vec2 position){return engine&&af_renderer_test_capture_pixel(engine->renderer,position);}
@@ -558,7 +561,7 @@ bool af_engine_load_normal_map(af_engine *engine,const char *name,const char *pa
     if(!result&&error)snprintf(error->message,sizeof(error->message),"GPU normal-map upload failed.");return result;
 }
 
-void af_engine_reset_interpolation(af_engine *engine){if(!engine)return;af_scene_destroy(engine->previous_scene);engine->previous_scene=NULL;engine->previous_camera=engine->camera;engine->has_fixed_camera=false;if(engine->renderer)af_renderer_set_interpolation(engine->renderer,NULL,1);}
+void af_engine_reset_interpolation(af_engine *engine){if(!engine)return;af_scene_destroy(engine->previous_scene);engine->previous_scene=NULL;engine->previous_camera=engine->camera;engine->has_fixed_camera=false;if(engine->renderer){af_renderer_set_interpolation(engine->renderer,NULL,1);af_renderer_reset_temporal(engine->renderer);}}
 void af_engine_set_simulation_paused(af_engine *engine,bool paused){if(!engine||engine->simulation_paused==paused)return;engine->simulation_paused=paused;if(paused)af_engine_stop_sounds(engine);engine->clock.accumulator=0;memset(engine->fixed_pressed,0,sizeof(engine->fixed_pressed));af_engine_reset_interpolation(engine);}
 bool af_engine_step_simulation(af_engine *engine){if(!engine||!engine->simulation_paused)return false;engine->step_pending=true;return true;}
 

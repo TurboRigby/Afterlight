@@ -41,7 +41,7 @@ typedef struct af_local_light {
     float inner_angle,outer_angle; /* Radians; 0 <= inner <= outer <= 89 degrees. */
 } af_local_light;
 af_local_light af_local_light_default(af_light_type type);
-typedef enum af_anti_aliasing { AF_AA_OFF, AF_AA_FXAA, AF_AA_SMAA } af_anti_aliasing;
+typedef enum af_anti_aliasing { AF_AA_OFF, AF_AA_FXAA, AF_AA_SMAA, AF_AA_TAA } af_anti_aliasing;
 typedef struct af_render_settings {
     af_anti_aliasing anti_aliasing;
     float aa_sharpness,taa_history_weight;
