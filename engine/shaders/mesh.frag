@@ -248,15 +248,14 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal) 
 #endif
     )
         return vec3(0);
-    vec3 diffuse = textureLod(irradiance_map, environment_uv(n), 0).rgb;
+    vec3 gi_radiance = vec3(0);
+    bool has_gi = false;
 #ifdef AF_RAY_QUERY
-    vec3 gi_radiance;
-    if (!water_surface() && trace_gi_bounce(world_position, n, gi_radiance)) {
-        diffuse = gi_radiance / max(0.001, frame.render_params.z);
-    }
+    has_gi = !water_surface() && trace_gi_bounce(world_position, n, gi_radiance);
 #endif
+    vec3 diffuse = has_gi ? gi_radiance : textureLod(irradiance_map, environment_uv(n), 0).rgb * frame.render_params.z;
     if (draw.params.z < 0.5)
-        return diffuse * base * frame.render_params.z;
+        return diffuse * base;
     float rough = clamp(roughness, 0.04, 1.0), nv = max(dot(n, v), 0.0);
     vec3 f0 = mix(vec3(water_surface() ? water_f0() : 0.04), base, metal);
     vec3 fresnel = f0 + (max(vec3(1.0 - rough), f0) - f0) * pow(1.0 - nv, 5.0);
@@ -268,8 +267,7 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal) 
         radiance = mix(hit, radiance, smoothstep(.12, .6, rough));
 #endif
     vec2 brdf = texture(brdf_lut, vec2(nv, rough)).rg;
-    return (vec3(1) - fresnel) * (1.0 - metal) * diffuse * base * frame.render_params.z +
-           radiance * (f0 * brdf.x + brdf.y);
+    return (vec3(1) - fresnel) * (1.0 - metal) * diffuse * base + radiance * (f0 * brdf.x + brdf.y);
 }
 #include "water_fog.glsl"
 void main() {
