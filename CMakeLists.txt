@@ -1423,6 +1423,9 @@ if(BUILD_TESTING)
     add_test(NAME afterlight.editor_project COMMAND afterlight_editor --project "${CMAKE_CURRENT_BINARY_DIR}/playground.afterlight.project" --play-controls-test --validation)
     set_tests_properties(afterlight.editor_project PROPERTIES TIMEOUT 30 LABELS "graphics"
         FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
+    set_property(TEST afterlight.editor_smoke afterlight.editor_playground afterlight.editor_project
+                      afterlight.editor_animation afterlight.editor_light_tools afterlight.editor_thumbnails
+                 PROPERTY RESOURCE_LOCK "editor_interactive")
     add_executable(afterlight_editor_document_test tests/editor_document.c)
     target_link_libraries(afterlight_editor_document_test PRIVATE afterlight_editor_document)
     afterlight_warnings(afterlight_editor_document_test)
