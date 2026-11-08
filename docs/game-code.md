@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **22** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **26** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 25 modules.
+to use newly built ABI 26 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -215,3 +215,10 @@ Scene format is 24; rebuild modules and restart old processes.
 ABI 25 adds `af_render_settings.ray_traced_water_reflections` and the active
 reflection flag in `af_engine_stats`. The C game ABI is independent of the
 0.22 release version.
+
+ABI 26 adds `af_render_settings.ray_traced_gi`, `rtgi_intensity`,
+`rtgi_ray_distance` and `rtgi_samples`, plus `ray_traced_gi_active` in
+`af_engine_stats`. The new render fields sit before `anti_aliasing`, so rebuild
+game modules and restart editor/player processes built against earlier ABIs;
+the struct layout is not backward compatible. `rtgi_samples` is clamped to
+1..4. Scene format is 25 and stores the GI fields only when non-default.

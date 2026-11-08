@@ -10,6 +10,9 @@ typedef struct fixture {
     af_scene *scene;
     af_object_id floor;
     af_object_id emitter;
+    af_object_id wall;
+    af_object_id blocker;
+    unsigned char blocked[4];
     unsigned phase, frames;
     bool failed;
 } fixture;
@@ -57,6 +60,40 @@ static bool init(af_engine *engine, void *data) {
     emitter_mat.emission_strength = 10.0f;
     emitter_mat.unlit = false;
     if (!af_scene_set_object_material(f->scene, f->emitter, emitter_mat))
+        return false;
+
+    /* Sunlit wall on the +X/-Z side. GI rays from the floor bounce off it. */
+    static const af_vertex wall_vertices[] = {
+        {.position = {-1, 0, -3}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {0, 0}},
+        {.position = {3, 0, -3}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {1, 0}},
+        {.position = {3, 5, -3}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {1, 1}},
+        {.position = {-1, 5, -3}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {0, 1}},
+    };
+    af_mesh_data wall_mesh = {wall_vertices, 4, indices, 6};
+    if (!af_engine_upload_mesh(engine, "wall", &wall_mesh))
+        return false;
+    f->wall = af_scene_add_object(f->scene, "Sun wall", "wall");
+    af_material wall_mat = af_material_default();
+    wall_mat.physically_based = true;
+    wall_mat.base_color = (af_color){1, 1, 1, 1};
+    wall_mat.roughness = 0.9f;
+    if (!af_scene_set_object_material(f->scene, f->wall, wall_mat) ||
+        !af_scene_set_object_visible(f->scene, f->wall, false))
+        return false;
+
+    /* Thin vertical pane at X = -1.5 between the sunlit wall and the sun. */
+    static const af_vertex blocker_vertices[] = {
+        {.position = {-1.5f, 0, -5}, .color = {1, 1, 1, 1}, .normal = {1, 0, 0}, .uv = {0, 0}},
+        {.position = {-1.5f, 0, 1}, .color = {1, 1, 1, 1}, .normal = {1, 0, 0}, .uv = {1, 0}},
+        {.position = {-1.5f, 5, 1}, .color = {1, 1, 1, 1}, .normal = {1, 0, 0}, .uv = {1, 1}},
+        {.position = {-1.5f, 5, -5}, .color = {1, 1, 1, 1}, .normal = {1, 0, 0}, .uv = {0, 1}},
+    };
+    af_mesh_data blocker_mesh = {blocker_vertices, 4, indices, 6};
+    if (!af_engine_upload_mesh(engine, "sun_blocker", &blocker_mesh))
+        return false;
+    f->blocker = af_scene_add_object(f->scene, "Sun blocker", "sun_blocker");
+    if (!af_scene_set_object_material(f->scene, f->blocker, wall_mat) ||
+        !af_scene_set_object_visible(f->scene, f->blocker, false))
         return false;
 
     /* Zero direct lighting and ambient */
@@ -117,6 +154,7 @@ static void update(af_engine *engine, double delta, void *data) {
 
     af_render_settings settings = af_scene_get_render_settings(f->scene);
     af_material material = af_scene_get_object(f->scene, f->emitter)->material;
+    af_directional_light sun = af_directional_light_default();
 
     switch (f->phase) {
     case 0:
@@ -164,6 +202,42 @@ static void update(af_engine *engine, double delta, void *data) {
         /* Phase 3: RTGI off again, floor returns to dark */
         CHECK(!stats.ray_traced_gi_active);
         CHECK(p[0] < 5 && p[1] < 5 && p[2] < 5);
+        /* Sunlit wall plus a blocker. Ray-traced shadows stay disabled, so the
+           GI sun shadow ray must still see GI-masked geometry (not the shadow mask). */
+        sun.direction = (af_vec3){0.8f, 0.0f, -0.6f};
+        sun.color = (af_vec3){1, 1, 1};
+        sun.intensity = 3.0f;
+        sun.ambient = 0.0f;
+        af_scene_set_light(f->scene, sun);
+        CHECK(af_scene_set_object_visible(f->scene, f->emitter, false));
+        CHECK(af_scene_set_object_visible(f->scene, f->wall, true));
+        CHECK(af_scene_set_object_visible(f->scene, f->blocker, true));
+        settings.ray_traced_gi = true;
+        settings.rtgi_intensity = 2.0f;
+        settings.rtgi_samples = 4;
+        settings.rtgi_ray_distance = 15.0f;
+        CHECK(af_scene_set_render_settings(f->scene, settings));
+        break;
+
+    case 4:
+        /* Phase 4: the blocker shadows the wall, so the GI sun bounce is absent. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        if (hardware) {
+            f->blocked[0] = p[0];
+            f->blocked[1] = p[1];
+            f->blocked[2] = p[2];
+            CHECK(p[0] < 8 && p[1] < 8 && p[2] < 8);
+        }
+        CHECK(af_scene_set_object_visible(f->scene, f->blocker, false));
+        break;
+
+    case 5:
+        /* Phase 5: without the blocker the sunlit wall lights the floor. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        if (hardware) {
+            CHECK(p[0] > 12);
+            CHECK(p[0] > (int)f->blocked[0] + 8);
+        }
         af_engine_request_quit(engine);
         break;
     }
@@ -192,5 +266,5 @@ int main(void) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || f.failed || f.phase != 4 || stats.validation_errors;
+    return result || f.failed || f.phase != 6 || stats.validation_errors;
 }

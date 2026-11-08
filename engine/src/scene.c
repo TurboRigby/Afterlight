@@ -569,8 +569,8 @@ bool af_scene_set_render_settings(af_scene *scene, af_render_settings settings) 
         settings.tone_mapper = AF_TONE_MAP_REINHARD;
     if (settings.rtgi_ray_distance == 0.0f)
         settings.rtgi_ray_distance = 25.0f;
-    if (settings.rtgi_samples > 16)
-        return false;
+    if (settings.rtgi_samples > 4)
+        settings.rtgi_samples = 4; /* The shader and editor cap GI at 4 samples. */
     if (settings.rtgi_samples == 0)
         settings.rtgi_samples = 1;
     if (!settings.local_shadow_resolution)

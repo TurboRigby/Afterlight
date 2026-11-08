@@ -118,6 +118,8 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     vec3 base = surface.color.rgb * (vertex_attribute(vertices, index.x, 3) * weights.x +
                                      vertex_attribute(vertices, index.y, 3) * weights.y +
                                      vertex_attribute(vertices, index.z, 3) * weights.z);
+    if (surface.emission_unlit.w > .5)
+        return base + surface.emission_unlit.rgb;
 
     vec3 normal = vertex_attribute(vertices, index.x, 7) * weights.x +
                   vertex_attribute(vertices, index.y, 7) * weights.y +
@@ -135,16 +137,17 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
         return vec3(0.0);
 
     float falloff = compute_gi_falloff(hit_t, max_dist);
-    vec3 emissive = (surface.emission_unlit.w > .5 ? base : vec3(0.0)) + surface.emission_unlit.rgb;
+    vec3 emissive = surface.emission_unlit.rgb;
 
     vec3 sun_dir = -frame.direction_intensity.xyz;
     float n_dot_l = max(dot(normal, sun_dir), 0.0);
     vec3 sun = vec3(0.0);
     if (n_dot_l > 0.0 && frame.direction_intensity.w > 0.0) {
+        // GI instances carry the GI mask regardless of whether ray-traced shadow casters are enabled.
         rayQueryEXT shadow_query;
         rayQueryInitializeEXT(shadow_query, scene_acceleration,
                               gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
-                              1, hit_pos + normal * 0.005, 0.002, sun_dir, 150.0);
+                              4, hit_pos + normal * 0.005, 0.002, sun_dir, 150.0);
         while (rayQueryProceedEXT(shadow_query)) {
         }
         if (rayQueryGetIntersectionTypeEXT(shadow_query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {

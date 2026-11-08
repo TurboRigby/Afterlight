@@ -1016,6 +1016,7 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
             }
             settings.ray_traced_gi = cJSON_IsTrue(rtgi_check) != 0;
             float samples = 1.0f;
+            /* Older files accepted up to 16; the setter clamps the stored value to 1..4. */
             if (!read_float_field(render, "rtgi_intensity", &settings.rtgi_intensity) ||
                 !read_float_field(render, "rtgi_ray_distance", &settings.rtgi_ray_distance) ||
                 !read_float_field(render, "rtgi_samples", &samples) || samples < 1.0f || samples > 16.0f) {
