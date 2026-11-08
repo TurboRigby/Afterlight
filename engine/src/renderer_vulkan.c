@@ -2296,7 +2296,7 @@ static bool prepare_shadows(af_renderer *renderer, const af_scene *scene, const 
                   (area.x + area.width) / (float)logical_width, (area.y + area.height) / (float)logical_height};
     double water_time = af_physics_time(renderer->water_physics);
     af_vec3 air = af_wind_velocity(af_scene_get_wind(scene), water_time);
-    uniform->wind_time = (af_vec4){air.x, air.z, (float)water_time, 0};
+    uniform->wind_time = (af_vec4){air.x, air.z, (float)water_time, (float)(renderer->rendered_frames & 255u)};
     af_water_sample underwater = af_physics_sample_water(renderer->water_physics, scene, camera->position);
     const af_water *water = af_scene_get_water(scene, underwater.owner);
     if (render_settings.underwater && water && underwater.inside && camera->position.y > underwater.bottom &&
@@ -3955,6 +3955,9 @@ bool af_renderer_test_read_pixels(af_renderer *renderer, unsigned char *rgba, si
         bool bgra =
             renderer->capture_format == VK_FORMAT_B8G8R8A8_SRGB || renderer->capture_format == VK_FORMAT_B8G8R8A8_UNORM;
         size_t count = (size_t)renderer->capture_extent.width * renderer->capture_extent.height;
+        size_t max_pixels = capacity / 4;
+        if (count > max_pixels)
+            count = max_pixels;
         for (size_t i = 0; i < count; ++i) {
             rgba[4 * i] = p[4 * i + (bgra ? 2u : 0u)];
             rgba[4 * i + 1] = p[4 * i + 1];

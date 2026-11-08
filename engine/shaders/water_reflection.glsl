@@ -94,6 +94,12 @@ vec3 sample_cosine_hemisphere(vec2 u, vec3 n, vec3 b1, vec3 b2) {
     return normalize(b1 * (cos(phi) * sin_theta) + b2 * (sin(phi) * sin_theta) + n * cos_theta);
 }
 
+vec2 hash22(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
 float compute_gi_falloff(float d, float max_dist) {
     float norm = clamp(d / max_dist, 0.0, 1.0);
     float window = clamp(1.0 - norm * norm, 0.0, 1.0);
@@ -112,9 +118,6 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     vec3 base = surface.color.rgb * (vertex_attribute(vertices, index.x, 3) * weights.x +
                                      vertex_attribute(vertices, index.y, 3) * weights.y +
                                      vertex_attribute(vertices, index.z, 3) * weights.z);
-    float falloff = compute_gi_falloff(hit_t, max_dist);
-    if (surface.emission_unlit.w > .5)
-        return (base + surface.emission_unlit.rgb) * falloff;
 
     vec3 normal = vertex_attribute(vertices, index.x, 7) * weights.x +
                   vertex_attribute(vertices, index.y, 7) * weights.y +
@@ -125,8 +128,14 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     }
     normal = transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(query, true))) * normal;
     normal = dot(normal, normal) > 1e-12 ? normalize(normal) : -direction;
-    if (dot(normal, direction) > 0.0)
-        normal = -normal;
+
+    // Discard backface hits
+    float cos_emitter = dot(normal, -direction);
+    if (cos_emitter <= 0.0)
+        return vec3(0.0);
+
+    float falloff = compute_gi_falloff(hit_t, max_dist);
+    vec3 emissive = (surface.emission_unlit.w > .5 ? base : vec3(0.0)) + surface.emission_unlit.rgb;
 
     vec3 sun_dir = -frame.direction_intensity.xyz;
     float n_dot_l = max(dot(normal, sun_dir), 0.0);
@@ -143,8 +152,8 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
         }
     }
     vec3 sky = textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z;
-    float cos_emitter = max(dot(normal, -direction), 0.0);
-    return (base * (frame.color_ambient.w + (sun + sky) * cos_emitter) + surface.emission_unlit.rgb) * falloff;
+    vec3 reflected = base * (frame.color_ambient.w + sun + sky);
+    return (reflected + emissive) * (cos_emitter * falloff);
 }
 
 bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
@@ -167,10 +176,14 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
     float bias = max(0.005, frame.shadow_params.w * 0.15);
     vec3 origin = pos + geometric * bias;
 
-    float time_jitter = frame.wind_time.z * 1.6180339887;
-    vec2 seed = fract(gl_FragCoord.xy * vec2(0.754877666, 0.569840291) + time_jitter);
+    float frame_time = frame.wind_time.w > 0.0 ? frame.wind_time.w : frame.wind_time.z;
+    float time_jitter = fract(frame_time * 0.6180339887);
+    vec2 seed = hash22(gl_FragCoord.xy + vec2(time_jitter * 1000.0, time_jitter * 7919.0));
 
-    vec3 accum = vec3(0.0);
+    vec3 sky_ambient = textureLod(irradiance_map, environment_uv(geometric), 0).rgb * frame.render_params.z;
+    float sky_visibility = 0.0;
+    vec3 bounce_accum = vec3(0.0);
+
     for (uint s = 0u; s < samples; ++s) {
         vec2 u = sample_hammersley(s, samples, seed);
         vec3 dir = sample_cosine_hemisphere(u, geometric, b1, b2);
@@ -182,11 +195,14 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
         if (rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
             float hit_t = rayQueryGetIntersectionTEXT(query, true);
             vec3 hit_pos = origin + dir * hit_t;
-            accum += shade_gi_hit(query, hit_pos, dir, max_dist, hit_t);
+            vec3 hit_rad = shade_gi_hit(query, hit_pos, dir, max_dist, hit_t);
+            bounce_accum += clamp(hit_rad, vec3(0.0), vec3(3.0));
         } else {
-            accum += textureLod(irradiance_map, environment_uv(dir), 0).rgb * frame.render_params.z;
+            sky_visibility += 1.0;
         }
     }
-    gi_radiance = (accum / float(samples)) * frame.rtgi_params.y;
+    vec3 indirect = (bounce_accum / float(samples)) * frame.rtgi_params.y;
+    vec3 ambient = sky_ambient * (sky_visibility / float(samples));
+    gi_radiance = ambient + indirect;
     return true;
 }
