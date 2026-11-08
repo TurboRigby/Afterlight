@@ -345,6 +345,9 @@ void ed_blueprint_canvas_panel(ed_blueprint_state *state, struct nk_context *ctx
     float pan_x = state->pan_x;
     float pan_y = state->pan_y;
 
+    /* Fill solid opaque background to cover any 3D viewport rendering */
+    nk_fill_rect(canvas, bounds, 0.0f, nk_rgb(22, 24, 30));
+
     /* Mouse input & interaction */
     float mx = ctx->input.mouse.pos.x;
     float my = ctx->input.mouse.pos.y;
@@ -355,6 +358,16 @@ void ed_blueprint_canvas_panel(ed_blueprint_state *state, struct nk_context *ctx
     bool mmb_down = ctx->input.mouse.buttons[NK_BUTTON_MIDDLE].down != 0;
     float dx = ctx->input.mouse.delta.x;
     float dy = ctx->input.mouse.delta.y;
+
+    /* Canvas Zooming with Mouse Wheel */
+    if (in_viewport && fabsf(ctx->input.mouse.scroll_delta.y) > 0.01f) {
+        state->zoom += ctx->input.mouse.scroll_delta.y * 0.08f;
+        if (state->zoom < 0.35f)
+            state->zoom = 0.35f;
+        if (state->zoom > 2.0f)
+            state->zoom = 2.0f;
+        zoom = state->zoom;
+    }
 
     /* 1. Canvas Panning */
     if (in_viewport && (rmb_down || mmb_down)) {

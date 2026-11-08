@@ -937,7 +937,7 @@ static void keyboard(editor *app, double delta) {
             app->landscape_stroke_active = false;
             refresh(app);
         }
-    } else {
+    } else if (!app->blueprint_mode) {
         if (!app->runtime.playing && inside(app->viewport, mouse) && af_engine_mouse_pressed(engine, AF_MOUSE_LEFT) &&
             !af_engine_mouse_captured(engine)) {
             ed_gui_unfocus(&app->gui);
@@ -1066,7 +1066,7 @@ static void keyboard(editor *app, double delta) {
     }
     if (app->fields_active)
         return;
-    if (!app->runtime.playing && !af_engine_mouse_captured(engine)) {
+    if (!app->blueprint_mode && !app->runtime.playing && !af_engine_mouse_captured(engine)) {
         if (!app->edit_joint && af_engine_key_pressed(engine, AF_KEY_W))
             app->gizmo.mode = ED_GIZMO_MOVE;
         if (!app->edit_joint && af_engine_key_pressed(engine, AF_KEY_E))
@@ -1074,7 +1074,7 @@ static void keyboard(editor *app, double delta) {
         if (!app->edit_joint && af_engine_key_pressed(engine, AF_KEY_R))
             app->gizmo.mode = ED_GIZMO_SCALE;
     }
-    bool navigate = af_engine_mouse_pressed(engine, AF_MOUSE_RIGHT) &&
+    bool navigate = !app->blueprint_mode && af_engine_mouse_pressed(engine, AF_MOUSE_RIGHT) &&
                     (inside(app->viewport, mouse) || (app->runtime.playing && af_engine_mouse_captured(engine)));
     if (navigate && !app->free_camera && !af_engine_key_pressed(engine, AF_KEY_ESCAPE)) {
         app->resume_game_capture = app->runtime.playing && af_engine_mouse_captured(engine);
@@ -2840,7 +2840,7 @@ static void inspector(editor *app, float width, float height) {
     nk_end(context);
 }
 static void draw_colliders(editor *app) {
-    if (!app->show_colliders)
+    if (!app->show_colliders || app->blueprint_mode)
         return;
     struct nk_context *ctx = &app->gui.context;
     af_rect r = app->viewport;
@@ -2871,7 +2871,7 @@ static void draw_colliders(editor *app) {
     nk_style_pop_style_item(ctx);
 }
 static void draw_skeleton(editor *app) {
-    if (!app->show_skeleton || !app->animation_target)
+    if (!app->show_skeleton || !app->animation_target || app->blueprint_mode)
         return;
     struct nk_context *ctx = &app->gui.context;
     af_rect r = app->viewport;
@@ -2895,7 +2895,7 @@ static void draw_skeleton(editor *app) {
     nk_style_pop_style_item(ctx);
 }
 static void draw_physics(editor *app) {
-    if (!app->show_physics)
+    if (!app->show_physics || app->blueprint_mode)
         return;
     struct nk_context *ctx = &app->gui.context;
     af_rect r = app->viewport;
@@ -2951,7 +2951,7 @@ static void draw_physics(editor *app) {
     nk_style_pop_style_item(ctx);
 }
 static void draw_lights(editor *app) {
-    if (app->runtime.playing)
+    if (app->runtime.playing || app->blueprint_mode)
         return;
     struct nk_context *ctx = &app->gui.context;
     af_rect r = app->viewport;
@@ -2985,7 +2985,7 @@ static void draw_lights(editor *app) {
     nk_style_pop_style_item(ctx);
 }
 static void draw_landscape_brush(editor *app) {
-    if (!app->landscape_mode || !app->terrain_hit || app->runtime.playing)
+    if (!app->landscape_mode || !app->terrain_hit || app->runtime.playing || app->blueprint_mode)
         return;
     struct nk_context *ctx = &app->gui.context;
     af_rect r = app->viewport;
@@ -3035,7 +3035,7 @@ static void draw_landscape_brush(editor *app) {
 }
 static void draw_gizmo(editor *app) {
     ed_gizmo *g = &app->gizmo;
-    if (!g->projected || app->runtime.playing)
+    if (!g->projected || app->runtime.playing || app->blueprint_mode)
         return;
     struct nk_context *ctx = &app->gui.context;
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background, nk_style_item_color(nk_rgba(0, 0, 0, 0)));
@@ -4126,11 +4126,13 @@ static void build_ui(editor *app, float width, float height) {
     struct nk_context *context = &app->gui.context;
     ed_thumbnails_begin(&app->thumbnails);
     ed_thumbnails_poll(&app->thumbnails, app->engine);
-    draw_colliders(app);
-    draw_physics(app);
-    draw_skeleton(app);
-    draw_lights(app);
-    draw_landscape_brush(app);
+    if (!app->blueprint_mode) {
+        draw_colliders(app);
+        draw_physics(app);
+        draw_skeleton(app);
+        draw_lights(app);
+        draw_landscape_brush(app);
+    }
     if (app->blueprint_mode) {
         ed_blueprint_canvas_panel(&app->blueprint_state, context,
                                   app->runtime.playing ? app->runtime.scene : app->document.scene, app->viewport,
