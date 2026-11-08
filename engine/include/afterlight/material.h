@@ -68,6 +68,7 @@ typedef struct af_render_settings {
     float rtgi_intensity;              /* RTGI indirect bounce intensity multiplier. */
     float rtgi_ray_distance;           /* RTGI max indirect ray trace distance. */
     uint32_t rtgi_samples;             /* RTGI hemisphere sample count (1..4). */
+    uint32_t rtgi_bounces;             /* RTGI diffuse path depth (1..4). */
     af_anti_aliasing anti_aliasing;
     float aa_sharpness, taa_history_weight;
     float exposure;

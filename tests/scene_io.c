@@ -60,6 +60,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 2);
     af_scene *legacy = af_scene_load(argv[1], &error);
     CHECK(legacy && af_scene_get_shadows(legacy).mode == AF_SHADOW_CASCADED);
+    CHECK(af_scene_get_render_settings(legacy).rtgi_bounces == 1);
     CHECK(af_scene_get_light(legacy).angular_radius == af_directional_light_default().angular_radius);
     CHECK(af_scene_object_at(legacy, 0)->material.cast_shadows &&
           af_scene_object_at(legacy, 0)->material.receive_shadows);
@@ -102,6 +103,8 @@ int main(int argc, char **argv) {
     CHECK(af_scene_set_light(scene, light));
     af_render_settings render_settings = af_scene_get_render_settings(scene);
     render_settings.ray_traced_material_effects = true;
+    render_settings.ray_traced_gi = true;
+    render_settings.rtgi_bounces = 3;
     CHECK(af_scene_set_render_settings(scene, render_settings));
     for (unsigned i = 0; i < 256; ++i)
         CHECK(af_scene_add_object(scene, "Shared object", "unloaded/mesh"));
@@ -132,6 +135,14 @@ int main(int argc, char **argv) {
     CHECK(af_scene_get_light(copy).intensity == 2 && af_scene_get_light(copy).ambient == 0.35f &&
           af_scene_get_light(copy).angular_radius == 0.025f);
     CHECK(af_scene_get_render_settings(copy).ray_traced_material_effects);
+    CHECK(af_scene_get_render_settings(copy).rtgi_bounces == 3);
+    af_render_settings bounce_limits = af_render_settings_default();
+    bounce_limits.rtgi_bounces = 0;
+    CHECK(af_scene_set_render_settings(copy, bounce_limits));
+    CHECK(af_scene_get_render_settings(copy).rtgi_bounces == 1);
+    bounce_limits.rtgi_bounces = 9;
+    CHECK(af_scene_set_render_settings(copy, bounce_limits));
+    CHECK(af_scene_get_render_settings(copy).rtgi_bounces == 4);
     af_directional_light invalid_sun = af_directional_light_default();
     invalid_sun.angular_radius = NAN;
     CHECK(!af_scene_set_light(copy, invalid_sun));

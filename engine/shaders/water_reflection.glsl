@@ -279,7 +279,8 @@ float compute_gi_falloff(float d, float max_dist) {
     return (1.0 / (1.0 + dist_sq * 0.25)) * window;
 }
 
-vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dist, float hit_t) {
+vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dist, float hit_t, out vec3 hit_base,
+                  out vec3 hit_normal, out bool can_bounce, bool include_environment) {
     ReflectionSurface surface = reflection.surfaces[rayQueryGetIntersectionInstanceCustomIndexEXT(query, true)];
     MeshWords vertices = MeshWords(surface.addresses.xy);
     MeshWords indices = MeshWords(surface.addresses.zw);
@@ -290,6 +291,9 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     vec3 base = surface.color.rgb * (vertex_attribute(vertices, index.x, 3) * weights.x +
                                      vertex_attribute(vertices, index.y, 3) * weights.y +
                                      vertex_attribute(vertices, index.z, 3) * weights.z);
+    hit_base = base;
+    hit_normal = -direction;
+    can_bounce = false;
     if (surface.emission_unlit.w > .5)
         return base + surface.emission_unlit.rgb;
 
@@ -302,11 +306,13 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     }
     normal = transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(query, true))) * normal;
     normal = dot(normal, normal) > 1e-12 ? normalize(normal) : -direction;
+    hit_normal = normal;
 
     // Discard backface hits
     float cos_emitter = dot(normal, -direction);
     if (cos_emitter <= 0.0)
         return vec3(0.0);
+    can_bounce = true;
 
     float falloff = compute_gi_falloff(hit_t, max_dist);
     vec3 emissive = surface.emission_unlit.rgb;
@@ -319,7 +325,7 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
         float visibility = trace_sun_visibility(hit_pos, normal, sun_dir, 0.005, 4u);
         sun = frame.color_ambient.rgb * frame.direction_intensity.w * n_dot_l * visibility;
     }
-    vec3 sky = textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z;
+    vec3 sky = include_environment ? textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z : vec3(0.0);
     vec3 reflected = base * (frame.color_ambient.w + sun + sky);
     return (reflected + emissive) * (cos_emitter * falloff);
 }
@@ -329,6 +335,7 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
         return false;
     uint samples = clamp(uint(frame.rtgi_params.w + 0.5), 1u, 4u);
     float max_dist = max(1.0, frame.rtgi_params.z);
+    uint max_bounces = clamp(uint(frame.ray_params.w + 0.5), 1u, 4u);
 
     vec3 d1 = dFdx(pos);
     vec3 d2 = dFdy(pos);
@@ -340,6 +347,7 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
     // Use the geometric normal for hemisphere sampling so rays never point into the surface geometry
     vec3 b1, b2;
     create_orthonormal_basis(geometric, b1, b2);
+    vec3 initial_b1 = b1, initial_b2 = b2;
 
     float bias = max(0.005, frame.shadow_params.w * 0.15);
     vec3 origin = pos + geometric * bias;
@@ -354,19 +362,42 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
 
     for (uint s = 0u; s < samples; ++s) {
         vec2 u = sample_hammersley(s, samples, seed);
-        vec3 dir = sample_cosine_hemisphere(u, geometric, b1, b2);
-
-        rayQueryEXT query;
-        rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 4, origin, 0.003, dir, max_dist);
-        while (rayQueryProceedEXT(query)) {
-        }
-        if (rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+        vec3 dir = sample_cosine_hemisphere(u, geometric, initial_b1, initial_b2);
+        vec3 ray_origin = origin;
+        vec3 throughput = vec3(1.0);
+        for (uint bounce = 0u; bounce < max_bounces; ++bounce) {
+            rayQueryEXT query;
+            rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 4, ray_origin, 0.003, dir, max_dist);
+            while (rayQueryProceedEXT(query)) {
+            }
+            if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
+                if (bounce == 0u)
+                    sky_visibility += 1.0;
+                else {
+                    vec3 sky = textureLod(irradiance_map, environment_uv(dir), 0).rgb * frame.render_params.z;
+                    bounce_accum += throughput * clamp(sky, vec3(0.0), vec3(3.0));
+                }
+                break;
+            }
             float hit_t = rayQueryGetIntersectionTEXT(query, true);
-            vec3 hit_pos = origin + dir * hit_t;
-            vec3 hit_rad = shade_gi_hit(query, hit_pos, dir, max_dist, hit_t);
-            bounce_accum += clamp(hit_rad, vec3(0.0), vec3(3.0));
-        } else {
-            sky_visibility += 1.0;
+            vec3 hit_pos = ray_origin + dir * hit_t;
+            vec3 hit_base, hit_normal;
+            bool can_bounce;
+            bool terminal = bounce + 1u >= max_bounces;
+            vec3 hit_rad = shade_gi_hit(query, hit_pos, dir, max_dist, hit_t, hit_base, hit_normal, can_bounce,
+                                        terminal);
+            bounce_accum += throughput * clamp(hit_rad, vec3(0.0), vec3(3.0));
+            if (!can_bounce || terminal)
+                break;
+            throughput *= clamp(hit_base, vec3(0.0), vec3(1.0));
+            if (max(throughput.r, max(throughput.g, throughput.b)) < 0.01)
+                break;
+            vec3 bounce_b1, bounce_b2;
+            create_orthonormal_basis(hit_normal, bounce_b1, bounce_b2);
+            vec2 bounce_seed = hash22(seed + vec2(17.0 * float(bounce + 1u), 29.0 * float(bounce + 1u)));
+            vec2 bounce_u = sample_hammersley(s, samples, bounce_seed);
+            dir = sample_cosine_hemisphere(bounce_u, hit_normal, bounce_b1, bounce_b2);
+            ray_origin = hit_pos + hit_normal * bias;
         }
     }
     vec3 indirect = (bounce_accum / float(samples)) * frame.rtgi_params.y;

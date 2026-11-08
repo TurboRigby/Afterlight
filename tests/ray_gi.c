@@ -12,6 +12,7 @@ typedef struct fixture {
     af_object_id emitter;
     af_object_id wall;
     af_object_id blocker;
+    af_object_id bounce_wall, bounce_emitter, bounce_blocker;
     unsigned char blocked[4];
     unsigned phase, frames;
     bool failed;
@@ -96,6 +97,58 @@ static bool init(af_engine *engine, void *data) {
         !af_scene_set_object_visible(f->scene, f->blocker, false))
         return false;
 
+    /* Two-segment fixture: the floor sees the diffuse wall through a gap;
+       the wall can see the emissive panel, while the direct floor-to-panel
+       path is blocked by the thin pane at z = 0. */
+    static const af_vertex bounce_wall_vertices[] = {
+        {.position = {-10, 0, -1.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {0, 0}},
+        {.position = {10, 0, -1.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {1, 0}},
+        {.position = {10, 2, -1.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {1, 1}},
+        {.position = {-10, 2, -1.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {0, 1}},
+    };
+    af_mesh_data bounce_wall_mesh = {bounce_wall_vertices, 4, indices, 6};
+    if (!af_engine_upload_mesh(engine, "gi_bounce_wall", &bounce_wall_mesh))
+        return false;
+    f->bounce_wall = af_scene_add_object(f->scene, "GI bounce wall", "gi_bounce_wall");
+    if (!af_scene_set_object_material(f->scene, f->bounce_wall, wall_mat) ||
+        !af_scene_set_object_visible(f->scene, f->bounce_wall, false))
+        return false;
+
+    static const af_vertex bounce_emitter_vertices[] = {
+        {.position = {-10, 1.5f, -0.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, -1}, .uv = {0, 0}},
+        {.position = {-10, 2.5f, -0.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, -1}, .uv = {0, 1}},
+        {.position = {10, 2.5f, -0.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, -1}, .uv = {1, 1}},
+        {.position = {10, 1.5f, -0.5f}, .color = {1, 1, 1, 1}, .normal = {0, 0, -1}, .uv = {1, 0}},
+    };
+    af_mesh_data bounce_emitter_mesh = {bounce_emitter_vertices, 4, indices, 6};
+    if (!af_engine_upload_mesh(engine, "gi_bounce_emitter", &bounce_emitter_mesh))
+        return false;
+    f->bounce_emitter = af_scene_add_object(f->scene, "GI bounce emitter", "gi_bounce_emitter");
+    af_material bounce_emitter_mat = af_material_default();
+    bounce_emitter_mat.base_color = (af_color){1, 0, 0, 1};
+    bounce_emitter_mat.emission = (af_vec3){1, 0, 0};
+    bounce_emitter_mat.emission_strength = 10.0f;
+    bounce_emitter_mat.unlit = false;
+    if (!af_scene_set_object_material(f->scene, f->bounce_emitter, bounce_emitter_mat) ||
+        !af_scene_set_object_visible(f->scene, f->bounce_emitter, false))
+        return false;
+
+    static const af_vertex bounce_blocker_vertices[] = {
+        {.position = {-10, 1.0f, 0.0f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {0, 0}},
+        {.position = {10, 1.0f, 0.0f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {1, 0}},
+        {.position = {10, 1.9f, 0.0f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {1, 1}},
+        {.position = {-10, 1.9f, 0.0f}, .color = {1, 1, 1, 1}, .normal = {0, 0, 1}, .uv = {0, 1}},
+    };
+    af_mesh_data bounce_blocker_mesh = {bounce_blocker_vertices, 4, indices, 6};
+    if (!af_engine_upload_mesh(engine, "gi_bounce_blocker", &bounce_blocker_mesh))
+        return false;
+    f->bounce_blocker = af_scene_add_object(f->scene, "GI direct blocker", "gi_bounce_blocker");
+    af_material bounce_blocker_mat = wall_mat;
+    bounce_blocker_mat.base_color = (af_color){0, 0, 0, 1};
+    if (!af_scene_set_object_material(f->scene, f->bounce_blocker, bounce_blocker_mat) ||
+        !af_scene_set_object_visible(f->scene, f->bounce_blocker, false))
+        return false;
+
     /* Zero direct lighting and ambient */
     af_directional_light light = af_directional_light_default();
     light.intensity = 0;
@@ -143,8 +196,9 @@ static void update(af_engine *engine, double delta, void *data) {
     if (f->frames == 5) {
         int w, h;
         af_engine_get_window_size(engine, &w, &h);
-        af_vec2 point =
-            f->phase >= 4 ? (af_vec2){(float)w / 2, (float)h * 0.40f} : (af_vec2){(float)w / 2, (float)h * 0.72f};
+        bool wall_sample = f->phase == 4 || f->phase == 5;
+        af_vec2 point = wall_sample ? (af_vec2){(float)w / 2, (float)h * 0.40f}
+                                    : (af_vec2){(float)w / 2, (float)h * 0.72f};
         CHECK(af_engine_test_capture_pixel(engine, point));
         return;
     }
@@ -240,6 +294,42 @@ static void update(af_engine *engine, double delta, void *data) {
             CHECK(p[0] > 12);
             CHECK(p[0] > (int)f->blocked[0] + 8);
         }
+        CHECK(af_scene_set_object_visible(f->scene, f->emitter, false));
+        CHECK(af_scene_set_object_visible(f->scene, f->wall, false));
+        CHECK(af_scene_set_object_visible(f->scene, f->blocker, false));
+        CHECK(af_scene_set_object_visible(f->scene, f->bounce_wall, true));
+        CHECK(af_scene_set_object_visible(f->scene, f->bounce_emitter, true));
+        CHECK(af_scene_set_object_visible(f->scene, f->bounce_blocker, true));
+        sun.intensity = 0.0f;
+        sun.ambient = 0.0f;
+        CHECK(af_scene_set_light(f->scene, sun));
+        af_camera bounce_camera = af_camera_default();
+        bounce_camera.position = (af_vec3){0, 1.2f, 2.8f};
+        bounce_camera.yaw = -AF_PI / 2;
+        bounce_camera.pitch = -0.45f;
+        CHECK(af_engine_set_camera(engine, &bounce_camera));
+        settings.ray_traced_gi = true;
+        settings.rtgi_intensity = 3.0f;
+        settings.rtgi_samples = 4;
+        settings.rtgi_ray_distance = 15.0f;
+        settings.rtgi_bounces = 2;
+        CHECK(af_scene_set_render_settings(f->scene, settings));
+        break;
+
+    case 6:
+        /* The floor receives red light only when the second ray reaches the emitter. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        if (hardware)
+            CHECK(p[0] > 10 && p[0] > p[1] + 8 && p[0] > p[2] + 8);
+        settings.rtgi_bounces = 1;
+        CHECK(af_scene_set_render_settings(f->scene, settings));
+        break;
+
+    case 7:
+        /* One bounce reaches only the dark wall; the emitter is occluded from the floor. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        if (hardware)
+            CHECK(p[0] < 5 && p[1] < 5 && p[2] < 5);
         af_engine_request_quit(engine);
         break;
     }
@@ -268,5 +358,5 @@ int main(void) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || f.failed || f.phase != 6 || stats.validation_errors;
+    return result || f.failed || f.phase != 8 || stats.validation_errors;
 }

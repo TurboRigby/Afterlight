@@ -500,7 +500,8 @@ af_render_settings af_render_settings_default(void) {
                                 .ray_traced_gi = false,
                                 .rtgi_intensity = 1.0f,
                                 .rtgi_ray_distance = 25.0f,
-                                .rtgi_samples = 1};
+                                .rtgi_samples = 1,
+                                .rtgi_bounces = 1};
 }
 af_render_settings af_scene_get_render_settings(const af_scene *scene) {
     return scene ? scene->render_settings : af_render_settings_default();
@@ -578,6 +579,10 @@ bool af_scene_set_render_settings(af_scene *scene, af_render_settings settings) 
         settings.rtgi_samples = 4; /* The shader and editor cap GI at 4 samples. */
     if (settings.rtgi_samples == 0)
         settings.rtgi_samples = 1;
+    if (settings.rtgi_bounces > 4)
+        settings.rtgi_bounces = 4;
+    if (settings.rtgi_bounces == 0)
+        settings.rtgi_bounces = 1;
     if (!settings.local_shadow_resolution)
         settings.local_shadow_resolution = 512;
     scene->render_settings = settings;

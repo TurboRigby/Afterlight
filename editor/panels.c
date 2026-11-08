@@ -322,6 +322,12 @@ void environment_panel(editor *app, float width, float height) {
                 render.rtgi_samples = (uint32_t)samples;
                 changed = true;
             }
+            nk_layout_row_dynamic(ctx, 28, 1);
+            int bounces = (int)render.rtgi_bounces;
+            if (nk_property_int(ctx, "RTGI bounces", 1, &bounces, 4, 1, 1)) {
+                render.rtgi_bounces = (uint32_t)bounces;
+                changed = true;
+            }
         }
         af_engine_stats ray_stats = af_engine_get_stats(app->engine);
         label(ctx,

@@ -659,3 +659,12 @@ the directional-light vector with four deterministic ray queries per receiver
 sample. The Environment panel exposes the radius in degrees. Raster fallback
 and local point/spot shadow paths are unchanged. The same area-sun visibility is
 used for direct RTGI hit lighting. Game ABI 28 requires rebuilding native modules.
+
+## Multi-bounce diffuse RTGI (version 28)
+
+Version 28 adds `render.rtgi_bounces` (integer 1–4, default 1) when RTGI settings
+are present. Versions 1–27 retain the existing single-segment behavior. Each path
+continues from a rigid opaque diffuse hit using a cosine-weighted hemisphere ray
+and the hit material's base color as throughput. Unlit and back-facing hits
+terminate the path; misses sample the environment. The existing sample count
+controls the number of independent paths. Game ABI 29 requires rebuilding modules.

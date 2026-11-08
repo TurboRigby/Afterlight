@@ -2535,6 +2535,7 @@ static uint64_t temporal_settings_hash(uint64_t h, af_render_settings value) {
     h = shadow_hash(h, &value.rtgi_intensity, sizeof(value.rtgi_intensity));
     h = shadow_hash(h, &value.rtgi_ray_distance, sizeof(value.rtgi_ray_distance));
     h = shadow_hash(h, &value.rtgi_samples, sizeof(value.rtgi_samples));
+    h = shadow_hash(h, &value.rtgi_bounces, sizeof(value.rtgi_bounces));
     h = shadow_hash(h, &value.anti_aliasing, sizeof(value.anti_aliasing));
     h = shadow_hash(h, &value.aa_sharpness, sizeof(value.aa_sharpness));
     h = shadow_hash(h, &value.taa_history_weight, sizeof(value.taa_history_weight));
@@ -2934,7 +2935,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     uniform.sky_params.w = ray_reflections ? 1.f : 0.f;
     af_directional_light sun = af_scene_get_light(scene);
     uniform.ray_params = (af_vec4){ray_material_effects && !renderer->ray_failed ? 1.0f : 0.0f,
-                                   sun.angular_radius, 4.0f, 0.0f};
+                                   sun.angular_radius, 4.0f, (float)environment_settings.rtgi_bounces};
     uniform.rtgi_params = (af_vec4){
         ray_gi && !renderer->ray_failed ? 1.0f : 0.0f,
         environment_settings.rtgi_intensity,
