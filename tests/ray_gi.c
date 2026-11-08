@@ -143,7 +143,9 @@ static void update(af_engine *engine, double delta, void *data) {
     if (f->frames == 5) {
         int w, h;
         af_engine_get_window_size(engine, &w, &h);
-        CHECK(af_engine_test_capture_pixel(engine, (af_vec2){(float)w / 2, (float)h * 0.72f}));
+        af_vec2 point =
+            f->phase >= 4 ? (af_vec2){(float)w / 2, (float)h * 0.40f} : (af_vec2){(float)w / 2, (float)h * 0.72f};
+        CHECK(af_engine_test_capture_pixel(engine, point));
         return;
     }
     CHECK(af_engine_test_read_pixel(engine, p));
