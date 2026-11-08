@@ -690,8 +690,8 @@ void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t inde
     struct {
         af_vec4 viewport, texel, params;
     } push = {.viewport = {area.x, area.y, area.x + area.width, area.y + area.height},
-              .texel = {1.0f / (float)size.width, 1.0f / (float)size.height, 0.12f, p->gi_history_valid ? 1.0f : 0.0f},
-              .params = {3.0f, 1.5f, 0, 0}};
+              .texel = {1.0f / (float)size.width, 1.0f / (float)size.height, 0.10f, p->gi_history_valid ? 1.0f : 0.0f},
+              .params = {3.0f, 2.0f, 0, 0}};
     VkClearValue clear = {0};
     VkRenderPassBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                                    .renderPass = p->gi_pass,
