@@ -242,13 +242,13 @@ vec2 environment_uv(vec3 d) {
 #ifdef AF_RAY_QUERY
 #include "water_reflection.glsl"
 #endif
-vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, out vec3 gi_contribution,
+vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, float ao, out vec3 gi_contribution,
                        out bool has_gi) {
     gi_contribution = vec3(0);
     has_gi = false;
     if (frame.render_params.z <= 0
 #ifdef AF_RAY_QUERY
-        && !(water_surface() && frame.sky_params.w > .5) && !(frame.rtgi_params.x > .5)
+        && !(water_surface() && frame.sky_params.w > .5) && !(frame.rtgi_params.x > .5) && !(frame.sky_params.w > .5)
 #endif
     )
         return vec3(0);
@@ -257,6 +257,8 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, 
     has_gi = !water_surface() && trace_gi_bounce(world_position, n, gi_radiance);
 #endif
     vec3 diffuse = has_gi ? gi_radiance : textureLod(irradiance_map, environment_uv(n), 0).rgb * frame.render_params.z;
+    if (!has_gi)
+        diffuse *= ao;
     if (draw.params.z < 0.5) {
         if (has_gi) {
             gi_contribution = diffuse * base;
@@ -271,8 +273,13 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, 
     vec3 radiance = textureLod(environment_map, environment_uv(direction), rough * 5.0).rgb * frame.render_params.z;
 #ifdef AF_RAY_QUERY
     vec3 hit;
-    if (water_surface() && trace_water_reflection(n, direction, rough, hit))
-        radiance = mix(hit, radiance, smoothstep(.12, .6, rough));
+    if (water_surface()) {
+        if (trace_water_reflection(n, direction, rough, hit))
+            radiance = mix(hit, radiance, smoothstep(.12, .6, rough));
+    } else {
+        if (trace_glossy_reflection(world_position, n, v, rough, hit))
+            radiance = mix(hit, radiance, smoothstep(.15, .75, rough));
+    }
 #endif
     vec2 brdf = texture(brdf_lut, vec2(nv, rough)).rg;
     vec3 diffuse_brdf = (vec3(1) - fresnel) * (1.0 - metal) * base;
@@ -341,9 +348,15 @@ void main() {
         }
         base.rgb = vec3(0);
     }
+    float ao = 1.0;
+#ifdef AF_RAY_QUERY
+    if (!water) {
+        trace_rtao(world_position, n, ao);
+    }
+#endif
     vec4 mr = texture(metallic_roughness_texture, uv);
     float roughness = draw.surface.x * mr.g, metal = water ? 0 : draw.surface.y * mr.b;
-    vec3 ambient = base.rgb * frame.color_ambient.w * (draw.params.z > 0.5 ? 1.0 - metal : 1.0);
+    vec3 ambient = base.rgb * frame.color_ambient.w * ao * (draw.params.z > 0.5 ? 1.0 - metal : 1.0);
     float sun_visibility = shadow_visibility(n);
     vec3 output_rgb =
         ((uint(draw.params.x) & 1u) != 0u)
@@ -388,7 +401,7 @@ void main() {
     if (((uint(draw.params.x) & 1u) == 0u)) {
         vec3 gi = vec3(0);
         bool has_gi = false;
-        output_rgb += environment_light(base.rgb, n, v, roughness, metal, gi, has_gi);
+        output_rgb += environment_light(base.rgb, n, v, roughness, metal, ao, gi, has_gi);
         vec3 gi_transmittance = underwater_transmittance(world_position);
         out_gi = vec4(gi * gi_transmittance, has_gi ? 1.0 : 0.0);
     }
@@ -417,6 +430,18 @@ void main() {
     }
     if (!water)
         output_rgb += draw.emission.rgb * draw.emission.w;
+#ifdef AF_RAY_QUERY
+    if (!water && mode == 2u) {
+        vec3 transmitted = vec3(0.0);
+        float mat_ior = draw.emission.w > 1.0 ? draw.emission.w : 1.45;
+        if (trace_refraction(world_position, n, v, roughness, mat_ior, transmitted)) {
+            float f0 = pow((mat_ior - 1.0) / (mat_ior + 1.0), 2.0);
+            float fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+            output_rgb = mix(transmitted * base.rgb, output_rgb, fresnel) + draw.emission.rgb * draw.emission.w;
+            base.a = mix(base.a, 1.0, fresnel);
+        }
+    }
+#endif
     float depth = dot(world_position - frame.camera_position.xyz, frame.camera_forward.xyz);
     if (frame.cascade_params.w > 0.5 && frame.shadow_params.x > 0.5 && depth >= 0 &&
         depth <= frame.cascade_splits[int(frame.cascade_params.x) - 1]) {

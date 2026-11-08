@@ -40,9 +40,9 @@ int main(int argc, char **argv) {
         af_transform t = {.position = {0, -2.5f, 0}, .scale = {72.0f, 1.0f, 72.0f}};
         af_scene_set_object_transform(scene, floor, t);
         af_material mat = af_material_default();
-        mat.base_color = (af_color){0.12f, 0.14f, 0.16f, 1.0f};
-        mat.roughness = 0.85f;
-        mat.metallic = 0.1f;
+        mat.base_color = (af_color){0.14f, 0.16f, 0.18f, 1.0f};
+        mat.roughness = 0.35f;
+        mat.metallic = 0.4f;
         af_scene_set_object_material(scene, floor, mat);
         setup_materials_and_colliders(scene, floor, (af_vec3){36.0f, 0.5f, 36.0f});
     }
@@ -231,11 +231,12 @@ int main(int argc, char **argv) {
         af_transform t = {.position = {0, 0.1f, -26.0f}, .scale = {1, 1, 1}};
         af_scene_set_object_transform(scene, c1, t);
         af_material mat = af_material_default();
-        mat.base_color = (af_color){0.1f, 0.9f, 1.0f, 1.0f};
-        mat.roughness = 0.1f;
-        mat.metallic = 0.9f;
+        mat.alpha_mode = AF_ALPHA_BLEND;
+        mat.base_color = (af_color){0.15f, 0.95f, 1.0f, 0.45f};
+        mat.roughness = 0.05f;
+        mat.metallic = 0.0f;
         mat.emission = (af_vec3){0.1f, 0.9f, 1.0f};
-        mat.emission_strength = 4.0f;
+        mat.emission_strength = 2.5f;
         af_scene_set_object_material(scene, c1, mat);
         setup_materials_and_colliders(scene, c1, (af_vec3){0.3f, 0.5f, 0.3f});
     }
@@ -245,11 +246,12 @@ int main(int argc, char **argv) {
         af_transform t = {.position = {26.0f, 0.1f, 0}, .scale = {1, 1, 1}};
         af_scene_set_object_transform(scene, c2, t);
         af_material mat = af_material_default();
-        mat.base_color = (af_color){1.0f, 0.65f, 0.1f, 1.0f};
-        mat.roughness = 0.1f;
-        mat.metallic = 0.9f;
+        mat.alpha_mode = AF_ALPHA_BLEND;
+        mat.base_color = (af_color){1.0f, 0.7f, 0.15f, 0.45f};
+        mat.roughness = 0.05f;
+        mat.metallic = 0.0f;
         mat.emission = (af_vec3){1.0f, 0.65f, 0.1f};
-        mat.emission_strength = 4.0f;
+        mat.emission_strength = 2.5f;
         af_scene_set_object_material(scene, c2, mat);
         setup_materials_and_colliders(scene, c2, (af_vec3){0.3f, 0.5f, 0.3f});
     }
@@ -259,11 +261,12 @@ int main(int argc, char **argv) {
         af_transform t = {.position = {-26.0f, 0.1f, 0}, .scale = {1, 1, 1}};
         af_scene_set_object_transform(scene, c3, t);
         af_material mat = af_material_default();
-        mat.base_color = (af_color){1.0f, 0.15f, 0.1f, 1.0f};
-        mat.roughness = 0.1f;
-        mat.metallic = 0.9f;
+        mat.alpha_mode = AF_ALPHA_BLEND;
+        mat.base_color = (af_color){1.0f, 0.2f, 0.15f, 0.45f};
+        mat.roughness = 0.05f;
+        mat.metallic = 0.0f;
         mat.emission = (af_vec3){1.0f, 0.15f, 0.1f};
-        mat.emission_strength = 4.0f;
+        mat.emission_strength = 2.5f;
         af_scene_set_object_material(scene, c3, mat);
         setup_materials_and_colliders(scene, c3, (af_vec3){0.3f, 0.5f, 0.3f});
     }

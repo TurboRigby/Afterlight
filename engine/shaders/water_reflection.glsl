@@ -15,7 +15,7 @@ vec3 vertex_attribute(MeshWords vertices, uint vertex, uint offset) {
     uint start = vertex * 18u + offset;
     return uintBitsToFloat(uvec3(vertices.words[start], vertices.words[start + 1], vertices.words[start + 2]));
 }
-vec3 shade_reflection_hit(rayQueryEXT query, vec3 direction) {
+vec3 shade_reflection_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction) {
     ReflectionSurface surface = reflection.surfaces[rayQueryGetIntersectionInstanceCustomIndexEXT(query, true)];
     MeshWords vertices = MeshWords(surface.addresses.xy);
     MeshWords indices = MeshWords(surface.addresses.zw);
@@ -43,7 +43,25 @@ vec3 shade_reflection_hit(rayQueryEXT query, vec3 direction) {
     vec3 sun =
         frame.color_ambient.rgb * frame.direction_intensity.w * max(dot(normal, -frame.direction_intensity.xyz), 0.0);
     vec3 sky = textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z;
-    return base * (frame.color_ambient.w + sun + sky) + surface.emission_unlit.rgb;
+
+    vec3 local_light = vec3(0.0);
+    for (int i = 0; i < int(min(frame.light_count.x, 4.0)); ++i) {
+        LocalLight light = frame.lights[i];
+        vec3 offset = light.position_range.xyz - hit_pos;
+        float dist_sq = dot(offset, offset);
+        if (dist_sq < light.position_range.w * light.position_range.w) {
+            float dist = sqrt(dist_sq);
+            vec3 l = offset / max(dist, 0.001);
+            float n_dot_l = max(dot(normal, l), 0.0);
+            if (n_dot_l > 0.0) {
+                float falloff = clamp(1.0 - pow(dist / light.position_range.w, 4.0), 0.0, 1.0);
+                float atten = falloff * falloff / max(dist_sq, 0.01);
+                local_light += light.color_intensity.rgb * (light.color_intensity.w * atten * n_dot_l);
+            }
+        }
+    }
+
+    return base * (frame.color_ambient.w + sun + sky + local_light) + surface.emission_unlit.rgb;
 }
 
 bool trace_water_reflection(vec3 n, vec3 direction, float roughness, out vec3 radiance) {
@@ -52,13 +70,16 @@ bool trace_water_reflection(vec3 n, vec3 direction, float roughness, out vec3 ra
         roughness >= .6)
         return false;
     rayQueryEXT query;
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, world_position + vec3(0, .003, 0), .002,
+    vec3 origin = world_position + vec3(0, .003, 0);
+    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, .002,
                           direction, 150.0);
     while (rayQueryProceedEXT(query)) {
     }
     if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT)
         return false;
-    radiance = shade_reflection_hit(query, direction);
+    float hit_t = rayQueryGetIntersectionTEXT(query, true);
+    vec3 hit_pos = origin + direction * hit_t;
+    radiance = shade_reflection_hit(query, hit_pos, direction);
     return true;
 }
 
@@ -98,6 +119,119 @@ vec2 hash22(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
     p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+vec3 sample_ggx(vec2 u, vec3 n, vec3 b1, vec3 b2, float roughness) {
+    float alpha = max(roughness * roughness, 0.002);
+    float alpha2 = alpha * alpha;
+    float phi = 6.28318530718 * u.x;
+    float cos_theta = sqrt(clamp((1.0 - u.y) / (1.0 + (alpha2 - 1.0) * u.y), 0.0, 1.0));
+    float sin_theta = sqrt(clamp(1.0 - cos_theta * cos_theta, 0.0, 1.0));
+    return normalize(b1 * (cos(phi) * sin_theta) + b2 * (sin(phi) * sin_theta) + n * cos_theta);
+}
+
+bool trace_glossy_reflection(vec3 pos, vec3 n, vec3 v, float roughness, out vec3 radiance) {
+    if (frame.sky_params.w < 0.5 || roughness >= 0.75)
+        return false;
+    float rough = clamp(roughness, 0.02, 1.0);
+    vec3 L = reflect(-v, n);
+    if (dot(L, n) <= 0.0)
+        return false;
+
+    float bias = max(0.005, frame.shadow_params.w * 0.15);
+    vec3 origin = pos + n * bias;
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, L, 150.0);
+    while (rayQueryProceedEXT(query)) {
+    }
+    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
+        radiance = textureLod(environment_map, environment_uv(L), rough * 5.0).rgb * frame.render_params.z;
+        return false;
+    }
+    float hit_t = rayQueryGetIntersectionTEXT(query, true);
+    vec3 hit_pos = origin + L * hit_t;
+    radiance = shade_reflection_hit(query, hit_pos, L);
+    return true;
+}
+
+bool trace_refraction(vec3 pos, vec3 n, vec3 v, float roughness, float ior, out vec3 transmitted_radiance) {
+    if (frame.sky_params.w < 0.5)
+        return false;
+    float eta = 1.0 / max(ior, 1.001);
+    vec3 N = n;
+    float cos_theta = dot(N, v);
+    if (cos_theta < 0.0) {
+        N = -N;
+        eta = max(ior, 1.001);
+    }
+    vec3 T = refract(-v, N, eta);
+    if (dot(T, T) < 1e-6)
+        T = reflect(-v, N);
+
+    vec3 origin = pos - N * 0.005;
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, T, 150.0);
+    while (rayQueryProceedEXT(query)) {
+    }
+    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
+        transmitted_radiance = textureLod(environment_map, environment_uv(T), roughness * 5.0).rgb * frame.render_params.z;
+        return true;
+    }
+    float hit_t = rayQueryGetIntersectionTEXT(query, true);
+    vec3 hit_pos = origin + T * hit_t;
+    vec3 hit_rad = shade_reflection_hit(query, hit_pos, T);
+    if (roughness > 0.08) {
+        vec3 env_blur = textureLod(environment_map, environment_uv(T), roughness * 5.0).rgb * frame.render_params.z;
+        transmitted_radiance = mix(hit_rad, env_blur, smoothstep(0.08, 0.75, roughness));
+    } else {
+        transmitted_radiance = hit_rad;
+    }
+    return true;
+}
+
+bool trace_rtao(vec3 pos, vec3 normal, out float ao) {
+    if (frame.rtgi_params.x < 0.5 && frame.sky_params.w < 0.5) {
+        ao = 1.0;
+        return false;
+    }
+
+    vec3 d1 = dFdx(pos);
+    vec3 d2 = dFdy(pos);
+    vec3 geometric = cross(d1, d2);
+    geometric = dot(geometric, geometric) > 1e-12 ? normalize(geometric) : normal;
+    if (dot(geometric, normal) < 0.0)
+        geometric = -geometric;
+
+    vec3 b1, b2;
+    create_orthonormal_basis(geometric, b1, b2);
+
+    float bias = max(0.008, frame.shadow_params.w * 0.15);
+    vec3 origin = pos + geometric * bias;
+
+    // Deterministic cosine-weighted hemisphere sampling: zero temporal flicker and clean gradients
+    const uint samples = 4u;
+    const float r_ao = 2.0;
+    float total_occlusion = 0.0;
+
+    for (uint s = 0u; s < samples; ++s) {
+        vec2 u = sample_hammersley(s, samples, vec2(0.0));
+        vec3 dir = sample_cosine_hemisphere(u, geometric, b1, b2);
+
+        rayQueryEXT query;
+        rayQueryInitializeEXT(query, scene_acceleration,
+                              gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
+                              4 | 2, origin, 0.005, dir, r_ao);
+        while (rayQueryProceedEXT(query)) {
+        }
+        if (rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+            float hit_t = rayQueryGetIntersectionTEXT(query, true);
+            float occ = clamp(1.0 - (hit_t / r_ao), 0.0, 1.0);
+            total_occlusion += occ * occ;
+        }
+    }
+
+    ao = clamp(1.0 - (total_occlusion / float(samples)), 0.0, 1.0);
+    return true;
 }
 
 float compute_gi_falloff(float d, float max_dist) {
