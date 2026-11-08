@@ -675,7 +675,7 @@
 				"metallic_roughness_map":	""
 			},
 			"collider":	{
-				"type":	"box",
+				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
@@ -1665,7 +1665,7 @@
 				"metallic_roughness_map":	""
 			},
 			"collider":	{
-				"type":	"box",
+				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
@@ -1962,7 +1962,7 @@
 				"metallic_roughness_map":	""
 			},
 			"collider":	{
-				"type":	"box",
+				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
@@ -2754,7 +2754,7 @@
 				"metallic_roughness_map":	""
 			},
 			"collider":	{
-				"type":	"box",
+				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
