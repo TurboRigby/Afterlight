@@ -1,0 +1,7 @@
+{
+  "format": "afterlight.project",
+  "version": 1,
+  "name": "LUMINA: Deep Core",
+  "startup_scene": "scenes/lumina_core.afterlight.json",
+  "game_module": "build/game.so"
+}
