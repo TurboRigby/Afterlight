@@ -12,8 +12,7 @@ static af_vec3 rotate(af_transform t, af_vec3 p) {
     return (af_vec3){c * p.x + s * p.z, p.y, -s * p.x + c * p.z};
 }
 static uint32_t hash(int x, int y, int z) {
-    return ((uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)z * 83492791u) &
-           (WA_HASH_SIZE - 1);
+    return ((uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)z * 83492791u) & (WA_HASH_SIZE - 1);
 }
 static void grid(wa_particles *f) {
     for (unsigned i = 0; i < WA_HASH_SIZE; ++i)
@@ -66,8 +65,7 @@ static void birth(wa_slot *slot, size_t count, bool initial) {
         uint64_t serial = f->births++;
         unsigned x = (unsigned)(serial % nx), z = (unsigned)((serial / nx) % nz),
                  layer = (unsigned)(serial / (nx * nz));
-        af_vec3 local = {((float)x + .5f - (float)nx * .5f) * f->spacing,
-                         initial ? -(float)layer * f->spacing : 0,
+        af_vec3 local = {((float)x + .5f - (float)nx * .5f) * f->spacing, initial ? -(float)layer * f->spacing : 0,
                          ((float)z + .5f - (float)nz * .5f) * f->spacing};
         af_vec3 position = af_vec3_add(slot->transform.position, rotate(slot->transform, local));
         if (!initial) {
@@ -91,11 +89,12 @@ static void birth(wa_slot *slot, size_t count, bool initial) {
         f->emitted += f->volume;
     }
 }
-void wa_particles_free(wa_particles *p) { free(p); }
+void wa_particles_free(wa_particles *p) {
+    free(p);
+}
 bool wa_particles_sync(wa_slot *a) {
     size_t capacity = 256u << (2u * (unsigned)a->config.quality);
-    if (a->particles &&
-        (a->particles->capacity != capacity || a->particles->spacing != a->config.particle_spacing)) {
+    if (a->particles && (a->particles->capacity != capacity || a->particles->spacing != a->config.particle_spacing)) {
         wa_particles_free(a->particles);
         a->particles = NULL;
     }
@@ -108,14 +107,12 @@ bool wa_particles_sync(wa_slot *a) {
         f->spacing = a->config.particle_spacing;
         f->volume = f->spacing * f->spacing * f->spacing;
         f->initial_volume = a->config.initial_volume;
-        size_t count =
-            (size_t)fminf((float)capacity, floorf(a->config.initial_volume / f->volume + .0001f));
+        size_t count = (size_t)fminf((float)capacity, floorf(a->config.initial_volume / f->volume + .0001f));
         birth(a, count, true);
     }
     return true;
 }
-size_t af_physics_water_particles(const af_physics *p, af_object_id id, af_water_particle *out,
-                                  size_t capacity) {
+size_t af_physics_water_particles(const af_physics *p, af_object_id id, af_water_particle *out, size_t capacity) {
     const af_water_runtime *r = ph_water_runtime(p);
     for (size_t k = 0; r && k < r->count; ++k)
         if (r->slots[k].config.owner == id) {
@@ -145,22 +142,18 @@ static bool near_shape(af_world_collider w, af_vec3 a, af_vec3 b, float radius) 
         h.y += fabsf(w.a.y - w.b.y) * .5f;
         h.z += fabsf(w.a.z - w.b.z) * .5f;
     }
-    return fminf(a.x, b.x) <= w.center.x + h.x + radius &&
-           fmaxf(a.x, b.x) >= w.center.x - h.x - radius &&
-           fminf(a.y, b.y) <= w.center.y + h.y + radius &&
-           fmaxf(a.y, b.y) >= w.center.y - h.y - radius &&
+    return fminf(a.x, b.x) <= w.center.x + h.x + radius && fmaxf(a.x, b.x) >= w.center.x - h.x - radius &&
+           fminf(a.y, b.y) <= w.center.y + h.y + radius && fmaxf(a.y, b.y) >= w.center.y - h.y - radius &&
            fminf(a.z, b.z) <= w.center.z + h.z + radius && fmaxf(a.z, b.z) >= w.center.z - h.z - radius;
 }
 static af_world_collider moving_shape(const ph_body *body, size_t part, float fraction) {
     if (!body->water_motion)
         return ph_part_world(body, part);
     ph_body at = *body;
-    at.p = af_vec3_add(body->water_previous_p,
-                       af_vec3_scale(af_vec3_sub(body->p, body->water_previous_p), fraction));
+    at.p = af_vec3_add(body->water_previous_p, af_vec3_scale(af_vec3_sub(body->p, body->water_previous_p), fraction));
     for (unsigned k = 0; k < 2; ++k) {
-        at.axes[k] = af_vec3_add(
-            body->water_previous_axes[k],
-            af_vec3_scale(af_vec3_sub(body->axes[k], body->water_previous_axes[k]), fraction));
+        at.axes[k] = af_vec3_add(body->water_previous_axes[k],
+                                 af_vec3_scale(af_vec3_sub(body->axes[k], body->water_previous_axes[k]), fraction));
         if (af_vec3_length(at.axes[k]) < 1e-5f)
             at.axes[k] = body->axes[k];
     }
@@ -202,14 +195,12 @@ static void collide(af_physics *world, wa_particle *p, float radius, bool sweep)
                 af_vec3 d = af_vec3_sub(p->p, old.center);
                 origin = w.center;
                 for (unsigned axis = 0; axis < 3; ++axis)
-                    origin =
-                        af_vec3_add(origin, af_vec3_scale(w.axes[axis], af_vec3_dot(d, old.axes[axis])));
+                    origin = af_vec3_add(origin, af_vec3_scale(w.axes[axis], af_vec3_dot(d, old.axes[axis])));
             }
             if (!near_shape(w, origin, p->q, radius))
                 continue;
             af_collision_hit hit;
-            if (sweep &&
-                af_collider_sweep_sphere(w, origin, radius, af_vec3_sub(p->q, origin), .0002f, &hit)) {
+            if (sweep && af_collider_sweep_sphere(w, origin, radius, af_vec3_sub(p->q, origin), .0002f, &hit)) {
                 af_vec3 displacement = af_vec3_sub(p->q, origin),
                         remaining = af_vec3_scale(displacement, 1 - hit.fraction);
                 float into = af_vec3_dot(remaining, hit.normal);
@@ -221,8 +212,7 @@ static void collide(af_physics *world, wa_particle *p, float radius, bool sweep)
             }
             float separation = af_collision_capsule_distance(w, p->q, radius, 0, &hit);
             if (separation < .0002f) {
-                p->q =
-                    af_vec3_add(p->q, af_vec3_scale(hit.normal, fminf(radius * 4, .0002f - separation)));
+                p->q = af_vec3_add(p->q, af_vec3_scale(hit.normal, fminf(radius * 4, .0002f - separation)));
                 contact(p, b, hit);
             }
         }
@@ -247,8 +237,7 @@ static void couple(af_physics *world, wa_particle *p, af_vec3 incoming, float ma
             b->water_calm = false;
         }
         float inverse =
-            b->inv_mass +
-            af_vec3_dot(c.normal, af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(r, c.normal)), r));
+            b->inv_mass + af_vec3_dot(c.normal, af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(r, c.normal)), r));
         float impulse = fminf(-vn, 30) / (1 / mass + fmaxf(0, inverse));
         af_vec3 reaction = af_vec3_scale(c.normal, impulse);
         ph_impulse(b, af_vec3_scale(reaction, -1), c.point);
@@ -262,10 +251,8 @@ static void couple(af_physics *world, wa_particle *p, af_vec3 incoming, float ma
         if (speed > 1e-7f) {
             af_vec3 n = af_vec3_scale(tangent, 1 / speed);
             float effective =
-                1 / mass + b->inv_mass +
-                af_vec3_dot(n, af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(r, n)), r));
-            float friction =
-                fminf(speed / fmaxf(effective, 1e-7f), impulse * fminf(.3f, b->config.friction * .2f));
+                1 / mass + b->inv_mass + af_vec3_dot(n, af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(r, n)), r));
+            float friction = fminf(speed / fmaxf(effective, 1e-7f), impulse * fminf(.3f, b->config.friction * .2f));
             af_vec3 change = af_vec3_scale(n, -friction);
             p->v = af_vec3_add(p->v, af_vec3_scale(change, 1 / mass));
             incoming = af_vec3_add(incoming, af_vec3_scale(change, 1 / mass));
@@ -319,8 +306,7 @@ void ph_particles_step(af_physics *world, wa_slot *slot, float dt) {
             for (int z = p->cell[2] - 1; z <= p->cell[2] + 1; ++z)
                 for (int y = p->cell[1] - 1; y <= p->cell[1] + 1; ++y)
                     for (int x = p->cell[0] - 1; x <= p->cell[0] + 1; ++x)
-                        for (uint32_t j = f->heads[hash(x, y, z)]; j != UINT32_MAX;
-                             j = f->values[j].next) {
+                        for (uint32_t j = f->heads[hash(x, y, z)]; j != UINT32_MAX; j = f->values[j].next) {
                             wa_particle *q = &f->values[j];
                             if (j == i || !cell(q, x, y, z))
                                 continue;
@@ -338,17 +324,16 @@ void ph_particles_step(af_physics *world, wa_slot *slot, float dt) {
             for (int z = p->cell[2] - 1; z <= p->cell[2] + 1; ++z)
                 for (int y = p->cell[1] - 1; y <= p->cell[1] + 1; ++y)
                     for (int x = p->cell[0] - 1; x <= p->cell[0] + 1; ++x)
-                        for (uint32_t j = f->heads[hash(x, y, z)]; j != UINT32_MAX;
-                             j = f->values[j].next) {
+                        for (uint32_t j = f->heads[hash(x, y, z)]; j != UINT32_MAX; j = f->values[j].next) {
                             wa_particle *q = &f->values[j];
                             if (j == i || !cell(q, x, y, z))
                                 continue;
                             af_vec3 d = af_vec3_sub(p->q, q->q);
                             float ratio = kernel(af_vec3_dot(d, d), h) / kernel(.09f * h * h, h);
                             float scorr = -.0001f * spacing * spacing * ratio * ratio * ratio * ratio;
-                            correction = af_vec3_add(
-                                correction, af_vec3_scale(gradient(d, h, i, j),
-                                                          volume * (p->lambda + q->lambda + scorr)));
+                            correction =
+                                af_vec3_add(correction, af_vec3_scale(gradient(d, h, i, j),
+                                                                      volume * (p->lambda + q->lambda + scorr)));
                         }
             p->delta = ph_limit(correction, spacing * .15f);
         }

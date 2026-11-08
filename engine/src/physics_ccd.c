@@ -63,9 +63,8 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
     if (a->character_proxy || b->character_proxy) {
         const ph_body *player = a->character_proxy ? a : b, *other = player == a ? b : a;
         af_collision_hit hit;
-        float d =
-            af_collision_capsule_distance(other->shape, player->p, player->shape.radius,
-                                          player->shape.half_extents.y - player->shape.radius, &hit);
+        float d = af_collision_capsule_distance(other->shape, player->p, player->shape.radius,
+                                                player->shape.half_extents.y - player->shape.radius, &hit);
         *normal = player == a ? mul(hit.normal, -1) : hit.normal;
         *point = hit.point;
         return d;
@@ -86,8 +85,7 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
     }
     if (!triangle && a->shape.type != b->shape.type) {
         const ph_body *sphere = a->shape.type == AF_COLLIDER_SPHERE ? a : b, *box = sphere == a ? b : a;
-        af_vec3 local = ph_shape_local(box, sub(sphere->shape.center, box->shape.center)),
-                h = box->shape.half_extents,
+        af_vec3 local = ph_shape_local(box, sub(sphere->shape.center, box->shape.center)), h = box->shape.half_extents,
                 closest = {fminf(h.x, fmaxf(-h.x, local.x)), fminf(h.y, fmaxf(-h.y, local.y)),
                            fminf(h.z, fmaxf(-h.z, local.z))};
         af_vec3 delta = sub(local, closest);
@@ -147,8 +145,7 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
             positive = lo - r;
             negative = -hi - r;
         } else {
-            float center = dot(sub(b->shape.center, a->shape.center), axis),
-                  sum = r + projected(b, axis);
+            float center = dot(sub(b->shape.center, a->shape.center), axis), sum = r + projected(b, axis);
             positive = center - sum;
             negative = -center - sum;
         }
@@ -169,8 +166,8 @@ static float distance(const ph_body *a, const ph_body *b, const af_triangle *tri
 static af_vec3 velocity(const ph_body *b, af_vec3 at) {
     return add(b->v, af_vec3_cross(b->w, sub(at, b->p)));
 }
-static bool toi(const ph_body *a, const ph_body *b, const af_triangle *triangle, size_t part_a,
-                size_t part_b, float limit, float *time, af_vec3 *normal, af_vec3 *point) {
+static bool toi(const ph_body *a, const ph_body *b, const af_triangle *triangle, size_t part_a, size_t part_b,
+                float limit, float *time, af_vec3 *normal, af_vec3 *point) {
     float speed = (moving(a) ? af_vec3_length(a->v) + af_vec3_length(a->w) * extent(a) : 0) +
                   (moving(b) ? af_vec3_length(b->v) + af_vec3_length(b->w) * extent(b) : 0);
     if (speed < 1e-7f)
@@ -220,9 +217,8 @@ static bool ignored(const ph_ccd_event *events, size_t count, size_t a, size_t b
             return true;
     return false;
 }
-static bool pair_toi(ph_body *a, ph_body *b, float limit, float *time, af_vec3 *normal, af_vec3 *point,
-                     size_t ai, size_t bi, const ph_ccd_event *events, size_t event_count,
-                     size_t *out_pa, size_t *out_pb) {
+static bool pair_toi(ph_body *a, ph_body *b, float limit, float *time, af_vec3 *normal, af_vec3 *point, size_t ai,
+                     size_t bi, const ph_ccd_event *events, size_t event_count, size_t *out_pa, size_t *out_pb) {
     bool found = false;
     float best = limit;
     size_t na = a->part_count ? a->part_count : 1, nb = b->part_count ? b->part_count : 1;
@@ -248,10 +244,8 @@ static bool pair_toi(ph_body *a, ph_body *b, float limit, float *time, af_vec3 *
     ph_body *body = a->shape.type == AF_COLLIDER_MESH ? b : a, *mesh = body == a ? b : a;
     af_vec3 end = add(body->p, mul(body->v, limit));
     float r = extent(body) + .002f;
-    af_vec3 low = {fminf(body->p.x, end.x) - r, fminf(body->p.y, end.y) - r,
-                   fminf(body->p.z, end.z) - r},
-            high = {fmaxf(body->p.x, end.x) + r, fmaxf(body->p.y, end.y) + r,
-                    fmaxf(body->p.z, end.z) + r};
+    af_vec3 low = {fminf(body->p.x, end.x) - r, fminf(body->p.y, end.y) - r, fminf(body->p.z, end.z) - r},
+            high = {fmaxf(body->p.x, end.x) + r, fmaxf(body->p.y, end.y) + r, fmaxf(body->p.z, end.z) + r};
     uint32_t scratch[128], *list;
     size_t count;
     if (!tc_candidates(mesh->shape, low, high, &list, &count, scratch, 128))
@@ -303,8 +297,8 @@ void ph_advance(af_physics *p, float dt) {
         }
         ph_bounds(p, p->ccd_bounds, remaining, true);
         for (size_t one = 0; one < p->count; ++one)
-            for (size_t two = one + 1;
-                 two < p->count && p->ccd_bounds[two].key_low <= p->ccd_bounds[one].key_high; ++two) {
+            for (size_t two = one + 1; two < p->count && p->ccd_bounds[two].key_low <= p->ccd_bounds[one].key_high;
+                 ++two) {
                 if (!ph_bounds_overlap(p->ccd_bounds[one], p->ccd_bounds[two]))
                     continue;
                 size_t i = p->ccd_bounds[one].body, j = p->ccd_bounds[two].body;
@@ -322,8 +316,7 @@ void ph_advance(af_physics *p, float dt) {
                 float t;
                 af_vec3 n, pos;
                 size_t pa = 0, pb = 0;
-                if (pair_toi(a, b, earliest, &t, &n, &pos, i, j, events, ignored_count, &pa, &pb) &&
-                    t <= earliest) {
+                if (pair_toi(a, b, earliest, &t, &n, &pos, i, j, events, ignored_count, &pa, &pb) && t <= earliest) {
                     earliest = t;
                     normal = n;
                     point = pos;
@@ -348,10 +341,9 @@ void ph_advance(af_physics *p, float dt) {
             b->sleep_time = 0;
         }
         af_vec3 ra = sub(point, a->p), rb = sub(point, b->p);
-        float mass =
-                  a->inv_mass + b->inv_mass +
-                  dot(normal, add(af_vec3_cross(ph_inverse_inertia(a, af_vec3_cross(ra, normal)), ra),
-                                  af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(rb, normal)), rb))),
+        float mass = a->inv_mass + b->inv_mass +
+                     dot(normal, add(af_vec3_cross(ph_inverse_inertia(a, af_vec3_cross(ra, normal)), ra),
+                                     af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(rb, normal)), rb))),
               closing = dot(sub(velocity(b, point), velocity(a, point)), normal);
         if (mass > 1e-12f && closing < 0) {
             float bounce = closing < -1 ? fmaxf(a->config.restitution, b->config.restitution) : 0;
@@ -362,8 +354,7 @@ void ph_advance(af_physics *p, float dt) {
         ++p->stats.ccd_hits;
         events[ignored_count++] = (ph_ccd_event){ai, bi, hit_pa, hit_pb};
         if (earliest < 1e-8f) {
-            float consume =
-                fminf(remaining, 1e-6f); /* Stay at contact while consuming a bounded zero-time event. */
+            float consume = fminf(remaining, 1e-6f); /* Stay at contact while consuming a bounded zero-time event. */
             remaining -= consume;
         }
     }

@@ -16,9 +16,8 @@ typedef int af_module_sanitizer_translation_unit;
 #include <stdint.h>
 /* Compiler-rt ABI used by Clang's own module destructor. */
 extern void __asan_unregister_image_globals(uintptr_t *flag);
-static uintptr_t af_image_registered=1;
-__attribute__((destructor)) static void af_unregister_image(void)
-{
+static uintptr_t af_image_registered = 1;
+__attribute__((destructor)) static void af_unregister_image(void) {
     __asan_unregister_image_globals(&af_image_registered);
 }
 #endif

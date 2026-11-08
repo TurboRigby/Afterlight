@@ -21,14 +21,14 @@ static bool key(const af_game_host *h, af_key k) {
     (void)h;
     return tilt && k == AF_KEY_F;
 }
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Water demo %u phase %u line %d: %s\n", s->scene, s->phase, __LINE__, #x);  \
-            s->failed = true;                                                                           \
-            af_engine_request_quit(e);                                                                  \
-            return;                                                                                     \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Water demo %u phase %u line %d: %s\n", s->scene, s->phase, __LINE__, #x);                 \
+            s->failed = true;                                                                                          \
+            af_engine_request_quit(e);                                                                                 \
+            return;                                                                                                    \
+        }                                                                                                              \
     } while (0)
 static bool load(af_engine *e, test *s) {
     af_engine_set_scene(e, NULL);
@@ -88,8 +88,7 @@ static void update(af_engine *e, double dt, void *data) {
     if (s->phase == 0 && ticks >= 90) {
         CHECK(water.surfaces == 1 && af_engine_get_stats(e).validation_errors == 0);
         CHECK(af_engine_get_stats(e).mesh_idle_waits == s->mesh_waits &&
-              af_engine_get_stats(e).water_stream_uploads > 0 &&
-              af_engine_get_stats(e).water_upload_bytes > 0);
+              af_engine_get_stats(e).water_stream_uploads > 0 && af_engine_get_stats(e).water_upload_bytes > 0);
         if (s->scene < 4)
             CHECK(water.wet_bodies > 0);
         else
@@ -131,9 +130,8 @@ static void update(af_engine *e, double dt, void *data) {
             }
             CHECK(cup && cup->transform.rotation.z < -1.5f);
         }
-        printf("Water C scene %s: %zu cells / %zu particles, %.3f ms physics, %.3f ms fluid.\n",
-               names[s->scene], water.cells, water.particles, af_engine_get_stats(e).cpu_physics_ms,
-               water.milliseconds);
+        printf("Water C scene %s: %zu cells / %zu particles, %.3f ms physics, %.3f ms fluid.\n", names[s->scene],
+               water.cells, water.particles, af_engine_get_stats(e).cpu_physics_ms, water.milliseconds);
         ++s->scene;
         if (s->scene < 6) {
             CHECK(load(e, s));
@@ -179,8 +177,7 @@ int main(int argc, char **argv) {
     af_engine *e = af_engine_create(&c);
     if (!e)
         return 1;
-    af_game g = {
-        .init = init, .update = update, .fixed_update = fixed, .shutdown = shutdown, .user_data = &s};
+    af_game g = {.init = init, .update = update, .fixed_update = fixed, .shutdown = shutdown, .user_data = &s};
     int result = af_engine_run(e, &g);
     af_engine_stats stats = af_engine_get_stats(e);
     af_engine_destroy(e);

@@ -31,16 +31,14 @@ static float pseudo_rand_float(uint32_t *state) {
 }
 
 static inline af_vec2 grad2d(uint32_t hash) {
-    static const float g[8][2] = {
-        { 1.0f,  0.0f},
-        {-1.0f,  0.0f},
-        { 0.0f,  1.0f},
-        { 0.0f, -1.0f},
-        { 0.70710678f,  0.70710678f},
-        {-0.70710678f,  0.70710678f},
-        { 0.70710678f, -0.70710678f},
-        {-0.70710678f, -0.70710678f}
-    };
+    static const float g[8][2] = {{1.0f, 0.0f},
+                                  {-1.0f, 0.0f},
+                                  {0.0f, 1.0f},
+                                  {0.0f, -1.0f},
+                                  {0.70710678f, 0.70710678f},
+                                  {-0.70710678f, 0.70710678f},
+                                  {0.70710678f, -0.70710678f},
+                                  {-0.70710678f, -0.70710678f}};
     return (af_vec2){g[hash & 7u][0], g[hash & 7u][1]};
 }
 
@@ -99,29 +97,29 @@ af_terrain_layer af_terrain_layer_default(size_t index) {
     layer.color = (af_color){1.0f, 1.0f, 1.0f, 1.0f};
 
     switch (index) {
-        case 0:
-            snprintf(layer.name, sizeof(layer.name), "Grass");
-            layer.color = (af_color){0.34f, 0.52f, 0.22f, 1.0f};
-            layer.roughness = 0.85f;
-            break;
-        case 1:
-            snprintf(layer.name, sizeof(layer.name), "Dirt");
-            layer.color = (af_color){0.45f, 0.33f, 0.22f, 1.0f};
-            layer.roughness = 0.90f;
-            break;
-        case 2:
-            snprintf(layer.name, sizeof(layer.name), "Rock");
-            layer.color = (af_color){0.50f, 0.52f, 0.55f, 1.0f};
-            layer.roughness = 0.65f;
-            break;
-        case 3:
-            snprintf(layer.name, sizeof(layer.name), "Sand");
-            layer.color = (af_color){0.82f, 0.76f, 0.58f, 1.0f};
-            layer.roughness = 0.75f;
-            break;
-        default:
-            snprintf(layer.name, sizeof(layer.name), "Layer %zu", index + 1);
-            break;
+    case 0:
+        snprintf(layer.name, sizeof(layer.name), "Grass");
+        layer.color = (af_color){0.34f, 0.52f, 0.22f, 1.0f};
+        layer.roughness = 0.85f;
+        break;
+    case 1:
+        snprintf(layer.name, sizeof(layer.name), "Dirt");
+        layer.color = (af_color){0.45f, 0.33f, 0.22f, 1.0f};
+        layer.roughness = 0.90f;
+        break;
+    case 2:
+        snprintf(layer.name, sizeof(layer.name), "Rock");
+        layer.color = (af_color){0.50f, 0.52f, 0.55f, 1.0f};
+        layer.roughness = 0.65f;
+        break;
+    case 3:
+        snprintf(layer.name, sizeof(layer.name), "Sand");
+        layer.color = (af_color){0.82f, 0.76f, 0.58f, 1.0f};
+        layer.roughness = 0.75f;
+        break;
+    default:
+        snprintf(layer.name, sizeof(layer.name), "Layer %zu", index + 1);
+        break;
     }
     return layer;
 }
@@ -142,18 +140,21 @@ af_placement_rules af_placement_rules_default(void) {
     rules.height_max = 10000.0f;
     rules.density = 1.0f;
     rules.min_spacing = 1.5f;
-    rules.align_to_normal = 0.0f;    /* Keep trees upright by default */
+    rules.align_to_normal = 0.0f; /* Keep trees upright by default */
     rules.offset_y = 0.0f;
-    rules.paint_mask_layer = -1;    /* Any layer */
+    rules.paint_mask_layer = -1; /* Any layer */
     rules.collision_avoidance = true;
     return rules;
 }
 
 af_foliage_layer af_foliage_layer_default(const char *name, const char *mesh) {
     af_foliage_layer layer = {0};
-    if (name) snprintf(layer.name, sizeof(layer.name), "%s", name);
-    else snprintf(layer.name, sizeof(layer.name), "Foliage Layer");
-    if (mesh) snprintf(layer.mesh, sizeof(layer.mesh), "%s", mesh);
+    if (name)
+        snprintf(layer.name, sizeof(layer.name), "%s", name);
+    else
+        snprintf(layer.name, sizeof(layer.name), "Foliage Layer");
+    if (mesh)
+        snprintf(layer.mesh, sizeof(layer.mesh), "%s", mesh);
     layer.material = af_material_default();
     layer.visible = true;
     layer.cast_shadows = true;
@@ -191,12 +192,16 @@ static void init_chunk(af_landscape *landscape, size_t chunk_idx, int32_t cx, in
 }
 
 af_landscape *af_landscape_create(uint32_t chunks_x, uint32_t chunks_z, float spacing) {
-    if (chunks_x == 0) chunks_x = 4;
-    if (chunks_z == 0) chunks_z = 4;
-    if (spacing <= 0.01f) spacing = 1.0f;
+    if (chunks_x == 0)
+        chunks_x = 4;
+    if (chunks_z == 0)
+        chunks_z = 4;
+    if (spacing <= 0.01f)
+        spacing = 1.0f;
 
     af_landscape *ls = calloc(1, sizeof(*ls));
-    if (!ls) return NULL;
+    if (!ls)
+        return NULL;
 
     ls->enabled = true;
     ls->chunk_count_x = chunks_x;
@@ -233,9 +238,11 @@ af_landscape *af_landscape_create(uint32_t chunks_x, uint32_t chunks_z, float sp
 }
 
 af_landscape *af_landscape_clone(const af_landscape *src) {
-    if (!src) return NULL;
+    if (!src)
+        return NULL;
     af_landscape *dst = calloc(1, sizeof(*dst));
-    if (!dst) return NULL;
+    if (!dst)
+        return NULL;
 
     memcpy(dst, src, sizeof(*dst));
     dst->chunks = calloc(dst->chunk_count, sizeof(af_terrain_chunk));
@@ -268,7 +275,8 @@ af_landscape *af_landscape_clone(const af_landscape *src) {
 }
 
 void af_landscape_destroy(af_landscape *ls) {
-    if (!ls) return;
+    if (!ls)
+        return;
     if (ls->chunks) {
         for (size_t c = 0; c < ls->chunk_count; ++c) {
             for (size_t fl = 0; fl < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++fl) {
@@ -281,10 +289,10 @@ void af_landscape_destroy(af_landscape *ls) {
 }
 
 /* Internal helper: find chunk and local vertex grid coordinates */
-static bool get_local_coords(const af_landscape *ls, float world_x, float world_z,
-                            int32_t *out_cx, int32_t *out_cz,
-                            float *out_lx, float *out_lz) {
-    if (!ls || !ls->chunks) return false;
+static bool get_local_coords(const af_landscape *ls, float world_x, float world_z, int32_t *out_cx, int32_t *out_cz,
+                             float *out_lx, float *out_lz) {
+    if (!ls || !ls->chunks)
+        return false;
     float rx = (world_x - ls->origin.x) / ls->vertex_spacing;
     float rz = (world_z - ls->origin.z) / ls->vertex_spacing;
 
@@ -297,18 +305,26 @@ static bool get_local_coords(const af_landscape *ls, float world_x, float world_
     int32_t cx = (int32_t)floorf(rx / (float)CHUNK_Q);
     int32_t cz = (int32_t)floorf(rz / (float)CHUNK_Q);
 
-    if (cx >= (int32_t)ls->chunk_count_x) cx = (int32_t)ls->chunk_count_x - 1;
-    if (cz >= (int32_t)ls->chunk_count_z) cz = (int32_t)ls->chunk_count_z - 1;
-    if (cx < 0) cx = 0;
-    if (cz < 0) cz = 0;
+    if (cx >= (int32_t)ls->chunk_count_x)
+        cx = (int32_t)ls->chunk_count_x - 1;
+    if (cz >= (int32_t)ls->chunk_count_z)
+        cz = (int32_t)ls->chunk_count_z - 1;
+    if (cx < 0)
+        cx = 0;
+    if (cz < 0)
+        cz = 0;
 
     float lx = rx - (float)((int64_t)cx * (int64_t)CHUNK_Q);
     float lz = rz - (float)((int64_t)cz * (int64_t)CHUNK_Q);
 
-    if (out_cx) *out_cx = cx;
-    if (out_cz) *out_cz = cz;
-    if (out_lx) *out_lx = lx;
-    if (out_lz) *out_lz = lz;
+    if (out_cx)
+        *out_cx = cx;
+    if (out_cz)
+        *out_cz = cz;
+    if (out_lx)
+        *out_lx = lx;
+    if (out_lz)
+        *out_lz = lz;
     return true;
 }
 
@@ -340,7 +356,8 @@ float af_landscape_get_height(const af_landscape *ls, float world_x, float world
 }
 
 bool af_landscape_get_normal(const af_landscape *ls, float world_x, float world_z, af_vec3 *out_normal) {
-    if (!out_normal) return false;
+    if (!out_normal)
+        return false;
     int32_t cx, cz;
     float lx, lz;
     if (!get_local_coords(ls, world_x, world_z, &cx, &cz, &lx, &lz)) {
@@ -368,7 +385,8 @@ bool af_landscape_get_normal(const af_landscape *ls, float world_x, float world_
 }
 
 bool af_landscape_get_layer_weights(const af_landscape *ls, float world_x, float world_z, float out_weights[4]) {
-    if (!out_weights) return false;
+    if (!out_weights)
+        return false;
     int32_t cx, cz;
     float lx, lz;
     if (!get_local_coords(ls, world_x, world_z, &cx, &cz, &lx, &lz)) {
@@ -402,7 +420,8 @@ bool af_landscape_get_layer_weights(const af_landscape *ls, float world_x, float
         total += w;
     }
     if (total > 0.001f) {
-        for (size_t k = 0; k < 4; ++k) out_weights[k] /= total;
+        for (size_t k = 0; k < 4; ++k)
+            out_weights[k] /= total;
     } else {
         out_weights[0] = 1.0f;
     }
@@ -412,15 +431,21 @@ bool af_landscape_get_layer_weights(const af_landscape *ls, float world_x, float
 static float get_vertex_height_global(const af_landscape *ls, int32_t gx, int32_t gz) {
     int32_t total_x = (int32_t)(ls->chunk_count_x * CHUNK_Q);
     int32_t total_z = (int32_t)(ls->chunk_count_z * CHUNK_Q);
-    if (gx < 0) gx = 0;
-    if (gz < 0) gz = 0;
-    if (gx > total_x) gx = total_x;
-    if (gz > total_z) gz = total_z;
+    if (gx < 0)
+        gx = 0;
+    if (gz < 0)
+        gz = 0;
+    if (gx > total_x)
+        gx = total_x;
+    if (gz > total_z)
+        gz = total_z;
 
     int32_t cx = gx / (int32_t)CHUNK_Q;
     int32_t cz = gz / (int32_t)CHUNK_Q;
-    if (cx >= (int32_t)ls->chunk_count_x) cx = (int32_t)ls->chunk_count_x - 1;
-    if (cz >= (int32_t)ls->chunk_count_z) cz = (int32_t)ls->chunk_count_z - 1;
+    if (cx >= (int32_t)ls->chunk_count_x)
+        cx = (int32_t)ls->chunk_count_x - 1;
+    if (cz >= (int32_t)ls->chunk_count_z)
+        cz = (int32_t)ls->chunk_count_z - 1;
 
     int32_t lx = gx - cx * (int32_t)CHUNK_Q;
     int32_t lz = gz - cz * (int32_t)CHUNK_Q;
@@ -430,11 +455,16 @@ static float get_vertex_height_global(const af_landscape *ls, int32_t gx, int32_
 }
 
 void af_landscape_recompute_normals(af_landscape *ls, int32_t min_cx, int32_t min_cz, int32_t max_cx, int32_t max_cz) {
-    if (!ls || !ls->chunks) return;
-    if (min_cx < 0) min_cx = 0;
-    if (min_cz < 0) min_cz = 0;
-    if (max_cx >= (int32_t)ls->chunk_count_x) max_cx = (int32_t)ls->chunk_count_x - 1;
-    if (max_cz >= (int32_t)ls->chunk_count_z) max_cz = (int32_t)ls->chunk_count_z - 1;
+    if (!ls || !ls->chunks)
+        return;
+    if (min_cx < 0)
+        min_cx = 0;
+    if (min_cz < 0)
+        min_cz = 0;
+    if (max_cx >= (int32_t)ls->chunk_count_x)
+        max_cx = (int32_t)ls->chunk_count_x - 1;
+    if (max_cz >= (int32_t)ls->chunk_count_z)
+        max_cz = (int32_t)ls->chunk_count_z - 1;
 
     float two_dx = 2.0f * ls->vertex_spacing;
 
@@ -465,15 +495,15 @@ void af_landscape_recompute_normals(af_landscape *ls, int32_t min_cx, int32_t mi
 static float compute_falloff(float dist, float radius, af_brush_falloff falloff) {
     float t = clamp_f(dist / radius, 0.0f, 1.0f);
     switch (falloff) {
-        case AF_FALLOFF_FLAT:
-            return 1.0f;
-        case AF_FALLOFF_LINEAR:
-            return 1.0f - t;
-        case AF_FALLOFF_SPHERICAL:
-            return sqrtf(fmaxf(0.0f, 1.0f - t * t));
-        case AF_FALLOFF_SMOOTH:
-        default:
-            return (1.0f - t) * (1.0f - t) * (3.0f - 2.0f * (1.0f - t));
+    case AF_FALLOFF_FLAT:
+        return 1.0f;
+    case AF_FALLOFF_LINEAR:
+        return 1.0f - t;
+    case AF_FALLOFF_SPHERICAL:
+        return sqrtf(fmaxf(0.0f, 1.0f - t * t));
+    case AF_FALLOFF_SMOOTH:
+    default:
+        return (1.0f - t) * (1.0f - t) * (3.0f - 2.0f * (1.0f - t));
     }
 }
 
@@ -482,8 +512,10 @@ static void update_chunk_bounds(af_landscape *ls, size_t chunk_idx) {
     float min_y = c->heights[0];
     float max_y = c->heights[0];
     for (size_t i = 1; i < CHUNK_V * CHUNK_V; ++i) {
-        if (c->heights[i] < min_y) min_y = c->heights[i];
-        if (c->heights[i] > max_y) max_y = c->heights[i];
+        if (c->heights[i] < min_y)
+            min_y = c->heights[i];
+        if (c->heights[i] > max_y)
+            max_y = c->heights[i];
     }
     c->bounds_min.y = min_y;
     c->bounds_max.y = max_y;
@@ -491,18 +523,24 @@ static void update_chunk_bounds(af_landscape *ls, size_t chunk_idx) {
     ls->modification_version++;
 }
 
-bool af_landscape_sculpt_raise_lower(af_landscape *ls, af_vec3 center, float radius, float delta, af_brush_falloff falloff) {
-    if (!ls || radius <= 0.001f || fabsf(delta) <= 1e-6f) return false;
+bool af_landscape_sculpt_raise_lower(af_landscape *ls, af_vec3 center, float radius, float delta,
+                                     af_brush_falloff falloff) {
+    if (!ls || radius <= 0.001f || fabsf(delta) <= 1e-6f)
+        return false;
 
     int32_t min_cx = (int32_t)floorf(((center.x - radius) - ls->origin.x) / (ls->vertex_spacing * (float)CHUNK_Q));
     int32_t max_cx = (int32_t)ceilf(((center.x + radius) - ls->origin.x) / (ls->vertex_spacing * (float)CHUNK_Q));
     int32_t min_cz = (int32_t)floorf(((center.z - radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
     int32_t max_cz = (int32_t)ceilf(((center.z + radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
 
-    if (min_cx < 0) min_cx = 0;
-    if (min_cz < 0) min_cz = 0;
-    if (max_cx >= (int32_t)ls->chunk_count_x) max_cx = (int32_t)ls->chunk_count_x - 1;
-    if (max_cz >= (int32_t)ls->chunk_count_z) max_cz = (int32_t)ls->chunk_count_z - 1;
+    if (min_cx < 0)
+        min_cx = 0;
+    if (min_cz < 0)
+        min_cz = 0;
+    if (max_cx >= (int32_t)ls->chunk_count_x)
+        max_cx = (int32_t)ls->chunk_count_x - 1;
+    if (max_cz >= (int32_t)ls->chunk_count_z)
+        max_cz = (int32_t)ls->chunk_count_z - 1;
 
     for (int32_t cz = min_cz; cz <= max_cz; ++cz) {
         for (int32_t cx = min_cx; cx <= max_cx; ++cx) {
@@ -524,15 +562,18 @@ bool af_landscape_sculpt_raise_lower(af_landscape *ls, af_vec3 center, float rad
                     }
                 }
             }
-            if (changed) update_chunk_bounds(ls, c_idx);
+            if (changed)
+                update_chunk_bounds(ls, c_idx);
         }
     }
     af_landscape_recompute_normals(ls, min_cx - 1, min_cz - 1, max_cx + 1, max_cz + 1);
     return true;
 }
 
-bool af_landscape_sculpt_smooth(af_landscape *ls, af_vec3 center, float radius, float strength, af_brush_falloff falloff) {
-    if (!ls || radius <= 0.001f || strength <= 0.0f) return false;
+bool af_landscape_sculpt_smooth(af_landscape *ls, af_vec3 center, float radius, float strength,
+                                af_brush_falloff falloff) {
+    if (!ls || radius <= 0.001f || strength <= 0.0f)
+        return false;
     strength = clamp_f(strength, 0.0f, 1.0f);
 
     int32_t min_cx = (int32_t)floorf(((center.x - radius) - ls->origin.x) / (ls->vertex_spacing * (float)CHUNK_Q));
@@ -540,10 +581,14 @@ bool af_landscape_sculpt_smooth(af_landscape *ls, af_vec3 center, float radius, 
     int32_t min_cz = (int32_t)floorf(((center.z - radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
     int32_t max_cz = (int32_t)ceilf(((center.z + radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
 
-    if (min_cx < 0) min_cx = 0;
-    if (min_cz < 0) min_cz = 0;
-    if (max_cx >= (int32_t)ls->chunk_count_x) max_cx = (int32_t)ls->chunk_count_x - 1;
-    if (max_cz >= (int32_t)ls->chunk_count_z) max_cz = (int32_t)ls->chunk_count_z - 1;
+    if (min_cx < 0)
+        min_cx = 0;
+    if (min_cz < 0)
+        min_cz = 0;
+    if (max_cx >= (int32_t)ls->chunk_count_x)
+        max_cx = (int32_t)ls->chunk_count_x - 1;
+    if (max_cz >= (int32_t)ls->chunk_count_z)
+        max_cz = (int32_t)ls->chunk_count_z - 1;
 
     for (int32_t cz = min_cz; cz <= max_cz; ++cz) {
         for (int32_t cx = min_cx; cx <= max_cx; ++cx) {
@@ -563,24 +608,28 @@ bool af_landscape_sculpt_smooth(af_landscape *ls, af_vec3 center, float radius, 
                     float dist = sqrtf(dx * dx + dz * dz);
                     if (dist <= radius) {
                         float w = compute_falloff(dist, radius, falloff) * strength;
-                        float avg = (get_vertex_height_global(ls, gx - 1, gz) +
-                                     get_vertex_height_global(ls, gx + 1, gz) +
-                                     get_vertex_height_global(ls, gx, gz - 1) +
-                                     get_vertex_height_global(ls, gx, gz + 1)) * 0.25f;
-                        c->heights[(size_t)vz * CHUNK_V + (size_t)vx] += (avg - c->heights[(size_t)vz * CHUNK_V + (size_t)vx]) * w;
+                        float avg =
+                            (get_vertex_height_global(ls, gx - 1, gz) + get_vertex_height_global(ls, gx + 1, gz) +
+                             get_vertex_height_global(ls, gx, gz - 1) + get_vertex_height_global(ls, gx, gz + 1)) *
+                            0.25f;
+                        c->heights[(size_t)vz * CHUNK_V + (size_t)vx] +=
+                            (avg - c->heights[(size_t)vz * CHUNK_V + (size_t)vx]) * w;
                         changed = true;
                     }
                 }
             }
-            if (changed) update_chunk_bounds(ls, c_idx);
+            if (changed)
+                update_chunk_bounds(ls, c_idx);
         }
     }
     af_landscape_recompute_normals(ls, min_cx - 1, min_cz - 1, max_cx + 1, max_cz + 1);
     return true;
 }
 
-bool af_landscape_sculpt_flatten(af_landscape *ls, af_vec3 center, float radius, float target_height, float strength, af_brush_falloff falloff) {
-    if (!ls || radius <= 0.001f) return false;
+bool af_landscape_sculpt_flatten(af_landscape *ls, af_vec3 center, float radius, float target_height, float strength,
+                                 af_brush_falloff falloff) {
+    if (!ls || radius <= 0.001f)
+        return false;
     strength = clamp_f(strength, 0.01f, 1.0f);
 
     int32_t min_cx = (int32_t)floorf(((center.x - radius) - ls->origin.x) / (ls->vertex_spacing * (float)CHUNK_Q));
@@ -588,10 +637,14 @@ bool af_landscape_sculpt_flatten(af_landscape *ls, af_vec3 center, float radius,
     int32_t min_cz = (int32_t)floorf(((center.z - radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
     int32_t max_cz = (int32_t)ceilf(((center.z + radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
 
-    if (min_cx < 0) min_cx = 0;
-    if (min_cz < 0) min_cz = 0;
-    if (max_cx >= (int32_t)ls->chunk_count_x) max_cx = (int32_t)ls->chunk_count_x - 1;
-    if (max_cz >= (int32_t)ls->chunk_count_z) max_cz = (int32_t)ls->chunk_count_z - 1;
+    if (min_cx < 0)
+        min_cx = 0;
+    if (min_cz < 0)
+        min_cz = 0;
+    if (max_cx >= (int32_t)ls->chunk_count_x)
+        max_cx = (int32_t)ls->chunk_count_x - 1;
+    if (max_cz >= (int32_t)ls->chunk_count_z)
+        max_cz = (int32_t)ls->chunk_count_z - 1;
 
     for (int32_t cz = min_cz; cz <= max_cz; ++cz) {
         for (int32_t cx = min_cx; cx <= max_cx; ++cx) {
@@ -608,20 +661,24 @@ bool af_landscape_sculpt_flatten(af_landscape *ls, af_vec3 center, float radius,
                     float dist = sqrtf(dx * dx + dz * dz);
                     if (dist <= radius) {
                         float w = compute_falloff(dist, radius, falloff) * strength;
-                        c->heights[(size_t)vz * CHUNK_V + (size_t)vx] += (target_height - c->heights[(size_t)vz * CHUNK_V + (size_t)vx]) * w;
+                        c->heights[(size_t)vz * CHUNK_V + (size_t)vx] +=
+                            (target_height - c->heights[(size_t)vz * CHUNK_V + (size_t)vx]) * w;
                         changed = true;
                     }
                 }
             }
-            if (changed) update_chunk_bounds(ls, c_idx);
+            if (changed)
+                update_chunk_bounds(ls, c_idx);
         }
     }
     af_landscape_recompute_normals(ls, min_cx - 1, min_cz - 1, max_cx + 1, max_cz + 1);
     return true;
 }
 
-bool af_landscape_paint_layer(af_landscape *ls, af_vec3 center, float radius, size_t layer_idx, float strength, af_brush_falloff falloff) {
-    if (!ls || radius <= 0.001f || layer_idx >= AF_LANDSCAPE_MAX_LAYERS) return false;
+bool af_landscape_paint_layer(af_landscape *ls, af_vec3 center, float radius, size_t layer_idx, float strength,
+                              af_brush_falloff falloff) {
+    if (!ls || radius <= 0.001f || layer_idx >= AF_LANDSCAPE_MAX_LAYERS)
+        return false;
     strength = clamp_f(strength, 0.01f, 1.0f);
 
     int32_t min_cx = (int32_t)floorf(((center.x - radius) - ls->origin.x) / (ls->vertex_spacing * (float)CHUNK_Q));
@@ -629,10 +686,14 @@ bool af_landscape_paint_layer(af_landscape *ls, af_vec3 center, float radius, si
     int32_t min_cz = (int32_t)floorf(((center.z - radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
     int32_t max_cz = (int32_t)ceilf(((center.z + radius) - ls->origin.z) / (ls->vertex_spacing * (float)CHUNK_Q));
 
-    if (min_cx < 0) min_cx = 0;
-    if (min_cz < 0) min_cz = 0;
-    if (max_cx >= (int32_t)ls->chunk_count_x) max_cx = (int32_t)ls->chunk_count_x - 1;
-    if (max_cz >= (int32_t)ls->chunk_count_z) max_cz = (int32_t)ls->chunk_count_z - 1;
+    if (min_cx < 0)
+        min_cx = 0;
+    if (min_cz < 0)
+        min_cz = 0;
+    if (max_cx >= (int32_t)ls->chunk_count_x)
+        max_cx = (int32_t)ls->chunk_count_x - 1;
+    if (max_cz >= (int32_t)ls->chunk_count_z)
+        max_cz = (int32_t)ls->chunk_count_z - 1;
 
     for (int32_t cz = min_cz; cz <= max_cz; ++cz) {
         for (int32_t cx = min_cx; cx <= max_cx; ++cx) {
@@ -652,17 +713,20 @@ bool af_landscape_paint_layer(af_landscape *ls, af_vec3 center, float radius, si
                         size_t b_idx = ((size_t)vz * CHUNK_V + (size_t)vx) * 4;
 
                         float cur[4];
-                        for (size_t k = 0; k < 4; ++k) cur[k] = (float)c->weights[b_idx + (size_t)k] / 255.0f;
+                        for (size_t k = 0; k < 4; ++k)
+                            cur[k] = (float)c->weights[b_idx + (size_t)k] / 255.0f;
 
                         /* Add to target layer */
                         cur[layer_idx] += w;
 
                         /* Renormalize */
                         float sum = 0.0f;
-                        for (size_t k = 0; k < 4; ++k) sum += cur[k];
+                        for (size_t k = 0; k < 4; ++k)
+                            sum += cur[k];
                         if (sum > 0.001f) {
                             for (size_t k = 0; k < 4; ++k) {
-                                c->weights[b_idx + (size_t)k] = (uint8_t)clamp_f(roundf((cur[k] / sum) * 255.0f), 0.0f, 255.0f);
+                                c->weights[b_idx + (size_t)k] =
+                                    (uint8_t)clamp_f(roundf((cur[k] / sum) * 255.0f), 0.0f, 255.0f);
                             }
                         }
                         changed = true;
@@ -678,9 +742,12 @@ bool af_landscape_paint_layer(af_landscape *ls, af_vec3 center, float radius, si
     return true;
 }
 
-bool af_landscape_auto_paint_slopes(af_landscape *ls, size_t rock_layer, float min_slope_rad, size_t sand_layer, float max_height) {
-    if (!ls || !ls->chunks) return false;
-    if (min_slope_rad <= 0.01f) min_slope_rad = 0.5f;
+bool af_landscape_auto_paint_slopes(af_landscape *ls, size_t rock_layer, float min_slope_rad, size_t sand_layer,
+                                    float max_height) {
+    if (!ls || !ls->chunks)
+        return false;
+    if (min_slope_rad <= 0.01f)
+        min_slope_rad = 0.5f;
 
     for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
         af_terrain_chunk *c = &ls->chunks[c_idx];
@@ -715,8 +782,10 @@ bool af_landscape_auto_paint_slopes(af_landscape *ls, size_t rock_layer, float m
 }
 
 bool af_landscape_generate_procedural_hills(af_landscape *ls, float scale, float amplitude, uint32_t seed) {
-    if (!ls || !ls->chunks) return false;
-    if (amplitude <= 0.001f) amplitude = 8.0f;
+    if (!ls || !ls->chunks)
+        return false;
+    if (amplitude <= 0.001f)
+        amplitude = 8.0f;
 
     /* Support both wavelength in meters (e.g. 45.0m) and frequency (e.g. 0.02) */
     float inv_scale;
@@ -758,8 +827,10 @@ bool af_landscape_generate_procedural_hills(af_landscape *ls, float scale, float
     return true;
 }
 
-bool af_landscape_import_heightmap(af_landscape *ls, const float *heights, uint32_t width, uint32_t height, float min_h, float max_h) {
-    if (!ls || !heights || width < 2 || height < 2) return false;
+bool af_landscape_import_heightmap(af_landscape *ls, const float *heights, uint32_t width, uint32_t height, float min_h,
+                                   float max_h) {
+    if (!ls || !heights || width < 2 || height < 2)
+        return false;
 
     uint32_t total_x = ls->chunk_count_x * CHUNK_Q + 1;
     uint32_t total_z = ls->chunk_count_z * CHUNK_Q + 1;
@@ -805,7 +876,8 @@ bool af_landscape_import_heightmap(af_landscape *ls, const float *heights, uint3
 }
 
 bool af_landscape_export_heightmap(const af_landscape *ls, float *out_heights, uint32_t width, uint32_t height) {
-    if (!ls || !out_heights || width == 0 || height == 0) return false;
+    if (!ls || !out_heights || width == 0 || height == 0)
+        return false;
 
     float total_w = (float)(ls->chunk_count_x * CHUNK_Q) * ls->vertex_spacing;
     float total_d = (float)(ls->chunk_count_z * CHUNK_Q) * ls->vertex_spacing;
@@ -823,10 +895,13 @@ bool af_landscape_export_heightmap(const af_landscape *ls, float *out_heights, u
 }
 
 /* Terrain raycast */
-bool af_landscape_raycast(const af_landscape *ls, af_vec3 ray_origin, af_vec3 ray_dir, af_vec3 *hit_point, af_vec3 *hit_normal) {
-    if (!ls || !ls->chunks) return false;
+bool af_landscape_raycast(const af_landscape *ls, af_vec3 ray_origin, af_vec3 ray_dir, af_vec3 *hit_point,
+                          af_vec3 *hit_normal) {
+    if (!ls || !ls->chunks)
+        return false;
     float dir_len = af_vec3_length(ray_dir);
-    if (dir_len <= 1e-6f) return false;
+    if (dir_len <= 1e-6f)
+        return false;
     af_vec3 dir = af_vec3_scale(ray_dir, 1.0f / dir_len);
 
     float total_w = (float)(ls->chunk_count_x * CHUNK_Q) * ls->vertex_spacing;
@@ -840,16 +915,18 @@ bool af_landscape_raycast(const af_landscape *ls, af_vec3 ray_origin, af_vec3 ra
     /* If ray is looking away or too high, advance to terrain bounds */
     float t = t_min;
     float prev_t = t;
-    float prev_diff = ray_origin.y + dir.y * t - af_landscape_get_height(ls, ray_origin.x + dir.x * t, ray_origin.z + dir.z * t);
+    float prev_diff =
+        ray_origin.y + dir.y * t - af_landscape_get_height(ls, ray_origin.x + dir.x * t, ray_origin.z + dir.z * t);
 
-    (void)total_w; (void)total_d;
+    (void)total_w;
+    (void)total_d;
     for (int i = 0; i < 1000 && t < t_max; ++i) {
         t += step;
         af_vec3 p = af_vec3_add(ray_origin, af_vec3_scale(dir, t));
-        if (p.x < ls->origin.x || p.x > ls->origin.x + total_w ||
-            p.z < ls->origin.z || p.z > ls->origin.z + total_d) {
+        if (p.x < ls->origin.x || p.x > ls->origin.x + total_w || p.z < ls->origin.z || p.z > ls->origin.z + total_d) {
             /* Outside horizontal bounds */
-            if (t > 10.0f && (p.y < -100.0f || p.y > 1000.0f)) break;
+            if (t > 10.0f && (p.y < -100.0f || p.y > 1000.0f))
+                break;
             prev_t = t;
             continue;
         }
@@ -865,13 +942,17 @@ bool af_landscape_raycast(const af_landscape *ls, af_vec3 ray_origin, af_vec3 ra
                 float tm = (t0 + t1) * 0.5f;
                 af_vec3 pm = af_vec3_add(ray_origin, af_vec3_scale(dir, tm));
                 float hm = af_landscape_get_height(ls, pm.x, pm.z);
-                if (pm.y <= hm) t1 = tm;
-                else t0 = tm;
+                if (pm.y <= hm)
+                    t1 = tm;
+                else
+                    t0 = tm;
             }
             float hit_t = (t0 + t1) * 0.5f;
             af_vec3 hit = af_vec3_add(ray_origin, af_vec3_scale(dir, hit_t));
-            if (hit_point) *hit_point = hit;
-            if (hit_normal) af_landscape_get_normal(ls, hit.x, hit.z, hit_normal);
+            if (hit_point)
+                *hit_point = hit;
+            if (hit_normal)
+                af_landscape_get_normal(ls, hit.x, hit.z, hit_normal);
             return true;
         }
         prev_t = t;
@@ -888,7 +969,8 @@ size_t af_landscape_chunk_index_count(void) {
     return CHUNK_Q * CHUNK_Q * 6;
 }
 
-bool af_landscape_build_chunk_mesh(const af_landscape *ls, size_t chunk_idx, af_vertex *out_vertices, uint32_t *out_indices) {
+bool af_landscape_build_chunk_mesh(const af_landscape *ls, size_t chunk_idx, af_vertex *out_vertices,
+                                   uint32_t *out_indices) {
     if (!ls || !ls->chunks || chunk_idx >= ls->chunk_count || !out_vertices || !out_indices)
         return false;
 
@@ -904,11 +986,13 @@ bool af_landscape_build_chunk_mesh(const af_landscape *ls, size_t chunk_idx, af_
     }
     size_t dominant = 0;
     for (size_t l = 1; l < AF_LANDSCAPE_MAX_LAYERS; ++l) {
-        if (sum_weights[l] > sum_weights[dominant]) dominant = l;
+        if (sum_weights[l] > sum_weights[dominant])
+            dominant = l;
     }
 
     float layer_scale = ls->layers[dominant].uv_scale;
-    if (layer_scale < 0.001f) layer_scale = 1.0f;
+    if (layer_scale < 0.001f)
+        layer_scale = 1.0f;
     float uv_scale = layer_scale * 0.25f; /* 1 UV tile per 4m scaled by layer uv_scale */
 
     /* Build vertices */
@@ -934,12 +1018,9 @@ bool af_landscape_build_chunk_mesh(const af_landscape *ls, size_t chunk_idx, af_
             af_color c2 = ls->layers[2].color;
             af_color c3 = ls->layers[3].color;
 
-            v->color = (af_color){
-                c0.r * w0 + c1.r * w1 + c2.r * w2 + c3.r * w3,
-                c0.g * w0 + c1.g * w1 + c2.g * w2 + c3.g * w3,
-                c0.b * w0 + c1.b * w1 + c2.b * w2 + c3.b * w3,
-                1.0f
-            };
+            v->color =
+                (af_color){c0.r * w0 + c1.r * w1 + c2.r * w2 + c3.r * w3, c0.g * w0 + c1.g * w1 + c2.g * w2 + c3.g * w3,
+                           c0.b * w0 + c1.b * w1 + c2.b * w2 + c3.b * w3, 1.0f};
             memset(v->joints, 0, sizeof(v->joints));
             v->weights = (af_vec4){0, 0, 0, 0};
         }
@@ -977,7 +1058,8 @@ int af_landscape_add_foliage_layer(af_landscape *ls, const char *name, const cha
 }
 
 bool af_landscape_remove_foliage_layer(af_landscape *ls, size_t layer_idx) {
-    if (!ls || layer_idx >= ls->foliage_layer_count) return false;
+    if (!ls || layer_idx >= ls->foliage_layer_count)
+        return false;
 
     /* Free all instances in this layer across all chunks */
     for (size_t c = 0; c < ls->chunk_count; ++c) {
@@ -997,27 +1079,31 @@ bool af_landscape_remove_foliage_layer(af_landscape *ls, size_t layer_idx) {
 }
 
 bool af_landscape_set_foliage_visible(af_landscape *ls, size_t layer_idx, bool visible) {
-    if (!ls || layer_idx >= ls->foliage_layer_count) return false;
+    if (!ls || layer_idx >= ls->foliage_layer_count)
+        return false;
     ls->foliage_layers[layer_idx].visible = visible;
     ls->modification_version++;
     return true;
 }
 
-static bool test_instance_rules(const af_landscape *ls, const af_foliage_layer *fl,
-                                af_vec3 pos, af_vec3 normal, float *weights) {
+static bool test_instance_rules(const af_landscape *ls, const af_foliage_layer *fl, af_vec3 pos, af_vec3 normal,
+                                float *weights) {
     (void)ls;
     const af_placement_rules *r = &fl->rules;
 
     /* Height restriction */
-    if (pos.y < r->height_min || pos.y > r->height_max) return false;
+    if (pos.y < r->height_min || pos.y > r->height_max)
+        return false;
 
     /* Slope restriction */
     float slope = acosf(clamp_f(normal.y, -1.0f, 1.0f));
-    if (slope < r->slope_min || slope > r->slope_max) return false;
+    if (slope < r->slope_min || slope > r->slope_max)
+        return false;
 
     /* Paint mask check */
     if (r->paint_mask_layer >= 0 && r->paint_mask_layer < (int)AF_LANDSCAPE_MAX_LAYERS) {
-        if (weights[r->paint_mask_layer] < 0.25f) return false;
+        if (weights[r->paint_mask_layer] < 0.25f)
+            return false;
     }
     return true;
 }
@@ -1030,14 +1116,16 @@ static bool add_instance_to_chunk(af_terrain_chunk *c, size_t layer_idx, af_foli
         float min_dist_sq = min_dist * min_dist;
         for (size_t i = 0; i < fc->count; ++i) {
             af_vec3 diff = af_vec3_sub(fc->instances[i].transform.position, inst.transform.position);
-            if (af_vec3_dot(diff, diff) < min_dist_sq) return false;
+            if (af_vec3_dot(diff, diff) < min_dist_sq)
+                return false;
         }
     }
 
     if (fc->count >= fc->capacity) {
         size_t new_cap = fc->capacity == 0 ? 32 : fc->capacity * 2;
         af_foliage_instance *next = realloc(fc->instances, new_cap * sizeof(*next));
-        if (!next) return false;
+        if (!next)
+            return false;
         fc->instances = next;
         fc->capacity = new_cap;
     }
@@ -1058,7 +1146,8 @@ static bool add_instance_to_chunk(af_terrain_chunk *c, size_t layer_idx, af_foli
     return true;
 }
 
-bool af_landscape_paint_foliage(af_landscape *ls, size_t layer_idx, af_vec3 center, float radius, float strength, uint32_t seed) {
+bool af_landscape_paint_foliage(af_landscape *ls, size_t layer_idx, af_vec3 center, float radius, float strength,
+                                uint32_t seed) {
     if (!ls || layer_idx >= ls->foliage_layer_count || radius <= 0.001f || strength <= 0.0f)
         return false;
 
@@ -1068,8 +1157,10 @@ bool af_landscape_paint_foliage(af_landscape *ls, size_t layer_idx, af_vec3 cent
     uint32_t rng = seed ^ 0x85ebca6bu;
     float area = AF_PI * radius * radius;
     int samples = (int)ceilf(area * 0.1f * r->density * strength);
-    if (samples < 1) samples = 1;
-    if (samples > 200) samples = 200;
+    if (samples < 1)
+        samples = 1;
+    if (samples > 200)
+        samples = 200;
 
     size_t added = 0;
     for (int s = 0; s < samples; ++s) {
@@ -1082,7 +1173,8 @@ bool af_landscape_paint_foliage(af_landscape *ls, size_t layer_idx, af_vec3 cent
         float wz = center.z + r_dist * sinf(angle);
 
         int32_t cx, cz;
-        if (!get_local_coords(ls, wx, wz, &cx, &cz, NULL, NULL)) continue;
+        if (!get_local_coords(ls, wx, wz, &cx, &cz, NULL, NULL))
+            continue;
 
         float wy = af_landscape_get_height(ls, wx, wz);
         af_vec3 norm;
@@ -1092,7 +1184,8 @@ bool af_landscape_paint_foliage(af_landscape *ls, size_t layer_idx, af_vec3 cent
         af_landscape_get_layer_weights(ls, wx, wz, weights);
 
         af_vec3 pos = {wx, wy + r->offset_y, wz};
-        if (!test_instance_rules(ls, fl, pos, norm, weights)) continue;
+        if (!test_instance_rules(ls, fl, pos, norm, weights))
+            continue;
 
         /* Rotation */
         float yaw = 0.0f;
@@ -1145,7 +1238,8 @@ bool af_landscape_paint_foliage(af_landscape *ls, size_t layer_idx, af_vec3 cent
 }
 
 bool af_landscape_erase_foliage(af_landscape *ls, int layer_idx, af_vec3 center, float radius) {
-    if (!ls || radius <= 0.001f) return false;
+    if (!ls || radius <= 0.001f)
+        return false;
     float r_sq = radius * radius;
     size_t removed = 0;
 
@@ -1166,7 +1260,8 @@ bool af_landscape_erase_foliage(af_landscape *ls, int layer_idx, af_vec3 center,
                     if (ls->foliage_layers[l].total_instances > 0)
                         ls->foliage_layers[l].total_instances--;
                 } else {
-                    if (write_idx != i) fc->instances[write_idx] = fc->instances[i];
+                    if (write_idx != i)
+                        fc->instances[write_idx] = fc->instances[i];
                     write_idx++;
                 }
             }
@@ -1181,7 +1276,8 @@ bool af_landscape_erase_foliage(af_landscape *ls, int layer_idx, af_vec3 center,
 }
 
 void af_landscape_clear_foliage(af_landscape *ls, int layer_idx) {
-    if (!ls) return;
+    if (!ls)
+        return;
     size_t l_start = layer_idx >= 0 ? (size_t)layer_idx : 0;
     size_t l_end = layer_idx >= 0 ? (size_t)layer_idx + 1 : ls->foliage_layer_count;
 
@@ -1190,14 +1286,16 @@ void af_landscape_clear_foliage(af_landscape *ls, int layer_idx) {
             ls->chunks[c].foliage[l].count = 0;
         }
         ls->total_foliage_instances -= (ls->total_foliage_instances >= ls->foliage_layers[l].total_instances
-                                        ? ls->foliage_layers[l].total_instances : ls->total_foliage_instances);
+                                            ? ls->foliage_layers[l].total_instances
+                                            : ls->total_foliage_instances);
         ls->foliage_layers[l].total_instances = 0;
     }
     ls->modification_version++;
 }
 
 bool af_landscape_populate_procedural_foliage(af_landscape *ls, size_t layer_idx, uint32_t seed) {
-    if (!ls || layer_idx >= ls->foliage_layer_count) return false;
+    if (!ls || layer_idx >= ls->foliage_layer_count)
+        return false;
 
     af_landscape_clear_foliage(ls, (int)layer_idx);
     af_foliage_layer *fl = &ls->foliage_layers[layer_idx];
@@ -1207,8 +1305,10 @@ bool af_landscape_populate_procedural_foliage(af_landscape *ls, size_t layer_idx
     float chunk_size = (float)CHUNK_Q * ls->vertex_spacing;
     float chunk_area = chunk_size * chunk_size;
     int target_chunk_samples = (int)ceilf(chunk_area * 0.05f * r->density);
-    if (target_chunk_samples < 2) target_chunk_samples = 2;
-    if (target_chunk_samples > 300) target_chunk_samples = 300;
+    if (target_chunk_samples < 2)
+        target_chunk_samples = 2;
+    if (target_chunk_samples > 300)
+        target_chunk_samples = 300;
 
     size_t total_added = 0;
     for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
@@ -1229,7 +1329,8 @@ bool af_landscape_populate_procedural_foliage(af_landscape *ls, size_t layer_idx
             af_landscape_get_layer_weights(ls, wx, wz, weights);
 
             af_vec3 pos = {wx, wy + r->offset_y, wz};
-            if (!test_instance_rules(ls, fl, pos, norm, weights)) continue;
+            if (!test_instance_rules(ls, fl, pos, norm, weights))
+                continue;
 
             float yaw = 0.0f;
             if (r->random_yaw) {
@@ -1280,7 +1381,8 @@ size_t af_landscape_query_foliage_batches(const af_landscape *ls, const af_camer
                                           af_foliage_batch *out_batches, size_t max_batches,
                                           af_foliage_instance *instance_pool, size_t pool_capacity,
                                           size_t *out_total_instances) {
-    if (!ls || !ls->chunks || !out_batches || max_batches == 0) return 0;
+    if (!ls || !ls->chunks || !out_batches || max_batches == 0)
+        return 0;
     (void)viewport;
 
     size_t batch_count = 0;
@@ -1301,20 +1403,21 @@ size_t af_landscape_query_foliage_batches(const af_landscape *ls, const af_camer
         for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
             const af_terrain_chunk *c = &ls->chunks[c_idx];
             const af_foliage_chunk *fc = &c->foliage[l];
-            if (fc->count == 0) continue;
+            if (fc->count == 0)
+                continue;
 
             /* Distance culling based on chunk center */
-            af_vec3 chunk_center = {
-                (c->bounds_min.x + c->bounds_max.x) * 0.5f,
-                (c->bounds_min.y + c->bounds_max.y) * 0.5f,
-                (c->bounds_min.z + c->bounds_max.z) * 0.5f
-            };
+            af_vec3 chunk_center = {(c->bounds_min.x + c->bounds_max.x) * 0.5f,
+                                    (c->bounds_min.y + c->bounds_max.y) * 0.5f,
+                                    (c->bounds_min.z + c->bounds_max.z) * 0.5f};
             af_vec3 to_cam = af_vec3_sub(chunk_center, cam_pos);
-            if (af_vec3_dot(to_cam, to_cam) > max_dist_sq) continue;
+            if (af_vec3_dot(to_cam, to_cam) > max_dist_sq)
+                continue;
 
             /* Copy visible instances into instance pool */
             for (size_t i = 0; i < fc->count && pool_used < pool_capacity; ++i) {
-                if (instance_pool) instance_pool[pool_used++] = fc->instances[i];
+                if (instance_pool)
+                    instance_pool[pool_used++] = fc->instances[i];
                 layer_instance_count++;
             }
         }
@@ -1331,6 +1434,7 @@ size_t af_landscape_query_foliage_batches(const af_landscape *ls, const af_camer
         }
     }
 
-    if (out_total_instances) *out_total_instances = total_instances;
+    if (out_total_instances)
+        *out_total_instances = total_instances;
     return batch_count;
 }

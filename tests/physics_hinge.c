@@ -4,12 +4,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Hinge %d: %s\n", __LINE__, #x);                                            \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Hinge %d: %s\n", __LINE__, #x);                                                           \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -36,8 +36,7 @@ int main(void) {
         CHECK(af_physics_step(p, s, 1.f / 60));
         af_joint_frame f;
         CHECK(af_scene_joint_frame(s, j, &f));
-        CHECK(af_vec3_length(af_vec3_sub(f.anchor_a, f.anchor_b)) < .035f &&
-              af_vec3_dot(f.axis_a, f.axis_b) > .999f);
+        CHECK(af_vec3_length(af_vec3_sub(f.anchor_a, f.anchor_b)) < .035f && af_vec3_dot(f.axis_a, f.axis_b) > .999f);
         float angle = atan2f(af_vec3_dot(f.axis_a, af_vec3_cross(f.reference_a, f.reference_b)),
                              af_vec3_dot(f.reference_a, f.reference_b));
         largest = fmaxf(largest, fabsf(angle));
@@ -59,8 +58,7 @@ int main(void) {
     af_scene_error e;
     CHECK(af_scene_save(s, "hinge.scene", &e));
     af_scene *copy = af_scene_load("hinge.scene", &e);
-    CHECK(copy && af_scene_joint_at(copy, 0)->limits_enabled &&
-          af_scene_joint_at(copy, 0)->type == AF_JOINT_HINGE);
+    CHECK(copy && af_scene_joint_at(copy, 0)->limits_enabled && af_scene_joint_at(copy, 0)->type == AF_JOINT_HINGE);
     af_scene_destroy(copy);
     remove("hinge.scene");
     j.axis_a = (af_vec3){0};

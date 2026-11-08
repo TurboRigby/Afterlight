@@ -16,15 +16,15 @@ static bool init(void *memory, const af_game_host *h) {
     for (size_t i = 0; i < h->object_count(h->scene); ++i) {
         const af_water *w = h->get_water(h->scene, h->object_at(h->scene, i)->id);
         if (w) {
-            river |= w->mode == AF_WATER_RIVER;s->hard|=w->quality==AF_WATER_HIGH;
+            river |= w->mode == AF_WATER_RIVER;
+            s->hard |= w->quality == AF_WATER_HIGH;
             s->pouring |= w->mode == AF_WATER_PARTICLES;
         }
         const af_scene_object *o = h->object_at(h->scene, i);
         if (!strcmp(o->name, "Pouring cup"))
             s->cup = o->id;
     }
-    strcpy(s->scene, river ? (s->hard ? "water-river-bend" : "water-stream")
-                           : (s->hard ? "water-lake" : "water-pool"));
+    strcpy(s->scene, river ? (s->hard ? "water-river-bend" : "water-stream") : (s->hard ? "water-lake" : "water-pool"));
     if (s->pouring)
         strcpy(s->scene, s->hard ? "water-pour-lab" : "water-pour");
     s->camera = (af_camera){.position = {0, 5, 9},
@@ -91,8 +91,7 @@ static void frame(void *memory, const af_game_host *h, double dt) {
               r = (h->key_down(h, AF_KEY_D) ? 1.f : 0) - (h->key_down(h, AF_KEY_A) ? 1.f : 0);
         s->camera.position.x += speed * (cosf(s->camera.yaw) * f - sinf(s->camera.yaw) * r);
         s->camera.position.z += speed * (sinf(s->camera.yaw) * f + cosf(s->camera.yaw) * r);
-        s->camera.position.y +=
-            speed * ((h->key_down(h, AF_KEY_E) ? 1.f : 0) - (h->key_down(h, AF_KEY_Q) ? 1.f : 0));
+        s->camera.position.y += speed * ((h->key_down(h, AF_KEY_E) ? 1.f : 0) - (h->key_down(h, AF_KEY_Q) ? 1.f : 0));
     }
     h->set_camera(h->engine, &s->camera);
 }

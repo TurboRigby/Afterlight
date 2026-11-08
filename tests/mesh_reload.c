@@ -12,8 +12,8 @@ static bool source(float y, bool bad) {
     FILE *f = fopen("reload-room.obj", "wb");
     if (!f)
         return false;
-    bool ok = fprintf(f, "v -4 %g -4\nv 4 %g -4\nv 4 %g 4\nv -4 %g 4\nf 1 2 3\nf 1 %u 4\n", (double)y,
-                      (double)y, (double)y, (double)y, bad ? 1u : 3u) > 0;
+    bool ok = fprintf(f, "v -4 %g -4\nv 4 %g -4\nv 4 %g 4\nv -4 %g 4\nf 1 2 3\nf 1 %u 4\n", (double)y, (double)y,
+                      (double)y, (double)y, bad ? 1u : 3u) > 0;
     return fclose(f) == 0 && ok;
 }
 static bool init(af_engine *e, void *memory) {
@@ -33,14 +33,14 @@ static bool init(af_engine *e, void *memory) {
     af_engine_set_scene(e, s->scene);
     return true;
 }
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Mesh reload %d: %s\n", __LINE__, #x);                                      \
-            s->failed = true;                                                                           \
-            af_engine_request_quit(e);                                                                  \
-            return;                                                                                     \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Mesh reload %d: %s\n", __LINE__, #x);                                                     \
+            s->failed = true;                                                                                          \
+            af_engine_request_quit(e);                                                                                 \
+            return;                                                                                                    \
+        }                                                                                                              \
     } while (0)
 static void update(af_engine *e, double dt, void *memory) {
     (void)dt;

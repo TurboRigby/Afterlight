@@ -2,12 +2,12 @@
 #include <afterlight/swim.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Swimming %d: %s\n", __LINE__, #x);                                         \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Swimming %d: %s\n", __LINE__, #x);                                                        \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     float heights[3];
@@ -29,20 +29,16 @@ int main(void) {
             CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){0}, dt, filter));
         heights[rate] = c.position.y;
         printf("Rate %u surface %.5f immersion %.5f\n", rates[rate], c.position.y, state.immersion);
-        CHECK(state.swimming && !state.head_underwater &&
-              fabsf(state.immersion - sc.neutral_fraction) < .025f);
+        CHECK(state.swimming && !state.head_underwater && fabsf(state.immersion - sc.neutral_fraction) < .025f);
         for (unsigned i = 0; i < rates[rate]; ++i)
-            CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.vertical = -1},
-                                         dt, filter));
+            CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.vertical = -1}, dt, filter));
         CHECK(c.position.y < -1 && state.head_underwater);
         for (unsigned i = 0; i < rates[rate] * 2; ++i)
-            CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.vertical = 1}, dt,
-                                         filter));
+            CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.vertical = 1}, dt, filter));
         CHECK(c.position.y > -.5f && !state.head_underwater);
         c = (af_character){.position = {0, -.27f, 0}};
         state = (af_swim_state){0};
-        CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.jump = true}, dt,
-                                     filter));
+        CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.jump = true}, dt, filter));
         CHECK(c.velocity.y > 4 && !state.swimming);
         c = (af_character){.position = {0, -1, 0}};
         state = (af_swim_state){0};
@@ -55,8 +51,7 @@ int main(void) {
         collider.half_extents = (af_vec3){.1f, 3, 3};
         CHECK(af_scene_set_object_collider(s, wall, collider));
         for (unsigned i = 0; i < rates[rate] * 2; ++i)
-            CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.move = {1, 0, 0}},
-                                         dt, filter));
+            CHECK(af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.move = {1, 0, 0}}, dt, filter));
         CHECK(c.position.x < .56f && c.position.x > .4f);
         CHECK(af_scene_remove_object(s, wall));
         w.mode = AF_WATER_RIVER;
@@ -75,8 +70,7 @@ int main(void) {
         CHECK(!state.swimming && state.immersion == 0 && c.velocity.y < 0);
         af_character before = c;
         af_swim_state saved = state;
-        CHECK(!af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.vertical = NAN}, dt,
-                                      filter));
+        CHECK(!af_character_swim_step(NULL, s, &c, cc, &state, sc, (af_swim_input){.vertical = NAN}, dt, filter));
         CHECK(c.position.y == before.position.y && state.swimming == saved.swimming);
         af_scene_destroy(s);
     }

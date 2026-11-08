@@ -14,16 +14,17 @@
 #define CHUNK_Q AF_LANDSCAPE_CHUNK_QUADS
 
 static bool read_float(const cJSON *j, float *out) {
-    if (!cJSON_IsNumber(j) || !isfinite(j->valuedouble)) return false;
+    if (!cJSON_IsNumber(j) || !isfinite(j->valuedouble))
+        return false;
     *out = (float)j->valuedouble;
     return true;
 }
 
 static bool read_vec3(const cJSON *j, af_vec3 *out) {
-    if (!cJSON_IsArray(j) || cJSON_GetArraySize(j) != 3) return false;
+    if (!cJSON_IsArray(j) || cJSON_GetArraySize(j) != 3)
+        return false;
     float x, y, z;
-    if (!read_float(cJSON_GetArrayItem(j, 0), &x) ||
-        !read_float(cJSON_GetArrayItem(j, 1), &y) ||
+    if (!read_float(cJSON_GetArrayItem(j, 0), &x) || !read_float(cJSON_GetArrayItem(j, 1), &y) ||
         !read_float(cJSON_GetArrayItem(j, 2), &z))
         return false;
     *out = (af_vec3){x, y, z};
@@ -39,10 +40,13 @@ static cJSON *write_vec3(af_vec3 v) {
 }
 
 bool ls_decode(af_scene *scene, const cJSON *root) {
-    if (!scene || !root) return false;
+    if (!scene || !root)
+        return false;
     const cJSON *lj = cJSON_GetObjectItemCaseSensitive(root, "landscape");
-    if (!lj || cJSON_IsNull(lj)) return true; /* Optional or null landscape */
-    if (!cJSON_IsObject(lj)) return false;
+    if (!lj || cJSON_IsNull(lj))
+        return true; /* Optional or null landscape */
+    if (!cJSON_IsObject(lj))
+        return false;
 
     const cJSON *cx_item = cJSON_GetObjectItemCaseSensitive(lj, "chunks_x");
     const cJSON *cz_item = cJSON_GetObjectItemCaseSensitive(lj, "chunks_z");
@@ -53,41 +57,52 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
     float spacing = (sp_item && cJSON_IsNumber(sp_item)) ? (float)sp_item->valuedouble : 1.0f;
 
     af_landscape *ls = af_landscape_create(cx, cz, spacing);
-    if (!ls) return false;
+    if (!ls)
+        return false;
 
     const cJSON *en_item = cJSON_GetObjectItemCaseSensitive(lj, "enabled");
-    if (en_item && cJSON_IsBool(en_item)) ls->enabled = cJSON_IsTrue(en_item);
+    if (en_item && cJSON_IsBool(en_item))
+        ls->enabled = cJSON_IsTrue(en_item);
 
     const cJSON *orig_item = cJSON_GetObjectItemCaseSensitive(lj, "origin");
-    if (orig_item) read_vec3(orig_item, &ls->origin);
+    if (orig_item)
+        read_vec3(orig_item, &ls->origin);
 
     /* Layers */
     const cJSON *layers_arr = cJSON_GetObjectItemCaseSensitive(lj, "layers");
     if (layers_arr && cJSON_IsArray(layers_arr)) {
         size_t count = (size_t)cJSON_GetArraySize(layers_arr);
-        if (count > AF_LANDSCAPE_MAX_LAYERS) count = AF_LANDSCAPE_MAX_LAYERS;
+        if (count > AF_LANDSCAPE_MAX_LAYERS)
+            count = AF_LANDSCAPE_MAX_LAYERS;
         for (size_t i = 0; i < count; ++i) {
             const cJSON *item = cJSON_GetArrayItem(layers_arr, (int)i);
-            if (!cJSON_IsObject(item)) continue;
+            if (!cJSON_IsObject(item))
+                continue;
             af_terrain_layer *l = &ls->layers[i];
 
             const cJSON *name = cJSON_GetObjectItemCaseSensitive(item, "name");
-            if (name && cJSON_IsString(name)) snprintf(l->name, sizeof(l->name), "%s", name->valuestring);
+            if (name && cJSON_IsString(name))
+                snprintf(l->name, sizeof(l->name), "%s", name->valuestring);
 
             const cJSON *diff = cJSON_GetObjectItemCaseSensitive(item, "diffuse");
-            if (diff && cJSON_IsString(diff)) snprintf(l->diffuse_texture, sizeof(l->diffuse_texture), "%s", diff->valuestring);
+            if (diff && cJSON_IsString(diff))
+                snprintf(l->diffuse_texture, sizeof(l->diffuse_texture), "%s", diff->valuestring);
 
             const cJSON *norm = cJSON_GetObjectItemCaseSensitive(item, "normal");
-            if (norm && cJSON_IsString(norm)) snprintf(l->normal_texture, sizeof(l->normal_texture), "%s", norm->valuestring);
+            if (norm && cJSON_IsString(norm))
+                snprintf(l->normal_texture, sizeof(l->normal_texture), "%s", norm->valuestring);
 
             const cJSON *rough = cJSON_GetObjectItemCaseSensitive(item, "roughness");
-            if (rough && cJSON_IsNumber(rough)) l->roughness = (float)rough->valuedouble;
+            if (rough && cJSON_IsNumber(rough))
+                l->roughness = (float)rough->valuedouble;
 
             const cJSON *metal = cJSON_GetObjectItemCaseSensitive(item, "metalness");
-            if (metal && cJSON_IsNumber(metal)) l->metalness = (float)metal->valuedouble;
+            if (metal && cJSON_IsNumber(metal))
+                l->metalness = (float)metal->valuedouble;
 
             const cJSON *scale = cJSON_GetObjectItemCaseSensitive(item, "uv_scale");
-            if (scale && cJSON_IsNumber(scale)) l->uv_scale = (float)scale->valuedouble;
+            if (scale && cJSON_IsNumber(scale))
+                l->uv_scale = (float)scale->valuedouble;
         }
     }
 
@@ -97,47 +112,60 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
         size_t count = (size_t)cJSON_GetArraySize(fl_arr);
         for (size_t i = 0; i < count && i < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++i) {
             const cJSON *item = cJSON_GetArrayItem(fl_arr, (int)i);
-            if (!cJSON_IsObject(item)) continue;
+            if (!cJSON_IsObject(item))
+                continue;
 
             const cJSON *name = cJSON_GetObjectItemCaseSensitive(item, "name");
             const cJSON *mesh = cJSON_GetObjectItemCaseSensitive(item, "mesh");
 
-            int idx = af_landscape_add_foliage_layer(ls, name ? name->valuestring : "Layer",
-                                                     mesh ? mesh->valuestring : "");
+            int idx =
+                af_landscape_add_foliage_layer(ls, name ? name->valuestring : "Layer", mesh ? mesh->valuestring : "");
             if (idx >= 0) {
                 af_foliage_layer *fl = &ls->foliage_layers[idx];
                 const cJSON *vis = cJSON_GetObjectItemCaseSensitive(item, "visible");
-                if (vis && cJSON_IsBool(vis)) fl->visible = cJSON_IsTrue(vis);
+                if (vis && cJSON_IsBool(vis))
+                    fl->visible = cJSON_IsTrue(vis);
 
                 const cJSON *shadows = cJSON_GetObjectItemCaseSensitive(item, "cast_shadows");
-                if (shadows && cJSON_IsBool(shadows)) fl->cast_shadows = cJSON_IsTrue(shadows);
+                if (shadows && cJSON_IsBool(shadows))
+                    fl->cast_shadows = cJSON_IsTrue(shadows);
 
                 const cJSON *dist = cJSON_GetObjectItemCaseSensitive(item, "max_distance");
-                if (dist && cJSON_IsNumber(dist)) fl->max_distance = (float)dist->valuedouble;
+                if (dist && cJSON_IsNumber(dist))
+                    fl->max_distance = (float)dist->valuedouble;
 
                 /* Rules */
                 const cJSON *rj = cJSON_GetObjectItemCaseSensitive(item, "rules");
                 if (rj && cJSON_IsObject(rj)) {
                     const cJSON *ry = cJSON_GetObjectItemCaseSensitive(rj, "random_yaw");
-                    if (ry && cJSON_IsBool(ry)) fl->rules.random_yaw = cJSON_IsTrue(ry);
+                    if (ry && cJSON_IsBool(ry))
+                        fl->rules.random_yaw = cJSON_IsTrue(ry);
                     const cJSON *ymin = cJSON_GetObjectItemCaseSensitive(rj, "yaw_min");
-                    if (ymin && cJSON_IsNumber(ymin)) fl->rules.yaw_min = (float)ymin->valuedouble;
+                    if (ymin && cJSON_IsNumber(ymin))
+                        fl->rules.yaw_min = (float)ymin->valuedouble;
                     const cJSON *ymax = cJSON_GetObjectItemCaseSensitive(rj, "yaw_max");
-                    if (ymax && cJSON_IsNumber(ymax)) fl->rules.yaw_max = (float)ymax->valuedouble;
+                    if (ymax && cJSON_IsNumber(ymax))
+                        fl->rules.yaw_max = (float)ymax->valuedouble;
 
                     const cJSON *smin = cJSON_GetObjectItemCaseSensitive(rj, "scale_min");
-                    if (smin) read_vec3(smin, &fl->rules.scale_min);
+                    if (smin)
+                        read_vec3(smin, &fl->rules.scale_min);
                     const cJSON *smax = cJSON_GetObjectItemCaseSensitive(rj, "scale_max");
-                    if (smax) read_vec3(smax, &fl->rules.scale_max);
+                    if (smax)
+                        read_vec3(smax, &fl->rules.scale_max);
 
                     const cJSON *dens = cJSON_GetObjectItemCaseSensitive(rj, "density");
-                    if (dens && cJSON_IsNumber(dens)) fl->rules.density = (float)dens->valuedouble;
+                    if (dens && cJSON_IsNumber(dens))
+                        fl->rules.density = (float)dens->valuedouble;
                     const cJSON *spac = cJSON_GetObjectItemCaseSensitive(rj, "min_spacing");
-                    if (spac && cJSON_IsNumber(spac)) fl->rules.min_spacing = (float)spac->valuedouble;
+                    if (spac && cJSON_IsNumber(spac))
+                        fl->rules.min_spacing = (float)spac->valuedouble;
                     const cJSON *norm_al = cJSON_GetObjectItemCaseSensitive(rj, "align_to_normal");
-                    if (norm_al && cJSON_IsNumber(norm_al)) fl->rules.align_to_normal = (float)norm_al->valuedouble;
+                    if (norm_al && cJSON_IsNumber(norm_al))
+                        fl->rules.align_to_normal = (float)norm_al->valuedouble;
                     const cJSON *off_y = cJSON_GetObjectItemCaseSensitive(rj, "offset_y");
-                    if (off_y && cJSON_IsNumber(off_y)) fl->rules.offset_y = (float)off_y->valuedouble;
+                    if (off_y && cJSON_IsNumber(off_y))
+                        fl->rules.offset_y = (float)off_y->valuedouble;
                 }
             }
         }
@@ -149,7 +177,8 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
         size_t c_count = (size_t)cJSON_GetArraySize(chunks_arr);
         for (size_t i = 0; i < c_count && i < ls->chunk_count; ++i) {
             const cJSON *cj = cJSON_GetArrayItem(chunks_arr, (int)i);
-            if (!cJSON_IsObject(cj)) continue;
+            if (!cJSON_IsObject(cj))
+                continue;
 
             const cJSON *cx_val = cJSON_GetObjectItemCaseSensitive(cj, "cx");
             const cJSON *cz_val = cJSON_GetObjectItemCaseSensitive(cj, "cz");
@@ -157,7 +186,8 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
             int32_t chunk_z = cz_val ? (int32_t)cz_val->valueint : (int32_t)(i / ls->chunk_count_x);
 
             size_t c_idx = (size_t)chunk_z * ls->chunk_count_x + (size_t)chunk_x;
-            if (c_idx >= ls->chunk_count) continue;
+            if (c_idx >= ls->chunk_count)
+                continue;
             af_terrain_chunk *c = &ls->chunks[c_idx];
 
             /* Heights */
@@ -166,7 +196,8 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
                 size_t h_count = (size_t)cJSON_GetArraySize(h_arr);
                 for (size_t v = 0; v < h_count && v < CHUNK_V * CHUNK_V; ++v) {
                     const cJSON *hv = cJSON_GetArrayItem(h_arr, (int)v);
-                    if (hv && cJSON_IsNumber(hv)) c->heights[v] = (float)hv->valuedouble;
+                    if (hv && cJSON_IsNumber(hv))
+                        c->heights[v] = (float)hv->valuedouble;
                 }
             }
 
@@ -176,7 +207,8 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
                 size_t w_count = (size_t)cJSON_GetArraySize(w_arr);
                 for (size_t b = 0; b < w_count && b < CHUNK_V * CHUNK_V * 4; ++b) {
                     const cJSON *wv = cJSON_GetArrayItem(w_arr, (int)b);
-                    if (wv && cJSON_IsNumber(wv)) c->weights[b] = (uint8_t)wv->valueint;
+                    if (wv && cJSON_IsNumber(wv))
+                        c->weights[b] = (uint8_t)wv->valueint;
                 }
             }
 
@@ -186,14 +218,17 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
                 size_t f_layer_count = (size_t)cJSON_GetArraySize(f_arr);
                 for (size_t fl = 0; fl < f_layer_count && fl < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++fl) {
                     const cJSON *fl_entry = cJSON_GetArrayItem(f_arr, (int)fl);
-                    if (!cJSON_IsObject(fl_entry)) continue;
+                    if (!cJSON_IsObject(fl_entry))
+                        continue;
 
                     const cJSON *l_idx_item = cJSON_GetObjectItemCaseSensitive(fl_entry, "layer");
                     size_t l_idx = l_idx_item ? (size_t)l_idx_item->valueint : fl;
-                    if (l_idx >= ls->foliage_layer_count) continue;
+                    if (l_idx >= ls->foliage_layer_count)
+                        continue;
 
                     const cJSON *inst_arr = cJSON_GetObjectItemCaseSensitive(fl_entry, "instances");
-                    if (!inst_arr || !cJSON_IsArray(inst_arr)) continue;
+                    if (!inst_arr || !cJSON_IsArray(inst_arr))
+                        continue;
 
                     size_t num_inst = (size_t)cJSON_GetArraySize(inst_arr);
                     af_foliage_chunk *fc = &c->foliage[l_idx];
@@ -203,7 +238,8 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
 
                     for (size_t inst_i = 0; inst_i < num_inst; ++inst_i) {
                         const cJSON *inst_v = cJSON_GetArrayItem(inst_arr, (int)inst_i);
-                        if (!cJSON_IsArray(inst_v) || cJSON_GetArraySize(inst_v) < 9) continue;
+                        if (!cJSON_IsArray(inst_v) || cJSON_GetArraySize(inst_v) < 9)
+                            continue;
 
                         af_foliage_instance inst;
                         inst.transform.position.x = (float)cJSON_GetArrayItem(inst_v, 0)->valuedouble;
@@ -228,8 +264,10 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
             /* Update bounds */
             float min_y = c->heights[0], max_y = c->heights[0];
             for (size_t v = 1; v < CHUNK_V * CHUNK_V; ++v) {
-                if (c->heights[v] < min_y) min_y = c->heights[v];
-                if (c->heights[v] > max_y) max_y = c->heights[v];
+                if (c->heights[v] < min_y)
+                    min_y = c->heights[v];
+                if (c->heights[v] > max_y)
+                    max_y = c->heights[v];
             }
             c->bounds_min.y = min_y;
             c->bounds_max.y = max_y;
@@ -243,12 +281,15 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
 }
 
 bool ls_encode(const af_scene *scene, cJSON *root) {
-    if (!scene || !root) return false;
+    if (!scene || !root)
+        return false;
     const af_landscape *ls = af_scene_get_landscape(scene);
-    if (!ls) return cJSON_AddNullToObject(root, "landscape") != NULL;
+    if (!ls)
+        return cJSON_AddNullToObject(root, "landscape") != NULL;
 
     cJSON *lj = cJSON_CreateObject();
-    if (!lj) return false;
+    if (!lj)
+        return false;
     cJSON_AddItemToObject(root, "landscape", lj);
 
     cJSON_AddBoolToObject(lj, "enabled", ls->enabled);
@@ -326,7 +367,8 @@ bool ls_encode(const af_scene *scene, cJSON *root) {
         cJSON *f_arr = cJSON_CreateArray();
         for (size_t fl = 0; fl < ls->foliage_layer_count; ++fl) {
             const af_foliage_chunk *fc = &c->foliage[fl];
-            if (fc->count == 0) continue;
+            if (fc->count == 0)
+                continue;
 
             cJSON *fl_entry = cJSON_CreateObject();
             cJSON_AddNumberToObject(fl_entry, "layer", (double)fl);
@@ -338,9 +380,12 @@ bool ls_encode(const af_scene *scene, cJSON *root) {
                 cJSON_AddItemToArray(inst_v, cJSON_CreateNumber(roundf(inst->transform.position.y * 100.0f) / 100.0f));
                 cJSON_AddItemToArray(inst_v, cJSON_CreateNumber(roundf(inst->transform.position.z * 100.0f) / 100.0f));
 
-                cJSON_AddItemToArray(inst_v, cJSON_CreateNumber(roundf(inst->transform.rotation.x * 1000.0f) / 1000.0f));
-                cJSON_AddItemToArray(inst_v, cJSON_CreateNumber(roundf(inst->transform.rotation.y * 1000.0f) / 1000.0f));
-                cJSON_AddItemToArray(inst_v, cJSON_CreateNumber(roundf(inst->transform.rotation.z * 1000.0f) / 1000.0f));
+                cJSON_AddItemToArray(inst_v,
+                                     cJSON_CreateNumber(roundf(inst->transform.rotation.x * 1000.0f) / 1000.0f));
+                cJSON_AddItemToArray(inst_v,
+                                     cJSON_CreateNumber(roundf(inst->transform.rotation.y * 1000.0f) / 1000.0f));
+                cJSON_AddItemToArray(inst_v,
+                                     cJSON_CreateNumber(roundf(inst->transform.rotation.z * 1000.0f) / 1000.0f));
 
                 cJSON_AddItemToArray(inst_v, cJSON_CreateNumber(roundf(inst->transform.scale.x * 100.0f) / 100.0f));
                 cJSON_AddItemToArray(inst_v, cJSON_CreateNumber(roundf(inst->transform.scale.y * 100.0f) / 100.0f));

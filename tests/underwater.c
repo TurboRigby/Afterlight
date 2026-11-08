@@ -11,22 +11,27 @@ typedef struct test {
     af_object_id plane;
     unsigned char deep[4], near_surface[4];
 } test;
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Underwater phase %u line %d: %s (%u,%u,%u)\n", s->phase, __LINE__, #x,     \
-                    p[0], p[1], p[2]);                                                                  \
-            s->failed = true;                                                                           \
-            af_engine_request_quit(e);                                                                  \
-            return;                                                                                     \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Underwater phase %u line %d: %s (%u,%u,%u)\n", s->phase, __LINE__, #x, p[0], p[1], p[2]); \
+            s->failed = true;                                                                                          \
+            af_engine_request_quit(e);                                                                                 \
+            return;                                                                                                    \
+        }                                                                                                              \
     } while (0)
 static bool init(af_engine *e, void *data) {
     test *s = data;
     s->scene = af_scene_create();
     if (!s->scene)
         return false;
-    const char *aa=getenv("AFTERLIGHT_TEST_AA");if(aa){af_render_settings r=af_scene_get_render_settings(s->scene);r.anti_aliasing=!strcmp(aa,"taa")?AF_AA_TAA:!strcmp(aa,"smaa")?AF_AA_SMAA:AF_AA_FXAA;if(!af_scene_set_render_settings(s->scene,r))return false;}
+    const char *aa = getenv("AFTERLIGHT_TEST_AA");
+    if (aa) {
+        af_render_settings r = af_scene_get_render_settings(s->scene);
+        r.anti_aliasing = !strcmp(aa, "taa") ? AF_AA_TAA : !strcmp(aa, "smaa") ? AF_AA_SMAA : AF_AA_FXAA;
+        if (!af_scene_set_render_settings(s->scene, r))
+            return false;
+    }
     af_object_id id = af_scene_add_object(s->scene, "Pool", "__node");
     af_water w = af_water_default();
     w.half_size = (af_vec2){10, 10};

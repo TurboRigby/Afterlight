@@ -2,12 +2,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Interaction %d: %s\n", __LINE__, #x);                                      \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Interaction %d: %s\n", __LINE__, #x);                                                     \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -22,8 +22,8 @@ int main(void) {
     CHECK(af_scene_set_body(s, id, b));
     af_physics *p = af_physics_create();
     af_character character = {.position = {-.9f, 0, 0}};
-    CHECK(af_physics_push_character(p, s, 0, &character, af_character_config_default(),
-                                    (af_vec3){2, 0, 0}, 120, 1.f / 60) == 1);
+    CHECK(af_physics_push_character(p, s, 0, &character, af_character_config_default(), (af_vec3){2, 0, 0}, 120,
+                                    1.f / 60) == 1);
     CHECK(af_physics_step(p, s, 1.f / 60) && af_physics_get_state(p, id).velocity.x > 0);
     af_vec3 center = af_physics_get_state(p, id).position;
     CHECK(af_physics_grab(p, s, id, center) && af_physics_held(p) == id);

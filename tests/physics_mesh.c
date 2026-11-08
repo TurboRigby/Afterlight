@@ -2,12 +2,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Mesh physics %d: %s\n", __LINE__, #x);                                     \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Mesh physics %d: %s\n", __LINE__, #x);                                                    \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -45,10 +45,8 @@ int main(void) {
         CHECK(af_physics_step(p, s, 1.f / 60));
     for (unsigned i = 0; i < 4; ++i) {
         af_physics_state b = af_physics_get_state(p, ids[i]);
-        printf("Mesh rest %u: %.3f %.3f speed %.4f\n", i, b.position.x, b.position.y,
-               af_vec3_length(b.velocity));
-        CHECK(fabsf(b.position.y - (i == 3 ? .5f : .5f + (float)i)) < .1f &&
-              af_vec3_length(b.velocity) < .15f);
+        printf("Mesh rest %u: %.3f %.3f speed %.4f\n", i, b.position.x, b.position.y, af_vec3_length(b.velocity));
+        CHECK(fabsf(b.position.y - (i == 3 ? .5f : .5f + (float)i)) < .1f && af_vec3_length(b.velocity) < .15f);
     }
     CHECK(af_physics_get_stats(p).contacts > 0);
     af_physics_destroy(p);

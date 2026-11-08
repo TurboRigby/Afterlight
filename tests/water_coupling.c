@@ -3,12 +3,12 @@
 #include <afterlight/water.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Fluid coupling %d: %s\n", __LINE__, #x);                                   \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Fluid coupling %d: %s\n", __LINE__, #x);                                                  \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_physics *p = af_physics_create();

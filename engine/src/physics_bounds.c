@@ -4,10 +4,7 @@
 #include <stdlib.h>
 static int compare(const void *one, const void *two) {
     const ph_bound *a = one, *b = two;
-    return a->key_low < b->key_low   ? -1
-           : a->key_low > b->key_low ? 1
-           : a->body < b->body       ? -1
-                                     : a->body > b->body;
+    return a->key_low < b->key_low ? -1 : a->key_low > b->key_low ? 1 : a->body < b->body ? -1 : a->body > b->body;
 }
 bool ph_bounds_overlap(ph_bound a, ph_bound b) {
     return a.low.x <= b.high.x && a.high.x >= b.low.x && a.low.y <= b.high.y && a.high.y >= b.low.y &&
@@ -20,16 +17,14 @@ void ph_bounds(af_physics *p, ph_bound *out, float dt, bool swept) {
         af_vec3 extent = {b->shape.radius, b->shape.radius, b->shape.radius};
         bool moving = b->inv_mass > 0 && !b->sleeping;
         if (swept && moving) {
-            float r = b->shape.type == AF_COLLIDER_SPHERE ? b->shape.radius
-                                                          : af_vec3_length(b->shape.half_extents);
+            float r = b->shape.type == AF_COLLIDER_SPHERE ? b->shape.radius : af_vec3_length(b->shape.half_extents);
             extent = (af_vec3){r, r, r};
         } else if (b->shape.type != AF_COLLIDER_SPHERE) {
             extent = (af_vec3){0};
             for (unsigned k = 0; k < 3; ++k) {
                 af_vec3 axis = b->shape.axes[k];
                 float h = ph_get(b->shape.half_extents, k);
-                extent = af_vec3_add(extent,
-                                     (af_vec3){fabsf(axis.x) * h, fabsf(axis.y) * h, fabsf(axis.z) * h});
+                extent = af_vec3_add(extent, (af_vec3){fabsf(axis.x) * h, fabsf(axis.y) * h, fabsf(axis.z) * h});
             }
         }
         extent = af_vec3_add(extent, (af_vec3){.006f, .006f, .006f});

@@ -2,12 +2,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Landing %d: %s\n", __LINE__, #x);                                          \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Landing %d: %s\n", __LINE__, #x);                                                         \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id box(af_scene *s, af_vec3 pos, af_vec3 half, bool dynamic) {
     af_object_id id = af_scene_add_object(s, "Box", "cube");
@@ -43,10 +43,7 @@ int main(void) {
         af_gameplay_component g = af_gameplay_component_default();
         g.player.enabled = true;
         CHECK(af_scene_set_object_gameplay(s, player, g));
-        af_character ch = {.position = {offset == 0   ? 0
-                                        : offset == 1 ? .65f
-                                                      : .65f,
-                                        4, offset == 2 ? .65f : 0}};
+        af_character ch = {.position = {offset == 0 ? 0 : offset == 1 ? .65f : .65f, 4, offset == 2 ? .65f : 0}};
         af_transform t = af_transform_identity();
         t.position = ch.position;
         CHECK(af_scene_set_object_transform(s, player, t));

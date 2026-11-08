@@ -12,15 +12,14 @@ typedef struct test {
     bool failed;
     unsigned char straight[4], bent[4];
 } test;
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Refraction phase %u line %d: %s (%u,%u,%u)\n", s->phase, __LINE__, #x,     \
-                    p[0], p[1], p[2]);                                                                  \
-            s->failed = true;                                                                           \
-            af_engine_request_quit(e);                                                                  \
-            return;                                                                                     \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Refraction phase %u line %d: %s (%u,%u,%u)\n", s->phase, __LINE__, #x, p[0], p[1], p[2]); \
+            s->failed = true;                                                                                          \
+            af_engine_request_quit(e);                                                                                 \
+            return;                                                                                                    \
+        }                                                                                                              \
     } while (0)
 static bool init(af_engine *e, void *data) {
     test *s = data;
@@ -55,11 +54,10 @@ static bool init(af_engine *e, void *data) {
     af_mesh_data mesh = {vertices, 80, indices, 120};
     if (!af_engine_upload_mesh(e, "stripes", &mesh))
         return false;
-    af_vertex guard_v[4] = {
-        {.position = {-.5f, 1, 2.1f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}},
-        {.position = {.5f, 1, 2.1f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}},
-        {.position = {.5f, 1, 2.8f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}},
-        {.position = {-.5f, 1, 2.8f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}}};
+    af_vertex guard_v[4] = {{.position = {-.5f, 1, 2.1f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}},
+                            {.position = {.5f, 1, 2.1f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}},
+                            {.position = {.5f, 1, 2.8f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}},
+                            {.position = {-.5f, 1, 2.8f}, .normal = {0, 1, 0}, .color = {.02f, .02f, .9f, 1}}};
     uint32_t guard_i[] = {0, 2, 1, 0, 3, 2};
     af_mesh_data guard_mesh = {guard_v, 4, guard_i, 6};
     if (!af_engine_upload_mesh(e, "guard", &guard_mesh))
@@ -78,7 +76,9 @@ static bool init(af_engine *e, void *data) {
     l.intensity = l.ambient = 0;
     af_scene_set_light(s->scene, l);
     af_render_settings r = af_render_settings_default();
-    const char *aa=getenv("AFTERLIGHT_TEST_AA");if(aa)r.anti_aliasing=!strcmp(aa,"taa")?AF_AA_TAA:!strcmp(aa,"smaa")?AF_AA_SMAA:AF_AA_FXAA;
+    const char *aa = getenv("AFTERLIGHT_TEST_AA");
+    if (aa)
+        r.anti_aliasing = !strcmp(aa, "taa") ? AF_AA_TAA : !strcmp(aa, "smaa") ? AF_AA_SMAA : AF_AA_FXAA;
     r.refraction = false;
     r.underwater = false;
     af_scene_set_render_settings(s->scene, r);

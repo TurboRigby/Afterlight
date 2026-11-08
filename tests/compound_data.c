@@ -2,12 +2,12 @@
 
 #include <afterlight/compound.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Compound data %d: %s\n", __LINE__, #x);                                    \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Compound data %d: %s\n", __LINE__, #x);                                                   \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -23,8 +23,7 @@ int main(void) {
     af_scene_error e;
     CHECK(af_scene_save(s, "compound-data.scene", &e));
     af_scene *copy = af_scene_load("compound-data.scene", &e);
-    CHECK(copy && af_scene_collider_part_count(copy, id) == 2 &&
-          af_scene_get_collider_part(copy, first));
+    CHECK(copy && af_scene_collider_part_count(copy, id) == 2 && af_scene_get_collider_part(copy, first));
     af_scene *clone = af_scene_clone(s);
     CHECK(clone && af_scene_remove_object(clone, id) && af_scene_collider_part_count(clone, id) == 0 &&
           af_scene_collider_part_count(s, id) == 2);

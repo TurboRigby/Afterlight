@@ -7,12 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK(cond) do { \
-    if (!(cond)) { \
-        fprintf(stderr, "FAIL at line %d: %s\n", __LINE__, #cond); \
-        return 1; \
-    } \
-} while (0)
+#define CHECK(cond)                                                                                                    \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            fprintf(stderr, "FAIL at line %d: %s\n", __LINE__, #cond);                                                 \
+            return 1;                                                                                                  \
+        }                                                                                                              \
+    } while (0)
 
 int main(void) {
     puts("Running landscape system unit tests...");
@@ -156,16 +157,16 @@ int main(void) {
     size_t total_inst = 0;
     af_camera cam = af_camera_default();
     cam.position = (af_vec3){0, 10, 0};
-    size_t batch_count = af_landscape_query_foliage_batches(ls, &cam, (af_rect){0, 0, 800, 600},
-                                                            batches, 8, pool, 2048, &total_inst);
+    size_t batch_count =
+        af_landscape_query_foliage_batches(ls, &cam, (af_rect){0, 0, 800, 600}, batches, 8, pool, 2048, &total_inst);
     CHECK(batch_count == 1);
     CHECK(total_inst > 0);
     CHECK(!strcmp(batches[0].mesh_name, "pine_tree.obj"));
 
     /* Layer visibility toggle */
     CHECK(af_landscape_set_foliage_visible(ls, 0, false));
-    batch_count = af_landscape_query_foliage_batches(ls, &cam, (af_rect){0, 0, 800, 600},
-                                                     batches, 8, pool, 2048, &total_inst);
+    batch_count =
+        af_landscape_query_foliage_batches(ls, &cam, (af_rect){0, 0, 800, 600}, batches, 8, pool, 2048, &total_inst);
     CHECK(batch_count == 0); /* Hidden layer produces 0 batches! */
     CHECK(af_landscape_set_foliage_visible(ls, 0, true));
 
@@ -214,7 +215,8 @@ int main(void) {
     CHECK(af_scene_save(scene, test_path, &err));
 
     af_scene *loaded_scene = af_scene_load(test_path, &err);
-    if (!loaded_scene) fprintf(stderr, "Load error: code=%d message='%s'\n", err.code, err.message);
+    if (!loaded_scene)
+        fprintf(stderr, "Load error: code=%d message='%s'\n", err.code, err.message);
     CHECK(loaded_scene != NULL);
     const af_landscape *loaded_ls = af_scene_get_landscape(loaded_scene);
     CHECK(loaded_ls != NULL);

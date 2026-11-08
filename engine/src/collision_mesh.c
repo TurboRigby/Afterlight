@@ -16,8 +16,8 @@ struct af_collision_mesh {
     cm_node *nodes;
 };
 static bool finite3(af_vec3 v) {
-    return isfinite(v.x) && isfinite(v.y) && isfinite(v.z) && fabsf(v.x) <= 1000000 &&
-           fabsf(v.y) <= 1000000 && fabsf(v.z) <= 1000000;
+    return isfinite(v.x) && isfinite(v.y) && isfinite(v.z) && fabsf(v.x) <= 1000000 && fabsf(v.y) <= 1000000 &&
+           fabsf(v.z) <= 1000000;
 }
 static af_vec3 minimum(af_vec3 a, af_vec3 b) {
     return (af_vec3){fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z)};
@@ -146,8 +146,7 @@ static af_collision_mesh *create(const af_mesh_data *data, af_asset_error *error
     m->bytes = sizeof(*m) + count * (sizeof(af_triangle) + 2 * sizeof(cm_node));
     return m;
 }
-bool af_scene_set_collision_mesh(af_scene *s, const char *name, const af_mesh_data *data,
-                                 af_asset_error *e) {
+bool af_scene_set_collision_mesh(af_scene *s, const char *name, const af_mesh_data *data, af_asset_error *e) {
     if (e)
         *e = (af_asset_error){0};
     if (!s || !name || !name[0] || strlen(name) >= 64)
@@ -232,12 +231,10 @@ bool af_scene_prepare_collision_meshes(af_scene *s, af_asset_error *error) {
         size_t at = 0;
         while (at < stage->collision_mesh_count && strcmp(stage->collision_meshes[at].name, o->mesh))
             ++at;
-        if (at < stage->collision_mesh_count &&
-            (!asset || !strcmp(stage->collision_meshes[at].path, asset->path)))
+        if (at < stage->collision_mesh_count && (!asset || !strcmp(stage->collision_meshes[at].path, asset->path)))
             continue;
         if (!asset || asset->kind != AF_ASSET_MESH) {
-            ok = fail(error,
-                      "Mesh collider needs an imported mesh asset or uploaded CPU collision mesh.");
+            ok = fail(error, "Mesh collider needs an imported mesh asset or uploaded CPU collision mesh.");
             break;
         }
         af_mesh_file file = {0};
@@ -267,8 +264,7 @@ bool af_scene_prepare_collision_meshes(af_scene *s, af_asset_error *error) {
 static bool intersects(af_vec3 a, af_vec3 b, af_vec3 c, af_vec3 d) {
     return a.x <= d.x && b.x >= c.x && a.y <= d.y && b.y >= c.y && a.z <= d.z && b.z >= c.z;
 }
-size_t af_collision_mesh_query(const af_collision_mesh *m, af_vec3 low, af_vec3 high, uint32_t *out,
-                               size_t capacity) {
+size_t af_collision_mesh_query(const af_collision_mesh *m, af_vec3 low, af_vec3 high, uint32_t *out, size_t capacity) {
     if (!m || !finite3(low) || !finite3(high) || low.x > high.x || low.y > high.y || low.z > high.z ||
         (!out && capacity))
         return 0;

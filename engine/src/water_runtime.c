@@ -3,7 +3,9 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-static float clamp(float x, float a, float b) { return fmaxf(a, fminf(b, x)); }
+static float clamp(float x, float a, float b) {
+    return fmaxf(a, fminf(b, x));
+}
 static af_vec3 local(af_transform t, af_vec3 p) {
     p = af_vec3_sub(p, t.position);
     float c = cosf(t.rotation.y), s = sinf(t.rotation.y);
@@ -20,7 +22,7 @@ static const wa_slot *slot(const af_water_runtime *r, af_object_id id) {
     return NULL;
 }
 bool wa_sync(af_water_runtime *r, const af_scene *s) {
-    r->wind=af_scene_get_wind(s);
+    r->wind = af_scene_get_wind(s);
     size_t n = af_scene_water_count(s);
     /* Preserve by owner even when an earlier definition is removed. */
     for (size_t i = 0; i < n; ++i) {
@@ -63,11 +65,14 @@ bool wa_sync(af_water_runtime *r, const af_scene *s) {
     }
     r->count = n;
     uint64_t key = UINT64_C(1469598103934665603) ^ r->disturbance;
-    float wind_values[]={r->wind.direction.x,r->wind.direction.z,r->wind.speed,r->wind.gust_strength,r->wind.gust_frequency,r->wind.air_density};
-    key^=r->wind.enabled?1u:0u;
-    for(size_t k=0;k<sizeof(wind_values)/sizeof(*wind_values);++k){
-        uint32_t bits=0;memcpy(&bits,&wind_values[k],sizeof(bits));
-        for(unsigned byte=0;byte<4;++byte)key=(key^((bits>>(byte*8))&255u))*UINT64_C(1099511628211);
+    float wind_values[] = {r->wind.direction.x,   r->wind.direction.z,    r->wind.speed,
+                           r->wind.gust_strength, r->wind.gust_frequency, r->wind.air_density};
+    key ^= r->wind.enabled ? 1u : 0u;
+    for (size_t k = 0; k < sizeof(wind_values) / sizeof(*wind_values); ++k) {
+        uint32_t bits = 0;
+        memcpy(&bits, &wind_values[k], sizeof(bits));
+        for (unsigned byte = 0; byte < 4; ++byte)
+            key = (key ^ ((bits >> (byte * 8)) & 255u)) * UINT64_C(1099511628211);
     }
     for (size_t i = 0; i < n; ++i) {
         const unsigned char *bytes = (const unsigned char *)&r->slots[i].config;
@@ -81,9 +86,7 @@ bool wa_sync(af_water_runtime *r, const af_scene *s) {
     r->stats = (af_water_stats){.surfaces = n};
     for (size_t i = 0; i < n; ++i)
         if (r->slots[i].config.enabled)
-            r->stats.cells += r->slots[i].config.mode == AF_WATER_PARTICLES
-                                  ? 0
-                                  : (size_t)r->slots[i].n * r->slots[i].n;
+            r->stats.cells += r->slots[i].config.mode == AF_WATER_PARTICLES ? 0 : (size_t)r->slots[i].n * r->slots[i].n;
     return true;
 }
 static float length(const af_water *w) {
@@ -92,8 +95,7 @@ static float length(const af_water *w) {
 static float grid(const wa_slot *a, float x, float z, float alpha) {
     float gx = clamp((x / a->config.half_size.x + 1) * .5f * (float)(a->n - 1), 0, (float)a->n - 1);
     float gz = clamp((z / length(&a->config) + 1) * .5f * (float)(a->n - 1), 0, (float)a->n - 1);
-    unsigned ix = (unsigned)gx, iz = (unsigned)gz, jx = ix + 1 < a->n ? ix + 1 : ix,
-             jz = iz + 1 < a->n ? iz + 1 : iz;
+    unsigned ix = (unsigned)gx, iz = (unsigned)gz, jx = ix + 1 < a->n ? ix + 1 : ix, jz = iz + 1 < a->n ? iz + 1 : iz;
     unsigned ids[] = {iz * a->n + ix, iz * a->n + jx, jz * a->n + ix, jz * a->n + jx};
     float h[4];
     for (unsigned i = 0; i < 4; ++i)
@@ -102,26 +104,26 @@ static float grid(const wa_slot *a, float x, float z, float alpha) {
     return (h[0] * (1 - u) + h[1] * u) * (1 - v) + (h[2] * (1 - u) + h[3] * u) * v;
 }
 void wa_step(af_water_runtime *r, float dt) {
-    af_vec3 air=af_wind_velocity(r->wind,r->time);
-    float air_speed=af_vec3_length(air);
-    r->time+=dt;
+    af_vec3 air = af_wind_velocity(r->wind, r->time);
+    float air_speed = af_vec3_length(air);
+    r->time += dt;
     for (size_t i = 0; i < r->count; ++i) {
         wa_slot *a = &r->slots[i];
         af_water w = a->config;
         if (!w.enabled || w.mode == AF_WATER_PARTICLES)
             continue;
-        float drive=w.wind+fminf(.25f,.0015f*air_speed*air_speed);
-        float yaw=a->transform.rotation.y,cosa=cosf(yaw),sina=sinf(yaw);
-        af_vec3 direction=air_speed>.001f?af_vec3_scale(air,1/air_speed):(af_vec3){.8f,0,.6f};
-        float wind_x=cosa*direction.x-sina*direction.z,wind_z=sina*direction.x+cosa*direction.z;
+        float drive = w.wind + fminf(.25f, .0015f * air_speed * air_speed);
+        float yaw = a->transform.rotation.y, cosa = cosf(yaw), sina = sinf(yaw);
+        af_vec3 direction = air_speed > .001f ? af_vec3_scale(air, 1 / air_speed) : (af_vec3){.8f, 0, .6f};
+        float wind_x = cosa * direction.x - sina * direction.z, wind_z = sina * direction.x + cosa * direction.z;
         if (a->sleeping && drive == 0)
             continue;
         a->sleeping = false;
         unsigned n = a->n;
         float dx = 2 * w.half_size.x / (float)(n - 1), dz = 2 * length(&w) / (float)(n - 1);
         float c = fminf(w.wave_speed, sqrtf(9.81f * w.depth)), c2 = c * c;
-        unsigned steps = (unsigned)ceilf(
-            dt * (c / fminf(dx, dz) + (w.mode == AF_WATER_RIVER ? w.flow_speed / dz : 0)) / .35f);
+        unsigned steps =
+            (unsigned)ceilf(dt * (c / fminf(dx, dz) + (w.mode == AF_WATER_RIVER ? w.flow_speed / dz : 0)) / .35f);
         if (!steps)
             steps = 1;
         float h = dt / (float)steps;
@@ -133,28 +135,23 @@ void wa_step(af_water_runtime *r, float dt) {
                     unsigned k = z * n + x;
                     float v = a->h[k];
                     float lap =
-                        (a->h[z * n + (x ? x - 1 : x)] - 2 * v + a->h[z * n + (x + 1 < n ? x + 1 : x)]) /
-                            (dx * dx) +
-                        (a->h[(z ? z - 1 : z) * n + x] - 2 * v + a->h[(z + 1 < n ? z + 1 : z) * n + x]) /
-                            (dz * dz);
-                    float along=(2*(float)x/(float)(n-1)-1)*w.half_size.x,
-                          across=(2*(float)z/(float)(n-1)-1)*length(&w);
-                    float phase=along*wind_x+across*wind_z;
-                    float wind = drive * sinf(phase*1.6f - a->time*(1.7f+air_speed*.1f));
-                    float advect = w.mode == AF_WATER_RIVER
-                                       ? w.flow_speed * (old_v[k] - old_v[(z ? z - 1 : z) * n + x]) / dz
-                                       : 0;
+                        (a->h[z * n + (x ? x - 1 : x)] - 2 * v + a->h[z * n + (x + 1 < n ? x + 1 : x)]) / (dx * dx) +
+                        (a->h[(z ? z - 1 : z) * n + x] - 2 * v + a->h[(z + 1 < n ? z + 1 : z) * n + x]) / (dz * dz);
+                    float along = (2 * (float)x / (float)(n - 1) - 1) * w.half_size.x,
+                          across = (2 * (float)z / (float)(n - 1) - 1) * length(&w);
+                    float phase = along * wind_x + across * wind_z;
+                    float wind = drive * sinf(phase * 1.6f - a->time * (1.7f + air_speed * .1f));
+                    float advect =
+                        w.mode == AF_WATER_RIVER ? w.flow_speed * (old_v[k] - old_v[(z ? z - 1 : z) * n + x]) / dz : 0;
                     a->v[k] = (a->v[k] + (c2 * lap + wind - advect) * h) * expf(-w.damping * h);
                 }
             float next[AF_WATER_GRID_MAX * AF_WATER_GRID_MAX];
             float mean = 0;
             for (unsigned k = 0; k < n * n; ++k) {
                 unsigned z = k / n;
-                float advect = w.mode == AF_WATER_RIVER
-                                   ? w.flow_speed * (a->h[k] - a->h[(z ? z - 1 : z) * n + k % n]) / dz
-                                   : 0;
-                next[k] =
-                    clamp(a->h[k] + (a->v[k] - advect) * h, -w.depth * .25f, fminf(.5f, w.depth * .25f));
+                float advect =
+                    w.mode == AF_WATER_RIVER ? w.flow_speed * (a->h[k] - a->h[(z ? z - 1 : z) * n + k % n]) / dz : 0;
+                next[k] = clamp(a->h[k] + (a->v[k] - advect) * h, -w.depth * .25f, fminf(.5f, w.depth * .25f));
                 if (w.mode == AF_WATER_RIVER) {
                     float edge = fminf((float)z, (float)(n - 1 - z));
                     if (edge < 3) {
@@ -213,16 +210,14 @@ static af_water_sample sample_id(const af_water_runtime *r, const af_scene *s, a
             normal = af_vec3_normalize(
                 (af_vec3){-(grid(a, q.x + dx, q.z, alpha) - grid(a, q.x - dx, q.z, alpha)) / (2 * dx), 1,
                           -(grid(a, q.x, q.z + dz, alpha) - grid(a, q.x, q.z - dz, alpha)) / (2 * dz)});
-            unsigned x = (unsigned)clamp((q.x / w.half_size.x + 1) * .5f * (float)(a->n - 1), 0,
-                                         (float)a->n - 1),
-                     z = (unsigned)clamp((q.z / length(&w) + 1) * .5f * (float)(a->n - 1), 0,
-                                         (float)a->n - 1);
+            unsigned x = (unsigned)clamp((q.x / w.half_size.x + 1) * .5f * (float)(a->n - 1), 0, (float)a->n - 1),
+                     z = (unsigned)clamp((q.z / length(&w) + 1) * .5f * (float)(a->n - 1), 0, (float)a->n - 1);
             v = a->v[z * a->n + x];
         }
         if (w.mode == AF_WATER_RIVER) {
             float across = -normal.x, down = -normal.z + tangent.y;
-            normal = af_vec3_normalize((af_vec3){-across * tangent.z - down * tangent.x, 1,
-                                                 across * tangent.x - down * tangent.z});
+            normal = af_vec3_normalize(
+                (af_vec3){-across * tangent.z - down * tangent.x, 1, across * tangent.x - down * tangent.z});
         }
         return (af_water_sample){
             true,
@@ -246,10 +241,9 @@ bool wa_contains(const af_water_runtime *r, const af_scene *s, af_object_id id, 
     af_water_sample sample = sample_id(r, s, p, 1, id);
     return sample.inside && p.y >= sample.bottom && p.y < sample.height;
 }
-bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3 p, float radius,
-                float velocity) {
-    if (!r || !isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z) || !isfinite(radius) || radius <= 0 ||
-        radius > 1000 || !isfinite(velocity) || fabsf(velocity) > 20)
+bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3 p, float radius, float velocity) {
+    if (!r || !isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z) || !isfinite(radius) || radius <= 0 || radius > 1000 ||
+        !isfinite(velocity) || fabsf(velocity) > 20)
         return false;
     wa_slot *a = NULL;
     for (size_t i = 0; i < r->count; ++i)
@@ -282,27 +276,31 @@ bool wa_disturb(af_water_runtime *r, const af_scene *s, af_object_id id, af_vec3
     return true;
 }
 static af_vec3 river_bank(const af_water *w, unsigned node) {
-    unsigned before=node?node-1:node,after=node+1<w->path_count?node+1:node;
-    af_vec3 a=af_vec3_sub(w->path[node?node:after],w->path[before]);
-    af_vec3 b=af_vec3_sub(w->path[after],w->path[node+1<w->path_count?node:before]);
-    a.y=b.y=0;a=af_vec3_normalize(a);b=af_vec3_normalize(b);
-    float scale=1/(1+af_vec3_dot(a,b));
-    return (af_vec3){(a.z+b.z)*scale,0,-(a.x+b.x)*scale};
+    unsigned before = node ? node - 1 : node, after = node + 1 < w->path_count ? node + 1 : node;
+    af_vec3 a = af_vec3_sub(w->path[node ? node : after], w->path[before]);
+    af_vec3 b = af_vec3_sub(w->path[after], w->path[node + 1 < w->path_count ? node : before]);
+    a.y = b.y = 0;
+    a = af_vec3_normalize(a);
+    b = af_vec3_normalize(b);
+    float scale = 1 / (1 + af_vec3_dot(a, b));
+    return (af_vec3){(a.z + b.z) * scale, 0, -(a.x + b.x) * scale};
 }
-static af_vec3 river_mesh_point(const af_water *w,float along,float side) {
-    for(unsigned i=1;i<w->path_count;++i){
-        af_vec3 delta=af_vec3_sub(w->path[i],w->path[i-1]);float distance=hypotf(delta.x,delta.z);
-        if(along<=distance||i+1==w->path_count){
-            float t=clamp(along/distance,0,1);af_vec3 a=river_bank(w,i-1),b=river_bank(w,i);
-            return af_vec3_add(af_vec3_add(w->path[i-1],af_vec3_scale(delta,t)),
-                              af_vec3_scale(af_vec3_add(af_vec3_scale(a,1-t),af_vec3_scale(b,t)),side));
+static af_vec3 river_mesh_point(const af_water *w, float along, float side) {
+    for (unsigned i = 1; i < w->path_count; ++i) {
+        af_vec3 delta = af_vec3_sub(w->path[i], w->path[i - 1]);
+        float distance = hypotf(delta.x, delta.z);
+        if (along <= distance || i + 1 == w->path_count) {
+            float t = clamp(along / distance, 0, 1);
+            af_vec3 a = river_bank(w, i - 1), b = river_bank(w, i);
+            return af_vec3_add(af_vec3_add(w->path[i - 1], af_vec3_scale(delta, t)),
+                               af_vec3_scale(af_vec3_add(af_vec3_scale(a, 1 - t), af_vec3_scale(b, t)), side));
         }
-        along-=distance;
+        along -= distance;
     }
     return (af_vec3){0};
 }
-bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, float alpha,
-             af_vertex **vertices, uint32_t **indices, af_mesh_data *mesh) {
+bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, float alpha, af_vertex **vertices,
+             uint32_t **indices, af_mesh_data *mesh) {
     const af_water *w = af_scene_get_water(s, id);
     const af_scene_object *o = af_scene_get_object(s, id);
     if (!w || !o)
@@ -321,8 +319,7 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
     }
     unsigned n = 16u << (unsigned)w->quality;
     uint32_t surface_vertices = n * n;
-    uint32_t vc = 2 * surface_vertices + 16 * (n - 1),
-             ic = (n - 1) * (n - 1) * 12 + 24 * (n - 1);
+    uint32_t vc = 2 * surface_vertices + 16 * (n - 1), ic = (n - 1) * (n - 1) * 12 + 24 * (n - 1);
     af_vertex *v = calloc(vc, sizeof(*v));
     uint32_t *ix = malloc(ic * sizeof(*ix));
     if (!v || !ix) {
@@ -336,14 +333,17 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
         for (unsigned x = 0; x < n; ++x) {
             af_vec3 p = {((float)x / (float)(n - 1) * 2 - 1) * w->half_size.x, 0,
                          ((float)z / (float)(n - 1) * 2 - 1) * length(w)};
-            float grid_x=p.x,grid_z=p.z;
+            float grid_x = p.x, grid_z = p.z;
             if (w->mode == AF_WATER_RIVER)
-                p = river_mesh_point(w,p.z+length(w),p.x);
-            float base=p.y;
+                p = river_mesh_point(w, p.z + length(w), p.x);
+            float base = p.y;
             af_vec3 wp = af_vec3_add(o->transform.position, rotate(o->transform, p));
             af_water_sample sample = sample_id(r, s, wp, alpha, id);
             p.y = sample.height - o->transform.position.y;
-            if(w->mode==AF_WATER_RIVER){const wa_slot *a=slot(r,id);p.y=base+(a?grid(a,grid_x,grid_z,alpha):0);}
+            if (w->mode == AF_WATER_RIVER) {
+                const wa_slot *a = slot(r, id);
+                p.y = base + (a ? grid(a, grid_x, grid_z, alpha) : 0);
+            }
             v[z * n + x] = (af_vertex){.position = p,
                                        .normal = rotate(inverse, sample.normal),
                                        .color = {1, 1, 1, 1},
@@ -371,30 +371,33 @@ bool wa_mesh(const af_water_runtime *r, const af_scene *s, af_object_id id, floa
         }
     for (unsigned z = 0; z < n; ++z)
         for (unsigned x = 0; x < n; ++x) {
-            af_vec3 dx = af_vec3_sub(v[surface_vertices + z*n + (x+1<n?x+1:x)].position,
-                                      v[surface_vertices + z*n + (x?x-1:x)].position);
-            af_vec3 dz = af_vec3_sub(v[surface_vertices + (z+1<n?z+1:z)*n + x].position,
-                                      v[surface_vertices + (z?z-1:z)*n + x].position);
-            v[surface_vertices + z*n + x].normal = af_vec3_normalize(af_vec3_cross(dx, dz));
-            dx=af_vec3_sub(v[z*n+(x+1<n?x+1:x)].position,v[z*n+(x?x-1:x)].position);
-            dz=af_vec3_sub(v[(z+1<n?z+1:z)*n+x].position,v[(z?z-1:z)*n+x].position);
-            v[z*n+x].normal=af_vec3_normalize(af_vec3_cross(dz,dx));
+            af_vec3 dx = af_vec3_sub(v[surface_vertices + z * n + (x + 1 < n ? x + 1 : x)].position,
+                                     v[surface_vertices + z * n + (x ? x - 1 : x)].position);
+            af_vec3 dz = af_vec3_sub(v[surface_vertices + (z + 1 < n ? z + 1 : z) * n + x].position,
+                                     v[surface_vertices + (z ? z - 1 : z) * n + x].position);
+            v[surface_vertices + z * n + x].normal = af_vec3_normalize(af_vec3_cross(dx, dz));
+            dx = af_vec3_sub(v[z * n + (x + 1 < n ? x + 1 : x)].position, v[z * n + (x ? x - 1 : x)].position);
+            dz = af_vec3_sub(v[(z + 1 < n ? z + 1 : z) * n + x].position, v[(z ? z - 1 : z) * n + x].position);
+            v[z * n + x].normal = af_vec3_normalize(af_vec3_cross(dz, dx));
         }
     unsigned next = 2 * surface_vertices;
     for (unsigned edge = 0; edge < 4; ++edge)
         for (unsigned j = 0; j < n - 1; ++j) {
-            unsigned a = edge == 0 ? j : edge == 1 ? j*n+n-1
-                         : edge == 2 ? n*n-1-j : (n-1-j)*n;
-            unsigned b = edge == 0 ? a+1 : edge == 1 ? a+n : edge == 2 ? a-1 : a-n;
-            af_vec3 normal = af_vec3_normalize(af_vec3_cross(
-                af_vec3_sub(v[b].position, v[a].position), (af_vec3){0,-1,0}));
-            unsigned source[] = {a,b,surface_vertices+b,surface_vertices+a};
+            unsigned a = edge == 0 ? j : edge == 1 ? j * n + n - 1 : edge == 2 ? n * n - 1 - j : (n - 1 - j) * n;
+            unsigned b = edge == 0 ? a + 1 : edge == 1 ? a + n : edge == 2 ? a - 1 : a - n;
+            af_vec3 normal =
+                af_vec3_normalize(af_vec3_cross(af_vec3_sub(v[b].position, v[a].position), (af_vec3){0, -1, 0}));
+            unsigned source[] = {a, b, surface_vertices + b, surface_vertices + a};
             for (unsigned q = 0; q < 4; ++q) {
-                v[next+q] = v[source[q]];
-                v[next+q].normal = normal;
+                v[next + q] = v[source[q]];
+                v[next + q].normal = normal;
             }
-            ix[k++]=next; ix[k++]=next+1; ix[k++]=next+2;
-            ix[k++]=next; ix[k++]=next+2; ix[k++]=next+3;
+            ix[k++] = next;
+            ix[k++] = next + 1;
+            ix[k++] = next + 2;
+            ix[k++] = next;
+            ix[k++] = next + 2;
+            ix[k++] = next + 3;
             next += 4;
         }
     *vertices = v;

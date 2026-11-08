@@ -15,6 +15,6 @@ typedef struct af_project {
     char startup_scene[AF_ASSET_PATH_CAPACITY];
     char game_module[AF_ASSET_PATH_CAPACITY];
 } af_project;
-bool af_project_load(const char *path,af_project *out,af_asset_error *error);
-bool af_project_save(const char *path,const af_project *project,af_asset_error *error);
+bool af_project_load(const char *path, af_project *out, af_asset_error *error);
+bool af_project_save(const char *path, const af_project *project, af_asset_error *error);
 #endif

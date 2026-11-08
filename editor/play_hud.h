@@ -7,5 +7,6 @@
 #ifndef ED_PLAY_HUD_H
 #define ED_PLAY_HUD_H
 #include "gui.h"
-void ed_play_hud(struct nk_context *context,af_engine *engine,af_rect viewport,bool paused,bool free_camera,bool editor,bool player);
+void ed_play_hud(struct nk_context *context, af_engine *engine, af_rect viewport, bool paused, bool free_camera,
+                 bool editor, bool player);
 #endif

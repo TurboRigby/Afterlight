@@ -19,7 +19,9 @@ static float distance(af_vec3 a, af_vec3 b) {
     float x = a.x - b.x, y = a.y - b.y, z = a.z - b.z;
     return sqrtf(x * x + y * y + z * z);
 }
-static bool finite3(af_vec3 p) { return isfinite(p.x) && isfinite(p.y) && isfinite(p.z); }
+static bool finite3(af_vec3 p) {
+    return isfinite(p.x) && isfinite(p.y) && isfinite(p.z);
+}
 static void camera(course *s, const af_game_host *h) {
     s->camera.position = s->player.position;
     s->camera.position.y += .65f;
@@ -37,14 +39,12 @@ static void publish(course *s, const af_game_host *h) {
     }
     camera(s, h);
     if (s->status.finished)
-        snprintf(s->status.hint, sizeof(s->status.hint),
-                 "Course complete! R restarts | N changes course");
+        snprintf(s->status.hint, sizeof(s->status.hint), "Course complete! R restarts | N changes course");
     else if (s->hard && s->status.checkpoint == s->status.checkpoint_count && s->received < .05f)
-        snprintf(s->status.hint, sizeof(s->status.hint),
-                 "Fill receiving cup: %.0f / 50 litres | E near the source cup", s->received * 1000);
+        snprintf(s->status.hint, sizeof(s->status.hint), "Fill receiving cup: %.0f / 50 litres | E near the source cup",
+                 s->received * 1000);
     else
-        snprintf(s->status.hint, sizeof(s->status.hint),
-                 "%s | Space up/jump | Ctrl dive | F grab | V throw%s",
+        snprintf(s->status.hint, sizeof(s->status.hint), "%s | Space up/jump | Ctrl dive | F grab | V throw%s",
                  s->swim.head_underwater ? "Diving"
                  : s->swim.swimming      ? "Swimming"
                                          : "Walk to the next marker",
@@ -78,11 +78,8 @@ static bool init(void *memory, const af_game_host *h) {
     s->player.position = s->spawn;
     s->published = s->spawn;
     s->water = h->swim_config_default();
-    s->camera = (af_camera){.yaw = -AF_PI / 2,
-                            .pitch = -.12f,
-                            .vertical_fov = AF_PI / 3,
-                            .near_clip = .05f,
-                            .far_clip = 180};
+    s->camera =
+        (af_camera){.yaw = -AF_PI / 2, .pitch = -.12f, .vertical_fov = AF_PI / 3, .near_clip = .05f, .far_clip = 180};
     publish(s, h);
     h->capture_mouse(h->engine, true);
     h->reset_interpolation(h->engine);
@@ -100,7 +97,8 @@ static void frame(void *memory, const af_game_host *h, double dt) {
             h->capture_mouse(h->engine, true);
         if (h->mouse_captured(h->engine)) {
             af_vec2 m = h->mouse_delta(h->engine);
-            const af_scene_object *body=h->get_object(h->scene,s->body);float sensitivity=body?body->gameplay.player.mouse_sensitivity:.0025f;
+            const af_scene_object *body = h->get_object(h->scene, s->body);
+            float sensitivity = body ? body->gameplay.player.mouse_sensitivity : .0025f;
             s->camera.yaw += m.x * sensitivity;
             s->camera.pitch = fmaxf(-1.5f, fminf(1.5f, s->camera.pitch - m.y * sensitivity));
         }
@@ -132,8 +130,7 @@ static void update(void *memory, const af_game_host *h, double delta) {
     if (s->source) {
         const af_scene_object *cup = h->get_object(h->scene, s->source);
         if (cup) {
-            if (controls && h->key_pressed(h, AF_KEY_E) &&
-                distance(s->player.position, cup->transform.position) < 3)
+            if (controls && h->key_pressed(h, AF_KEY_E) && distance(s->player.position, cup->transform.position) < 3)
                 s->tipping = !s->tipping;
             float target = s->tipping ? -1.65f : 0;
             s->tilt += fmaxf(-dt * .65f, fminf(dt * .65f, target - s->tilt));
@@ -148,8 +145,7 @@ static void update(void *memory, const af_game_host *h, double delta) {
               right = (h->key_down(h, AF_KEY_D) ? 1.f : 0) - (h->key_down(h, AF_KEY_A) ? 1.f : 0);
         input.move = (af_vec3){cosf(s->camera.yaw) * forward - sinf(s->camera.yaw) * right, 0,
                                sinf(s->camera.yaw) * forward + cosf(s->camera.yaw) * right};
-        input.vertical =
-            (h->key_down(h, AF_KEY_SPACE) ? 1.f : 0) - (h->key_down(h, AF_KEY_LEFT_CONTROL) ? 1.f : 0);
+        input.vertical = (h->key_down(h, AF_KEY_SPACE) ? 1.f : 0) - (h->key_down(h, AF_KEY_LEFT_CONTROL) ? 1.f : 0);
         input.jump = h->key_pressed(h, AF_KEY_SPACE);
         if (forward != 0.f || right != 0.f || input.vertical != 0.f || input.jump)
             s->status.running = true;
@@ -202,26 +198,27 @@ static void update(void *memory, const af_game_host *h, double delta) {
     }
     af_collision_hit hits[64];
     filter.include_triggers = true;
-    size_t count = h->overlap_capsule(h->scene, s->player.position, s->config.radius,
-                                      s->config.half_height, filter, hits, 64);
+    size_t count =
+        h->overlap_capsule(h->scene, s->player.position, s->config.radius, s->config.half_height, filter, hits, 64);
     for (size_t i = 0; i < count && i < 64; ++i) {
         const af_scene_object *o = h->get_object(h->scene, hits[i].object);
         if (!o)
             continue;
-        if (o->gameplay.role == AF_ROLE_CHECKPOINT &&
-            o->gameplay.checkpoint_order == s->status.checkpoint + 1) {
+        if (o->gameplay.role == AF_ROLE_CHECKPOINT && o->gameplay.checkpoint_order == s->status.checkpoint + 1) {
             af_mat4 m;
             if (h->world_matrix(h->scene, o->id, &m)) {
                 s->status.checkpoint = o->gameplay.checkpoint_order;
                 s->checkpoint = (af_vec3){m.elements[12], m.elements[13], m.elements[14]};
-                h->log("Water checkpoint reached.");h->play_sound(h->engine,"checkpoint",.7f);
+                h->log("Water checkpoint reached.");
+                h->play_sound(h->engine, "checkpoint", .7f);
             }
         }
-        if (!s->status.finished && o->gameplay.role == AF_ROLE_GOAL && s->status.checkpoint == s->status.checkpoint_count &&
-            (!s->hard || s->received >= .05f)) {
+        if (!s->status.finished && o->gameplay.role == AF_ROLE_GOAL &&
+            s->status.checkpoint == s->status.checkpoint_count && (!s->hard || s->received >= .05f)) {
             s->status.finished = true;
             s->status.running = false;
-            s->status.finish_time = s->status.elapsed;h->play_sound(h->engine,"finish",.8f);
+            s->status.finish_time = s->status.elapsed;
+            h->play_sound(h->engine, "finish", .8f);
         }
     }
     publish(s, h);
@@ -240,37 +237,30 @@ static size_t save(const void *memory, void *bytes, size_t cap) {
     memcpy(bytes, memory, sizeof(course));
     return sizeof(course);
 }
-static bool load(void *memory, const af_game_host *h, uint32_t version,
-                 const void *bytes, size_t size) {
-  if (version != 1 || size != sizeof(course))
-    return false;
-  course copy;
-  memcpy(&copy, bytes, size);
-  if (!finite3(copy.player.position) || !finite3(copy.player.velocity) ||
-      !isfinite(copy.camera.yaw) || !isfinite(copy.camera.pitch) ||
-      !isfinite(copy.status.elapsed) ||
-      copy.status.checkpoint > copy.status.checkpoint_count ||
-      !h->get_object(h->scene, copy.body))
-    return false;
-  const course *current = memory;
-  if (copy.body != current->body || copy.source != current->source ||
-      copy.receiver != current->receiver || copy.fluid != current->fluid ||
-      copy.status.checkpoint_count != current->status.checkpoint_count ||
-      copy.hard != current->hard || !finite3(copy.checkpoint) ||
-      !finite3(copy.spawn) || !finite3(copy.published) ||
-      !isfinite(copy.status.finish_time) || copy.status.elapsed < 0 ||
-      copy.status.finish_time < 0 || !isfinite(copy.tilt) ||
-      !isfinite(copy.received) || copy.camera.pitch < -1.5f ||
-      copy.camera.pitch > 1.5f)
-    return false;
-  copy.config = current->config;
-  copy.water = current->water;
-  copy.camera.vertical_fov = current->camera.vertical_fov;
-  copy.camera.near_clip = current->camera.near_clip;
-  copy.camera.far_clip = current->camera.far_clip;
-  *(course *)memory = copy;
-  publish(memory, h);
-  return true;
+static bool load(void *memory, const af_game_host *h, uint32_t version, const void *bytes, size_t size) {
+    if (version != 1 || size != sizeof(course))
+        return false;
+    course copy;
+    memcpy(&copy, bytes, size);
+    if (!finite3(copy.player.position) || !finite3(copy.player.velocity) || !isfinite(copy.camera.yaw) ||
+        !isfinite(copy.camera.pitch) || !isfinite(copy.status.elapsed) ||
+        copy.status.checkpoint > copy.status.checkpoint_count || !h->get_object(h->scene, copy.body))
+        return false;
+    const course *current = memory;
+    if (copy.body != current->body || copy.source != current->source || copy.receiver != current->receiver ||
+        copy.fluid != current->fluid || copy.status.checkpoint_count != current->status.checkpoint_count ||
+        copy.hard != current->hard || !finite3(copy.checkpoint) || !finite3(copy.spawn) || !finite3(copy.published) ||
+        !isfinite(copy.status.finish_time) || copy.status.elapsed < 0 || copy.status.finish_time < 0 ||
+        !isfinite(copy.tilt) || !isfinite(copy.received) || copy.camera.pitch < -1.5f || copy.camera.pitch > 1.5f)
+        return false;
+    copy.config = current->config;
+    copy.water = current->water;
+    copy.camera.vertical_fov = current->camera.vertical_fov;
+    copy.camera.near_clip = current->camera.near_clip;
+    copy.camera.far_clip = current->camera.far_clip;
+    *(course *)memory = copy;
+    publish(memory, h);
+    return true;
 }
 AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi) {
     static const af_game_module api = {.abi_version = AF_GAME_ABI_VERSION,

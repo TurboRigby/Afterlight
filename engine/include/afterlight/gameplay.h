@@ -8,7 +8,15 @@
 #define AFTERLIGHT_GAMEPLAY_H
 #include <afterlight/character.h>
 #include <afterlight/camera.h>
-typedef enum af_gameplay_role {AF_ROLE_NONE,AF_ROLE_SPAWN,AF_ROLE_CHECKPOINT,AF_ROLE_GOAL,AF_ROLE_RESTART,AF_ROLE_PLATFORM,AF_ROLE_COUNT} af_gameplay_role;
+typedef enum af_gameplay_role {
+    AF_ROLE_NONE,
+    AF_ROLE_SPAWN,
+    AF_ROLE_CHECKPOINT,
+    AF_ROLE_GOAL,
+    AF_ROLE_RESTART,
+    AF_ROLE_PLATFORM,
+    AF_ROLE_COUNT
+} af_gameplay_role;
 typedef struct af_player_component {
     bool enabled;
     uint64_t spawn;
@@ -16,8 +24,8 @@ typedef struct af_player_component {
     float mouse_sensitivity;
 } af_player_component;
 typedef struct af_camera_component {
-    bool enabled,primary;
-    float eye_height,vertical_fov,near_clip,far_clip;
+    bool enabled, primary;
+    float eye_height, vertical_fov, near_clip, far_clip;
 } af_camera_component;
 typedef struct af_gameplay_component {
     af_player_component player;
@@ -26,9 +34,9 @@ typedef struct af_gameplay_component {
     unsigned checkpoint_order;
 } af_gameplay_component;
 typedef struct af_gameplay_status {
-    double elapsed,finish_time;
-    unsigned checkpoint,checkpoint_count,deaths;
-    bool running,finished;
+    double elapsed, finish_time;
+    unsigned checkpoint, checkpoint_count, deaths;
+    bool running, finished;
     char hint[128];
 } af_gameplay_status;
 af_gameplay_component af_gameplay_component_default(void);

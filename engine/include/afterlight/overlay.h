@@ -10,7 +10,9 @@
 #include <stdint.h>
 #include <afterlight/math.h>
 
-typedef struct af_rect { float x, y, width, height; } af_rect;
+typedef struct af_rect {
+    float x, y, width, height;
+} af_rect;
 typedef struct af_overlay_vertex {
     af_vec2 position;
     af_vec2 uv;

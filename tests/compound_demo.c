@@ -26,12 +26,11 @@ static float action(const af_game_host *h, const char *name) {
 static bool pressed(const af_game_host *h, const char *name) {
     (void)h;
     return (!strcmp(name, "Grab") && grab_edge) || (!strcmp(name, "Throw") && throw_edge) ||
-           (!strcmp(name, "MotorToggle") && motor_toggle) ||
-           (!strcmp(name, "MotorReverse") && motor_reverse) ||
+           (!strcmp(name, "MotorToggle") && motor_toggle) || (!strcmp(name, "MotorReverse") && motor_reverse) ||
            (!strcmp(name, "Restart") && restart_edge);
 }
-static bool pick_body(const af_scene *scene, af_vec3 origin, af_vec3 direction, float distance,
-                      af_query_filter filter, af_collision_hit *out) {
+static bool pick_body(const af_scene *scene, af_vec3 origin, af_vec3 direction, float distance, af_query_filter filter,
+                      af_collision_hit *out) {
     (void)origin;
     (void)direction;
     (void)distance;
@@ -52,14 +51,14 @@ static af_object_id named(const af_scene *s, const char *name) {
             return af_scene_object_at(s, i)->id;
     return 0;
 }
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Physics demo phase %u line %d: %s\n", s->phase, __LINE__, #x);             \
-            s->failed = true;                                                                           \
-            af_engine_request_quit(e);                                                                  \
-            return;                                                                                     \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Physics demo phase %u line %d: %s\n", s->phase, __LINE__, #x);                            \
+            s->failed = true;                                                                                          \
+            af_engine_request_quit(e);                                                                                 \
+            return;                                                                                                    \
+        }                                                                                                              \
     } while (0)
 static bool load(af_engine *e, test *s, const char *path) {
     af_engine_set_scene(e, NULL);
@@ -72,8 +71,7 @@ static bool load(af_engine *e, test *s, const char *path) {
         fprintf(stderr, "%s\n", error.message);
         return false;
     }
-    if (!ed_runtime_set_project(&s->runtime, s->project, path) ||
-        !af_engine_load_scene_assets(e, s->source, &ae) ||
+    if (!ed_runtime_set_project(&s->runtime, s->project, path) || !af_engine_load_scene_assets(e, s->source, &ae) ||
         !ed_runtime_start_file(&s->runtime, s->source, e, s->module)) {
         fprintf(stderr, "Physics module: %s\n", s->runtime.status);
         return false;
@@ -99,8 +97,7 @@ static void update(af_engine *e, double dt, void *data) {
     ++s->frames;
     af_physics_stats stats = af_engine_physics_stats(e);
     if (s->phase == 3) {
-        CHECK(af_engine_body_state(e, s->ball).position.y == s->paused_y &&
-              stats.ticks == s->paused_ticks);
+        CHECK(af_engine_body_state(e, s->ball).position.y == s->paused_y && stats.ticks == s->paused_ticks);
         if (s->frames < 8)
             return;
         af_engine_step_simulation(e);
@@ -112,8 +109,7 @@ static void update(af_engine *e, double dt, void *data) {
     if (s->phase == 4) {
         if (stats.ticks == s->paused_ticks)
             return;
-        CHECK(stats.ticks == s->paused_ticks + 1 &&
-              af_engine_body_state(e, s->ball).position.y > s->paused_y);
+        CHECK(stats.ticks == s->paused_ticks + 1 && af_engine_body_state(e, s->ball).position.y > s->paused_y);
         s->runtime.paused = false;
         af_engine_set_simulation_paused(e, false);
         CHECK(ed_runtime_reload(&s->runtime) && strstr(s->runtime.status, "restored"));
@@ -133,9 +129,9 @@ static void update(af_engine *e, double dt, void *data) {
     fprintf(stderr,
             "Physics phase %u: ball %llu held %llu pos %.3f %.3f %.3f v %.3f %.3f %.3f, contacts %zu "
             "asleep %zu\n",
-            s->phase, (unsigned long long)s->ball, (unsigned long long)af_engine_held_body(e),
-            ball.position.x, ball.position.y, ball.position.z, ball.velocity.x, ball.velocity.y,
-            ball.velocity.z, stats.contacts, stats.sleeping);
+            s->phase, (unsigned long long)s->ball, (unsigned long long)af_engine_held_body(e), ball.position.x,
+            ball.position.y, ball.position.z, ball.velocity.x, ball.velocity.y, ball.velocity.z, stats.contacts,
+            stats.sleeping);
     switch (s->phase) {
     case 0:
         CHECK(stats.contacts > 0 && stats.sleeping >= 1 && ball.position.y < 1);
@@ -145,8 +141,7 @@ static void update(af_engine *e, double dt, void *data) {
         af_transform placement = af_transform_identity();
         placement.position = (af_vec3){4, 2, 3};
         af_scene_error error;
-        bool spawned =
-            af_engine_spawn_prefab(e, s->runtime.scene, prefab, 0, placement, &s->spawned, &error);
+        bool spawned = af_engine_spawn_prefab(e, s->runtime.scene, prefab, 0, placement, &s->spawned, &error);
         if (!spawned)
             fprintf(stderr, "Compound prefab: %s\n", error.message);
         CHECK(spawned);
@@ -173,8 +168,7 @@ static void update(af_engine *e, double dt, void *data) {
     case 2:
         CHECK(af_engine_body_state(e, s->crate).position.z < s->old_z - .15f);
         CHECK(af_scene_get_object(s->source, s->crate)->transform.position.z == s->source_z);
-        CHECK(af_engine_apply_impulse(e, s->ball, (af_vec3){0, (3 - ball.velocity.y) * ball.mass, 0},
-                                      ball.position));
+        CHECK(af_engine_apply_impulse(e, s->ball, (af_vec3){0, (3 - ball.velocity.y) * ball.mass, 0}, ball.position));
         s->paused_y = ball.position.y;
         s->paused_ticks = stats.ticks;
         s->runtime.paused = true;
@@ -215,8 +209,7 @@ static void update(af_engine *e, double dt, void *data) {
                 continue;
             ++motors;
             af_physics_joint_state state = af_engine_joint_state(e, j->id);
-            CHECK(state.available && fabsf(state.motor_torque) <= j->max_motor_torque + .05f &&
-                  !state.sleeping);
+            CHECK(state.available && fabsf(state.motor_torque) <= j->max_motor_torque + .05f && !state.sleeping);
         }
         CHECK(motors >= 4);
         unsigned compounds = 0;
@@ -227,8 +220,7 @@ static void update(af_engine *e, double dt, void *data) {
             ++compounds;
             af_world_collider root;
             CHECK(af_scene_world_collider(s->runtime.scene, o->id, &root) &&
-                  af_vec3_length(af_vec3_sub(root.center, af_engine_body_state(e, o->id).position)) <
-                      .003f);
+                  af_vec3_length(af_vec3_sub(root.center, af_engine_body_state(e, o->id).position)) < .003f);
         }
         CHECK(compounds >= 6);
         CHECK(af_engine_get_stats(e).shadow_draw_calls > 0);
@@ -272,8 +264,7 @@ int main(int argc, char **argv) {
     if (!e)
         return 1;
     test s = {.simple = argv[1], .complex = argv[2], .module = argv[3], .project = argv[4]};
-    af_game game = {
-        .init = init, .update = update, .fixed_update = fixed, .shutdown = shutdown, .user_data = &s};
+    af_game game = {.init = init, .update = update, .fixed_update = fixed, .shutdown = shutdown, .user_data = &s};
     int result = af_engine_run(e, &game);
     af_engine_stats stats = af_engine_get_stats(e);
     af_engine_destroy(e);

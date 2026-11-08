@@ -3,12 +3,12 @@
 #include <afterlight/simulation.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Physics timing %d: %s\n", __LINE__, #x);                                   \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Physics timing %d: %s\n", __LINE__, #x);                                                  \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_scene *scene(af_object_id *ball) {
     af_scene *s = af_scene_create();
@@ -83,8 +83,7 @@ int main(void) {
         t.position.x = (float)(i + 1) * .5f / 60;
         CHECK(af_scene_set_object_transform(s, platform, t) && af_physics_step(p, s, 1.f / 60));
     }
-    CHECK(af_physics_get_state(p, box).position.x > .25f &&
-          af_physics_get_state(p, box).position.y > .95f &&
+    CHECK(af_physics_get_state(p, box).position.x > .25f && af_physics_get_state(p, box).position.y > .95f &&
           af_physics_get_stats(p).kinematic_bodies == 1);
     af_physics_destroy(p);
     af_scene_destroy(s);

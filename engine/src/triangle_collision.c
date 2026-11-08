@@ -75,8 +75,7 @@ static void segments(af_vec3 p, af_vec3 q, af_vec3 a, af_vec3 b, af_vec3 *one, a
     *one = add(p, mul(u, s));
     *two = add(a, mul(v, t));
 }
-float tc_capsule_triangle(af_triangle t, af_vec3 center, float radius, float half,
-                          af_collision_hit *out) {
+float tc_capsule_triangle(af_triangle t, af_vec3 center, float radius, float half, af_collision_hit *out) {
     af_vec3 a = add(center, (af_vec3){0, -half, 0}), b = add(center, (af_vec3){0, half, 0}), one = a,
             two = tc_closest_triangle(t, a);
     float best = dot(sub(one, two), sub(one, two));
@@ -123,8 +122,8 @@ bool tc_candidates(af_world_collider target, af_vec3 low, af_vec3 high, uint32_t
                    uint32_t *scratch, size_t capacity) {
     af_vec3 lo = point(target.inverse, low), hi = lo;
     for (unsigned i = 0; i < 8; ++i) {
-        af_vec3 p = point(target.inverse, (af_vec3){i & 1 ? high.x : low.x, i & 2 ? high.y : low.y,
-                                                    i & 4 ? high.z : low.z});
+        af_vec3 p =
+            point(target.inverse, (af_vec3){i & 1 ? high.x : low.x, i & 2 ? high.y : low.y, i & 4 ? high.z : low.z});
         lo = minimum(lo, p);
         hi = maximum(hi, p);
     }
@@ -145,11 +144,9 @@ bool tc_candidates(af_world_collider target, af_vec3 low, af_vec3 high, uint32_t
 af_triangle tc_world_triangle(af_world_collider target, uint32_t index) {
     af_triangle t = {0};
     af_collision_mesh_triangle(target.mesh, index, &t);
-    return (af_triangle){point(target.matrix, t.a), point(target.matrix, t.b),
-                         point(target.matrix, t.c)};
+    return (af_triangle){point(target.matrix, t.a), point(target.matrix, t.b), point(target.matrix, t.c)};
 }
-float tc_mesh_distance(af_world_collider target, af_vec3 center, float radius, float half,
-                       af_collision_hit *out) {
+float tc_mesh_distance(af_world_collider target, af_vec3 center, float radius, float half, af_collision_hit *out) {
     uint32_t scratch[128], *list;
     size_t count;
     af_vec3 ext = {radius + .00001f, radius + half + .00001f, radius + .00001f};
@@ -170,13 +167,13 @@ float tc_mesh_distance(af_world_collider target, af_vec3 center, float radius, f
         free(list);
     return best;
 }
-bool tc_mesh_sweep(af_world_collider target, af_vec3 center, float radius, float half, af_vec3 move,
-                   float skin, af_collision_hit *out) {
+bool tc_mesh_sweep(af_world_collider target, af_vec3 center, float radius, float half, af_vec3 move, float skin,
+                   af_collision_hit *out) {
     uint32_t scratch[128], *list;
     size_t count;
     af_vec3 ext = {radius + skin, half + radius + skin, radius + skin}, end = add(center, move);
-    if (!tc_candidates(target, sub(minimum(center, end), ext), add(maximum(center, end), ext), &list,
-                       &count, scratch, 128))
+    if (!tc_candidates(target, sub(minimum(center, end), ext), add(maximum(center, end), ext), &list, &count, scratch,
+                       128))
         return false;
     float closest = 1.00001f;
     bool found = false;
@@ -185,8 +182,7 @@ bool tc_mesh_sweep(af_world_collider target, af_vec3 center, float radius, float
         float t = 0;
         for (unsigned step = 0; step < 64 && t <= 1 && t < closest; ++step) {
             af_collision_hit hit;
-            float distance =
-                      tc_capsule_triangle(triangle, add(center, mul(move, t)), radius, half, &hit),
+            float distance = tc_capsule_triangle(triangle, add(center, mul(move, t)), radius, half, &hit),
                   approach = -dot(move, hit.normal);
             if (distance <= skin + .00001f) {
                 if (t == 0 && approach <= 1e-7f)
@@ -214,14 +210,13 @@ bool tc_mesh_ray(af_world_collider target, af_vec3 origin, af_vec3 direction, fl
     uint32_t scratch[128], *list;
     size_t count;
     af_vec3 end = add(origin, mul(direction, maximum_distance)), padding = {.00001f, .00001f, .00001f};
-    if (!tc_candidates(target, sub(minimum(origin, end), padding), add(maximum(origin, end), padding),
-                       &list, &count, scratch, 128))
+    if (!tc_candidates(target, sub(minimum(origin, end), padding), add(maximum(origin, end), padding), &list, &count,
+                       scratch, 128))
         return false;
     bool found = false;
     for (size_t i = 0; i < count; ++i) {
         af_triangle triangle = tc_world_triangle(target, list[i]);
-        af_vec3 e1 = sub(triangle.b, triangle.a), e2 = sub(triangle.c, triangle.a),
-                p = af_vec3_cross(direction, e2);
+        af_vec3 e1 = sub(triangle.b, triangle.a), e2 = sub(triangle.c, triangle.a), p = af_vec3_cross(direction, e2);
         float det = dot(e1, p);
         if (fabsf(det) < 1e-9f)
             continue;

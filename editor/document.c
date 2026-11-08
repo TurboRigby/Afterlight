@@ -14,20 +14,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-const char *ed_path_name(const char *path)
-{
+const char *ed_path_name(const char *path) {
     const char *name = path;
-    for (const char *p = path; *p; ++p) if (*p == '/' || *p == '\\') name = p + 1;
+    for (const char *p = path; *p; ++p)
+        if (*p == '/' || *p == '\\')
+            name = p + 1;
     return name;
 }
-static void clear_history(ed_snapshot *history, size_t *count)
-{
-    for (size_t i = 0; i < *count; ++i) af_scene_destroy(history[i].scene);
+static void clear_history(ed_snapshot *history, size_t *count) {
+    for (size_t i = 0; i < *count; ++i)
+        af_scene_destroy(history[i].scene);
     *count = 0;
 }
-static size_t snapshot_bytes(ed_snapshot snapshot)
-{
-    size_t bytes = af_scene_object_count(snapshot.scene) * sizeof(af_scene_object) + af_scene_asset_count(snapshot.scene)*sizeof(af_scene_asset) + sizeof(snapshot);
+static size_t snapshot_bytes(ed_snapshot snapshot) {
+    size_t bytes = af_scene_object_count(snapshot.scene) * sizeof(af_scene_object) +
+                   af_scene_asset_count(snapshot.scene) * sizeof(af_scene_asset) + sizeof(snapshot);
     const af_landscape *ls = af_scene_get_landscape(snapshot.scene);
     if (ls) {
         bytes += sizeof(af_landscape) + ls->chunk_count * sizeof(af_terrain_chunk);
@@ -37,202 +38,356 @@ static size_t snapshot_bytes(ed_snapshot snapshot)
     }
     return bytes;
 }
-static void push_history(ed_snapshot *history, size_t *count, ed_snapshot snapshot)
-{
+static void push_history(ed_snapshot *history, size_t *count, ed_snapshot snapshot) {
     size_t bytes = snapshot_bytes(snapshot);
-    for (size_t i = 0; i < *count; ++i) bytes += snapshot_bytes(history[i]);
+    for (size_t i = 0; i < *count; ++i)
+        bytes += snapshot_bytes(history[i]);
     while (*count && (*count == ED_HISTORY_LIMIT || bytes > ED_HISTORY_BYTES)) {
         bytes -= snapshot_bytes(history[0]);
         af_scene_destroy(history[0].scene);
-        memmove(history,history+1,(--*count)*sizeof(*history));
+        memmove(history, history + 1, (--*count) * sizeof(*history));
     }
     history[(*count)++] = snapshot;
 }
-static void status(ed_document *d, const char *text) { snprintf(d->status,sizeof(d->status),"%s",text); }
-bool ed_document_init(ed_document *d)
-{
-    memset(d,0,sizeof(*d));
+static void status(ed_document *d, const char *text) {
+    snprintf(d->status, sizeof(d->status), "%s", text);
+}
+bool ed_document_init(ed_document *d) {
+    memset(d, 0, sizeof(*d));
     d->scene = af_scene_create();
     d->revision = d->saved_revision = d->serial = 1;
-    status(d,"Ready");
+    status(d, "Ready");
     return d->scene != NULL;
 }
-void ed_document_destroy(ed_document *d)
-{
+void ed_document_destroy(ed_document *d) {
     af_scene_destroy(d->scene);
-    clear_history(d->undo,&d->undo_count); clear_history(d->redo,&d->redo_count);
-    memset(d,0,sizeof(*d));
+    clear_history(d->undo, &d->undo_count);
+    clear_history(d->redo, &d->redo_count);
+    memset(d, 0, sizeof(*d));
 }
-bool ed_document_dirty(const ed_document *d) { return d->revision != d->saved_revision; }
-void ed_document_end_edit(ed_document *d) { d->group_kind = 0; d->group_object = AF_OBJECT_NONE; }
-static void replace_document(ed_document *d, af_scene *scene, const char *path)
-{
+bool ed_document_dirty(const ed_document *d) {
+    return d->revision != d->saved_revision;
+}
+void ed_document_end_edit(ed_document *d) {
+    d->group_kind = 0;
+    d->group_object = AF_OBJECT_NONE;
+}
+static void replace_document(ed_document *d, af_scene *scene, const char *path) {
     af_scene_destroy(d->scene);
-    clear_history(d->undo,&d->undo_count); clear_history(d->redo,&d->redo_count);
+    clear_history(d->undo, &d->undo_count);
+    clear_history(d->redo, &d->redo_count);
     d->scene = scene;
-    const af_scene_object *first = af_scene_object_at(scene,0);
+    const af_scene_object *first = af_scene_object_at(scene, 0);
     d->selection = first ? first->id : AF_OBJECT_NONE;
     d->revision = d->saved_revision = ++d->serial;
-    snprintf(d->path,sizeof(d->path),"%s",path);
+    snprintf(d->path, sizeof(d->path), "%s", path);
     ed_document_end_edit(d);
 }
-bool ed_document_load(ed_document *d, const char *path, bool as_untitled)
-{
-    if (!path || strlen(path) >= sizeof(d->path)) { status(d,"Scene path is too long."); return false; }
+bool ed_document_load(ed_document *d, const char *path, bool as_untitled) {
+    if (!path || strlen(path) >= sizeof(d->path)) {
+        status(d, "Scene path is too long.");
+        return false;
+    }
     af_scene_error error;
-    af_scene *scene = af_scene_load(path,&error);
-    if (!scene) { status(d,error.message); return false; }
-    char copied[ED_PATH_CAPACITY]; snprintf(copied,sizeof(copied),"%s",as_untitled ? "" : path);
-    replace_document(d,scene,copied);
-    status(d,as_untitled ? "Demo scene opened. Save As to create your own scene." : "Scene opened.");
+    af_scene *scene = af_scene_load(path, &error);
+    if (!scene) {
+        status(d, error.message);
+        return false;
+    }
+    char copied[ED_PATH_CAPACITY];
+    snprintf(copied, sizeof(copied), "%s", as_untitled ? "" : path);
+    replace_document(d, scene, copied);
+    status(d, as_untitled ? "Demo scene opened. Save As to create your own scene." : "Scene opened.");
     return true;
 }
-bool ed_document_save(ed_document *d, const char *path)
-{
-    if (!path || !path[0] || strlen(path) >= sizeof(d->path)) { status(d,"Choose a valid scene path."); return false; }
-    char copied[ED_PATH_CAPACITY]; snprintf(copied,sizeof(copied),"%s",path);
+bool ed_document_save(ed_document *d, const char *path) {
+    if (!path || !path[0] || strlen(path) >= sizeof(d->path)) {
+        status(d, "Choose a valid scene path.");
+        return false;
+    }
+    char copied[ED_PATH_CAPACITY];
+    snprintf(copied, sizeof(copied), "%s", path);
     af_scene_error error;
-    if (!af_scene_save(d->scene,copied,&error)) { status(d,error.message); return false; }
-    snprintf(d->path,sizeof(d->path),"%s",copied);
+    if (!af_scene_save(d->scene, copied, &error)) {
+        status(d, error.message);
+        return false;
+    }
+    snprintf(d->path, sizeof(d->path), "%s", copied);
     d->saved_revision = d->revision;
     ed_document_end_edit(d);
-    status(d,"Scene saved.");
+    status(d, "Scene saved.");
     return true;
 }
-bool ed_document_new(ed_document *d)
-{
+bool ed_document_new(ed_document *d) {
     af_scene *scene = af_scene_create();
-    if (!scene) { status(d,"Not enough memory to create a scene."); return false; }
-    replace_document(d,scene,""); status(d,"New scene. Add a cube to begin."); return true;
-}
-static bool commit(ed_document *d, af_scene *next, af_object_id selection, int kind)
-{
-    if (!next) { status(d,"Not enough memory to edit this scene."); return false; }
-    bool merge = kind != 0 && d->group_kind == kind && d->group_object == d->selection;
-    ed_snapshot old = {d->scene,d->selection,d->revision};
-    clear_history(d->redo,&d->redo_count);
-    if (merge) af_scene_destroy(d->scene);
-    else push_history(d->undo,&d->undo_count,old);
-    d->scene = next; d->selection = selection; d->revision = ++d->serial;
-    d->group_kind = kind; d->group_object = selection;
-    status(d,"Unsaved changes");
+    if (!scene) {
+        status(d, "Not enough memory to create a scene.");
+        return false;
+    }
+    replace_document(d, scene, "");
+    status(d, "New scene. Add a cube to begin.");
     return true;
 }
-static bool same_vector(af_vec3 a, af_vec3 b) { return a.x==b.x && a.y==b.y && a.z==b.z; }
-bool ed_document_transform(ed_document *d, af_transform transform)
-{
-    const af_scene_object *object = af_scene_get_object(d->scene,d->selection);
-    if (!object) return false;
-    if (same_vector(object->transform.position,transform.position) && same_vector(object->transform.rotation,transform.rotation) &&
-        same_vector(object->transform.scale,transform.scale)) return true;
-    af_scene *next = af_scene_clone(d->scene);
-    if (!next) return commit(d,NULL,0,0);
-    if (!af_scene_set_object_transform(next,d->selection,transform)) { af_scene_destroy(next); status(d,"Transform values must be finite."); return false; }
-    return commit(d,next,d->selection,1);
+static bool commit(ed_document *d, af_scene *next, af_object_id selection, int kind) {
+    if (!next) {
+        status(d, "Not enough memory to edit this scene.");
+        return false;
+    }
+    bool merge = kind != 0 && d->group_kind == kind && d->group_object == d->selection;
+    ed_snapshot old = {d->scene, d->selection, d->revision};
+    clear_history(d->redo, &d->redo_count);
+    if (merge)
+        af_scene_destroy(d->scene);
+    else
+        push_history(d->undo, &d->undo_count, old);
+    d->scene = next;
+    d->selection = selection;
+    d->revision = ++d->serial;
+    d->group_kind = kind;
+    d->group_object = selection;
+    status(d, "Unsaved changes");
+    return true;
 }
-bool ed_document_name(ed_document *d, const char *name)
-{
-    const af_scene_object *object = af_scene_get_object(d->scene,d->selection);
-    if (!object || !name) return false;
-    if (!strcmp(object->name,name)) return true;
-    af_scene *next = af_scene_clone(d->scene);
-    if (!next) return commit(d,NULL,0,0);
-    if (!af_scene_set_object_name(next,d->selection,name)) { af_scene_destroy(next); status(d,"Name must contain 1 to 63 UTF-8 bytes."); return false; }
-    return commit(d,next,d->selection,2);
+static bool same_vector(af_vec3 a, af_vec3 b) {
+    return a.x == b.x && a.y == b.y && a.z == b.z;
 }
-bool ed_document_mesh(ed_document *d, const char *mesh)
-{
-    const af_scene_object *object = af_scene_get_object(d->scene,d->selection);
-    if (!object || !mesh) return false;
-    if (!strcmp(object->mesh,mesh)) return true;
+bool ed_document_transform(ed_document *d, af_transform transform) {
+    const af_scene_object *object = af_scene_get_object(d->scene, d->selection);
+    if (!object)
+        return false;
+    if (same_vector(object->transform.position, transform.position) &&
+        same_vector(object->transform.rotation, transform.rotation) &&
+        same_vector(object->transform.scale, transform.scale))
+        return true;
     af_scene *next = af_scene_clone(d->scene);
-    if (!next) return commit(d,NULL,0,0);
-    if (!af_scene_set_object_mesh(next,d->selection,mesh)) { af_scene_destroy(next); status(d,"Mesh name must contain 1 to 63 bytes."); return false; }
-    return commit(d,next,d->selection,3);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_object_transform(next, d->selection, transform)) {
+        af_scene_destroy(next);
+        status(d, "Transform values must be finite.");
+        return false;
+    }
+    return commit(d, next, d->selection, 1);
 }
-bool ed_document_visible(ed_document *d, bool visible)
-{
-    const af_scene_object *object = af_scene_get_object(d->scene,d->selection);
-    if (!object) return false;
-    if (object->visible == visible) return true;
+bool ed_document_name(ed_document *d, const char *name) {
+    const af_scene_object *object = af_scene_get_object(d->scene, d->selection);
+    if (!object || !name)
+        return false;
+    if (!strcmp(object->name, name))
+        return true;
     af_scene *next = af_scene_clone(d->scene);
-    if (!next) return commit(d,NULL,0,0);
-    if (!af_scene_set_object_visible(next,d->selection,visible)) { af_scene_destroy(next); return false; }
-    return commit(d,next,d->selection,0);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_object_name(next, d->selection, name)) {
+        af_scene_destroy(next);
+        status(d, "Name must contain 1 to 63 UTF-8 bytes.");
+        return false;
+    }
+    return commit(d, next, d->selection, 2);
 }
-bool ed_document_add_cube(ed_document *d)
-{
-    if (af_scene_object_count(d->scene) >= AF_SCENE_FILE_MAX_OBJECTS) { status(d,"Scene object limit reached."); return false; }
+bool ed_document_mesh(ed_document *d, const char *mesh) {
+    const af_scene_object *object = af_scene_get_object(d->scene, d->selection);
+    if (!object || !mesh)
+        return false;
+    if (!strcmp(object->mesh, mesh))
+        return true;
     af_scene *next = af_scene_clone(d->scene);
-    if (!next) return commit(d,NULL,0,0);
-    af_object_id id = af_scene_add_object(next,"Cube","cube");
-    if (!id) { af_scene_destroy(next); status(d,"Cannot allocate another object."); return false; }
-    return commit(d,next,id,0);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_object_mesh(next, d->selection, mesh)) {
+        af_scene_destroy(next);
+        status(d, "Mesh name must contain 1 to 63 bytes.");
+        return false;
+    }
+    return commit(d, next, d->selection, 3);
 }
-bool ed_document_duplicate(ed_document *d)
-{
-    const af_scene_object *object = af_scene_get_object(d->scene,d->selection);
-    if (!object || af_scene_object_count(d->scene) >= AF_SCENE_FILE_MAX_OBJECTS) return false;
-    af_object_id root=object->id;size_t count=af_scene_object_count(d->scene),duplicates=0;
-    af_object_id *ids=calloc(count,sizeof(*ids));if(!ids)return commit(d,NULL,0,0);
-    af_scene *next=af_scene_clone(d->scene);if(!next){free(ids);return commit(d,NULL,0,0);}
-    af_object_id selected=0;
-    for(size_t i=0;i<count;++i){af_scene_object source=*af_scene_object_at(d->scene,i);
-        if(source.id!=root&&!af_scene_is_descendant(d->scene,source.id,root))continue;
-        if(count+(++duplicates)>AF_SCENE_FILE_MAX_OBJECTS)goto duplicate_failed;
-        ids[i]=af_scene_add_object(next,source.name,source.mesh);if(source.id==root){selected=ids[i];source.transform.position.x+=1.5f;}
-        if(!ids[i]||!af_scene_set_object_transform(next,ids[i],source.transform)||!af_scene_set_object_visible(next,ids[i],source.visible)||!af_scene_set_object_material(next,ids[i],source.material)||!af_scene_set_object_collider(next,ids[i],source.collider)||!af_scene_set_object_gameplay(next,ids[i],source.gameplay)||!af_scene_set_object_animation(next,ids[i],source.animation))goto duplicate_failed;
+bool ed_document_visible(ed_document *d, bool visible) {
+    const af_scene_object *object = af_scene_get_object(d->scene, d->selection);
+    if (!object)
+        return false;
+    if (object->visible == visible)
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_object_visible(next, d->selection, visible)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+bool ed_document_add_cube(ed_document *d) {
+    if (af_scene_object_count(d->scene) >= AF_SCENE_FILE_MAX_OBJECTS) {
+        status(d, "Scene object limit reached.");
+        return false;
+    }
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    af_object_id id = af_scene_add_object(next, "Cube", "cube");
+    if (!id) {
+        af_scene_destroy(next);
+        status(d, "Cannot allocate another object.");
+        return false;
+    }
+    return commit(d, next, id, 0);
+}
+bool ed_document_duplicate(ed_document *d) {
+    const af_scene_object *object = af_scene_get_object(d->scene, d->selection);
+    if (!object || af_scene_object_count(d->scene) >= AF_SCENE_FILE_MAX_OBJECTS)
+        return false;
+    af_object_id root = object->id;
+    size_t count = af_scene_object_count(d->scene), duplicates = 0;
+    af_object_id *ids = calloc(count, sizeof(*ids));
+    if (!ids)
+        return commit(d, NULL, 0, 0);
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next) {
+        free(ids);
+        return commit(d, NULL, 0, 0);
+    }
+    af_object_id selected = 0;
+    for (size_t i = 0; i < count; ++i) {
+        af_scene_object source = *af_scene_object_at(d->scene, i);
+        if (source.id != root && !af_scene_is_descendant(d->scene, source.id, root))
+            continue;
+        if (count + (++duplicates) > AF_SCENE_FILE_MAX_OBJECTS)
+            goto duplicate_failed;
+        ids[i] = af_scene_add_object(next, source.name, source.mesh);
+        if (source.id == root) {
+            selected = ids[i];
+            source.transform.position.x += 1.5f;
+        }
+        if (!ids[i] || !af_scene_set_object_transform(next, ids[i], source.transform) ||
+            !af_scene_set_object_visible(next, ids[i], source.visible) ||
+            !af_scene_set_object_material(next, ids[i], source.material) ||
+            !af_scene_set_object_collider(next, ids[i], source.collider) ||
+            !af_scene_set_object_gameplay(next, ids[i], source.gameplay) ||
+            !af_scene_set_object_animation(next, ids[i], source.animation))
+            goto duplicate_failed;
     }
 
-    for(size_t i=0;i<count;++i)if(ids[i]){af_object_id old=af_scene_object_at(d->scene,i)->id;for(size_t k=0;k<af_scene_collider_part_count(d->scene,old);++k){af_collider_part part=*af_scene_collider_part_at(d->scene,old,k);if(!af_scene_add_collider_part(next,ids[i],part))goto duplicate_failed;}}
-    for(size_t i=0;i<count;++i)if(ids[i]){const af_scene_object *source=af_scene_object_at(d->scene,i);af_object_id parent=source->parent;
-        if(source->id!=root)for(size_t j=0;j<count;++j)if(af_scene_object_at(d->scene,j)->id==parent){parent=ids[j];break;}
-        if(!af_scene_set_parent(next,ids[i],parent)||!af_scene_set_body(next,ids[i],source->body))goto duplicate_failed;
-        af_gameplay_component gameplay=af_scene_get_object(next,ids[i])->gameplay;
-        for(size_t j=0;j<count;++j)if(ids[j]&&af_scene_object_at(d->scene,j)->id==gameplay.player.spawn){gameplay.player.spawn=ids[j];break;}
-        if(!af_scene_set_object_gameplay(next,ids[i],gameplay))goto duplicate_failed;
-    }
-    for(size_t i=0;i<count;++i)if(ids[i]){const af_scene_object *source=af_scene_object_at(d->scene,i);
-        af_model_binding binding=af_model_binding_default();for(size_t j=0;j<count;++j)if(ids[j]&&af_scene_object_at(d->scene,j)->id==source->model.root){binding=source->model;binding.root=ids[j];break;}
-        if(!af_scene_set_model_binding(next,ids[i],binding))goto duplicate_failed;
-    }
+    for (size_t i = 0; i < count; ++i)
+        if (ids[i]) {
+            af_object_id old = af_scene_object_at(d->scene, i)->id;
+            for (size_t k = 0; k < af_scene_collider_part_count(d->scene, old); ++k) {
+                af_collider_part part = *af_scene_collider_part_at(d->scene, old, k);
+                if (!af_scene_add_collider_part(next, ids[i], part))
+                    goto duplicate_failed;
+            }
+        }
+    for (size_t i = 0; i < count; ++i)
+        if (ids[i]) {
+            const af_scene_object *source = af_scene_object_at(d->scene, i);
+            af_object_id parent = source->parent;
+            if (source->id != root)
+                for (size_t j = 0; j < count; ++j)
+                    if (af_scene_object_at(d->scene, j)->id == parent) {
+                        parent = ids[j];
+                        break;
+                    }
+            if (!af_scene_set_parent(next, ids[i], parent) || !af_scene_set_body(next, ids[i], source->body))
+                goto duplicate_failed;
+            af_gameplay_component gameplay = af_scene_get_object(next, ids[i])->gameplay;
+            for (size_t j = 0; j < count; ++j)
+                if (ids[j] && af_scene_object_at(d->scene, j)->id == gameplay.player.spawn) {
+                    gameplay.player.spawn = ids[j];
+                    break;
+                }
+            if (!af_scene_set_object_gameplay(next, ids[i], gameplay))
+                goto duplicate_failed;
+        }
+    for (size_t i = 0; i < count; ++i)
+        if (ids[i]) {
+            const af_scene_object *source = af_scene_object_at(d->scene, i);
+            af_model_binding binding = af_model_binding_default();
+            for (size_t j = 0; j < count; ++j)
+                if (ids[j] && af_scene_object_at(d->scene, j)->id == source->model.root) {
+                    binding = source->model;
+                    binding.root = ids[j];
+                    break;
+                }
+            if (!af_scene_set_model_binding(next, ids[i], binding))
+                goto duplicate_failed;
+        }
 
-    for(size_t i=0;i<count;++i)if(ids[i]){const af_water *w=af_scene_get_water(d->scene,af_scene_object_at(d->scene,i)->id);if(w&&!af_scene_set_water(next,ids[i],*w))goto duplicate_failed;}
-    for(size_t k=0;k<af_scene_joint_count(d->scene);++k){af_joint joint=*af_scene_joint_at(d->scene,k);af_object_id a=0,b=0;for(size_t i=0;i<count;++i)if(ids[i]){af_object_id old=af_scene_object_at(d->scene,i)->id;if(old==joint.a)a=ids[i];if(old==joint.b)b=ids[i];}if(!a||(joint.b&&!b))continue;joint.a=a;joint.b=b;if(!b)joint.anchor_b.x+=1.5f;if(!af_scene_add_joint(next,joint))goto duplicate_failed;}
-    free(ids);return commit(d,next,selected,0);
+    for (size_t i = 0; i < count; ++i)
+        if (ids[i]) {
+            const af_water *w = af_scene_get_water(d->scene, af_scene_object_at(d->scene, i)->id);
+            if (w && !af_scene_set_water(next, ids[i], *w))
+                goto duplicate_failed;
+        }
+    for (size_t k = 0; k < af_scene_joint_count(d->scene); ++k) {
+        af_joint joint = *af_scene_joint_at(d->scene, k);
+        af_object_id a = 0, b = 0;
+        for (size_t i = 0; i < count; ++i)
+            if (ids[i]) {
+                af_object_id old = af_scene_object_at(d->scene, i)->id;
+                if (old == joint.a)
+                    a = ids[i];
+                if (old == joint.b)
+                    b = ids[i];
+            }
+        if (!a || (joint.b && !b))
+            continue;
+        joint.a = a;
+        joint.b = b;
+        if (!b)
+            joint.anchor_b.x += 1.5f;
+        if (!af_scene_add_joint(next, joint))
+            goto duplicate_failed;
+    }
+    free(ids);
+    return commit(d, next, selected, 0);
 duplicate_failed:
-    free(ids);af_scene_destroy(next);status(d,"Cannot duplicate this subtree.");return false;
+    free(ids);
+    af_scene_destroy(next);
+    status(d, "Cannot duplicate this subtree.");
+    return false;
 }
-bool ed_document_delete(ed_document *d)
-{
-    if (!af_scene_get_object(d->scene,d->selection)) return false;
+bool ed_document_delete(ed_document *d) {
+    if (!af_scene_get_object(d->scene, d->selection))
+        return false;
     af_scene *next = af_scene_clone(d->scene);
-    if (!next) return commit(d,NULL,0,0);
-    if (!af_scene_remove_object(next,d->selection)) { af_scene_destroy(next); return false; }
-    const af_scene_object *first = af_scene_object_at(next,0);
-    return commit(d,next,first ? first->id : AF_OBJECT_NONE,0);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_remove_object(next, d->selection)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    const af_scene_object *first = af_scene_object_at(next, 0);
+    return commit(d, next, first ? first->id : AF_OBJECT_NONE, 0);
 }
-bool ed_document_undo(ed_document *d)
-{
-    if (!d->undo_count) return false;
-    push_history(d->redo,&d->redo_count,(ed_snapshot){d->scene,d->selection,d->revision});
+bool ed_document_undo(ed_document *d) {
+    if (!d->undo_count)
+        return false;
+    push_history(d->redo, &d->redo_count, (ed_snapshot){d->scene, d->selection, d->revision});
     ed_snapshot previous = d->undo[--d->undo_count];
-    d->scene=previous.scene; d->selection=previous.selection; d->revision=previous.revision;
-    ed_document_end_edit(d); status(d,"Undo"); return true;
+    d->scene = previous.scene;
+    d->selection = previous.selection;
+    d->revision = previous.revision;
+    ed_document_end_edit(d);
+    status(d, "Undo");
+    return true;
 }
-bool ed_document_redo(ed_document *d)
-{
-    if (!d->redo_count) return false;
-    push_history(d->undo,&d->undo_count,(ed_snapshot){d->scene,d->selection,d->revision});
+bool ed_document_redo(ed_document *d) {
+    if (!d->redo_count)
+        return false;
+    push_history(d->undo, &d->undo_count, (ed_snapshot){d->scene, d->selection, d->revision});
     ed_snapshot next = d->redo[--d->redo_count];
-    d->scene=next.scene; d->selection=next.selection; d->revision=next.revision;
-    ed_document_end_edit(d); status(d,"Redo"); return true;
+    d->scene = next.scene;
+    d->selection = next.selection;
+    d->revision = next.revision;
+    ed_document_end_edit(d);
+    status(d, "Redo");
+    return true;
 }
-bool ed_document_push_undo(ed_document *d)
-{
-    if (!d || !d->scene) return false;
+bool ed_document_push_undo(ed_document *d) {
+    if (!d || !d->scene)
+        return false;
     af_scene *backup = af_scene_clone(d->scene);
-    if (!backup) return false;
+    if (!backup)
+        return false;
     clear_history(d->redo, &d->redo_count);
     push_history(d->undo, &d->undo_count, (ed_snapshot){backup, d->selection, d->revision});
     d->revision = ++d->serial;
@@ -241,135 +396,379 @@ bool ed_document_push_undo(ed_document *d)
     return true;
 }
 
-bool ed_document_import_mesh(ed_document *d,const char *name,const char *path){
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(af_asset_is_model_path(path)){af_object_id root;af_asset_error error;
-        if(!af_scene_import_model(next,name,path,&root,&error)){af_scene_destroy(next);status(d,error.message);return false;}
-        (void)af_scene_set_object_name(next,root,ed_path_name(path));return commit(d,next,root,0);}
-    if(!af_scene_set_asset(next,name,AF_ASSET_MESH,path)){af_scene_destroy(next);status(d,"Cannot add mesh reference.");return false;}
-    af_object_id id=af_scene_add_object(next,ed_path_name(path),name);
-    if(!id){af_scene_destroy(next);return false;}return commit(d,next,id,0);
+bool ed_document_import_mesh(ed_document *d, const char *name, const char *path) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (af_asset_is_model_path(path)) {
+        af_object_id root;
+        af_asset_error error;
+        if (!af_scene_import_model(next, name, path, &root, &error)) {
+            af_scene_destroy(next);
+            status(d, error.message);
+            return false;
+        }
+        (void)af_scene_set_object_name(next, root, ed_path_name(path));
+        return commit(d, next, root, 0);
+    }
+    if (!af_scene_set_asset(next, name, AF_ASSET_MESH, path)) {
+        af_scene_destroy(next);
+        status(d, "Cannot add mesh reference.");
+        return false;
+    }
+    af_object_id id = af_scene_add_object(next, ed_path_name(path), name);
+    if (!id) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, id, 0);
 }
 
-bool ed_document_material(ed_document *d,af_material material){
-    const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;
-    const af_material *a=&o->material;
-    if(a->base_color.r==material.base_color.r&&a->base_color.g==material.base_color.g&&a->base_color.b==material.base_color.b&&a->base_color.a==material.base_color.a&&a->unlit==material.unlit&&a->cast_shadows==material.cast_shadows&&a->receive_shadows==material.receive_shadows&&a->physically_based==material.physically_based&&a->roughness==material.roughness&&a->metallic==material.metallic&&same_vector(a->emission,material.emission)&&a->emission_strength==material.emission_strength&&a->normal_strength==material.normal_strength&&!strcmp(a->metallic_roughness_map,material.metallic_roughness_map)&&!strcmp(a->normal_map,material.normal_map)&&!strcmp(a->texture,material.texture))return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_object_material(next,d->selection,material)){af_scene_destroy(next);status(d,"Invalid material values.");return false;}
-    return commit(d,next,d->selection,4);
+bool ed_document_material(ed_document *d, af_material material) {
+    const af_scene_object *o = af_scene_get_object(d->scene, d->selection);
+    if (!o)
+        return false;
+    const af_material *a = &o->material;
+    if (a->base_color.r == material.base_color.r && a->base_color.g == material.base_color.g &&
+        a->base_color.b == material.base_color.b && a->base_color.a == material.base_color.a &&
+        a->unlit == material.unlit && a->cast_shadows == material.cast_shadows &&
+        a->receive_shadows == material.receive_shadows && a->physically_based == material.physically_based &&
+        a->roughness == material.roughness && a->metallic == material.metallic &&
+        same_vector(a->emission, material.emission) && a->emission_strength == material.emission_strength &&
+        a->normal_strength == material.normal_strength &&
+        !strcmp(a->metallic_roughness_map, material.metallic_roughness_map) &&
+        !strcmp(a->normal_map, material.normal_map) && !strcmp(a->texture, material.texture))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_object_material(next, d->selection, material)) {
+        af_scene_destroy(next);
+        status(d, "Invalid material values.");
+        return false;
+    }
+    return commit(d, next, d->selection, 4);
 }
-bool ed_document_light(ed_document *d,af_directional_light light){
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_light(next,light)){af_scene_destroy(next);status(d,"Light direction must be nonzero and values within range.");return false;}
-    return commit(d,next,d->selection,5);
+bool ed_document_light(ed_document *d, af_directional_light light) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_light(next, light)) {
+        af_scene_destroy(next);
+        status(d, "Light direction must be nonzero and values within range.");
+        return false;
+    }
+    return commit(d, next, d->selection, 5);
 }
-bool ed_document_import_texture(ed_document *d,const char *name,const char *path){
-    const af_scene_object *o=af_scene_get_object(d->scene,d->selection);af_material material=o?o->material:af_material_default();
-    if(!name||strlen(name)>=sizeof(material.texture))return false;snprintf(material.texture,sizeof(material.texture),"%s",name);
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_asset(next,name,AF_ASSET_TEXTURE,path)||(o&&!af_scene_set_object_material(next,d->selection,material))){af_scene_destroy(next);return false;}
-    return commit(d,next,d->selection,0);
-}
-
-bool ed_document_parent(ed_document *d,af_object_id parent){
-    const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;if(o->parent==parent)return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_parent(next,d->selection,parent)){af_scene_destroy(next);status(d,"Parent would create a cycle or excessive depth.");return false;}
-    return commit(d,next,d->selection,0);
-}
-
-bool ed_document_shadows(ed_document *d,af_shadow_settings settings){
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_shadows(next,settings)){af_scene_destroy(next);status(d,"Invalid shadow settings.");return false;}
-    return commit(d,next,d->selection,6);
-}
-
-bool ed_document_import_normal_map(ed_document *d,const char *name,const char *path){
-    const af_scene_object *o=af_scene_get_object(d->scene,d->selection);
-    if(!name||strlen(name)>=AF_MESH_NAME_CAPACITY)return false;
-    af_material material=o?o->material:af_material_default();snprintf(material.normal_map,sizeof(material.normal_map),"%s",name);
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_asset(next,name,AF_ASSET_NORMAL_MAP,path)||(o&&!af_scene_set_object_material(next,d->selection,material))){af_scene_destroy(next);return false;}
-    return commit(d,next,d->selection,0);
-}
-
-bool ed_document_render_settings(ed_document *d,af_render_settings settings){
-    af_render_settings old=af_scene_get_render_settings(d->scene);if(!memcmp(&old,&settings,sizeof(settings)))return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_render_settings(next,settings)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,7);
-}
-
-bool ed_document_add_light(ed_document *d,af_light_type type){
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_add_local_light(next,af_local_light_default(type))){af_scene_destroy(next);status(d,"Local light limit reached.");return false;}
-    return commit(d,next,d->selection,0);
-}
-bool ed_document_local_light(ed_document *d,size_t index,af_local_light light){
-    const af_local_light *old=af_scene_local_light_at(d->scene,index);if(old&&!memcmp(old,&light,sizeof(light)))return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_local_light(next,index,light)){af_scene_destroy(next);status(d,"Invalid light: check name, direction, range and cone angles.");return false;}
-    return commit(d,next,d->selection,8+(int)index);
-}
-bool ed_document_remove_light(ed_document *d,size_t index){
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_remove_local_light(next,index)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
+bool ed_document_import_texture(ed_document *d, const char *name, const char *path) {
+    const af_scene_object *o = af_scene_get_object(d->scene, d->selection);
+    af_material material = o ? o->material : af_material_default();
+    if (!name || strlen(name) >= sizeof(material.texture))
+        return false;
+    snprintf(material.texture, sizeof(material.texture), "%s", name);
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_asset(next, name, AF_ASSET_TEXTURE, path) ||
+        (o && !af_scene_set_object_material(next, d->selection, material))) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
 }
 
-bool ed_document_create_mesh_object(ed_document *d,const char *mesh){
-    if(!mesh)return false;const af_scene_asset *asset=af_scene_find_asset(d->scene,mesh);
-    if((!asset&&strcmp(mesh,"cube"))||(asset&&asset->kind!=AF_ASSET_MESH)||af_scene_object_count(d->scene)>=AF_SCENE_FILE_MAX_OBJECTS)return false;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    af_object_id id=af_scene_add_object(next,mesh,mesh);if(!id){af_scene_destroy(next);return false;}return commit(d,next,id,0);
+bool ed_document_parent(ed_document *d, af_object_id parent) {
+    const af_scene_object *o = af_scene_get_object(d->scene, d->selection);
+    if (!o)
+        return false;
+    if (o->parent == parent)
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_parent(next, d->selection, parent)) {
+        af_scene_destroy(next);
+        status(d, "Parent would create a cycle or excessive depth.");
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
 }
 
-bool ed_document_collider(ed_document *d,af_collider collider){
-    const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_object_collider(next,d->selection,collider)){af_scene_destroy(next);status(d,"Invalid collider dimensions or layer.");return false;}if(collider.type==AF_COLLIDER_MESH){af_asset_error e;if(!af_scene_prepare_collision_meshes(next,&e)){af_scene_destroy(next);status(d,e.message);return false;}}return commit(d,next,d->selection,30);
+bool ed_document_shadows(ed_document *d, af_shadow_settings settings) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_shadows(next, settings)) {
+        af_scene_destroy(next);
+        status(d, "Invalid shadow settings.");
+        return false;
+    }
+    return commit(d, next, d->selection, 6);
 }
 
-bool ed_document_gameplay(ed_document *d,af_gameplay_component component){
-    const af_scene_object *object=af_scene_get_object(d->scene,d->selection);if(!object)return false;
-    if(!memcmp(&object->gameplay,&component,sizeof(component)))return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_object_gameplay(next,d->selection,component)){af_scene_destroy(next);status(d,"Invalid player/camera settings.");return false;}
-    if(component.camera.enabled&&component.camera.primary)for(size_t i=0;i<af_scene_object_count(next);++i){const af_scene_object *other=af_scene_object_at(next,i);if(other->id!=d->selection&&other->gameplay.camera.primary){af_gameplay_component value=other->gameplay;value.camera.primary=false;af_scene_set_object_gameplay(next,other->id,value);}}
-    if(component.player.enabled){af_collider collider=object->collider;collider.type=AF_COLLIDER_CAPSULE;collider.enabled=true;collider.trigger=false;collider.center=(af_vec3){0};collider.radius=component.player.controller.radius;collider.half_height=component.player.controller.half_height;
-        if(!af_scene_set_object_collider(next,d->selection,collider)){af_scene_destroy(next);return false;}}
-    return commit(d,next,d->selection,31);
-}
-bool ed_document_import_sound(ed_document *d,const char *name,const char *path){
-    af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_asset(next,name,AF_ASSET_AUDIO,path)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
-}
-
-bool ed_document_import_surface(ed_document *d,const char *name,const char *path){
-    if(!name||strlen(name)>=AF_MESH_NAME_CAPACITY)return false;af_scene *next=af_scene_clone(d->scene);if(!next)return commit(d,NULL,0,0);
-    if(!af_scene_set_asset(next,name,AF_ASSET_METALLIC_ROUGHNESS,path)){af_scene_destroy(next);return false;}
-    const af_scene_object *object=af_scene_get_object(next,d->selection);if(object){af_material m=object->material;snprintf(m.metallic_roughness_map,sizeof(m.metallic_roughness_map),"%s",name);if(!af_scene_set_object_material(next,object->id,m)){af_scene_destroy(next);return false;}}
-    return commit(d,next,d->selection,0);
+bool ed_document_import_normal_map(ed_document *d, const char *name, const char *path) {
+    const af_scene_object *o = af_scene_get_object(d->scene, d->selection);
+    if (!name || strlen(name) >= AF_MESH_NAME_CAPACITY)
+        return false;
+    af_material material = o ? o->material : af_material_default();
+    snprintf(material.normal_map, sizeof(material.normal_map), "%s", name);
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_asset(next, name, AF_ASSET_NORMAL_MAP, path) ||
+        (o && !af_scene_set_object_material(next, d->selection, material))) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
 }
 
-bool ed_document_import_environment(ed_document *d,const char *name,const char *path){
-    af_scene *next=af_scene_clone(d->scene);if(!next)return false;
-    af_render_settings settings=af_scene_get_render_settings(next);snprintf(settings.environment_asset,sizeof(settings.environment_asset),"%s",name);settings.environment_enabled=true;settings.skybox=true;
-    if(!af_scene_set_asset(next,name,AF_ASSET_ENVIRONMENT,path)||!af_scene_set_render_settings(next,settings)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
+bool ed_document_render_settings(ed_document *d, af_render_settings settings) {
+    af_render_settings old = af_scene_get_render_settings(d->scene);
+    if (!memcmp(&old, &settings, sizeof(settings)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_render_settings(next, settings)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 7);
 }
 
-bool ed_document_animation(ed_document *d,af_object_id id,af_animation_component component){
-    const af_scene_object *o=af_scene_get_object(d->scene,id);if(!o||!memchr(component.asset,0,sizeof(component.asset)))return false;if(!strcmp(o->animation.asset,component.asset)&&o->animation.clip==component.clip&&o->animation.speed==component.speed&&o->animation.loop==component.loop&&o->animation.autoplay==component.autoplay)return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_object_animation(next,id,component)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);
+bool ed_document_add_light(ed_document *d, af_light_type type) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_add_local_light(next, af_local_light_default(type))) {
+        af_scene_destroy(next);
+        status(d, "Local light limit reached.");
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+bool ed_document_local_light(ed_document *d, size_t index, af_local_light light) {
+    const af_local_light *old = af_scene_local_light_at(d->scene, index);
+    if (old && !memcmp(old, &light, sizeof(light)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_local_light(next, index, light)) {
+        af_scene_destroy(next);
+        status(d, "Invalid light: check name, direction, range and cone angles.");
+        return false;
+    }
+    return commit(d, next, d->selection, 8 + (int)index);
+}
+bool ed_document_remove_light(ed_document *d, size_t index) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_remove_local_light(next, index)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
 }
 
-bool ed_document_rig(ed_document *d,af_object_id id,af_character_rig rig){const af_scene_object *o=af_scene_get_object(d->scene,id);if(!o||!af_character_rig_valid(rig))return false;if(!memcmp(&o->rig,&rig,sizeof(rig)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_character_rig(next,id,rig)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);}
+bool ed_document_create_mesh_object(ed_document *d, const char *mesh) {
+    if (!mesh)
+        return false;
+    const af_scene_asset *asset = af_scene_find_asset(d->scene, mesh);
+    if ((!asset && strcmp(mesh, "cube")) || (asset && asset->kind != AF_ASSET_MESH) ||
+        af_scene_object_count(d->scene) >= AF_SCENE_FILE_MAX_OBJECTS)
+        return false;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    af_object_id id = af_scene_add_object(next, mesh, mesh);
+    if (!id) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, id, 0);
+}
 
-bool ed_document_prefab(ed_document *d,const char *path){af_scene *next=af_scene_clone(d->scene);if(!next)return false;af_scene_error e;af_object_id root;if(!af_prefab_instantiate(next,path,0,af_transform_identity(),&root,&e)){snprintf(d->status,sizeof(d->status),"%s",e.message);af_scene_destroy(next);return false;}return commit(d,next,root,0);}
+bool ed_document_collider(ed_document *d, af_collider collider) {
+    const af_scene_object *o = af_scene_get_object(d->scene, d->selection);
+    if (!o)
+        return false;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_object_collider(next, d->selection, collider)) {
+        af_scene_destroy(next);
+        status(d, "Invalid collider dimensions or layer.");
+        return false;
+    }
+    if (collider.type == AF_COLLIDER_MESH) {
+        af_asset_error e;
+        if (!af_scene_prepare_collision_meshes(next, &e)) {
+            af_scene_destroy(next);
+            status(d, e.message);
+            return false;
+        }
+    }
+    return commit(d, next, d->selection, 30);
+}
 
-bool ed_document_body(ed_document *d,af_rigid_body body){const af_scene_object *o=af_scene_get_object(d->scene,d->selection);if(!o)return false;if(!memcmp(&o->body,&body,sizeof(body)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_body(next,d->selection,body)){af_scene_destroy(next);status(d,"Dynamic bodies need centered root sphere/box colliders and valid mass/settings.");return false;}return commit(d,next,d->selection,47);}
+bool ed_document_gameplay(ed_document *d, af_gameplay_component component) {
+    const af_scene_object *object = af_scene_get_object(d->scene, d->selection);
+    if (!object)
+        return false;
+    if (!memcmp(&object->gameplay, &component, sizeof(component)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_object_gameplay(next, d->selection, component)) {
+        af_scene_destroy(next);
+        status(d, "Invalid player/camera settings.");
+        return false;
+    }
+    if (component.camera.enabled && component.camera.primary)
+        for (size_t i = 0; i < af_scene_object_count(next); ++i) {
+            const af_scene_object *other = af_scene_object_at(next, i);
+            if (other->id != d->selection && other->gameplay.camera.primary) {
+                af_gameplay_component value = other->gameplay;
+                value.camera.primary = false;
+                af_scene_set_object_gameplay(next, other->id, value);
+            }
+        }
+    if (component.player.enabled) {
+        af_collider collider = object->collider;
+        collider.type = AF_COLLIDER_CAPSULE;
+        collider.enabled = true;
+        collider.trigger = false;
+        collider.center = (af_vec3){0};
+        collider.radius = component.player.controller.radius;
+        collider.half_height = component.player.controller.half_height;
+        if (!af_scene_set_object_collider(next, d->selection, collider)) {
+            af_scene_destroy(next);
+            return false;
+        }
+    }
+    return commit(d, next, d->selection, 31);
+}
+bool ed_document_import_sound(ed_document *d, const char *name, const char *path) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_asset(next, name, AF_ASSET_AUDIO, path)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+
+bool ed_document_import_surface(ed_document *d, const char *name, const char *path) {
+    if (!name || strlen(name) >= AF_MESH_NAME_CAPACITY)
+        return false;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return commit(d, NULL, 0, 0);
+    if (!af_scene_set_asset(next, name, AF_ASSET_METALLIC_ROUGHNESS, path)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    const af_scene_object *object = af_scene_get_object(next, d->selection);
+    if (object) {
+        af_material m = object->material;
+        snprintf(m.metallic_roughness_map, sizeof(m.metallic_roughness_map), "%s", name);
+        if (!af_scene_set_object_material(next, object->id, m)) {
+            af_scene_destroy(next);
+            return false;
+        }
+    }
+    return commit(d, next, d->selection, 0);
+}
+
+bool ed_document_import_environment(ed_document *d, const char *name, const char *path) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    af_render_settings settings = af_scene_get_render_settings(next);
+    snprintf(settings.environment_asset, sizeof(settings.environment_asset), "%s", name);
+    settings.environment_enabled = true;
+    settings.skybox = true;
+    if (!af_scene_set_asset(next, name, AF_ASSET_ENVIRONMENT, path) || !af_scene_set_render_settings(next, settings)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+
+bool ed_document_animation(ed_document *d, af_object_id id, af_animation_component component) {
+    const af_scene_object *o = af_scene_get_object(d->scene, id);
+    if (!o || !memchr(component.asset, 0, sizeof(component.asset)))
+        return false;
+    if (!strcmp(o->animation.asset, component.asset) && o->animation.clip == component.clip &&
+        o->animation.speed == component.speed && o->animation.loop == component.loop &&
+        o->animation.autoplay == component.autoplay)
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_set_object_animation(next, id, component)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+
+bool ed_document_rig(ed_document *d, af_object_id id, af_character_rig rig) {
+    const af_scene_object *o = af_scene_get_object(d->scene, id);
+    if (!o || !af_character_rig_valid(rig))
+        return false;
+    if (!memcmp(&o->rig, &rig, sizeof(rig)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_set_character_rig(next, id, rig)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+
+bool ed_document_prefab(ed_document *d, const char *path) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    af_scene_error e;
+    af_object_id root;
+    if (!af_prefab_instantiate(next, path, 0, af_transform_identity(), &root, &e)) {
+        snprintf(d->status, sizeof(d->status), "%s", e.message);
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, root, 0);
+}
+
+bool ed_document_body(ed_document *d, af_rigid_body body) {
+    const af_scene_object *o = af_scene_get_object(d->scene, d->selection);
+    if (!o)
+        return false;
+    if (!memcmp(&o->body, &body, sizeof(body)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_set_body(next, d->selection, body)) {
+        af_scene_destroy(next);
+        status(d, "Dynamic bodies need centered root sphere/box colliders and valid mass/settings.");
+        return false;
+    }
+    return commit(d, next, d->selection, 47);
+}
 
 bool ed_document_joint(ed_document *d, af_joint j) {
-    const af_joint *current=af_scene_get_joint(d->scene,j.id);if(current&&!memcmp(current,&j,sizeof(j)))return true;
+    const af_joint *current = af_scene_get_joint(d->scene, j.id);
+    if (current && !memcmp(current, &j, sizeof(j)))
+        return true;
     af_scene *next = af_scene_clone(d->scene);
     if (!next)
         return false;
@@ -393,27 +792,166 @@ bool ed_document_remove_joint(ed_document *d, af_joint_id id) {
     return commit(d, next, d->selection, 49);
 }
 
-bool ed_document_part(ed_document *d,af_collider_part part){const af_collider_part *old=af_scene_get_collider_part(d->scene,part.id);if(old&&!memcmp(old,&part,sizeof(part)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;af_object_id owner=old?old->owner:d->selection;bool ok=old?af_scene_set_collider_part(next,part.id,part):af_scene_add_collider_part(next,owner,part)!=0;const af_scene_object *o=af_scene_get_object(next,owner);if(ok&&o){af_collider c=o->collider;c.type=AF_COLLIDER_COMPOUND;c.enabled=true;c.center=(af_vec3){0};ok=af_scene_set_object_collider(next,owner,c);}if(!ok){af_scene_destroy(next);status(d,"Compound parts need valid box/sphere dimensions and uniform dynamic-root scale.");return false;}return commit(d,next,d->selection,50);}
-bool ed_document_remove_part(ed_document *d,af_collider_part_id id){af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_remove_collider_part(next,id)){af_scene_destroy(next);status(d,"Keep one part on a compound; remove the owner to delete its body.");return false;}ed_document_end_edit(d);return commit(d,next,d->selection,51);}
-static af_vec3 fit_point(af_mat4 m,af_vec3 p){af_vec4 v=af_mat4_transform(m,(af_vec4){p.x,p.y,p.z,1});return (af_vec3){v.x,v.y,v.z};}
-bool ed_document_fit_part(ed_document *d,af_collider_part_id id){const af_collider_part *found=af_scene_get_collider_part(d->scene,id);if(!found)return false;af_collider_part part=*found;af_mat4 root,inverse;if(!af_scene_world_matrix(d->scene,part.owner,&root)||!af_mat4_inverse(root,&inverse))return false;af_vec3 lo={1e30f,1e30f,1e30f},hi={-1e30f,-1e30f,-1e30f};bool any=false;
-    for(size_t i=0;i<af_scene_object_count(d->scene);++i){const af_scene_object *o=af_scene_object_at(d->scene,i);if(o->id!=part.owner&&!af_scene_is_descendant(d->scene,o->id,part.owner))continue;if(!strcmp(o->mesh,"__node"))continue;af_mat4 matrix;if(!af_scene_world_matrix(d->scene,o->id,&matrix))continue;matrix=af_mat4_mul(inverse,matrix);af_mesh_file file={0};bool cube=!strcmp(o->mesh,"cube");if(!cube){const af_scene_asset *a=af_scene_find_asset(d->scene,o->mesh);af_asset_error e;if(!a||a->kind!=AF_ASSET_MESH||!af_mesh_file_load(a->path,&file,&e))continue;}
-        size_t count=cube?8:file.data.vertex_count;for(size_t k=0;k<count;++k){af_vec3 point=cube?(af_vec3){k&1?.65f:-.65f,k&2?.65f:-.65f,k&4?.65f:-.65f}:file.data.vertices[k].position;point=fit_point(matrix,point);lo=(af_vec3){fminf(lo.x,point.x),fminf(lo.y,point.y),fminf(lo.z,point.z)};hi=(af_vec3){fmaxf(hi.x,point.x),fmaxf(hi.y,point.y),fmaxf(hi.z,point.z)};any=true;}if(!cube)af_mesh_file_free(&file);
-    }if(!any){status(d,"No rigid mesh bounds found on this owner or its children.");return false;}part.local=af_transform_identity();part.local.position=af_vec3_scale(af_vec3_add(lo,hi),.5f);af_vec3 half=af_vec3_scale(af_vec3_sub(hi,lo),.5f);half=(af_vec3){fmaxf(.01f,half.x),fmaxf(.01f,half.y),fmaxf(.01f,half.z)};part.collider.half_extents=half;part.collider.radius=af_vec3_length(half);ed_document_end_edit(d);bool ok=ed_document_part(d,part);ed_document_end_edit(d);return ok;}
-
-bool ed_document_add_water(ed_document *d){af_scene *next=af_scene_clone(d->scene);if(!next)return false;af_object_id id=af_scene_add_object(next,"Water","__node");if(!id||!af_scene_set_water(next,id,af_water_default())){af_scene_destroy(next);status(d,"Cannot add water: maximum eight root surfaces.");return false;}return commit(d,next,id,0);}
-bool ed_document_water(ed_document *d,af_water w){const af_water *before=af_scene_get_water(d->scene,d->selection);if(before&&!memcmp(before,&w,sizeof(w)))return true;af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_set_water(next,d->selection,w)){af_scene_destroy(next);status(d,"Water needs a root node with unit scale and yaw rotation only.");return false;}return commit(d,next,d->selection,52);}
-bool ed_document_remove_water(ed_document *d){af_scene *next=af_scene_clone(d->scene);if(!next)return false;if(!af_scene_remove_water(next,d->selection)){af_scene_destroy(next);return false;}return commit(d,next,d->selection,0);}
-
-bool ed_document_wind(ed_document *d,af_wind w){
-    af_wind before=af_scene_get_wind(d->scene);if(!memcmp(&before,&w,sizeof(w)))return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return false;
-    if(!af_scene_set_wind(next,w)){af_scene_destroy(next);status(d,"Invalid wind settings.");return false;}return commit(d,next,d->selection,53);
+bool ed_document_part(ed_document *d, af_collider_part part) {
+    const af_collider_part *old = af_scene_get_collider_part(d->scene, part.id);
+    if (old && !memcmp(old, &part, sizeof(part)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    af_object_id owner = old ? old->owner : d->selection;
+    bool ok =
+        old ? af_scene_set_collider_part(next, part.id, part) : af_scene_add_collider_part(next, owner, part) != 0;
+    const af_scene_object *o = af_scene_get_object(next, owner);
+    if (ok && o) {
+        af_collider c = o->collider;
+        c.type = AF_COLLIDER_COMPOUND;
+        c.enabled = true;
+        c.center = (af_vec3){0};
+        ok = af_scene_set_object_collider(next, owner, c);
+    }
+    if (!ok) {
+        af_scene_destroy(next);
+        status(d, "Compound parts need valid box/sphere dimensions and uniform dynamic-root scale.");
+        return false;
+    }
+    return commit(d, next, d->selection, 50);
 }
-bool ed_document_environment(ed_document *d,af_directional_light sun,af_render_settings render){
-    af_directional_light old_sun=af_scene_get_light(d->scene);af_render_settings old_render=af_scene_get_render_settings(d->scene);
-    if(!memcmp(&old_sun,&sun,sizeof(sun))&&!memcmp(&old_render,&render,sizeof(render)))return true;
-    af_scene *next=af_scene_clone(d->scene);if(!next)return false;
-    if(!af_scene_set_light(next,sun)||!af_scene_set_render_settings(next,render)){af_scene_destroy(next);status(d,"Invalid environment settings.");return false;}
-    return commit(d,next,d->selection,54);
+bool ed_document_remove_part(ed_document *d, af_collider_part_id id) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_remove_collider_part(next, id)) {
+        af_scene_destroy(next);
+        status(d, "Keep one part on a compound; remove the owner to delete its body.");
+        return false;
+    }
+    ed_document_end_edit(d);
+    return commit(d, next, d->selection, 51);
+}
+static af_vec3 fit_point(af_mat4 m, af_vec3 p) {
+    af_vec4 v = af_mat4_transform(m, (af_vec4){p.x, p.y, p.z, 1});
+    return (af_vec3){v.x, v.y, v.z};
+}
+bool ed_document_fit_part(ed_document *d, af_collider_part_id id) {
+    const af_collider_part *found = af_scene_get_collider_part(d->scene, id);
+    if (!found)
+        return false;
+    af_collider_part part = *found;
+    af_mat4 root, inverse;
+    if (!af_scene_world_matrix(d->scene, part.owner, &root) || !af_mat4_inverse(root, &inverse))
+        return false;
+    af_vec3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
+    bool any = false;
+    for (size_t i = 0; i < af_scene_object_count(d->scene); ++i) {
+        const af_scene_object *o = af_scene_object_at(d->scene, i);
+        if (o->id != part.owner && !af_scene_is_descendant(d->scene, o->id, part.owner))
+            continue;
+        if (!strcmp(o->mesh, "__node"))
+            continue;
+        af_mat4 matrix;
+        if (!af_scene_world_matrix(d->scene, o->id, &matrix))
+            continue;
+        matrix = af_mat4_mul(inverse, matrix);
+        af_mesh_file file = {0};
+        bool cube = !strcmp(o->mesh, "cube");
+        if (!cube) {
+            const af_scene_asset *a = af_scene_find_asset(d->scene, o->mesh);
+            af_asset_error e;
+            if (!a || a->kind != AF_ASSET_MESH || !af_mesh_file_load(a->path, &file, &e))
+                continue;
+        }
+        size_t count = cube ? 8 : file.data.vertex_count;
+        for (size_t k = 0; k < count; ++k) {
+            af_vec3 point = cube ? (af_vec3){k & 1 ? .65f : -.65f, k & 2 ? .65f : -.65f, k & 4 ? .65f : -.65f}
+                                 : file.data.vertices[k].position;
+            point = fit_point(matrix, point);
+            lo = (af_vec3){fminf(lo.x, point.x), fminf(lo.y, point.y), fminf(lo.z, point.z)};
+            hi = (af_vec3){fmaxf(hi.x, point.x), fmaxf(hi.y, point.y), fmaxf(hi.z, point.z)};
+            any = true;
+        }
+        if (!cube)
+            af_mesh_file_free(&file);
+    }
+    if (!any) {
+        status(d, "No rigid mesh bounds found on this owner or its children.");
+        return false;
+    }
+    part.local = af_transform_identity();
+    part.local.position = af_vec3_scale(af_vec3_add(lo, hi), .5f);
+    af_vec3 half = af_vec3_scale(af_vec3_sub(hi, lo), .5f);
+    half = (af_vec3){fmaxf(.01f, half.x), fmaxf(.01f, half.y), fmaxf(.01f, half.z)};
+    part.collider.half_extents = half;
+    part.collider.radius = af_vec3_length(half);
+    ed_document_end_edit(d);
+    bool ok = ed_document_part(d, part);
+    ed_document_end_edit(d);
+    return ok;
+}
+
+bool ed_document_add_water(ed_document *d) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    af_object_id id = af_scene_add_object(next, "Water", "__node");
+    if (!id || !af_scene_set_water(next, id, af_water_default())) {
+        af_scene_destroy(next);
+        status(d, "Cannot add water: maximum eight root surfaces.");
+        return false;
+    }
+    return commit(d, next, id, 0);
+}
+bool ed_document_water(ed_document *d, af_water w) {
+    const af_water *before = af_scene_get_water(d->scene, d->selection);
+    if (before && !memcmp(before, &w, sizeof(w)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_set_water(next, d->selection, w)) {
+        af_scene_destroy(next);
+        status(d, "Water needs a root node with unit scale and yaw rotation only.");
+        return false;
+    }
+    return commit(d, next, d->selection, 52);
+}
+bool ed_document_remove_water(ed_document *d) {
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_remove_water(next, d->selection)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+
+bool ed_document_wind(ed_document *d, af_wind w) {
+    af_wind before = af_scene_get_wind(d->scene);
+    if (!memcmp(&before, &w, sizeof(w)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_set_wind(next, w)) {
+        af_scene_destroy(next);
+        status(d, "Invalid wind settings.");
+        return false;
+    }
+    return commit(d, next, d->selection, 53);
+}
+bool ed_document_environment(ed_document *d, af_directional_light sun, af_render_settings render) {
+    af_directional_light old_sun = af_scene_get_light(d->scene);
+    af_render_settings old_render = af_scene_get_render_settings(d->scene);
+    if (!memcmp(&old_sun, &sun, sizeof(sun)) && !memcmp(&old_render, &render, sizeof(render)))
+        return true;
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    if (!af_scene_set_light(next, sun) || !af_scene_set_render_settings(next, render)) {
+        af_scene_destroy(next);
+        status(d, "Invalid environment settings.");
+        return false;
+    }
+    return commit(d, next, d->selection, 54);
 }

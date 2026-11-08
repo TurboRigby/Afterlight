@@ -4,13 +4,13 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Water scene %u tick %u line %d: %s (%s)\n", scene, tick, __LINE__, #x,     \
-                    af_physics_error(p));                                                               \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Water scene %u tick %u line %d: %s (%s)\n", scene, tick, __LINE__, #x,                    \
+                    af_physics_error(p));                                                                              \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(int argc, char **argv) {
     if (argc < 3)
@@ -31,8 +31,7 @@ int main(int argc, char **argv) {
                 if (!o->body.enabled)
                     continue;
                 af_physics_state b = af_physics_get_state(p, o->id);
-                CHECK(b.available && isfinite(b.position.y) && b.position.y > -2.5f &&
-                      b.position.y < 10);
+                CHECK(b.available && isfinite(b.position.y) && b.position.y > -2.5f && b.position.y < 10);
             }
         }
         size_t floating = 0, sunk = 0;

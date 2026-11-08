@@ -3,12 +3,12 @@
 #include <afterlight/water.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Channel %d: %s\n", __LINE__, #x);                                          \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Channel %d: %s\n", __LINE__, #x);                                                         \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(int argc, char **argv) {
     CHECK(argc == 3);
@@ -33,8 +33,8 @@ int main(int argc, char **argv) {
                 if (!o->body.enabled)
                     continue;
                 af_physics_state b = af_physics_get_state(p, o->id);
-                CHECK(isfinite(b.position.x) && b.position.y > -3 && b.position.y < 5 &&
-                      fabsf(b.position.x) < 15 && fabsf(b.position.z) < 15);
+                CHECK(isfinite(b.position.x) && b.position.y > -3 && b.position.y < 5 && fabsf(b.position.x) < 15 &&
+                      fabsf(b.position.z) < 15);
             }
         }
         af_vec3 end = af_physics_get_state(p, first).position;

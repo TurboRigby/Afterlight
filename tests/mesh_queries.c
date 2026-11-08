@@ -3,12 +3,12 @@
 #include <afterlight/scene.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Mesh queries %d: %s\n", __LINE__, #x);                                     \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Mesh queries %d: %s\n", __LINE__, #x);                                                    \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -29,12 +29,9 @@ int main(void) {
     af_collision_hit hit;
     CHECK(af_scene_raycast(s, (af_vec3){0, 3, 0}, (af_vec3){0, -1, 0}, 5, filter, &hit) &&
           fabsf(hit.distance - 3) < .0001f && hit.normal.y > .99f);
-    CHECK(af_scene_raycast(s, (af_vec3){0, -3, 0}, (af_vec3){0, 1, 0}, 5, filter, &hit) &&
-          hit.normal.y < -.99f);
-    CHECK(af_scene_overlap_sphere(s, (af_vec3){0, .2f, 0}, .3f, filter, &hit, 1) == 1 &&
-          hit.penetration > .09f);
-    CHECK(af_scene_sweep_capsule(s, (af_vec3){0, 4, 0}, .35f, .55f, (af_vec3){0, -8, 0}, .002f, filter,
-                                 &hit) &&
+    CHECK(af_scene_raycast(s, (af_vec3){0, -3, 0}, (af_vec3){0, 1, 0}, 5, filter, &hit) && hit.normal.y < -.99f);
+    CHECK(af_scene_overlap_sphere(s, (af_vec3){0, .2f, 0}, .3f, filter, &hit, 1) == 1 && hit.penetration > .09f);
+    CHECK(af_scene_sweep_capsule(s, (af_vec3){0, 4, 0}, .35f, .55f, (af_vec3){0, -8, 0}, .002f, filter, &hit) &&
           fabsf(hit.fraction - .38725f) < .001f);
     af_character character = {.position = {0, 2, 0}};
     for (unsigned i = 0; i < 120; ++i)

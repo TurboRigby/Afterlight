@@ -4,12 +4,12 @@
 #include <afterlight/physics.h>
 #include <afterlight/prefab.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Compound prefab %d: %s\n", __LINE__, #x);                                  \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Compound prefab %d: %s\n", __LINE__, #x);                                                 \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     ed_document d;
@@ -33,8 +33,7 @@ int main(void) {
     CHECK(ed_document_duplicate(&d));
     af_object_id copy = d.selection;
     CHECK(copy != id && af_scene_collider_part_count(d.scene, copy) == 2 &&
-          af_scene_collider_part_at(d.scene, copy, 0)->id !=
-              af_scene_collider_part_at(d.scene, id, 0)->id &&
+          af_scene_collider_part_at(d.scene, copy, 0)->id != af_scene_collider_part_at(d.scene, id, 0)->id &&
           af_scene_get_object(d.scene, copy)->body.type == AF_BODY_DYNAMIC);
     af_scene_error e;
     CHECK(af_prefab_save(d.scene, copy, NULL, "compound.prefab", &e));
@@ -48,13 +47,11 @@ int main(void) {
     part.collider.enabled = false;
     CHECK(af_scene_set_collider_part(d.scene, part.id, part));
     af_collider_part_id active = af_scene_collider_part_at(d.scene, instance, 1)->id;
-    CHECK(!af_scene_remove_collider_part(d.scene, active) &&
-          af_scene_collider_part_count(d.scene, instance) == 2);
+    CHECK(!af_scene_remove_collider_part(d.scene, active) && af_scene_collider_part_count(d.scene, instance) == 2);
     af_physics *p = af_physics_create();
     CHECK(p && af_physics_step(p, d.scene, 1.f / 60));
     af_physics_destroy(p);
-    CHECK(af_scene_remove_object(d.scene, instance) &&
-          af_scene_collider_part_count(d.scene, instance) == 0 &&
+    CHECK(af_scene_remove_object(d.scene, instance) && af_scene_collider_part_count(d.scene, instance) == 0 &&
           af_scene_collider_part_count(d.scene, id) == 2);
     ed_document_destroy(&d);
     remove("compound.prefab");

@@ -53,16 +53,15 @@ void ph_solve(af_physics *p, float dt) {
             continue;
         af_vec3 n = c->view.normal;
         float speed = dot(sub(velocity(b, c->view.point), velocity(a, c->view.point)), n);
-        c->bounce =
-            c->view.penetration < 0
-                ? c->view.penetration / dt
-                : (speed < -1 ? -fmaxf(a->config.restitution, b->config.restitution) * speed : 0);
-        for (uint32_t slot = p->cache_heads[bucket(c->view.a, c->view.b)]; slot;
-             slot = p->cache_next[slot - 1]) {
+        c->bounce = c->view.penetration < 0
+                        ? c->view.penetration / dt
+                        : (speed < -1 ? -fmaxf(a->config.restitution, b->config.restitution) * speed : 0);
+        for (uint32_t slot = p->cache_heads[bucket(c->view.a, c->view.b)]; slot; slot = p->cache_next[slot - 1]) {
             size_t j = slot - 1;
             ++p->stats.cache_probes;
             ph_contact *old = &p->cache[j];
-            if (old->view.a != c->view.a || old->view.b != c->view.b ||old->view.part_a!=c->view.part_a||old->view.part_b!=c->view.part_b|| dot(old->view.normal, n) < .95f)
+            if (old->view.a != c->view.a || old->view.b != c->view.b || old->view.part_a != c->view.part_a ||
+                old->view.part_b != c->view.part_b || dot(old->view.normal, n) < .95f)
                 continue;
             af_vec3 da = sub(old->local_a, c->local_a), db = sub(old->local_b, c->local_b);
             if (dot(da, da) > .0025f || dot(db, db) > .0025f)
@@ -86,8 +85,7 @@ void ph_solve(af_physics *p, float dt) {
             if (mass < 1e-12f)
                 continue;
             af_vec3 relative = sub(velocity(b, point), velocity(a, point));
-            float value = fmaxf(0, c->normal + (c->bounce - dot(relative, n)) / mass),
-                  delta = value - c->normal;
+            float value = fmaxf(0, c->normal + (c->bounce - dot(relative, n)) / mass), delta = value - c->normal;
             c->normal = value;
             impulse(a, b, point, mul(n, delta));
             relative = sub(velocity(b, point), velocity(a, point));

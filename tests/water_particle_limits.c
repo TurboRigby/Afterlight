@@ -5,12 +5,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Particle limits %d: %s\n", __LINE__, #x);                                  \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Particle limits %d: %s\n", __LINE__, #x);                                                 \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_physics *p = af_physics_create();
@@ -47,8 +47,7 @@ int main(void) {
         free(v);
         free(ix);
         size_t capacity = 256u << (2u * quality);
-        w.initial_volume =
-            (float)capacity * w.particle_spacing * w.particle_spacing * w.particle_spacing;
+        w.initial_volume = (float)capacity * w.particle_spacing * w.particle_spacing * w.particle_spacing;
         CHECK(af_scene_set_water(s, id, w));
         CHECK(af_physics_step(p, s, 1.f / 240));
         CHECK(af_physics_water_stats(p).particles == capacity);

@@ -13,8 +13,9 @@
 /* Packed RGBA8 levels; caller frees pixels. Offsets are four-byte aligned. */
 typedef struct af_mip_chain {
     unsigned char *pixels;
-    size_t bytes,offsets[AF_MAX_MIPS];
-    uint32_t count,widths[AF_MAX_MIPS],heights[AF_MAX_MIPS];
+    size_t bytes, offsets[AF_MAX_MIPS];
+    uint32_t count, widths[AF_MAX_MIPS], heights[AF_MAX_MIPS];
 } af_mip_chain;
-bool af_mip_chain_build(const unsigned char *rgba,uint32_t width,uint32_t height,bool srgb,bool mipmaps,af_mip_chain *out);
+bool af_mip_chain_build(const unsigned char *rgba, uint32_t width, uint32_t height, bool srgb, bool mipmaps,
+                        af_mip_chain *out);
 #endif

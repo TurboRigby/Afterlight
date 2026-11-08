@@ -3,12 +3,12 @@
 #include <afterlight/joint.h>
 #include <afterlight/physics.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Island %d: %s\n", __LINE__, #x);                                           \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Island %d: %s\n", __LINE__, #x);                                                          \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id ball(af_scene *s, float y) {
     af_object_id id = af_scene_add_object(s, "Link", "cube");

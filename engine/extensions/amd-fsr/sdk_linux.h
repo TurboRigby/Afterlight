@@ -13,35 +13,33 @@
 #include <FidelityFX/host/ffx_util.h>
 
 // FidelityFX 1.1.4 uses Microsoft CRT helpers in shared Vulkan code.
-inline int wcscpy_s(wchar_t *dest, size_t capacity, const wchar_t *source)
-{
+inline int wcscpy_s(wchar_t *dest, size_t capacity, const wchar_t *source) {
     if (std::wcslen(source) >= capacity) {
-        if (capacity) dest[0] = 0;
+        if (capacity)
+            dest[0] = 0;
         return ERANGE;
     }
     std::wcscpy(dest, source);
     return 0;
 }
 
-template <size_t Capacity>
-int wcscpy_s(wchar_t (&dest)[Capacity], const wchar_t *source)
-{
+template <size_t Capacity> int wcscpy_s(wchar_t (&dest)[Capacity], const wchar_t *source) {
     return wcscpy_s(dest, Capacity, source);
 }
 
-inline int strcpy_s(char *dest, size_t capacity, const char *source)
-{
+inline int strcpy_s(char *dest, size_t capacity, const char *source) {
     if (std::strlen(source) >= capacity) {
-        if (capacity) dest[0] = 0;
+        if (capacity)
+            dest[0] = 0;
         return ERANGE;
     }
     std::strcpy(dest, source);
     return 0;
 }
 
-inline int wcstombs_s(size_t *written, char *dest, size_t capacity, const wchar_t *source, size_t limit)
-{
-    if (!capacity) return ERANGE;
+inline int wcstombs_s(size_t *written, char *dest, size_t capacity, const wchar_t *source, size_t limit) {
+    if (!capacity)
+        return ERANGE;
     const size_t length = std::wcstombs(dest, source, limit < capacity ? limit : capacity - 1);
     if (length == static_cast<size_t>(-1)) {
         dest[0] = 0;

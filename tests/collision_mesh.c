@@ -2,12 +2,12 @@
 #include <afterlight/scene.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "BVH %d: %s\n", __LINE__, #x);                                              \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "BVH %d: %s\n", __LINE__, #x);                                                             \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -31,8 +31,7 @@ int main(void) {
     af_triangle triangle;
     CHECK(af_collision_mesh_triangle(mesh, found[0], &triangle) && triangle.a.x == 10);
     indices[0] = 99;
-    CHECK(!af_scene_set_collision_mesh(s, "level", &data, &error) &&
-          af_scene_collision_mesh(s, "level") == mesh);
+    CHECK(!af_scene_set_collision_mesh(s, "level", &data, &error) && af_scene_collision_mesh(s, "level") == mesh);
     af_scene_destroy(s);
     CHECK(af_scene_collision_mesh_stats(clone).triangles == 4);
     af_object_id id = af_scene_add_object(clone, "Level", "level");

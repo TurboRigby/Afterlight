@@ -22,6 +22,6 @@ bool af_swim_config_valid(af_swim_config);
    swept capsule movement while swimming. XZ move, vertical [-1,1]; jump is an
    edge for surface exits. Physics may be NULL for calm authored-water queries.
    Particle fluids are excluded. Mutates state/character only on success. */
-bool af_character_swim_step(const af_physics *, const af_scene *, af_character *, af_character_config,
-                            af_swim_state *, af_swim_config, af_swim_input, float, af_query_filter);
+bool af_character_swim_step(const af_physics *, const af_scene *, af_character *, af_character_config, af_swim_state *,
+                            af_swim_config, af_swim_input, float, af_query_filter);
 #endif

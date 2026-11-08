@@ -4,12 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Stress %d: %s\n", __LINE__, #x);                                           \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Stress %d: %s\n", __LINE__, #x);                                                          \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id box(af_scene *s, af_vec3 pos, af_vec3 half, float mass) {
     af_object_id id = af_scene_add_object(s, "Stress body", "cube");
@@ -51,10 +51,9 @@ int main(void) {
         af_object_id ids[256];
         for (unsigned i = 0; i < counts[test]; ++i) {
             unsigned stack = i / 4, level = i % 4;
-            ids[i] = box(s,
-                         (af_vec3){(float)(stack % 4) * 3 - 5, .5f + (float)level * 1.01f,
-                                   (float)(stack / 4) * 3 - 5},
-                         (af_vec3){.5f, .5f, .5f}, level == 3 ? 8 : 1);
+            ids[i] =
+                box(s, (af_vec3){(float)(stack % 4) * 3 - 5, .5f + (float)level * 1.01f, (float)(stack / 4) * 3 - 5},
+                    (af_vec3){.5f, .5f, .5f}, level == 3 ? 8 : 1);
             CHECK(ids[i]);
         }
         double times[60], total = 0;
@@ -80,10 +79,9 @@ int main(void) {
         }
         qsort(times, 60, sizeof(double), compare);
         af_physics_stats stats = af_physics_get_stats(p);
-        printf("%u,60,%.4f,%.4f,%.5f,%zu,%zu,%.4f,%.4f,%.4f,%.4f,%.4f,%zu\n", counts[test], total / 60,
-               times[56], peak, stats.contacts, stats.broadphase_pairs, stats.sync_ms,
-               stats.broadphase_ms, stats.narrowphase_ms, stats.ccd_ms, stats.solver_ms,
-               stats.cache_probes);
+        printf("%u,60,%.4f,%.4f,%.5f,%zu,%zu,%.4f,%.4f,%.4f,%.4f,%.4f,%zu\n", counts[test], total / 60, times[56], peak,
+               stats.contacts, stats.broadphase_pairs, stats.sync_ms, stats.broadphase_ms, stats.narrowphase_ms,
+               stats.ccd_ms, stats.solver_ms, stats.cache_probes);
         af_physics_destroy(p);
         af_scene_destroy(s);
     }

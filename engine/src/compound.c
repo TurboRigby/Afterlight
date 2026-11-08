@@ -6,20 +6,19 @@
 af_collider_part af_collider_part_default(void) {
     af_collider c = af_collider_default();
     c.type = AF_COLLIDER_BOX;
-    return (af_collider_part){
-        .name = "Collider part", .local = {.scale = {1, 1, 1}}, .collider = c, .density = 1000};
+    return (af_collider_part){.name = "Collider part", .local = {.scale = {1, 1, 1}}, .collider = c, .density = 1000};
 }
 static bool finite3(af_vec3 v) {
     return isfinite(v.x) && isfinite(v.y) && isfinite(v.z) && af_vec3_length(v) <= 1000000;
 }
 bool af_collider_part_valid(af_collider_part p) {
-    return memchr(p.name, 0, sizeof(p.name)) && p.name[0] && finite3(p.local.position) &&
-           finite3(p.local.rotation) && finite3(p.local.scale) && p.local.scale.x > 0 &&
-           p.local.scale.y > 0 && p.local.scale.z > 0 && p.local.scale.x <= 10000 &&
-           p.local.scale.y <= 10000 && p.local.scale.z <= 10000 && af_collider_valid(p.collider) &&
-           (p.collider.type == AF_COLLIDER_BOX || p.collider.type == AF_COLLIDER_SPHERE) &&
-           !p.collider.trigger && af_vec3_length(p.collider.center) < 1e-6f && isfinite(p.density) &&
-           p.density >= .001f && p.density <= 1000000;
+    return memchr(p.name, 0, sizeof(p.name)) && p.name[0] && finite3(p.local.position) && finite3(p.local.rotation) &&
+           finite3(p.local.scale) && p.local.scale.x > 0 && p.local.scale.y > 0 && p.local.scale.z > 0 &&
+           p.local.scale.x <= 10000 && p.local.scale.y <= 10000 && p.local.scale.z <= 10000 &&
+           af_collider_valid(p.collider) &&
+           (p.collider.type == AF_COLLIDER_BOX || p.collider.type == AF_COLLIDER_SPHERE) && !p.collider.trigger &&
+           af_vec3_length(p.collider.center) < 1e-6f && isfinite(p.density) && p.density >= .001f &&
+           p.density <= 1000000;
 }
 size_t af_scene_collider_part_count(const af_scene *s, af_object_id id) {
     size_t n = 0;
@@ -43,9 +42,8 @@ const af_collider_part *af_scene_get_collider_part(const af_scene *s, af_collide
     return NULL;
 }
 af_collider_part_id af_scene_add_collider_part(af_scene *s, af_object_id owner, af_collider_part p) {
-    if (!s || !af_scene_get_object(s, owner) || s->part_count >= AF_SCENE_MAX_COLLIDER_PARTS ||
-        !s->next_part_id || af_scene_collider_part_count(s, owner) >= AF_COMPOUND_MAX_PARTS ||
-        !af_collider_part_valid(p))
+    if (!s || !af_scene_get_object(s, owner) || s->part_count >= AF_SCENE_MAX_COLLIDER_PARTS || !s->next_part_id ||
+        af_scene_collider_part_count(s, owner) >= AF_COMPOUND_MAX_PARTS || !af_collider_part_valid(p))
         return 0;
     p.owner = owner;
     p.id = s->next_part_id++;
@@ -72,8 +70,7 @@ bool af_scene_remove_collider_part(af_scene *s, af_collider_part_id id) {
     for (size_t i = 0; s && i < s->part_count; ++i)
         if (s->parts[i].id == id) {
             const af_scene_object *o = af_scene_get_object(s, s->parts[i].owner);
-            if (o && o->collider.type == AF_COLLIDER_COMPOUND &&
-                af_scene_collider_part_count(s, o->id) == 1)
+            if (o && o->collider.type == AF_COLLIDER_COMPOUND && af_scene_collider_part_count(s, o->id) == 1)
                 return false;
             af_collider_part previous = s->parts[i];
             memmove(&s->parts[i], &s->parts[i + 1], (--s->part_count - i) * sizeof(*s->parts));
@@ -100,8 +97,7 @@ size_t af_scene_collider_shape_count(const af_scene *s, af_object_id id) {
             ++count;
     return count;
 }
-bool af_scene_collider_shape_at(const af_scene *s, af_object_id id, size_t index,
-                                af_world_collider *out) {
+bool af_scene_collider_shape_at(const af_scene *s, af_object_id id, size_t index, af_world_collider *out) {
     const af_scene_object *o = af_scene_get_object(s, id);
     if (!out || !o || !o->collider.enabled || o->collider.type == AF_COLLIDER_NONE)
         return false;
@@ -139,9 +135,8 @@ bool af_scene_collider_shape_at(const af_scene *s, af_object_id id, size_t index
                 return false;
     w.center = (af_vec3){m.elements[12], m.elements[13], m.elements[14]};
     w.a = w.b = w.center;
-    w.half_extents =
-        (af_vec3){p->collider.half_extents.x * scale[0], p->collider.half_extents.y * scale[1],
-                  p->collider.half_extents.z * scale[2]};
+    w.half_extents = (af_vec3){p->collider.half_extents.x * scale[0], p->collider.half_extents.y * scale[1],
+                               p->collider.half_extents.z * scale[2]};
     w.radius = p->collider.radius * fmaxf(scale[0], fmaxf(scale[1], scale[2]));
     *out = w;
     return true;
@@ -198,8 +193,7 @@ bool af_scene_compound_mass(const af_scene *s, af_object_id id, af_mass_properti
                v = p->collider.type == AF_COLLIDER_SPHERE ? 4.0 / 3.0 * (double)AF_PI * r * r * r
                                                           : 8 * h[0] * h[1] * h[2],
                weight = v * p->density, pos[] = {m.elements[12], m.elements[13], m.elements[14]},
-               diagonal[] = {weight / 3 * (h[1] * h[1] + h[2] * h[2]),
-                             weight / 3 * (h[0] * h[0] + h[2] * h[2]),
+               diagonal[] = {weight / 3 * (h[1] * h[1] + h[2] * h[2]), weight / 3 * (h[0] * h[0] + h[2] * h[2]),
                              weight / 3 * (h[0] * h[0] + h[1] * h[1])};
         if (p->collider.type == AF_COLLIDER_SPHERE)
             for (unsigned k = 0; k < 3; ++k)

@@ -4,12 +4,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Compound CCD %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));           \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Compound CCD %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));                          \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id prop(af_scene *s, af_vec3 position, af_vec3 velocity, bool gap) {
     af_object_id id = af_scene_add_object(s, "CCD compound", "__node");
@@ -70,8 +70,7 @@ int main(void) {
     id = prop(s, (af_vec3){0}, (af_vec3){0}, true);
     af_rigid_body body = af_scene_get_object(s, id)->body;
     body.angular_velocity.z = 100;
-    CHECK(af_scene_set_body(s, id, body) && af_physics_step(p, s, 1.f / 60) &&
-          af_physics_get_stats(p).ccd_hits > 0);
+    CHECK(af_scene_set_body(s, id, body) && af_physics_step(p, s, 1.f / 60) && af_physics_get_stats(p).ccd_hits > 0);
     for (size_t i = 0; i < 2; ++i) {
         af_world_collider w;
         CHECK(af_scene_collider_shape_at(s, id, i, &w) && w.center.y + w.radius < 1.03f);

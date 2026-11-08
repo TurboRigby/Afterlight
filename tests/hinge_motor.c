@@ -3,12 +3,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Motor %d: %s\n", __LINE__, #x);                                            \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Motor %d: %s\n", __LINE__, #x);                                                           \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -56,8 +56,7 @@ int main(void) {
     af_scene_error e;
     CHECK(af_scene_save(s, "motor.scene", &e));
     af_scene *copy = af_scene_load("motor.scene", &e);
-    CHECK(copy && af_scene_joint_at(copy, 0)->motor_enabled &&
-          af_scene_joint_at(copy, 0)->motor_speed == 3);
+    CHECK(copy && af_scene_joint_at(copy, 0)->motor_enabled && af_scene_joint_at(copy, 0)->motor_speed == 3);
     af_scene_destroy(copy);
     remove("motor.scene");
     j.max_motor_torque = -1;

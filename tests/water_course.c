@@ -79,22 +79,20 @@ static float received(af_engine *e, const af_scene *s) {
     }
     return volume;
 }
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Course phase %u line %d: %s (received %.4f)\n", s->phase, __LINE__, #x,    \
-                    s->max_received);                                                                   \
-            s->failed = true;                                                                           \
-            af_engine_request_quit(e);                                                                  \
-            return;                                                                                     \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Course phase %u line %d: %s (received %.4f)\n", s->phase, __LINE__, #x, s->max_received); \
+            s->failed = true;                                                                                          \
+            af_engine_request_quit(e);                                                                                 \
+            return;                                                                                                    \
+        }                                                                                                              \
     } while (0)
 static bool init(af_engine *e, void *data) {
     test *s = data;
     s->source = af_scene_load(s->scene_path, NULL);
     af_mesh_data mesh = cube_mesh_data();
-    if (!s->source || !af_engine_upload_mesh(e, "cube", &mesh) ||
-        !af_engine_load_scene_assets(e,s->source,NULL) ||
+    if (!s->source || !af_engine_upload_mesh(e, "cube", &mesh) || !af_engine_load_scene_assets(e, s->source, NULL) ||
         !ed_runtime_set_project(&s->runtime, s->project, s->scene_path) ||
         !ed_runtime_start_file(&s->runtime, s->source, e, s->module))
         return false;
@@ -216,16 +214,14 @@ static void update(af_engine *e, double dt, void *data) {
             if (ticks % 120 == 0) {
                 const af_scene_object *cup =
                     af_scene_get_object(s->runtime.scene, named(s->runtime.scene, "Source cup"));
-                fprintf(stderr, "Native pour tick %llu tilt %.3f player %.2f %.2f %.2f\n",
-                        (unsigned long long)ticks, cup ? cup->transform.rotation.z : 0,
-                        body->transform.position.x, body->transform.position.y,
+                fprintf(stderr, "Native pour tick %llu tilt %.3f player %.2f %.2f %.2f\n", (unsigned long long)ticks,
+                        cup ? cup->transform.rotation.z : 0, body->transform.position.x, body->transform.position.y,
                         body->transform.position.z);
             }
             CHECK(ticks < 900);
             return;
         }
-        printf("Expedition received %.4f m3 after %llu ticks.\n", s->max_received,
-               (unsigned long long)ticks);
+        printf("Expedition received %.4f m3 after %llu ticks.\n", s->max_received, (unsigned long long)ticks);
         CHECK(visit(s, 0, true));
         s->phase = 11;
         break;
@@ -268,8 +264,7 @@ int main(int argc, char **argv) {
     af_engine *e = af_engine_create(&c);
     if (!e)
         return 1;
-    af_game g = {
-        .init = init, .update = update, .fixed_update = fixed, .shutdown = shutdown, .user_data = &s};
+    af_game g = {.init = init, .update = update, .fixed_update = fixed, .shutdown = shutdown, .user_data = &s};
     int result = af_engine_run(e, &g);
     af_engine_stats stats = af_engine_get_stats(e);
     af_engine_destroy(e);

@@ -4,12 +4,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Joint stress %d: %s\n", __LINE__, #x);                                     \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Joint stress %d: %s\n", __LINE__, #x);                                                    \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     float rates[] = {30, 60, 144};
@@ -57,8 +57,7 @@ int main(void) {
                 CHECK(isfinite(error) && error < .14f);
             }
         }
-        printf("12-link 16:1 chain at %.0f Hz: max length error %.5f\n", (double)rates[run],
-               (double)maximum);
+        printf("12-link 16:1 chain at %.0f Hz: max length error %.5f\n", (double)rates[run], (double)maximum);
         af_scene_destroy(s);
         af_physics_destroy(p);
     }

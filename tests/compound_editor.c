@@ -3,12 +3,12 @@
 #include "document.h"
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Compound editor %d: %s\n", __LINE__, #x);                                  \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Compound editor %d: %s\n", __LINE__, #x);                                                 \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     ed_document d;
@@ -26,15 +26,13 @@ int main(void) {
     part = *af_scene_collider_part_at(d.scene, root, 0);
     CHECK(ed_document_fit_part(&d, part.id));
     part = *af_scene_get_collider_part(d.scene, part.id);
-    CHECK(fabsf(part.local.position.x - 2) < .001f &&
-          fabsf(part.collider.half_extents.x - 1.3f) < .001f);
+    CHECK(fabsf(part.local.position.x - 2) < .001f && fabsf(part.collider.half_extents.x - 1.3f) < .001f);
     part.local.position.x = 3;
     CHECK(ed_document_part(&d, part));
     part.local.position.x = 4;
     CHECK(ed_document_part(&d, part));
     ed_document_end_edit(&d);
-    CHECK(ed_document_undo(&d) &&
-          fabsf(af_scene_get_collider_part(d.scene, part.id)->local.position.x - 2) < .001f &&
+    CHECK(ed_document_undo(&d) && fabsf(af_scene_get_collider_part(d.scene, part.id)->local.position.x - 2) < .001f &&
           ed_document_redo(&d));
     CHECK(!ed_document_remove_part(&d, part.id));
     af_collider_part sphere = af_collider_part_default();

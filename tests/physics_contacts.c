@@ -2,12 +2,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Contacts %d: %s\n", __LINE__, #x);                                         \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Contacts %d: %s\n", __LINE__, #x);                                                        \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id add(af_scene *s, af_collider_type type, af_vec3 pos, bool dynamic) {
     af_object_id id = af_scene_add_object(s, "Shape", "cube");

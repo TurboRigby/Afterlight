@@ -4,18 +4,17 @@
 #include <afterlight/water.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Particles %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));              \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Particles %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));                             \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id cup(af_scene *s) {
     af_object_id id = af_scene_add_object(s, "Cup", "__node");
     af_vec3 centers[] = {{0, 0, 0}, {-.7f, .6f, 0}, {.7f, .6f, 0}, {0, .6f, -.7f}, {0, .6f, .7f}},
-            half[] = {
-                {.8f, .1f, .8f}, {.1f, .6f, .8f}, {.1f, .6f, .8f}, {.6f, .6f, .1f}, {.6f, .6f, .1f}};
+            half[] = {{.8f, .1f, .8f}, {.1f, .6f, .8f}, {.1f, .6f, .8f}, {.6f, .6f, .1f}, {.6f, .6f, .1f}};
     for (unsigned i = 0; i < 5; ++i) {
         af_collider_part part = af_collider_part_default();
         part.local.position = centers[i];
@@ -59,8 +58,8 @@ int main(void) {
             speed = fmaxf(speed, af_vec3_length(particles[i].velocity));
         }
         af_water_stats stats = af_physics_water_stats(p);
-        printf("Quality %u: %zu particles, %zu in cup, speed %.4f, volume %.5f emitted %.5f\n", quality,
-               count, inside, speed, stats.particle_volume, stats.emitted_volume);
+        printf("Quality %u: %zu particles, %zu in cup, speed %.4f, volume %.5f emitted %.5f\n", quality, count, inside,
+               speed, stats.particle_volume, stats.emitted_volume);
         CHECK(count == 100 && inside >= 95 && speed < 2);
         CHECK(fabsf(stats.particle_volume + stats.escaped_volume - stats.emitted_volume) < .00001f);
         CHECK(!af_physics_sample_water(p, s, (af_vec3){0}).inside);

@@ -14,29 +14,29 @@ typedef struct test_state {
     bool capture, failed;
 } test_state;
 
-static bool init(af_engine *engine, void *data)
-{
+static bool init(af_engine *engine, void *data) {
     test_state *test = data;
     af_engine_set_scene(engine, test->scene);
     af_engine_set_clear_color(engine, (af_color){.8f, .01f, .01f, 1});
     return true;
 }
 
-#define CHECK(condition) do { \
-    if (!(condition)) { \
-        fprintf(stderr, "Vulkan upscaler phase %u: %s failed.\n", test->phase, #condition); \
-        test->failed = true; \
-        af_engine_request_quit(engine); \
-        return; \
-    } \
-} while (0)
+#define CHECK(condition)                                                                                               \
+    do {                                                                                                               \
+        if (!(condition)) {                                                                                            \
+            fprintf(stderr, "Vulkan upscaler phase %u: %s failed.\n", test->phase, #condition);                        \
+            test->failed = true;                                                                                       \
+            af_engine_request_quit(engine);                                                                            \
+            return;                                                                                                    \
+        }                                                                                                              \
+    } while (0)
 
-static void update(af_engine *engine, double delta, void *data)
-{
+static void update(af_engine *engine, double delta, void *data) {
     (void)delta;
     test_state *test = data;
     af_engine_stats stats = af_engine_get_stats(engine);
-    if (stats.rendered_frames < test->changed_at + 8) return;
+    if (stats.rendered_frames < test->changed_at + 8)
+        return;
     if (!test->capture) {
         int width, height;
         af_engine_get_window_size(engine, &width, &height);
@@ -46,14 +46,12 @@ static void update(af_engine *engine, double delta, void *data)
     }
     unsigned char pixel[4];
     CHECK(af_engine_test_read_pixel(engine, pixel));
-    bool upscale = test->phase >= 1 && test->phase <= 7 && test->phase != 3 &&
-                   test->phase != 4;
+    bool upscale = test->phase >= 1 && test->phase <= 7 && test->phase != 3 && test->phase != 4;
     CHECK(stats.effective_aa == (upscale ? AF_AA_OFF : AF_AA_FXAA));
     if (test->phase == 6)
         CHECK(pixel[2] > 200 && pixel[0] < 40 && pixel[1] < 40);
     else
-        CHECK(upscale ? pixel[1] > 200 && pixel[0] < 40
-                      : pixel[0] > 200 && pixel[1] < 40);
+        CHECK(upscale ? pixel[1] > 200 && pixel[0] < 40 : pixel[0] > 200 && pixel[1] < 40);
 
     af_temporal_test_stats temporal = af_engine_test_temporal(engine);
     switch (test->phase) {
@@ -107,15 +105,16 @@ static void update(af_engine *engine, double delta, void *data)
     test->capture = false;
 }
 
-int main(int argc, char **argv)
-{
-    if (argc != 2) return 1;
+int main(int argc, char **argv) {
+    if (argc != 2)
+        return 1;
     af_engine_config config = af_engine_config_default();
     config.width = 640;
     config.height = 360;
     config.enable_validation = true;
     af_engine *engine = af_engine_create(&config);
-    if (!engine) return 1;
+    if (!engine)
+        return 1;
     if (!af_engine_test_temporal(engine).supported) {
         af_engine_destroy(engine);
         return 77;
@@ -128,8 +127,8 @@ int main(int argc, char **argv)
     settings.bloom = true;
     settings.bloom_threshold = 2;
     int result = 1;
-    if ((!validation || strcmp(validation, "1") || af_engine_get_stats(engine).validation_enabled) &&
-        test.scene && af_scene_set_render_settings(test.scene, settings)) {
+    if ((!validation || strcmp(validation, "1") || af_engine_get_stats(engine).validation_enabled) && test.scene &&
+        af_scene_set_render_settings(test.scene, settings)) {
         af_game game = {.init = init, .update = update, .user_data = &test};
         result = af_engine_run(engine, &game) || test.failed || test.phase != 8;
     }

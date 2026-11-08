@@ -8,9 +8,14 @@
 af_physics *af_physics_create(void) {
     return calloc(1, sizeof(af_physics));
 }
-double af_physics_time(const af_physics *p){return p?p->simulation_time:0;}
+double af_physics_time(const af_physics *p) {
+    return p ? p->simulation_time : 0;
+}
 void af_physics_destroy(af_physics *p) {
-    if(p){wa_destroy(p->water);free(p->water);}
+    if (p) {
+        wa_destroy(p->water);
+        free(p->water);
+    }
     free(p);
 }
 void af_physics_set_profiling(af_physics *p, bool enabled) {
@@ -20,13 +25,16 @@ void af_physics_set_profiling(af_physics *p, bool enabled) {
 void af_physics_reset(af_physics *p) {
     if (p) {
         bool profiling = p->profiling;
-        wa_destroy(p->water);free(p->water);
+        wa_destroy(p->water);
+        free(p->water);
         memset(p, 0, sizeof(*p));
         p->profiling = profiling;
     }
 }
 bool af_physics_active(const af_scene *s) {
-    for(size_t i=0;i<af_scene_water_count(s);++i)if(af_scene_water_at(s,i)->enabled)return true;
+    for (size_t i = 0; i < af_scene_water_count(s); ++i)
+        if (af_scene_water_at(s, i)->enabled)
+            return true;
     for (size_t i = 0; i < af_scene_object_count(s); ++i) {
         const af_rigid_body *b = &af_scene_object_at(s, i)->body;
         if (b->enabled && b->type != AF_BODY_STATIC)
@@ -62,8 +70,7 @@ af_vec3 ph_inverse_inertia(const ph_body *b, af_vec3 v) {
         af_vec4 value = af_mat4_transform(b->inverse_tensor, (af_vec4){local.x, local.y, local.z, 0});
         return ph_vector(b, (af_vec3){value.x, value.y, value.z});
     }
-    return ph_vector(b,
-                     (af_vec3){local.x * b->inertia.x, local.y * b->inertia.y, local.z * b->inertia.z});
+    return ph_vector(b, (af_vec3){local.x * b->inertia.x, local.y * b->inertia.y, local.z * b->inertia.z});
 }
 static af_vec3 euler(af_vec4 q) {
     af_mat4 m = af_animation_pose_matrix((af_animation_pose){.rotation = q, .scale = {1, 1, 1}});
@@ -98,12 +105,10 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
               o->collider.type != AF_COLLIDER_COMPOUND) ||
              !o->collider.enabled || o->transform.scale.x <= 0 || o->transform.scale.y <= 0 ||
              o->transform.scale.z <= 0))
-            return fail(
-                p, "Dynamic bodies require centered root sphere/box colliders with positive scale.");
+            return fail(p, "Dynamic bodies require centered root sphere/box colliders with positive scale.");
         af_world_collider shape;
         if (!af_scene_world_collider(s, o->id, &shape)) {
-            if ((o->body.enabled && o->body.type == AF_BODY_DYNAMIC) ||
-                o->collider.type == AF_COLLIDER_MESH)
+            if ((o->body.enabled && o->body.type == AF_BODY_DYNAMIC) || o->collider.type == AF_COLLIDER_MESH)
                 return fail(p, "Collider has no prepared, valid world shape.");
             continue;
         }
@@ -113,25 +118,22 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         if (player_proxy) {
             shape.type = AF_COLLIDER_BOX;
             shape.half_extents = (af_vec3){
-                shape.radius, af_vec3_length(af_vec3_sub(shape.b, shape.a)) * .5f + shape.radius,
-                shape.radius};
+                shape.radius, af_vec3_length(af_vec3_sub(shape.b, shape.a)) * .5f + shape.radius, shape.radius};
             for (unsigned axis = 0; axis < 3; ++axis)
                 shape.axes[axis] = ph_axis(axis);
         }
-        if (shape.type != AF_COLLIDER_BOX && shape.type != AF_COLLIDER_SPHERE &&
-            shape.type != AF_COLLIDER_MESH && shape.type != AF_COLLIDER_COMPOUND)
+        if (shape.type != AF_COLLIDER_BOX && shape.type != AF_COLLIDER_SPHERE && shape.type != AF_COLLIDER_MESH &&
+            shape.type != AF_COLLIDER_COMPOUND)
             continue;
         if (!ph_finite(shape.half_extents) || !isfinite(shape.radius) || shape.radius > 10000 ||
             shape.half_extents.x > 10000 || shape.half_extents.y > 10000 || shape.half_extents.z > 10000)
             return fail(p, "Physics dimensions exceed 10,000 world units.");
         if (shape.type != AF_COLLIDER_MESH &&
-            (shape.type == AF_COLLIDER_SPHERE
-                 ? shape.radius < .009999f
-                 : (shape.half_extents.x < .009999f || shape.half_extents.y < .009999f ||
-                    shape.half_extents.z < .009999f)))
+            (shape.type == AF_COLLIDER_SPHERE ? shape.radius < .009999f
+                                              : (shape.half_extents.x < .009999f || shape.half_extents.y < .009999f ||
+                                                 shape.half_extents.z < .009999f)))
             return fail(p, "Physics shape dimensions must be at least .01 world units.");
-        if (count == AF_PHYSICS_MAX_BODIES || !ph_finite(shape.center) ||
-            af_vec3_length(shape.center) > 1000000)
+        if (count == AF_PHYSICS_MAX_BODIES || !ph_finite(shape.center) || af_vec3_length(shape.center) > 1000000)
             return fail(p, "Physics exceeds 1024 shapes or the 1,000,000 unit world bound.");
         ph_body *old = p->scene == s ? find(p, o->id) : NULL;
         ph_body b = old ? *old
@@ -143,9 +145,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                                     .published = o->transform};
         b.scene_index = i;
         b.character_proxy = player_proxy;
-        af_body_type type = player_proxy      ? AF_BODY_KINEMATIC
-                            : o->body.enabled ? o->body.type
-                                              : AF_BODY_STATIC;
+        af_body_type type = player_proxy ? AF_BODY_KINEMATIC : o->body.enabled ? o->body.type : AF_BODY_STATIC;
         bool moved = old && memcmp(&o->transform, &old->published, sizeof(o->transform));
         if (type == AF_BODY_DYNAMIC) {
             if (moved || (old && old->config.type != type)) {
@@ -159,8 +159,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                 b.sleeping = false;
                 b.sleep_time = 0;
             }
-            if (old &&
-                memcmp(&o->body.angular_velocity, &old->config.angular_velocity, sizeof(af_vec3))) {
+            if (old && memcmp(&o->body.angular_velocity, &old->config.angular_velocity, sizeof(af_vec3))) {
                 b.w = o->body.angular_velocity;
                 b.sleeping = false;
                 b.sleep_time = 0;
@@ -173,8 +172,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             b.w = (af_vec3){0};
             if (type == AF_BODY_KINEMATIC && old && dt > 0)
                 for (unsigned k = 0; k < 3; ++k)
-                    b.w = af_vec3_add(
-                        b.w, af_vec3_scale(af_vec3_cross(old->shape.axes[k], shape.axes[k]), .5f / dt));
+                    b.w = af_vec3_add(b.w, af_vec3_scale(af_vec3_cross(old->shape.axes[k], shape.axes[k]), .5f / dt));
         }
         if (old && memcmp(&o->body, &old->config, sizeof(o->body))) {
             b.sleeping = false;
@@ -220,9 +218,8 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             af_mass_properties mass;
             if (!af_scene_compound_mass(s, o->id, &mass))
                 return fail(p, "Compound mass properties are invalid.");
-            if (type == AF_BODY_DYNAMIC &&
-                (fabsf(o->transform.scale.x - o->transform.scale.y) > .0001f ||
-                 fabsf(o->transform.scale.x - o->transform.scale.z) > .0001f))
+            if (type == AF_BODY_DYNAMIC && (fabsf(o->transform.scale.x - o->transform.scale.y) > .0001f ||
+                                            fabsf(o->transform.scale.x - o->transform.scale.z) > .0001f))
                 return fail(p, "Dynamic compound roots need uniform positive scale.");
             b.com_offset = mass.center;
             b.part_start = part_count;
@@ -255,8 +252,10 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             }
         }
 
-        b.water_motion=type==AF_BODY_KINEMATIC&&old&&dt>0&&moved;
-        b.water_previous_p=old?old->p:b.p;for(unsigned axis=0;axis<3;++axis)b.water_previous_axes[axis]=old?old->axes[axis]:b.axes[axis];
+        b.water_motion = type == AF_BODY_KINEMATIC && old && dt > 0 && moved;
+        b.water_previous_p = old ? old->p : b.p;
+        for (unsigned axis = 0; axis < 3; ++axis)
+            b.water_previous_axes[axis] = old ? old->axes[axis] : b.axes[axis];
         b.published = o->transform;
         b.inv_mass = type == AF_BODY_DYNAMIC ? 1 / o->body.mass : 0;
         if (b.inv_mass > 0) {
@@ -268,9 +267,8 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                 float inverse = 2.5f / (mass * shape.radius * shape.radius);
                 b.inertia = (af_vec3){inverse, inverse, inverse};
             } else
-                b.inertia =
-                    (af_vec3){3 / (mass * (h.y * h.y + h.z * h.z)), 3 / (mass * (h.x * h.x + h.z * h.z)),
-                              3 / (mass * (h.x * h.x + h.y * h.y))};
+                b.inertia = (af_vec3){3 / (mass * (h.y * h.y + h.z * h.z)), 3 / (mass * (h.x * h.x + h.z * h.z)),
+                                      3 / (mass * (h.x * h.x + h.y * h.y))};
             ph_shape(&b);
         }
         p->scratch[count++] = b;
@@ -297,11 +295,9 @@ void ph_impulse(ph_body *b, af_vec3 impulse, af_vec3 point) {
     if (b->inv_mass == 0 || b->sleeping)
         return;
     b->v = ph_limit(af_vec3_add(b->v, af_vec3_scale(impulse, b->inv_mass)), 200);
-    b->w = ph_limit(
-        af_vec3_add(b->w, ph_inverse_inertia(b, af_vec3_cross(af_vec3_sub(point, b->p), impulse))), 100);
+    b->w = ph_limit(af_vec3_add(b->w, ph_inverse_inertia(b, af_vec3_cross(af_vec3_sub(point, b->p), impulse))), 100);
 }
-static bool act(af_physics *p, af_scene *s, af_object_id id, af_vec3 value, af_vec3 point,
-                bool impulse) {
+static bool act(af_physics *p, af_scene *s, af_object_id id, af_vec3 value, af_vec3 point, bool impulse) {
     if (!p || !s || !ph_finite(value) || !ph_finite(point) || af_vec3_length(value) > 1000000 ||
         af_vec3_length(point) > 1000000)
         return false;
@@ -322,8 +318,7 @@ static bool act(af_physics *p, af_scene *s, af_object_id id, af_vec3 value, af_v
         ph_impulse(b, value, point);
     else {
         b->force = ph_limit(af_vec3_add(b->force, value), 1000000);
-        b->torque =
-            ph_limit(af_vec3_add(b->torque, af_vec3_cross(af_vec3_sub(point, b->p), value)), 1000000);
+        b->torque = ph_limit(af_vec3_add(b->torque, af_vec3_cross(af_vec3_sub(point, b->p), value)), 1000000);
     }
     return true;
 }
@@ -372,8 +367,10 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
     double started = ph_clock(p);
     if (!ph_sync(p, s, dt))
         return false;
-    if(!ph_water_sync(p,s))return fail(p,"Invalid water surface or allocation failure.");
-    for(size_t i=0;i<p->count;++i)p->bodies[i].wet=false;
+    if (!ph_water_sync(p, s))
+        return fail(p, "Invalid water surface or allocation failure.");
+    for (size_t i = 0; i < p->count; ++i)
+        p->bodies[i].wet = false;
     uint64_t ticks = p->stats.ticks + 1;
     p->stats = (af_physics_stats){.bodies = p->count, .ticks = ticks};
     p->stats.sync_ms = ph_clock(p) - started;
@@ -383,24 +380,24 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
     float h = dt / (float)steps;
     p->stats.substeps = steps;
     for (unsigned sub = 0; sub < steps; ++sub) {
-        ph_wind_step(p,h);
+        ph_wind_step(p, h);
         ph_hold(p, h);
         for (size_t i = 0; i < p->count; ++i) {
             ph_body *b = &p->bodies[i];
             if (b->inv_mass == 0 || b->sleeping)
                 continue;
-            af_vec3 acceleration = af_vec3_add(af_vec3_scale(b->force, b->inv_mass),
-                                               (af_vec3){0, -9.81f * b->config.gravity_scale, 0});
-            b->v = ph_limit(af_vec3_scale(af_vec3_add(b->v, af_vec3_scale(acceleration, h)),
-                                          expf(-b->config.linear_damping * h)),
-                            200);
-            b->w = ph_limit(
-                af_vec3_scale(af_vec3_add(b->w, af_vec3_scale(ph_inverse_inertia(b, b->torque), h)),
-                              expf(-b->config.angular_damping * h)),
-                100);
+            af_vec3 acceleration =
+                af_vec3_add(af_vec3_scale(b->force, b->inv_mass), (af_vec3){0, -9.81f * b->config.gravity_scale, 0});
+            b->v = ph_limit(
+                af_vec3_scale(af_vec3_add(b->v, af_vec3_scale(acceleration, h)), expf(-b->config.linear_damping * h)),
+                200);
+            b->w = ph_limit(af_vec3_scale(af_vec3_add(b->w, af_vec3_scale(ph_inverse_inertia(b, b->torque), h)),
+                                          expf(-b->config.angular_damping * h)),
+                            100);
             ph_shape(b);
         }
-        p->water_substep=sub;ph_water_step(p,h);
+        p->water_substep = sub;
+        ph_water_step(p, h);
         double stamp = ph_clock(p);
         ph_advance(p, h);
         p->stats.ccd_ms += ph_clock(p) - stamp;
@@ -408,7 +405,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
             return fail(p, "Physics exceeds 8192 contact points.");
         stamp = ph_clock(p);
         ph_solve(p, h);
-        p->simulation_time+=h;
+        p->simulation_time += h;
         p->stats.solver_ms += ph_clock(p) - stamp;
     }
     ph_sleep(p, dt);
@@ -438,7 +435,14 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
 bool af_physics_validate_scene(const af_scene *scene, char *error, size_t capacity) {
     if (!scene)
         return false;
-    for(size_t i=0;i<af_scene_water_count(scene);++i){af_water w=*af_scene_water_at(scene,i);if(!wa_owner_valid(scene,w.owner,w)){if(error&&capacity)snprintf(error,capacity,"Invalid water definition or owner transform.");return false;}}
+    for (size_t i = 0; i < af_scene_water_count(scene); ++i) {
+        af_water w = *af_scene_water_at(scene, i);
+        if (!wa_owner_valid(scene, w.owner, w)) {
+            if (error && capacity)
+                snprintf(error, capacity, "Invalid water definition or owner transform.");
+            return false;
+        }
+    }
     if (!af_physics_active(scene))
         return true;
     af_physics *test = af_physics_create();

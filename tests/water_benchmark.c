@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-static double now(void) { return 1000.0 * (double)clock() / CLOCKS_PER_SEC; }
+static double now(void) {
+    return 1000.0 * (double)clock() / CLOCKS_PER_SEC;
+}
 int main(int argc, char **argv) {
     if (argc < 2 || argc > 3)
         return 2;
@@ -56,9 +58,8 @@ int main(int argc, char **argv) {
                 }
             }
             af_water_stats stats = af_physics_water_stats(p);
-            printf("%s,%u,%u,%.5f,%.5f,%.5f,%.5f,%u,%zu,%zu\n", names[scene], quality, ticks,
-                   total / ticks, maximum, mesh_total / ticks, mesh_max, vertices, stats.particles,
-                   stats.cells);
+            printf("%s,%u,%u,%.5f,%.5f,%.5f,%.5f,%u,%zu,%zu\n", names[scene], quality, ticks, total / ticks, maximum,
+                   mesh_total / ticks, mesh_max, vertices, stats.particles, stats.cells);
             fflush(stdout);
             af_physics_destroy(p);
             af_scene_destroy(s);

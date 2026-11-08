@@ -8,7 +8,7 @@
 #define AFTERLIGHT_SHADOW_H
 #include <stdbool.h>
 #include <stdint.h>
-typedef enum af_shadow_mode { AF_SHADOW_SINGLE=1, AF_SHADOW_CASCADED=4 } af_shadow_mode;
+typedef enum af_shadow_mode { AF_SHADOW_SINGLE = 1, AF_SHADOW_CASCADED = 4 } af_shadow_mode;
 typedef struct af_shadow_settings {
     bool enabled;
     af_shadow_mode mode;

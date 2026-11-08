@@ -67,8 +67,10 @@ AF_EXTENSION_EXPORT const af_extension_api *af_extension_get_api(uint32_t abi_ve
 #endif
 
 typedef enum af_extension_startup_status {
-    AF_EXTENSION_LIVE, AF_EXTENSION_STARTUP_READY,
-    AF_EXTENSION_RESTART_REQUIRED, AF_EXTENSION_STARTUP_UNAVAILABLE
+    AF_EXTENSION_LIVE,
+    AF_EXTENSION_STARTUP_READY,
+    AF_EXTENSION_RESTART_REQUIRED,
+    AF_EXTENSION_STARTUP_UNAVAILABLE
 } af_extension_startup_status;
 
 typedef struct af_extension_info {
@@ -79,8 +81,8 @@ typedef struct af_extension_info {
 
 /* Loads explicit paths before Vulkan instance/device creation. Unavailable
    Vulkan requirements leave their extension disabled. */
-af_engine *af_engine_create_with_extensions(const struct af_engine_config *config,
-                                            const char *const *paths, size_t count);
+af_engine *af_engine_create_with_extensions(const struct af_engine_config *config, const char *const *paths,
+                                            size_t count);
 /* Load a trusted native library before af_engine_run or from a game update
    callback on the main thread. Successfully started extensions stay resident
    and stop in reverse order during engine destruction. Startup extensions

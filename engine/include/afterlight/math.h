@@ -10,13 +10,21 @@
 
 #define AF_PI 3.14159265358979323846f
 
-typedef struct af_vec2 { float x, y; } af_vec2;
-typedef struct af_vec3 { float x, y, z; } af_vec3;
-typedef struct af_vec4 { float x, y, z, w; } af_vec4;
+typedef struct af_vec2 {
+    float x, y;
+} af_vec2;
+typedef struct af_vec3 {
+    float x, y, z;
+} af_vec3;
+typedef struct af_vec4 {
+    float x, y, z, w;
+} af_vec4;
 /* Column-major storage, column vectors; A * B applies B first. Right-handed,
    Y-up world. Angles are radians. Perspective looks down -Z, maps depth to
    [0, 1], and flips clip Y for Vulkan's positive-height viewport. */
-typedef struct af_mat4 { float elements[16]; } af_mat4;
+typedef struct af_mat4 {
+    float elements[16];
+} af_mat4;
 /* Euler rotation in radians; matrix composition is T * Rz * Ry * Rx * S. */
 typedef struct af_transform {
     af_vec3 position;

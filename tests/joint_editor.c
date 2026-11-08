@@ -3,12 +3,12 @@
 #include "collider_view.h"
 #include "document.h"
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Joint editor %d: %s\n", __LINE__, #x);                                     \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Joint editor %d: %s\n", __LINE__, #x);                                                    \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     ed_document d;
@@ -39,8 +39,7 @@ int main(void) {
     CHECK(ed_document_duplicate(&d));
     CHECK(af_scene_joint_count(d.scene) == 2 &&
           af_scene_get_object(d.scene, d.selection)->body.type == AF_BODY_DYNAMIC);
-    CHECK(af_scene_joint_at(d.scene, 1)->a == d.selection &&
-          af_scene_joint_at(d.scene, 1)->anchor_b.x == 1.5f);
+    CHECK(af_scene_joint_at(d.scene, 1)->a == d.selection && af_scene_joint_at(d.scene, 1)->anchor_b.x == 1.5f);
     ed_document_end_edit(&d);
     CHECK(ed_document_remove_joint(&d, j.id) && af_scene_joint_count(d.scene) == 1);
     CHECK(ed_document_undo(&d) && af_scene_joint_count(d.scene) == 2);

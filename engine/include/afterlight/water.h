@@ -22,7 +22,7 @@ typedef struct af_water {
     af_vec3 path[AF_WATER_MAX_PATH];
     float particle_spacing, initial_volume, emission_rate, viscosity;
     af_vec3 emission_velocity;
-    float ripple_scale,ripple_strength;
+    float ripple_scale, ripple_strength;
 } af_water;
 typedef struct af_water_sample {
     bool inside;
@@ -31,7 +31,7 @@ typedef struct af_water_sample {
     af_vec3 velocity, normal;
 } af_water_sample;
 typedef struct af_water_stats {
-    size_t surfaces, cells, wet_bodies, particles,sleeping_surfaces,sleeping_particles;
+    size_t surfaces, cells, wet_bodies, particles, sleeping_surfaces, sleeping_particles;
     float max_wave, displaced_volume;
     double milliseconds;
     float emitted_volume, escaped_volume, particle_volume;
@@ -51,7 +51,6 @@ bool af_scene_set_water(af_scene *, af_object_id, af_water);
 bool af_scene_remove_water(af_scene *, af_object_id);
 /* Surface query uses XZ; caller compares Y to height/bottom. Disabled water is skipped. */
 af_water_sample af_physics_sample_water(const af_physics *, const af_scene *, af_vec3);
-bool af_physics_disturb_water(af_physics *, const af_scene *, af_object_id, af_vec3, float radius,
-                              float velocity);
+bool af_physics_disturb_water(af_physics *, const af_scene *, af_object_id, af_vec3, float radius, float velocity);
 af_water_stats af_physics_water_stats(const af_physics *);
 #endif

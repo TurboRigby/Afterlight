@@ -3,12 +3,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Joint diagnostics %d: %s\n", __LINE__, #x);                                \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Joint diagnostics %d: %s\n", __LINE__, #x);                                               \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -30,8 +30,7 @@ int main(void) {
     for (unsigned tick = 0; tick < 20; ++tick)
         CHECK(af_physics_step(p, s, 1.f / 60));
     af_physics_joint_state state = af_physics_get_joint_state(p, joint);
-    CHECK(state.available && state.linear_error < .005f && fabsf(state.force - 19.62f) < 1 &&
-          isfinite(state.torque));
+    CHECK(state.available && state.linear_error < .005f && fabsf(state.force - 19.62f) < 1 && isfinite(state.torque));
     CHECK(af_physics_get_stats(p).max_joint_force > 18);
     CHECK(af_scene_remove_joint(s, joint) && af_physics_step(p, s, 1.f / 60) &&
           !af_physics_get_joint_state(p, joint).available);

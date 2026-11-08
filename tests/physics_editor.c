@@ -2,12 +2,12 @@
 #include "document.h"
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Physics editor %d: %s\n", __LINE__, #x);                                   \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Physics editor %d: %s\n", __LINE__, #x);                                                  \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     ed_document d;
@@ -40,8 +40,7 @@ int main(void) {
     CHECK(af_scene_set_object_transform(d.scene, d.selection, t));
     af_mat4 middle;
     CHECK(af_scene_interpolated_world_matrix(d.scene, previous, d.selection, .5f, &middle) &&
-          fabsf(middle.elements[0]) < .001f && middle.elements[2] < -.999f &&
-          middle.elements[5] > .999f);
+          fabsf(middle.elements[0]) < .001f && middle.elements[2] < -.999f && middle.elements[5] > .999f);
     af_scene_destroy(previous);
     ed_document_destroy(&d);
     puts("Physics editor: body history, undo/redo and invalid component/transform rejection passed.");

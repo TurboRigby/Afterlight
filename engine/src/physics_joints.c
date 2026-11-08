@@ -27,7 +27,7 @@ bool ph_joints_sync(af_physics *p) {
     p->joint_count = 0;
     p->world = (ph_body){.q = {0, 0, 0, 1}};
     for (unsigned k = 0; k < 3; ++k)
-        p->world.axes[k]=p->world.shape.axes[k] = ph_axis(k);
+        p->world.axes[k] = p->world.shape.axes[k] = ph_axis(k);
     for (size_t i = 0; i < af_scene_joint_count(p->scene); ++i) {
         af_joint j = *af_scene_joint_at(p->scene, i);
         if (!j.enabled)
@@ -92,8 +92,7 @@ static void turn(ph_body *b, af_vec3 angle) {
         return;
     angle = mul(angle, fminf(length, .2f) / length);
     af_vec3 q = {b->q.x, b->q.y, b->q.z}, d = mul(add(mul(angle, b->q.w), af_vec3_cross(angle, q)), .5f);
-    b->q = af_quaternion_normalize(
-        (af_vec4){b->q.x + d.x, b->q.y + d.y, b->q.z + d.z, b->q.w - .5f * dot(angle, q)});
+    b->q = af_quaternion_normalize((af_vec4){b->q.x + d.x, b->q.y + d.y, b->q.z + d.z, b->q.w - .5f * dot(angle, q)});
     ph_shape(b);
 }
 static void position(ph_body *b, af_vec3 j, af_vec3 r) {
@@ -103,16 +102,14 @@ static void position(ph_body *b, af_vec3 j, af_vec3 r) {
     turn(b, ph_inverse_inertia(b, af_vec3_cross(r, j)));
     ph_shape(b);
 }
-static void linear(ph_body *a, ph_body *b, af_vec3 ra, af_vec3 rb, af_vec3 n, float error, float dt,
-                   bool pos) {
+static void linear(ph_body *a, ph_body *b, af_vec3 ra, af_vec3 rb, af_vec3 n, float error, float dt, bool pos) {
     float mass = a->inv_mass + b->inv_mass +
                  dot(n, add(af_vec3_cross(ph_inverse_inertia(a, af_vec3_cross(ra, n)), ra),
                             af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(rb, n)), rb)));
     if (mass < 1e-10f)
         return;
     float speed = dot(sub(velocity(b, rb), velocity(a, ra)), n);
-    float value =
-        pos ? -.3f * fmaxf(-.2f, fminf(.2f, error)) / mass : -(speed + .1f * error / dt) / mass;
+    float value = pos ? -.3f * fmaxf(-.2f, fminf(.2f, error)) / mass : -(speed + .1f * error / dt) / mass;
     af_vec3 j = mul(n, fmaxf(-10000, fminf(10000, value)));
     if (pos) {
         position(a, mul(j, -1), ra);
@@ -127,8 +124,8 @@ static void angular(ph_body *a, ph_body *b, af_vec3 n, float error, float dt, bo
     float mass = dot(n, add(ph_inverse_inertia(a, n), ph_inverse_inertia(b, n)));
     if (mass < 1e-10f)
         return;
-    float value = pos ? -.3f * fmaxf(-.2f, fminf(.2f, error)) / mass
-                      : -(dot(sub(b->w, a->w), n) + .1f * error / dt) / mass;
+    float value =
+        pos ? -.3f * fmaxf(-.2f, fminf(.2f, error)) / mass : -(dot(sub(b->w, a->w), n) + .1f * error / dt) / mass;
     af_vec3 j = mul(n, fmaxf(-10000, fminf(10000, value)));
     if (pos) {
         turn(a, ph_inverse_inertia(a, mul(j, -1)));
@@ -171,14 +168,13 @@ static void row_apply(ph_body *a, ph_body *b, ph_joint_row *r, float lambda, boo
         ph_impulse(b, j, add(b->p, r->rb));
     }
 }
-static void row_prepare(ph_joint_row *r, ph_body *a, ph_body *b, af_vec3 ra, af_vec3 rb, af_vec3 n,
-                        float error, float dt, bool angular_row, float low, float high, float ratio) {
+static void row_prepare(ph_joint_row *r, ph_body *a, ph_body *b, af_vec3 ra, af_vec3 rb, af_vec3 n, float error,
+                        float dt, bool angular_row, float low, float high, float ratio) {
     ph_joint_row old = *r;
-    float mass = angular_row
-                     ? dot(n, add(ph_inverse_inertia(a, n), ph_inverse_inertia(b, n)))
-                     : a->inv_mass + b->inv_mass +
-                           dot(n, add(af_vec3_cross(ph_inverse_inertia(a, af_vec3_cross(ra, n)), ra),
-                                      af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(rb, n)), rb)));
+    float mass = angular_row ? dot(n, add(ph_inverse_inertia(a, n), ph_inverse_inertia(b, n)))
+                             : a->inv_mass + b->inv_mass +
+                                   dot(n, add(af_vec3_cross(ph_inverse_inertia(a, af_vec3_cross(ra, n)), ra),
+                                              af_vec3_cross(ph_inverse_inertia(b, af_vec3_cross(rb, n)), rb)));
     *r = (ph_joint_row){.n = n,
                         .ra = ra,
                         .rb = rb,
@@ -191,8 +187,7 @@ static void row_prepare(ph_joint_row *r, ph_body *a, ph_body *b, af_vec3 ra, af_
         r->lambda = fmaxf(low, fminf(high, old.lambda * ratio * alignment));
 }
 static float hinge_angle(ph_body *a, ph_body *b, const af_joint *j) {
-    af_vec3 axis = ph_vector(a, j->axis_a), u = ph_vector(a, j->reference_a),
-            v = ph_vector(b, j->reference_b);
+    af_vec3 axis = ph_vector(a, j->axis_a), u = ph_vector(a, j->reference_a), v = ph_vector(b, j->reference_b);
     v = sub(v, mul(axis, dot(axis, v)));
     v = af_vec3_normalize(v);
     return atan2f(dot(axis, af_vec3_cross(u, v)), dot(u, v));
@@ -214,31 +209,23 @@ void ph_joints_warm_start(af_physics *p, float dt) {
                 state->rows[k] = (ph_joint_row){0};
                 continue;
             }
-            af_vec3 n =
-                distance ? (length > 1e-6f ? mul(delta, 1 / length) : (af_vec3){0, 1, 0}) : ph_axis(k);
-            row_prepare(&state->rows[k], a, b, ra, rb, n,
-                        distance ? length - j->distance : ph_get(delta, k), dt, false, -10000, 10000,
-                        ratio);
+            af_vec3 n = distance ? (length > 1e-6f ? mul(delta, 1 / length) : (af_vec3){0, 1, 0}) : ph_axis(k);
+            row_prepare(&state->rows[k], a, b, ra, rb, n, distance ? length - j->distance : ph_get(delta, k), dt, false,
+                        -10000, 10000, ratio);
         }
         if (j->type == AF_JOINT_HINGE) {
-            af_vec3 x = ph_vector(a, j->axis_a), y = ph_vector(b, j->axis_b),
-                    u = ph_vector(a, j->reference_a), v = af_vec3_cross(x, u),
-                    cross = af_vec3_cross(x, y);
+            af_vec3 x = ph_vector(a, j->axis_a), y = ph_vector(b, j->axis_b), u = ph_vector(a, j->reference_a),
+                    v = af_vec3_cross(x, u), cross = af_vec3_cross(x, y);
             float n = af_vec3_length(cross), angle = atan2f(n, dot(x, y));
             af_vec3 error = n > 1e-6f ? mul(cross, angle / n) : mul(u, angle);
             row_prepare(&state->rows[3], a, b, ra, rb, u, dot(error, u), dt, true, -10000, 10000, ratio);
             row_prepare(&state->rows[4], a, b, ra, rb, v, dot(error, v), dt, true, -10000, 10000, ratio);
             angle = hinge_angle(a, b, j);
-            if (j->limits_enabled &&
-                (angle < j->lower_limit + .001f || angle > j->upper_limit - .001f)) {
-                bool lock = j->upper_limit - j->lower_limit < 1e-6f,
-                     lower = angle < j->lower_limit + .001f;
+            if (j->limits_enabled && (angle < j->lower_limit + .001f || angle > j->upper_limit - .001f)) {
+                bool lock = j->upper_limit - j->lower_limit < 1e-6f, lower = angle < j->lower_limit + .001f;
                 af_vec3 axis = lower || lock ? x : mul(x, -1);
-                float c = lock    ? angle - j->lower_limit
-                          : lower ? angle - j->lower_limit
-                                  : j->upper_limit - angle;
-                row_prepare(&state->rows[5], a, b, ra, rb, axis, c, dt, true, lock ? -10000 : 0, 10000,
-                            ratio);
+                float c = lock ? angle - j->lower_limit : lower ? angle - j->lower_limit : j->upper_limit - angle;
+                row_prepare(&state->rows[5], a, b, ra, rb, axis, c, dt, true, lock ? -10000 : 0, 10000, ratio);
             } else
                 state->rows[5] = (ph_joint_row){0};
         } else
@@ -247,8 +234,7 @@ void ph_joints_warm_start(af_physics *p, float dt) {
 
         if (j->type == AF_JOINT_HINGE && j->motor_enabled && j->max_motor_torque > 0) {
             float budget = j->max_motor_torque * dt;
-            row_prepare(&state->rows[6], a, b, ra, rb, ph_vector(a, j->axis_a), 0, dt, true, -budget,
-                        budget, ratio);
+            row_prepare(&state->rows[6], a, b, ra, rb, ph_vector(a, j->axis_a), 0, dt, true, -budget, budget, ratio);
             state->rows[6].bias = -j->motor_speed;
         } else
             state->rows[6] = (ph_joint_row){0};
@@ -271,8 +257,8 @@ void ph_joints_solve(af_physics *p, float dt, bool pos) {
                 ph_joint_row *r = &state->rows[k];
                 if (r->inverse <= 0)
                     continue;
-                float speed = k >= 3 ? dot(sub(b->w, a->w), r->n)
-                                     : dot(sub(velocity(b, r->rb), velocity(a, r->ra)), r->n);
+                float speed =
+                    k >= 3 ? dot(sub(b->w, a->w), r->n) : dot(sub(velocity(b, r->rb), velocity(a, r->ra)), r->n);
                 float next = fmaxf(r->lo, fminf(r->hi, r->lambda - (speed + r->bias) * r->inverse));
                 row_apply(a, b, r, next - r->lambda, k >= 3);
                 r->lambda = next;
@@ -299,17 +285,13 @@ af_physics_joint_state af_physics_get_joint_state(const af_physics *p, af_joint_
         if (state->config.id != id)
             continue;
         const af_joint *j = &state->config;
-        const ph_body *a = &p->bodies[state->a],
-                      *b = state->b == SIZE_MAX ? &p->world : &p->bodies[state->b];
+        const ph_body *a = &p->bodies[state->a], *b = state->b == SIZE_MAX ? &p->world : &p->bodies[state->b];
         af_vec3 one = add(a->p, ph_vector(a, j->anchor_a)), two = add(b->p, ph_vector(b, j->anchor_b)),
-                axis = ph_vector(a, j->axis_a), u = ph_vector(a, j->reference_a),
-                v = ph_vector(b, j->reference_b);
+                axis = ph_vector(a, j->axis_a), u = ph_vector(a, j->reference_a), v = ph_vector(b, j->reference_b);
         v = af_vec3_normalize(sub(v, mul(axis, dot(axis, v))));
         float angle = atan2f(dot(axis, af_vec3_cross(u, v)), dot(u, v)),
               alignment = acosf(fmaxf(-1, fminf(1, dot(axis, ph_vector(b, j->axis_b))))),
-              limit = j->limits_enabled
-                          ? fabsf(angle - fmaxf(j->lower_limit, fminf(j->upper_limit, angle)))
-                          : 0;
+              limit = j->limits_enabled ? fabsf(angle - fmaxf(j->lower_limit, fminf(j->upper_limit, angle))) : 0;
         af_vec3 linear_j = {0}, angular_j = {0};
         for (unsigned k = 0; k < 6; ++k) {
             af_vec3 value = mul(state->rows[k].n, state->rows[k].lambda);
@@ -325,8 +307,7 @@ af_physics_joint_state af_physics_get_joint_state(const af_physics *p, af_joint_
             .id = id,
             .anchor_a = one,
             .anchor_b = two,
-            .linear_error =
-                fabsf(af_vec3_length(sub(two, one)) - (j->type == AF_JOINT_DISTANCE ? j->distance : 0)),
+            .linear_error = fabsf(af_vec3_length(sub(two, one)) - (j->type == AF_JOINT_DISTANCE ? j->distance : 0)),
             .angular_error = j->type == AF_JOINT_HINGE ? fmaxf(alignment, limit) : 0,
             .angle = angle,
             .speed = dot(sub(b->w, a->w), axis),

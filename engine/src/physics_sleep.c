@@ -41,8 +41,7 @@ void ph_wake_island(af_physics *p, size_t i) {
         }
 }
 static bool active(ph_body *b) {
-    return af_vec3_length(b->v) > .08f || af_vec3_length(b->w) > .08f ||
-           (b->external && !b->character_proxy);
+    return af_vec3_length(b->v) > .08f || af_vec3_length(b->w) > .08f || (b->external && !b->character_proxy);
 }
 void ph_islands_build(af_physics *p) {
     for (size_t i = 0; i < p->count; ++i) {
@@ -89,15 +88,15 @@ void ph_islands_build(af_physics *p) {
         ph_body *a = &p->bodies[j->a], *b = j->b == SIZE_MAX ? &p->world : &p->bodies[j->b];
         if (a->inv_mass > 0) {
             size_t r = root(p, j->a);
-            p->island_wake[r] |= j->config.motor_enabled && j->config.max_motor_torque > 0 &&
-                                 fabsf(j->config.motor_speed) > 1e-5f;
+            p->island_wake[r] |=
+                j->config.motor_enabled && j->config.max_motor_torque > 0 && fabsf(j->config.motor_speed) > 1e-5f;
             p->island_anchor[r] |= b->inv_mass == 0;
             p->island_wake[r] |= b->inv_mass == 0 && active(b);
         }
         if (b->inv_mass > 0) {
             size_t r = root(p, j->b);
-            p->island_wake[r] |= j->config.motor_enabled && j->config.max_motor_torque > 0 &&
-                                 fabsf(j->config.motor_speed) > 1e-5f;
+            p->island_wake[r] |=
+                j->config.motor_enabled && j->config.max_motor_torque > 0 && fabsf(j->config.motor_speed) > 1e-5f;
             p->island_anchor[r] |= a->inv_mass == 0;
             p->island_wake[r] |= a->inv_mass == 0 && active(a);
         }
@@ -137,12 +136,12 @@ void ph_sleep(af_physics *p, float dt) {
         ph_joint *joint = &p->joints[i];
         af_joint *j = &joint->config;
         ph_body *a = &p->bodies[joint->a], *b = joint->b == SIZE_MAX ? &p->world : &p->bodies[joint->b];
-        af_vec3 delta = af_vec3_sub(af_vec3_add(b->p, ph_vector(b, j->anchor_b)),
-                                    af_vec3_add(a->p, ph_vector(a, j->anchor_a)));
+        af_vec3 delta =
+            af_vec3_sub(af_vec3_add(b->p, ph_vector(b, j->anchor_b)), af_vec3_add(a->p, ph_vector(a, j->anchor_a)));
         float error = fabsf(af_vec3_length(delta) - (j->type == AF_JOINT_DISTANCE ? j->distance : 0));
         size_t r = root(p, a->inv_mass > 0 ? joint->a : joint->b);
-        p->island_quiet[r] &= error < .006f && !(j->motor_enabled && j->max_motor_torque > 0 &&
-                                                 fabsf(j->motor_speed) > 1e-5f);
+        p->island_quiet[r] &=
+            error < .006f && !(j->motor_enabled && j->max_motor_torque > 0 && fabsf(j->motor_speed) > 1e-5f);
         if (j->type == AF_JOINT_HINGE)
             p->island_quiet[r] &= af_vec3_dot(ph_vector(a, j->axis_a), ph_vector(b, j->axis_b)) > .9999f;
     }

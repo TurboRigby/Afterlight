@@ -1,16 +1,14 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "physics_internal.h"
-size_t af_physics_push_character(af_physics *p, af_scene *s, af_object_id ignore,
-                                 const af_character *character, af_character_config config,
-                                 af_vec3 desired, float force, float dt) {
-    if (!p || !s || !character || !af_character_config_valid(config) ||
-        !ph_finite(character->position) || !ph_finite(desired) || !isfinite(force) || force < 0 ||
-        force > 10000 || !isfinite(dt) || dt <= 0 || dt > .1f)
+size_t af_physics_push_character(af_physics *p, af_scene *s, af_object_id ignore, const af_character *character,
+                                 af_character_config config, af_vec3 desired, float force, float dt) {
+    if (!p || !s || !character || !af_character_config_valid(config) || !ph_finite(character->position) ||
+        !ph_finite(desired) || !isfinite(force) || force < 0 || force > 10000 || !isfinite(dt) || dt <= 0 || dt > .1f)
         return 0;
     af_collision_hit hits[64];
     af_query_filter filter = {.ignore = ignore, .ignore_also = p->held, .mask = UINT32_MAX};
-    size_t count = af_scene_overlap_capsule(s, character->position, config.radius + .08f,
-                                            config.half_height, filter, hits, 64),
+    size_t count = af_scene_overlap_capsule(s, character->position, config.radius + .08f, config.half_height, filter,
+                                            hits, 64),
            pushed = 0;
     af_object_id seen[64];
     size_t seen_count = 0;
@@ -96,10 +94,9 @@ void ph_hold(af_physics *p, float dt) {
         b->sleep_time = 0;
         af_vec3 point = af_vec3_add(b->p, ph_vector(b, p->grab_local)),
                 velocity = af_vec3_add(b->v, af_vec3_cross(b->w, af_vec3_sub(point, b->p))),
-                acceleration =
-                    ph_limit(af_vec3_sub(af_vec3_scale(af_vec3_sub(p->grab_target, point), 36),
-                                         af_vec3_scale(velocity, 12)),
-                             80);
+                acceleration = ph_limit(
+                    af_vec3_sub(af_vec3_scale(af_vec3_sub(p->grab_target, point), 36), af_vec3_scale(velocity, 12)),
+                    80);
         ph_impulse(b, af_vec3_scale(acceleration, b->config.mass * dt), point);
         return;
     }

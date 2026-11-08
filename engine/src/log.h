@@ -8,8 +8,7 @@
 #define AF_LOG_H
 #include <stdarg.h>
 #include <stdio.h>
-static inline void af_log(const char *level, const char *format, ...)
-{
+static inline void af_log(const char *level, const char *format, ...) {
     va_list arguments;
     va_start(arguments, format);
     fprintf(stderr, "[afterlight][%s] ", level);

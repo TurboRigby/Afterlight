@@ -4,12 +4,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Course scene %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));           \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Course scene %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));                          \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(int argc, char **argv) {
     if (argc != 3)
@@ -39,8 +39,7 @@ int main(int argc, char **argv) {
                 const af_scene_object *o = af_scene_object_at(s, i);
                 if (o->body.enabled && o->body.type == AF_BODY_DYNAMIC) {
                     af_physics_state b = af_physics_get_state(p, o->id);
-                    CHECK(isfinite(b.position.x) && isfinite(b.position.y) && b.position.y > -4 &&
-                          b.position.y < 5);
+                    CHECK(isfinite(b.position.x) && isfinite(b.position.y) && b.position.y > -4 && b.position.y < 5);
                 }
             }
         }
@@ -76,13 +75,14 @@ int main(int argc, char **argv) {
                 }
                 maximum = fmaxf(maximum, volume);
                 if (tick % 60 == 0)
-                    fprintf(stderr, "Pour tick %u vol %.4f bounds %.2f %.2f %.2f to %.2f %.2f %.2f\n",
-                            tick, volume, low.x, low.y, low.z, high.x, high.y, high.z);
+                    fprintf(stderr, "Pour tick %u vol %.4f bounds %.2f %.2f %.2f to %.2f %.2f %.2f\n", tick, volume,
+                            low.x, low.y, low.z, high.x, high.y, high.z);
             }
             CHECK(maximum >= .05f);
         }
-        bool saved=af_scene_save(s, "course-roundtrip.json", &error);
-        if(!saved)fprintf(stderr,"Course roundtrip save: %s\n",error.message);
+        bool saved = af_scene_save(s, "course-roundtrip.json", &error);
+        if (!saved)
+            fprintf(stderr, "Course roundtrip save: %s\n", error.message);
         CHECK(saved);
         af_scene *copy = af_scene_load("course-roundtrip.json", NULL);
         CHECK(copy && af_scene_water_count(copy) == af_scene_water_count(s));

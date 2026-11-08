@@ -19,9 +19,11 @@ typedef struct ph_body {
     uint64_t geometry_key;
     af_world_collider *parts;
     size_t part_count, part_start;
-    af_vec4 q;af_vec3 water_previous_p,water_previous_axes[3];bool water_motion;
+    af_vec4 q;
+    af_vec3 water_previous_p, water_previous_axes[3];
+    bool water_motion;
     float inv_mass, sleep_time;
-    bool sleeping, supported, external, character_proxy, wet,water_calm,water_support;
+    bool sleeping, supported, external, character_proxy, wet, water_calm, water_support;
     uint64_t water_key;
 } ph_body;
 typedef struct ph_contact {
@@ -60,8 +62,7 @@ struct af_physics {
     size_t joint_count;
     ph_body world;
     size_t parents[AF_PHYSICS_MAX_BODIES], island_sizes[AF_PHYSICS_MAX_BODIES];
-    bool island_wake[AF_PHYSICS_MAX_BODIES], island_anchor[AF_PHYSICS_MAX_BODIES],
-        island_quiet[AF_PHYSICS_MAX_BODIES];
+    bool island_wake[AF_PHYSICS_MAX_BODIES], island_anchor[AF_PHYSICS_MAX_BODIES], island_quiet[AF_PHYSICS_MAX_BODIES];
     float island_time[AF_PHYSICS_MAX_BODIES];
     af_physics_stats stats;
     unsigned water_substep;
@@ -93,7 +94,7 @@ af_world_collider ph_part_world(const ph_body *, size_t);
 af_vec3 ph_vector(const ph_body *, af_vec3);
 af_vec3 ph_inverse_inertia(const ph_body *, af_vec3);
 void ph_impulse(ph_body *, af_vec3, af_vec3);
-void ph_wind_step(af_physics *,float);
+void ph_wind_step(af_physics *, float);
 void ph_shape(ph_body *);
 bool ph_water_sync(af_physics *, const af_scene *);
 void ph_water_step(af_physics *, float);

@@ -9,15 +9,17 @@
 #include <afterlight/afterlight.h>
 /* Private regression hook: copies one rendered pixel before presentation.
    Requests use logical window coordinates; read after a subsequent draw. */
-bool af_engine_test_capture_motion(af_engine *,af_vec2);
-bool af_engine_test_read_motion(af_engine *,af_vec4 *);
-bool af_engine_test_capture_region(af_engine *,af_vec2,uint32_t,uint32_t);
-bool af_engine_test_read_pixels(af_engine *,unsigned char *,size_t,uint32_t *,uint32_t *);
-bool af_engine_test_capture_pixel(af_engine *engine,af_vec2 position);
-bool af_engine_test_read_pixel(af_engine *engine,unsigned char rgba[4]);
+bool af_engine_test_capture_motion(af_engine *, af_vec2);
+bool af_engine_test_read_motion(af_engine *, af_vec4 *);
+bool af_engine_test_capture_region(af_engine *, af_vec2, uint32_t, uint32_t);
+bool af_engine_test_read_pixels(af_engine *, unsigned char *, size_t, uint32_t *, uint32_t *);
+bool af_engine_test_capture_pixel(af_engine *engine, af_vec2 position);
+bool af_engine_test_read_pixel(af_engine *engine, unsigned char rgba[4]);
 typedef struct af_temporal_test_stats {
-    uint64_t frames,resets;uint32_t width,height,valid_objects,valid_skins;
-    bool supported,valid;af_vec2 jitter;
+    uint64_t frames, resets;
+    uint32_t width, height, valid_objects, valid_skins;
+    bool supported, valid;
+    af_vec2 jitter;
 } af_temporal_test_stats;
 af_temporal_test_stats af_engine_test_temporal(const af_engine *);
 /* Native focus may be lost and regained within one SDL event batch. */

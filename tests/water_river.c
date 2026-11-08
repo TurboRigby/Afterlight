@@ -4,12 +4,12 @@
 #include <afterlight/water.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "River %d: %s\n", __LINE__, #x);                                            \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "River %d: %s\n", __LINE__, #x);                                                           \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     for (unsigned quality = 0; quality < 3; ++quality) {
@@ -29,8 +29,8 @@ int main(void) {
         CHECK(af_scene_set_water(s, id, w));
         af_water_sample a = af_physics_sample_water(p, s, (af_vec3){0, 0, -4}),
                         b = af_physics_sample_water(p, s, (af_vec3){0, 0, 4});
-        CHECK(a.inside && b.inside && a.height > b.height + .7f && a.velocity.z == 1 &&
-              a.velocity.y < 0 && a.normal.z > 0);
+        CHECK(a.inside && b.inside && a.height > b.height + .7f && a.velocity.z == 1 && a.velocity.y < 0 &&
+              a.normal.z > 0);
         CHECK(!af_physics_sample_water(p, s, (af_vec3){2, 0, 0}).inside &&
               !af_physics_sample_water(p, s, (af_vec3){0, 0, -6}).inside);
         af_object_id wood = af_scene_add_object(s, "Wood", "cube");
@@ -50,8 +50,8 @@ int main(void) {
         for (unsigned tick = 0; tick < 240; ++tick)
             CHECK(af_physics_step(p, s, 1.f / 60));
         af_physics_state state = af_physics_get_state(p, wood);
-        printf("River quality %u drift %.4f speed %.4f height %.4f\n", quality, state.position.z + 3,
-               state.velocity.z, state.position.y);
+        printf("River quality %u drift %.4f speed %.4f height %.4f\n", quality, state.position.z + 3, state.velocity.z,
+               state.position.y);
         CHECK(state.position.z > -1 && state.position.z < 2 && state.velocity.z > .6f &&
               fabsf(state.position.x) < .2f && state.position.y > -.3f);
         w.path_count = 3;

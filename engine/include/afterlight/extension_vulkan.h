@@ -32,8 +32,7 @@ typedef struct af_vulkan_startup_api {
     /* Optional callbacks receive zeroed requirements with struct_size set.
        Return false to keep the module disabled on this Vulkan configuration. */
     bool (*instance_requirements)(void *state, af_vulkan_requirements *);
-    bool (*device_requirements)(void *state, VkInstance, VkPhysicalDevice,
-                                af_vulkan_requirements *);
+    bool (*device_requirements)(void *state, VkInstance, VkPhysicalDevice, af_vulkan_requirements *);
 } af_vulkan_startup_api;
 
 typedef struct af_vulkan_upscaler_config {
@@ -76,8 +75,7 @@ typedef struct af_vulkan_upscaler_api {
     float render_scale;
     /* Called after device creation for each resource configuration. Copy any
        config values you retain. On failure, clean up partial state here. */
-    bool (*create)(void *extension_state, const af_vulkan_upscaler_config *config,
-                   void **context);
+    bool (*create)(void *extension_state, const af_vulkan_upscaler_config *config, void **context);
     /* Record inline outside render passes. Inputs are read-only and the output
        must be completely written. Restore entry layouts and never submit or
        retain the command buffer. Return false before recording any commands

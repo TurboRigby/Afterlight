@@ -4,12 +4,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Compound contacts %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));      \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Compound contacts %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));                     \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id prop(af_scene *s) {
     af_object_id id = af_scene_add_object(s, "Offset two-part body", "__node");
@@ -39,10 +39,8 @@ int main(void) {
     af_object_id id = prop(s);
     CHECK(id && af_physics_step(p, s, 1.f / 60));
     af_physics_state state = af_physics_get_state(p, id);
-    CHECK(fabsf(state.position.x - .5f) < .0001f &&
-          fabsf(af_scene_get_object(s, id)->transform.position.x) < .0001f);
-    CHECK(af_physics_apply_impulse(p, s, id, (af_vec3){0, 0, 1},
-                                   af_vec3_add(state.position, (af_vec3){0, 1, 0})));
+    CHECK(fabsf(state.position.x - .5f) < .0001f && fabsf(af_scene_get_object(s, id)->transform.position.x) < .0001f);
+    CHECK(af_physics_apply_impulse(p, s, id, (af_vec3){0, 0, 1}, af_vec3_add(state.position, (af_vec3){0, 1, 0})));
     for (unsigned i = 0; i < 120; ++i) {
         CHECK(af_physics_step(p, s, 1.f / 60));
         af_world_collider root;
@@ -84,8 +82,8 @@ int main(void) {
         part |= contacts[i].part_a || contacts[i].part_b;
     CHECK(part);
     af_character character = {.position = {.5f, .4f, -.6f}};
-    CHECK(af_physics_push_character(p, s, 0, &character, af_character_config_default(),
-                                    (af_vec3){0, 0, 2}, 120, 1.f / 60) == 1);
+    CHECK(af_physics_push_character(p, s, 0, &character, af_character_config_default(), (af_vec3){0, 0, 2}, 120,
+                                    1.f / 60) == 1);
     state = af_physics_get_state(p, id);
     CHECK(af_vec3_length(state.velocity) < .51f);
     af_scene_destroy(s);

@@ -11,7 +11,9 @@
 
 #define AF_MESH_NAME_CAPACITY 64
 
-typedef struct af_color { float r, g, b, a; } af_color;
+typedef struct af_color {
+    float r, g, b, a;
+} af_color;
 /* Right-handed, Y-up positions, linear vertex RGBA, normals and image UVs.
    Zero normals fall back to a geometric normal. The scene pipeline is opaque. */
 typedef struct af_vertex {

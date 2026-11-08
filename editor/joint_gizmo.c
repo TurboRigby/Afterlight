@@ -27,13 +27,11 @@ bool ed_joint_edit_pose(const af_scene *s, af_joint j, ed_joint_part part, af_tr
     *out = af_transform_identity();
     out->position = b ? f.anchor_b : f.anchor_a;
     float y = asinf(fmaxf(-1, fminf(1, -reference.z)));
-    out->rotation = fabsf(cosf(y)) < 1e-5f
-                        ? (af_vec3){atan2f(-z.y, axis.y), y, 0}
-                        : (af_vec3){atan2f(axis.z, z.z), y, atan2f(reference.y, reference.x)};
+    out->rotation = fabsf(cosf(y)) < 1e-5f ? (af_vec3){atan2f(-z.y, axis.y), y, 0}
+                                           : (af_vec3){atan2f(axis.z, z.z), y, atan2f(reference.y, reference.x)};
     return true;
 }
-bool ed_joint_edit_apply(const af_scene *s, af_joint j, ed_joint_part part, af_transform pose,
-                         af_joint *out) {
+bool ed_joint_edit_apply(const af_scene *s, af_joint j, ed_joint_part part, af_transform pose, af_joint *out) {
     if (!out || part < ED_JOINT_ANCHOR_A || part > ED_JOINT_AXIS_B)
         return false;
     bool b = part == ED_JOINT_ANCHOR_B || part == ED_JOINT_AXIS_B;

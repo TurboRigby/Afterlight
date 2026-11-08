@@ -11,9 +11,9 @@
 #include <inttypes.h>
 #include <string.h>
 
-static void extension_log(const char *message)
-{
-    if (message) af_log("extension", "%s", message);
+static void extension_log(const char *message) {
+    if (message)
+        af_log("extension", "%s", message);
 }
 
 static const af_extension_host host = {
@@ -22,8 +22,7 @@ static const af_extension_host host = {
     .log = extension_log,
 };
 
-bool af_extensions_load(af_extensions *extensions, const char *path)
-{
+bool af_extensions_load(af_extensions *extensions, const char *path) {
     if (extensions->count == AF_EXTENSION_LIMIT) {
         af_log("error", "Too many engine extensions (limit %u).", AF_EXTENSION_LIMIT);
         return false;
@@ -49,8 +48,8 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
     }
     const af_extension_api *api = get_api(AF_EXTENSION_ABI_VERSION);
     if (!api || api->abi_version != AF_EXTENSION_ABI_VERSION ||
-        api->struct_size < offsetof(af_extension_api, vulkan_upscaler) ||
-        !api->id || !api->id[0] || !api->start || !api->stop) {
+        api->struct_size < offsetof(af_extension_api, vulkan_upscaler) || !api->id || !api->id[0] || !api->start ||
+        !api->stop) {
         af_log("error", "Extension %s has an incompatible ABI or incomplete descriptor.", absolute);
         goto fail;
     }
@@ -63,30 +62,26 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
     const af_vulkan_upscaler_api *upscaler =
         api->struct_size >= offsetof(af_extension_api, vulkan_startup) ? api->vulkan_upscaler : NULL;
     if (upscaler && (upscaler->abi_version != AF_VULKAN_UPSCALER_ABI_VERSION ||
-        upscaler->struct_size < offsetof(af_vulkan_upscaler_api, flags) ||
-        !(upscaler->render_scale >= .5f && upscaler->render_scale <= 1.f) ||
-        !upscaler->create || !upscaler->record || !upscaler->destroy)) {
+                     upscaler->struct_size < offsetof(af_vulkan_upscaler_api, flags) ||
+                     !(upscaler->render_scale >= .5f && upscaler->render_scale <= 1.f) || !upscaler->create ||
+                     !upscaler->record || !upscaler->destroy)) {
         af_log("error", "Extension %s has an incompatible Vulkan upscaler.", api->id);
         goto fail;
     }
-    if (upscaler && upscaler->struct_size >= offsetof(af_vulkan_upscaler_api, quality_scales) +
-                                               sizeof(upscaler->quality_scales) &&
+    if (upscaler &&
+        upscaler->struct_size >= offsetof(af_vulkan_upscaler_api, quality_scales) + sizeof(upscaler->quality_scales) &&
         upscaler->quality_count) {
-        bool valid = upscaler->quality_count <= 16 && upscaler->quality_names &&
-                     upscaler->quality_scales;
+        bool valid = upscaler->quality_count <= 16 && upscaler->quality_names && upscaler->quality_scales;
         for (uint32_t i = 0; valid && i < upscaler->quality_count; ++i)
             valid = upscaler->quality_names[i] && upscaler->quality_names[i][0] &&
-                    upscaler->quality_scales[i] >= 1.f / 3.f &&
-                    upscaler->quality_scales[i] <= 1.f;
+                    upscaler->quality_scales[i] >= 1.f / 3.f && upscaler->quality_scales[i] <= 1.f;
         if (!valid) {
-            af_log("error", "Extension %s has an incompatible Vulkan upscaler quality list.",
-                   api->id);
+            af_log("error", "Extension %s has an incompatible Vulkan upscaler quality list.", api->id);
             goto fail;
         }
     }
     const af_vulkan_startup_api *startup = api->struct_size >= sizeof(*api) ? api->vulkan_startup : NULL;
-    if (startup && (startup->abi_version != AF_VULKAN_STARTUP_ABI_VERSION ||
-                    startup->struct_size < sizeof(*startup) ||
+    if (startup && (startup->abi_version != AF_VULKAN_STARTUP_ABI_VERSION || startup->struct_size < sizeof(*startup) ||
                     (!startup->instance_requirements && !startup->device_requirements))) {
         af_log("error", "Extension %s has an incompatible Vulkan startup descriptor.", api->id);
         goto fail;
@@ -99,7 +94,11 @@ bool af_extensions_load(af_extensions *extensions, const char *path)
     }
     af_loaded_extension *module = &extensions->modules[extensions->count++];
     *module = (af_loaded_extension){
-        .library = library, .api = api, .upscaler = upscaler, .startup = startup, .state = state,
+        .library = library,
+        .api = api,
+        .upscaler = upscaler,
+        .startup = startup,
+        .state = state,
         .startup_status = startup ? AF_EXTENSION_RESTART_REQUIRED : AF_EXTENSION_LIVE,
     };
     memcpy(module->path, absolute, strlen(absolute) + 1);
@@ -111,8 +110,7 @@ fail:
     return false;
 }
 
-void af_extensions_present(af_extensions *extensions, uint64_t ticks, double delta)
-{
+void af_extensions_present(af_extensions *extensions, uint64_t ticks, double delta) {
     const af_extension_frame frame = {
         .struct_size = sizeof(af_extension_frame),
         .presented_frames = ++extensions->presented_frames,
@@ -121,12 +119,12 @@ void af_extensions_present(af_extensions *extensions, uint64_t ticks, double del
     };
     for (size_t i = 0; i < extensions->count; ++i) {
         const af_loaded_extension *module = &extensions->modules[i];
-        if (module->enabled && module->api->on_present) module->api->on_present(module->state, &frame);
+        if (module->enabled && module->api->on_present)
+            module->api->on_present(module->state, &frame);
     }
 }
 
-void af_extensions_destroy(af_extensions *extensions)
-{
+void af_extensions_destroy(af_extensions *extensions) {
     while (extensions->count) {
         const af_loaded_extension *module = &extensions->modules[--extensions->count];
         module->api->stop(module->state);

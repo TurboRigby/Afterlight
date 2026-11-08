@@ -5,12 +5,12 @@
 #include <afterlight/prefab.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Joint %d: %s\n", __LINE__, #x);                                            \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Joint %d: %s\n", __LINE__, #x);                                                           \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id ball(af_scene *s, af_vec3 pos) {
     af_object_id id = af_scene_add_object(s, "Ball", "cube");
@@ -47,8 +47,7 @@ int main(void) {
     for (unsigned i = 0; i < 360; ++i) {
         CHECK(af_physics_step(p, s, 1.f / 60));
         af_vec3 x = af_physics_get_state(p, a).position, y = af_physics_get_state(p, b).position;
-        CHECK(isfinite(y.y) &&
-              fabsf(af_vec3_length(af_vec3_sub(x, (af_vec3){0, 4, 0})) - sqrtf(5)) < .04f);
+        CHECK(isfinite(y.y) && fabsf(af_vec3_length(af_vec3_sub(x, (af_vec3){0, 4, 0})) - sqrtf(5)) < .04f);
         CHECK(fabsf(af_vec3_length(af_vec3_sub(x, y)) - 2) < .04f);
     }
     af_scene_error error;
@@ -66,8 +65,7 @@ int main(void) {
     af_rigid_body disabled = af_rigid_body_default();
     CHECK(!af_scene_set_body(s, a, disabled));
     af_scene *pref = af_scene_create();
-    af_object_id root = ball(pref, (af_vec3){0}),
-                 child = af_scene_add_object(pref, "Static child", "cube");
+    af_object_id root = ball(pref, (af_vec3){0}), child = af_scene_add_object(pref, "Static child", "cube");
     af_collider c = af_collider_default();
     c.type = AF_COLLIDER_BOX;
     CHECK(af_scene_set_object_collider(pref, child, c) && af_scene_set_parent(pref, child, root));

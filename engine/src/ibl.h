@@ -10,16 +10,19 @@
 #define AF_IBL_DIFFUSE_WIDTH 32u
 #define AF_IBL_DIFFUSE_HEIGHT 16u
 #define AF_IBL_LUT_SIZE 32u
-typedef struct af_ibl_images {float *specular,*diffuse,*brdf;} af_ibl_images;
+typedef struct af_ibl_images {
+    float *specular, *diffuse, *brdf;
+} af_ibl_images;
 /* Original HDR studio/sky radiance, cosine convolution, GGX prefilter and
    split-sum BRDF integration. CPU-only and independent of Vulkan. */
-af_vec3 af_ibl_radiance(af_vec3 direction,uint32_t profile);
-af_vec3 af_ibl_direction(float u,float v);
-af_vec3 af_ibl_sample(const float *rgba,uint32_t width,uint32_t height,af_vec3 direction);
-bool af_ibl_bake_hdr(const float *rgba,uint32_t width,uint32_t height,af_ibl_images *images);
+af_vec3 af_ibl_radiance(af_vec3 direction, uint32_t profile);
+af_vec3 af_ibl_direction(float u, float v);
+af_vec3 af_ibl_sample(const float *rgba, uint32_t width, uint32_t height, af_vec3 direction);
+bool af_ibl_bake_hdr(const float *rgba, uint32_t width, uint32_t height, af_ibl_images *images);
 /* Return false from progress to cancel. Called at most once per output row. */
-typedef bool (*af_ibl_progress)(void *user,float fraction);
-bool af_ibl_bake_hdr_progress(const float *rgba,uint32_t width,uint32_t height,af_ibl_images *images,af_ibl_progress progress,void *user);
-bool af_ibl_bake(uint32_t profile,af_ibl_images *images);
+typedef bool (*af_ibl_progress)(void *user, float fraction);
+bool af_ibl_bake_hdr_progress(const float *rgba, uint32_t width, uint32_t height, af_ibl_images *images,
+                              af_ibl_progress progress, void *user);
+bool af_ibl_bake(uint32_t profile, af_ibl_images *images);
 void af_ibl_free(af_ibl_images *images);
 #endif

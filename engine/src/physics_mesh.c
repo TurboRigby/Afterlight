@@ -40,8 +40,7 @@ static size_t clip(af_vec3 *poly, size_t count, unsigned axis, float side, float
         poly[i] = out[i];
     return used;
 }
-static bool emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 normal, float depth,
-                 size_t first) {
+static bool emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 normal, float depth, size_t first) {
     size_t same[4], count = 0;
     for (size_t i = first; i < p->contact_count; ++i) {
         ph_contact *c = &p->contacts[i];
@@ -61,8 +60,7 @@ static bool emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 norma
         size_t nearest = same[0];
         float old_distance = 1e30f;
         for (size_t k = 0; k < 4; ++k) {
-            float d = dot(sub(p->contacts[same[k]].view.point, point),
-                          sub(p->contacts[same[k]].view.point, point));
+            float d = dot(sub(p->contacts[same[k]].view.point, point), sub(p->contacts[same[k]].view.point, point));
             if (d < old_distance) {
                 old_distance = d;
                 nearest = same[k];
@@ -97,10 +95,9 @@ static bool emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 norma
 }
 static bool box_triangle(af_physics *p, size_t a, size_t b, size_t box, af_triangle t, size_t first) {
     ph_body *body = &p->bodies[box];
-    af_vec3 v[3] = {sub(t.a, body->shape.center), sub(t.b, body->shape.center),
-                    sub(t.c, body->shape.center)},
-            edges[3] = {sub(t.b, t.a), sub(t.c, t.b), sub(t.a, t.c)},
-            face = af_vec3_cross(edges[0], edges[1]), normal = {0};
+    af_vec3 v[3] = {sub(t.a, body->shape.center), sub(t.b, body->shape.center), sub(t.c, body->shape.center)},
+            edges[3] = {sub(t.b, t.a), sub(t.c, t.b), sub(t.a, t.c)}, face = af_vec3_cross(edges[0], edges[1]),
+            normal = {0};
     float best = 1e30f;
     for (unsigned i = 0; i < 13; ++i) {
         af_vec3 axis = i < 3    ? body->shape.axes[i]
@@ -125,8 +122,7 @@ static bool box_triangle(af_physics *p, size_t a, size_t b, size_t box, af_trian
             normal = mul(axis, positive < negative ? 1.f : -1.f);
         }
     }
-    af_vec3 local[16] = {ph_shape_local(body, v[0]), ph_shape_local(body, v[1]),
-                         ph_shape_local(body, v[2])};
+    af_vec3 local[16] = {ph_shape_local(body, v[0]), ph_shape_local(body, v[1]), ph_shape_local(body, v[2])};
     size_t count = 3;
     for (unsigned axis = 0; axis < 3; ++axis) {
         count = clip(local, count, axis, 1, ph_get(body->shape.half_extents, axis) + .006f);
@@ -160,8 +156,8 @@ bool ph_mesh_contacts(af_physics *p, size_t a, size_t b) {
     extent = add(extent, (af_vec3){.006f, .006f, .006f});
     uint32_t scratch[128], *indices;
     size_t count;
-    if (!tc_candidates(target, sub(body->shape.center, extent), add(body->shape.center, extent),
-                       &indices, &count, scratch, 128))
+    if (!tc_candidates(target, sub(body->shape.center, extent), add(body->shape.center, extent), &indices, &count,
+                       scratch, 128))
         return false;
     size_t first = p->contact_count;
     bool ok = true;

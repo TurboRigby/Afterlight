@@ -6,12 +6,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Water data %d: %s\n", __LINE__, #x);                                       \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Water data %d: %s\n", __LINE__, #x);                                                      \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     ed_document d;
@@ -44,8 +44,7 @@ int main(void) {
     af_scene_destroy(copy);
     CHECK(af_prefab_save(d.scene, id, "water.json", "water.afterlight.prefab", &e));
     af_object_id instance;
-    CHECK(af_prefab_instantiate(d.scene, "water.afterlight.prefab", 0, af_transform_identity(),
-                                &instance, &e));
+    CHECK(af_prefab_instantiate(d.scene, "water.afterlight.prefab", 0, af_transform_identity(), &instance, &e));
     CHECK(instance != id && af_scene_get_water(d.scene, instance));
     CHECK(ed_document_duplicate(&d) && af_scene_get_water(d.scene, d.selection));
     CHECK(af_scene_water_count(d.scene) == 3);

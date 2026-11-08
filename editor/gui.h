@@ -22,7 +22,7 @@ typedef struct ed_gui {
 } ed_gui;
 bool ed_gui_init(ed_gui *gui, af_engine *engine, const char *font_path);
 void ed_gui_destroy(ed_gui *gui);
-bool ed_gui_set_text_input(ed_gui *gui,af_engine *engine,bool enabled);
+bool ed_gui_set_text_input(ed_gui *gui, af_engine *engine, bool enabled);
 void ed_gui_unfocus(ed_gui *gui);
 void ed_gui_input(ed_gui *gui, af_engine *engine);
 bool ed_gui_render(ed_gui *gui, af_engine *engine, float width, float height);

@@ -6,16 +6,123 @@
 
 #include <afterlight/game_module.h>
 #include <stdio.h>
-static float action_value(const af_game_host *h,const char *name){return h->input_enabled?af_engine_action_value(h->engine,name):0;}
-static bool action_pressed(const af_game_host *h,const char *name){return h->input_enabled&&af_engine_action_pressed(h->engine,name);}
-static bool key_down(const af_game_host *host,af_key key){return host->input_enabled&&af_engine_key_down(host->engine,key);}
-static bool key_pressed(const af_game_host *host,af_key key){return host->input_enabled&&af_engine_key_pressed(host->engine,key);}
-static void log_message(const char *text){if(text)fprintf(stdout,"[game] %s\n",text);}
-af_game_host af_game_host_create(af_scene *scene,af_engine *engine){
-    return (af_game_host){.abi_version=AF_GAME_ABI_VERSION,.struct_size=sizeof(af_game_host),.scene=scene,.engine=engine,.camera_enabled=true,
-        .spawn_prefab=af_engine_spawn_prefab,.instantiate_prefab=af_prefab_instantiate,.load_scene_assets=af_engine_load_scene_assets,.action_value=action_value,.action_pressed=action_pressed,.push_character=af_engine_push_character,.grab_body=af_engine_grab_body,.move_grab=af_engine_move_grab,.release_body=af_engine_release_body,.held_body=af_engine_held_body,.apply_force=af_engine_apply_force,.apply_impulse=af_engine_apply_impulse,.body_state=af_engine_body_state,.joint_state=af_engine_joint_state,.set_body=af_scene_set_body,.add_part=af_scene_add_collider_part,.set_part=af_scene_set_collider_part,.remove_part=af_scene_remove_collider_part,.get_part=af_scene_get_collider_part,.part_at=af_scene_collider_part_at,.part_count=af_scene_collider_part_count,.wind_default=af_wind_default,.get_wind=af_scene_get_wind,.set_wind=af_scene_set_wind,.wind_velocity=af_wind_velocity,.set_water=af_scene_set_water,.remove_water=af_scene_remove_water,.get_water=af_scene_get_water,.water_particles=af_engine_water_particles,.water_stats=af_engine_water_stats,.swim_config_default=af_swim_config_default,.swim_character=af_engine_swim_character,.sample_water=af_engine_sample_water,.disturb_water=af_engine_disturb_water,.add_joint=af_scene_add_joint,.set_joint=af_scene_set_joint,.remove_joint=af_scene_remove_joint,.get_joint=af_scene_get_joint,.joint_at=af_scene_joint_at,.joint_count=af_scene_joint_count,.key_down=key_down,.object_count=af_scene_object_count,.object_at=af_scene_object_at,.get_object=af_scene_get_object,.add_object=af_scene_add_object,
-        .remove_object=af_scene_remove_object,.set_transform=af_scene_set_object_transform,.set_material=af_scene_set_object_material,.set_parent=af_scene_set_parent,.log=log_message,
-        .local_light_count=af_scene_local_light_count,.local_light_at=af_scene_local_light_at,.add_local_light=af_scene_add_local_light,.set_local_light=af_scene_set_local_light,.remove_local_light=af_scene_remove_local_light,.set_light=af_scene_set_light,.set_render_settings=af_scene_set_render_settings,.get_render_settings=af_scene_get_render_settings,.get_stats=af_engine_get_stats,
-        .key_pressed=key_pressed,.mouse_delta=af_engine_mouse_delta,.mouse_pressed=af_engine_mouse_pressed,.mouse_in_viewport=af_engine_mouse_in_viewport,.mouse_captured=af_engine_mouse_captured,.capture_mouse=af_engine_set_mouse_capture,.set_camera=af_engine_set_camera,.reset_interpolation=af_engine_reset_interpolation,
-        .set_collider=af_scene_set_object_collider,.raycast=af_scene_raycast,.overlap_capsule=af_scene_overlap_capsule,.character_config_default=af_character_config_default,.move_character=af_character_step,.world_matrix=af_scene_world_matrix,.game_camera=af_scene_game_camera,.report_gameplay=af_engine_set_gameplay_status,.play_sound_at=af_engine_play_sound_at,.play_sound=af_engine_play_sound,.animation_play=af_engine_animation_play,.animation_pause=af_engine_animation_pause,.animation_stop=af_engine_animation_stop,.animation_seek=af_engine_animation_seek,.animation_options=af_engine_animation_options,.animation_status=af_engine_animation_status,.animated_world_matrix=af_engine_animated_world_matrix,.animation_clip=af_engine_animation_clip,.animation_root=af_engine_animation_root,.locomotion_root_motion=af_engine_locomotion_root_motion,.locomotion_root_delta=af_engine_locomotion_root_delta,.move_character_root_motion=af_character_step_root_motion,.animation_events=af_engine_animation_events,.locomotion_step=af_engine_locomotion_step,.third_person_config_default=af_third_person_config_default,.third_person_default=af_third_person_default,.third_person_look=af_third_person_look,.third_person_step=af_third_person_step,.third_person_step_root_motion=af_third_person_step_root_motion,.third_person_camera=af_third_person_camera};
+static float action_value(const af_game_host *h, const char *name) {
+    return h->input_enabled ? af_engine_action_value(h->engine, name) : 0;
+}
+static bool action_pressed(const af_game_host *h, const char *name) {
+    return h->input_enabled && af_engine_action_pressed(h->engine, name);
+}
+static bool key_down(const af_game_host *host, af_key key) {
+    return host->input_enabled && af_engine_key_down(host->engine, key);
+}
+static bool key_pressed(const af_game_host *host, af_key key) {
+    return host->input_enabled && af_engine_key_pressed(host->engine, key);
+}
+static void log_message(const char *text) {
+    if (text)
+        fprintf(stdout, "[game] %s\n", text);
+}
+af_game_host af_game_host_create(af_scene *scene, af_engine *engine) {
+    return (af_game_host){.abi_version = AF_GAME_ABI_VERSION,
+                          .struct_size = sizeof(af_game_host),
+                          .scene = scene,
+                          .engine = engine,
+                          .camera_enabled = true,
+                          .spawn_prefab = af_engine_spawn_prefab,
+                          .instantiate_prefab = af_prefab_instantiate,
+                          .load_scene_assets = af_engine_load_scene_assets,
+                          .action_value = action_value,
+                          .action_pressed = action_pressed,
+                          .push_character = af_engine_push_character,
+                          .grab_body = af_engine_grab_body,
+                          .move_grab = af_engine_move_grab,
+                          .release_body = af_engine_release_body,
+                          .held_body = af_engine_held_body,
+                          .apply_force = af_engine_apply_force,
+                          .apply_impulse = af_engine_apply_impulse,
+                          .body_state = af_engine_body_state,
+                          .joint_state = af_engine_joint_state,
+                          .set_body = af_scene_set_body,
+                          .add_part = af_scene_add_collider_part,
+                          .set_part = af_scene_set_collider_part,
+                          .remove_part = af_scene_remove_collider_part,
+                          .get_part = af_scene_get_collider_part,
+                          .part_at = af_scene_collider_part_at,
+                          .part_count = af_scene_collider_part_count,
+                          .wind_default = af_wind_default,
+                          .get_wind = af_scene_get_wind,
+                          .set_wind = af_scene_set_wind,
+                          .wind_velocity = af_wind_velocity,
+                          .set_water = af_scene_set_water,
+                          .remove_water = af_scene_remove_water,
+                          .get_water = af_scene_get_water,
+                          .water_particles = af_engine_water_particles,
+                          .water_stats = af_engine_water_stats,
+                          .swim_config_default = af_swim_config_default,
+                          .swim_character = af_engine_swim_character,
+                          .sample_water = af_engine_sample_water,
+                          .disturb_water = af_engine_disturb_water,
+                          .add_joint = af_scene_add_joint,
+                          .set_joint = af_scene_set_joint,
+                          .remove_joint = af_scene_remove_joint,
+                          .get_joint = af_scene_get_joint,
+                          .joint_at = af_scene_joint_at,
+                          .joint_count = af_scene_joint_count,
+                          .key_down = key_down,
+                          .object_count = af_scene_object_count,
+                          .object_at = af_scene_object_at,
+                          .get_object = af_scene_get_object,
+                          .add_object = af_scene_add_object,
+                          .remove_object = af_scene_remove_object,
+                          .set_transform = af_scene_set_object_transform,
+                          .set_material = af_scene_set_object_material,
+                          .set_parent = af_scene_set_parent,
+                          .log = log_message,
+                          .local_light_count = af_scene_local_light_count,
+                          .local_light_at = af_scene_local_light_at,
+                          .add_local_light = af_scene_add_local_light,
+                          .set_local_light = af_scene_set_local_light,
+                          .remove_local_light = af_scene_remove_local_light,
+                          .set_light = af_scene_set_light,
+                          .set_render_settings = af_scene_set_render_settings,
+                          .get_render_settings = af_scene_get_render_settings,
+                          .get_stats = af_engine_get_stats,
+                          .key_pressed = key_pressed,
+                          .mouse_delta = af_engine_mouse_delta,
+                          .mouse_pressed = af_engine_mouse_pressed,
+                          .mouse_in_viewport = af_engine_mouse_in_viewport,
+                          .mouse_captured = af_engine_mouse_captured,
+                          .capture_mouse = af_engine_set_mouse_capture,
+                          .set_camera = af_engine_set_camera,
+                          .reset_interpolation = af_engine_reset_interpolation,
+                          .set_collider = af_scene_set_object_collider,
+                          .raycast = af_scene_raycast,
+                          .overlap_capsule = af_scene_overlap_capsule,
+                          .character_config_default = af_character_config_default,
+                          .move_character = af_character_step,
+                          .world_matrix = af_scene_world_matrix,
+                          .game_camera = af_scene_game_camera,
+                          .report_gameplay = af_engine_set_gameplay_status,
+                          .play_sound_at = af_engine_play_sound_at,
+                          .play_sound = af_engine_play_sound,
+                          .animation_play = af_engine_animation_play,
+                          .animation_pause = af_engine_animation_pause,
+                          .animation_stop = af_engine_animation_stop,
+                          .animation_seek = af_engine_animation_seek,
+                          .animation_options = af_engine_animation_options,
+                          .animation_status = af_engine_animation_status,
+                          .animated_world_matrix = af_engine_animated_world_matrix,
+                          .animation_clip = af_engine_animation_clip,
+                          .animation_root = af_engine_animation_root,
+                          .locomotion_root_motion = af_engine_locomotion_root_motion,
+                          .locomotion_root_delta = af_engine_locomotion_root_delta,
+                          .move_character_root_motion = af_character_step_root_motion,
+                          .animation_events = af_engine_animation_events,
+                          .locomotion_step = af_engine_locomotion_step,
+                          .third_person_config_default = af_third_person_config_default,
+                          .third_person_default = af_third_person_default,
+                          .third_person_look = af_third_person_look,
+                          .third_person_step = af_third_person_step,
+                          .third_person_step_root_motion = af_third_person_step_root_motion,
+                          .third_person_camera = af_third_person_camera};
 }

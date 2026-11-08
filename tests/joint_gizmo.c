@@ -5,12 +5,12 @@
 #include "gizmo.h"
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Joint gizmo %d: %s\n", __LINE__, #x);                                      \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Joint gizmo %d: %s\n", __LINE__, #x);                                                     \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     ed_document d;
@@ -39,36 +39,27 @@ int main(void) {
     af_transform pose;
     CHECK(ed_joint_edit_pose(d.scene, j, ED_JOINT_ANCHOR_A, &pose));
     af_vec3 original = pose.position;
-    ed_gizmo g = {.mode = ED_GIZMO_MOVE,
-                  .snap = true,
-                  .axis = 0,
-                  .initial = pose,
-                  .direction = {100, 0},
-                  .units = 2};
+    ed_gizmo g = {.mode = ED_GIZMO_MOVE, .snap = true, .axis = 0, .initial = pose, .direction = {100, 0}, .units = 2};
     pose = ed_gizmo_drag(&g, (af_vec2){33, 0});
     CHECK(fabsf(pose.position.x - original.x - .5f) < .001f);
     af_joint next;
-    CHECK(ed_joint_edit_apply(d.scene, j, ED_JOINT_ANCHOR_A, pose, &next) &&
-          ed_document_joint(&d, next));
+    CHECK(ed_joint_edit_apply(d.scene, j, ED_JOINT_ANCHOR_A, pose, &next) && ed_document_joint(&d, next));
     pose.position.x += .5f;
-    CHECK(ed_joint_edit_apply(d.scene, j, ED_JOINT_ANCHOR_A, pose, &next) &&
-          ed_document_joint(&d, next));
+    CHECK(ed_joint_edit_apply(d.scene, j, ED_JOINT_ANCHOR_A, pose, &next) && ed_document_joint(&d, next));
     ed_document_end_edit(&d);
     af_joint_frame f;
-    CHECK(af_scene_joint_frame(d.scene, next, &f) &&
-          af_vec3_length(af_vec3_sub(f.anchor_a, pose.position)) < .001f);
+    CHECK(af_scene_joint_frame(d.scene, next, &f) && af_vec3_length(af_vec3_sub(f.anchor_a, pose.position)) < .001f);
     CHECK(ed_document_undo(&d) &&
           af_vec3_length(af_vec3_sub(af_scene_joint_at(d.scene, 0)->anchor_a, j.anchor_a)) < .001f &&
           ed_document_redo(&d));
     CHECK(ed_joint_edit_pose(d.scene, next, ED_JOINT_AXIS_B, &pose));
     pose.rotation = (af_vec3){AF_PI / 2, 0, 0};
-    CHECK(ed_joint_edit_apply(d.scene, next, ED_JOINT_AXIS_B, pose, &next) &&
-          af_scene_joint_frame(d.scene, next, &f) && f.axis_b.z > .999f &&
-          fabsf(af_vec3_dot(f.axis_b, f.reference_b)) < .001f);
+    CHECK(ed_joint_edit_apply(d.scene, next, ED_JOINT_AXIS_B, pose, &next) && af_scene_joint_frame(d.scene, next, &f) &&
+          f.axis_b.z > .999f && fabsf(af_vec3_dot(f.axis_b, f.reference_b)) < .001f);
     CHECK(ed_joint_edit_pose(d.scene, next, ED_JOINT_AXIS_A, &pose));
     pose.rotation = (af_vec3){AF_PI / 2, 0, 0};
-    CHECK(ed_joint_edit_apply(d.scene, next, ED_JOINT_AXIS_A, pose, &next) &&
-          af_scene_joint_frame(d.scene, next, &f) && f.axis_a.z > .999f);
+    CHECK(ed_joint_edit_apply(d.scene, next, ED_JOINT_AXIS_A, pose, &next) && af_scene_joint_frame(d.scene, next, &f) &&
+          f.axis_a.z > .999f);
     ed_document_destroy(&d);
     puts("Joint gizmos: rotated/scaled body anchors, world axes, snapped dragging and grouped undo/redo "
          "passed.");

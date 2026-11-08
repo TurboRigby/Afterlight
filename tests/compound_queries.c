@@ -4,12 +4,12 @@
 #include <afterlight/compound.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Compound query %d: %s\n", __LINE__, #x);                                   \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Compound query %d: %s\n", __LINE__, #x);                                                  \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -26,8 +26,8 @@ int main(void) {
     CHECK(a && b && af_scene_set_object_collider(s, id, c));
     af_collision_hit hit;
     af_query_filter f = {.mask = UINT32_MAX};
-    CHECK(af_scene_raycast(s, (af_vec3){-1, 0, 3}, (af_vec3){0, 0, -1}, 10, f, &hit) &&
-          hit.object == id && hit.part == a);
+    CHECK(af_scene_raycast(s, (af_vec3){-1, 0, 3}, (af_vec3){0, 0, -1}, 10, f, &hit) && hit.object == id &&
+          hit.part == a);
     CHECK(!af_scene_raycast(s, (af_vec3){.5f, .5f, 3}, (af_vec3){0, 0, -1}, 10, f, &hit));
     CHECK(af_scene_sweep_capsule(s, (af_vec3){0, 2, 0}, .2f, .2f, (af_vec3){0, -4, 0}, .001f, f, &hit) &&
           hit.part == b);

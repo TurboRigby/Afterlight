@@ -23,14 +23,12 @@ af_vec3 wa_river_point(const af_water *w, float distance, af_vec3 *tangent) {
     *tangent = (af_vec3){0, 0, 1};
     return (af_vec3){0};
 }
-bool wa_river_coordinates(const af_water *w, af_vec3 p, float *side, float *along, float *height,
-                          af_vec3 *tangent) {
+bool wa_river_coordinates(const af_water *w, af_vec3 p, float *side, float *along, float *height, af_vec3 *tangent) {
     float best = FLT_MAX, total = 0;
     bool found = false;
     for (unsigned i = 1; i < w->path_count; ++i) {
         af_vec3 a = w->path[i - 1], d = af_vec3_sub(w->path[i], a);
-        float length = hypotf(d.x, d.z),
-              raw = ((p.x - a.x) * d.x + (p.z - a.z) * d.z) / (length * length);
+        float length = hypotf(d.x, d.z), raw = ((p.x - a.x) * d.x + (p.z - a.z) * d.z) / (length * length);
         if ((i == 1 && raw < -.0001f) || (i + 1 == w->path_count && raw > 1.0001f)) {
             total += length;
             continue;

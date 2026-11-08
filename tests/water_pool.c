@@ -4,12 +4,12 @@
 #include <afterlight/water.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Pool %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));                   \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Pool %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));                                  \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id body(af_scene *s, const char *name, float x, float density, bool sphere) {
     af_object_id id = af_scene_add_object(s, name, "cube");
@@ -61,10 +61,10 @@ int main(void) {
         final[quality][0] = af_physics_get_state(p, wood).position.y;
         final[quality][1] = af_physics_get_state(p, ball).position.y;
         final[quality][2] = af_physics_get_state(p, stone).position.y;
-        printf("quality %u: wood %.4f ball %.4f stone %.4f, wave %.5f\n", quality, final[quality][0],
-               final[quality][1], final[quality][2], af_physics_water_stats(p).max_wave);
-        CHECK(fabsf(final[quality][0]) < .1f && fabsf(final[quality][1]) < .1f &&
-              final[quality][2] < -2.7f && final[quality][2] > -3);
+        printf("quality %u: wood %.4f ball %.4f stone %.4f, wave %.5f\n", quality, final[quality][0], final[quality][1],
+               final[quality][2], af_physics_water_stats(p).max_wave);
+        CHECK(fabsf(final[quality][0]) < .1f && fabsf(final[quality][1]) < .1f && final[quality][2] < -2.7f &&
+              final[quality][2] > -3);
         CHECK(af_vec3_length(af_physics_get_state(p, wood).velocity) < .08f);
         af_water_sample sample = af_physics_sample_water(p, s, (af_vec3){1, 0, 1});
         CHECK(sample.inside && sample.owner == surface && sample.density == 1000 && sample.bottom == -3);

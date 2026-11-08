@@ -3,12 +3,12 @@
 #include <afterlight/scene.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Body %d: %s\n", __LINE__, #x);                                             \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Body %d: %s\n", __LINE__, #x);                                                            \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 int main(void) {
     af_scene *s = af_scene_create();
@@ -28,8 +28,7 @@ int main(void) {
     CHECK(af_scene_save(s, "body.json", &e));
     af_scene *copy = af_scene_load("body.json", &e);
     CHECK(copy && af_scene_get_object(copy, id)->body.mass == 2 &&
-          af_scene_get_object(copy, id)->body.velocity.y == 2 &&
-          af_scene_get_object(copy, id)->body.continuous);
+          af_scene_get_object(copy, id)->body.velocity.y == 2 && af_scene_get_object(copy, id)->body.continuous);
     b.mass = NAN;
     CHECK(!af_scene_set_body(s, id, b));
     b = af_rigid_body_default();

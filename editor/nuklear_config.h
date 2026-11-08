@@ -16,18 +16,25 @@
 #define NK_KEYSTATE_BASED_INPUT
 #include <stdio.h>
 #include <string.h>
-static inline char *ed_nuklear_number(char *buffer,double value);
+static inline char *ed_nuklear_number(char *buffer, double value);
 #define NK_DTOA ed_nuklear_number
 #define NK_MAX_FLOAT_PRECISION 3
 #define NK_UINT_DRAW_INDEX
 #include "nuklear.h"
 /* Round numeric controls instead of truncating bias values such as 0.015. */
-static inline char *ed_nuklear_number(char *buffer,double value)
-{
-    int n=snprintf(buffer,NK_MAX_NUMBER_BUFFER,"%.3f",value);
-    if(n<0||n>=NK_MAX_NUMBER_BUFFER){snprintf(buffer,NK_MAX_NUMBER_BUFFER,"%.3g",value);return buffer;}
-    char *decimal=strchr(buffer,'.');
-    if(decimal){while(n>0&&buffer[n-1]=='0')buffer[--n]=0;if(n>0&&buffer[n-1]=='.')buffer[--n]=0;}
+static inline char *ed_nuklear_number(char *buffer, double value) {
+    int n = snprintf(buffer, NK_MAX_NUMBER_BUFFER, "%.3f", value);
+    if (n < 0 || n >= NK_MAX_NUMBER_BUFFER) {
+        snprintf(buffer, NK_MAX_NUMBER_BUFFER, "%.3g", value);
+        return buffer;
+    }
+    char *decimal = strchr(buffer, '.');
+    if (decimal) {
+        while (n > 0 && buffer[n - 1] == '0')
+            buffer[--n] = 0;
+        if (n > 0 && buffer[n - 1] == '.')
+            buffer[--n] = 0;
+    }
     return buffer;
 }
 #endif

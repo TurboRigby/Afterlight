@@ -2,12 +2,12 @@
 #include <afterlight/physics.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Solver %d: %s\n", __LINE__, #x);                                           \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Solver %d: %s\n", __LINE__, #x);                                                          \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id box(af_scene *s, af_vec3 p, af_vec3 half, bool dynamic) {
     af_object_id id = af_scene_add_object(s, "Box", "cube");

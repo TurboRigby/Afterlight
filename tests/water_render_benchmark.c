@@ -63,9 +63,9 @@ static void update(af_engine *e, double dt, void *data) {
     if (++b->frames < 30 + b->measured)
         return;
     double n = b->measured;
-    printf("%s,%u,%u,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%llu\n", names[b->case_index / 3], b->case_index % 3,
-           b->measured, b->physics / n, b->render / n, b->gpu / n, b->fence / n, b->acquire / n,
-           b->upload / n, (unsigned long long)(s.mesh_idle_waits - b->idle));
+    printf("%s,%u,%u,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%llu\n", names[b->case_index / 3], b->case_index % 3, b->measured,
+           b->physics / n, b->render / n, b->gpu / n, b->fence / n, b->acquire / n, b->upload / n,
+           (unsigned long long)(s.mesh_idle_waits - b->idle));
     fflush(stdout);
     if (++b->case_index == 18) {
         af_engine_request_quit(e);
@@ -84,8 +84,7 @@ static void shutdown(af_engine *e, void *data) {
 int main(int argc, char **argv) {
     if (argc < 2 || argc > 3)
         return 2;
-    benchmark b = {.directory = argv[1],
-                   .measured = argc == 3 ? (unsigned)strtoul(argv[2], NULL, 10) : 90};
+    benchmark b = {.directory = argv[1], .measured = argc == 3 ? (unsigned)strtoul(argv[2], NULL, 10) : 90};
     if (b.measured < 30 || b.measured > 3600)
         return 2;
     af_engine_config c = af_engine_config_default();

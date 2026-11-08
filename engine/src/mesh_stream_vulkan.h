@@ -23,7 +23,8 @@ static bool stream_buffer(af_renderer *r, af_gpu_buffer *b, const void *data, Vk
         if (!vk_ok(vkCreateBuffer(r->device, &info, NULL, &b->handle), "create streamed buffer"))
             return false;
         VkMemoryRequirements req;
-        vkGetBufferMemoryRequirements(r->device, b->handle, &req);b->allocation_bytes=req.size;
+        vkGetBufferMemoryRequirements(r->device, b->handle, &req);
+        b->allocation_bytes = req.size;
         VkPhysicalDeviceMemoryProperties props;
         vkGetPhysicalDeviceMemoryProperties(r->physical_device, &props);
         uint32_t type = UINT32_MAX;
@@ -37,18 +38,14 @@ static bool stream_buffer(af_renderer *r, af_gpu_buffer *b, const void *data, Vk
         }
         if (type == UINT32_MAX)
             return false;
-        VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                                           .allocationSize = req.size,
-                                           .memoryTypeIndex = type};
-        if (!vk_ok(vkAllocateMemory(r->device, &allocation, NULL, &b->memory),
-                   "allocate streamed memory") ||
+        VkMemoryAllocateInfo allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size, .memoryTypeIndex = type};
+        if (!vk_ok(vkAllocateMemory(r->device, &allocation, NULL, &b->memory), "allocate streamed memory") ||
             !vk_ok(vkBindBufferMemory(r->device, b->handle, b->memory, 0), "bind streamed buffer") ||
-            !vk_ok(vkMapMemory(r->device, b->memory, 0, VK_WHOLE_SIZE, 0, &b->mapped),
-                   "map streamed buffer"))
+            !vk_ok(vkMapMemory(r->device, b->memory, 0, VK_WHOLE_SIZE, 0, &b->mapped), "map streamed buffer"))
             return false;
         b->capacity = size;
-        b->coherent =
-            (props.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+        b->coherent = (props.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
     }
     memcpy(b->mapped, data, (size_t)bytes);
     if (!b->coherent) {
@@ -109,10 +106,10 @@ static bool stream_set(af_renderer *r, const char *name, const af_mesh_data *m) 
     a->gpu.minimum = a->gpu.maximum = v[0].position;
     for (uint32_t k = 0; k < m->vertex_count; ++k) {
         af_vec3 p = v[k].position;
-        a->gpu.minimum = (af_vec3){fminf(a->gpu.minimum.x, p.x), fminf(a->gpu.minimum.y, p.y),
-                                   fminf(a->gpu.minimum.z, p.z)};
-        a->gpu.maximum = (af_vec3){fmaxf(a->gpu.maximum.x, p.x), fmaxf(a->gpu.maximum.y, p.y),
-                                   fmaxf(a->gpu.maximum.z, p.z)};
+        a->gpu.minimum =
+            (af_vec3){fminf(a->gpu.minimum.x, p.x), fminf(a->gpu.minimum.y, p.y), fminf(a->gpu.minimum.z, p.z)};
+        a->gpu.maximum =
+            (af_vec3){fmaxf(a->gpu.maximum.x, p.x), fmaxf(a->gpu.maximum.y, p.y), fmaxf(a->gpu.maximum.z, p.z)};
     }
     return true;
 }
@@ -137,8 +134,7 @@ static bool stream_prepare(af_renderer *r) {
             continue;
         VkDeviceSize vb = (VkDeviceSize)a->vertex_count * sizeof(af_vertex),
                      ib = (VkDeviceSize)a->gpu.index_count * sizeof(uint32_t);
-        if (!stream_buffer(r, &f->gpu.vertices, a->cpu_vertices, vb,
-                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) ||
+        if (!stream_buffer(r, &f->gpu.vertices, a->cpu_vertices, vb, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) ||
             !stream_buffer(r, &f->gpu.indices, a->cpu_indices, ib, VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
             return false;
         f->gpu.index_count = a->gpu.index_count;
@@ -148,7 +144,6 @@ static bool stream_prepare(af_renderer *r) {
         r->water_upload_bytes += (uint64_t)(vb + ib);
         ++r->water_stream_uploads;
     }
-    r->water_upload_ms =
-        (double)(SDL_GetPerformanceCounter() - start) * 1000 / (double)SDL_GetPerformanceFrequency();
+    r->water_upload_ms = (double)(SDL_GetPerformanceCounter() - start) * 1000 / (double)SDL_GetPerformanceFrequency();
     return true;
 }

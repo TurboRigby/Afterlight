@@ -59,10 +59,9 @@ static bool create_image(af_vk_refraction *r, image *out, VkFormat format, VkIma
         }
     if (type == UINT32_MAX)
         return false;
-    r->allocation_bytes+=req.size;
-    VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                                       .allocationSize = req.size,
-                                       .memoryTypeIndex = type};
+    r->allocation_bytes += req.size;
+    VkMemoryAllocateInfo allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size, .memoryTypeIndex = type};
     if (!ok(vkAllocateMemory(r->device, &allocation, NULL, &out->memory)) ||
         !ok(vkBindImageMemory(r->device, out->image, out->memory, 0)))
         return false;
@@ -73,8 +72,8 @@ static bool create_image(af_vk_refraction *r, image *out, VkFormat format, VkIma
                                   .subresourceRange = {aspect, 0, 1, 0, 1}};
     return ok(vkCreateImageView(r->device, &view, NULL, &out->view));
 }
-af_vk_refraction *af_vk_refraction_create(VkPhysicalDevice physical, VkDevice device, VkExtent2D extent,
-                                          uint32_t count, VkFormat depth) {
+af_vk_refraction *af_vk_refraction_create(VkPhysicalDevice physical, VkDevice device, VkExtent2D extent, uint32_t count,
+                                          VkFormat depth) {
     af_vk_refraction *r = calloc(1, sizeof(*r));
     if (!r)
         return NULL;
@@ -99,8 +98,7 @@ af_vk_refraction *af_vk_refraction_create(VkPhysicalDevice physical, VkDevice de
     if (!ok(vkCreateSampler(device, &sampler, NULL, &r->depth_sampler)))
         goto fail;
     for (uint32_t i = 0; i < count; ++i)
-        if (!create_image(r, &r->frames[i].color, VK_FORMAT_R16G16B16A16_SFLOAT,
-                          VK_IMAGE_ASPECT_COLOR_BIT) ||
+        if (!create_image(r, &r->frames[i].color, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT) ||
             !create_image(r, &r->frames[i].depth, depth, VK_IMAGE_ASPECT_DEPTH_BIT))
             goto fail;
     return r;
@@ -108,7 +106,9 @@ fail:
     af_vk_refraction_destroy(r);
     return NULL;
 }
-uint64_t af_vk_refraction_allocation_bytes(const af_vk_refraction *p){return p?p->allocation_bytes:0;}
+uint64_t af_vk_refraction_allocation_bytes(const af_vk_refraction *p) {
+    return p ? p->allocation_bytes : 0;
+}
 void af_vk_refraction_destroy(af_vk_refraction *r) {
     if (!r)
         return;
@@ -132,15 +132,13 @@ void af_vk_refraction_destroy(af_vk_refraction *r) {
     free(r);
 }
 VkDescriptorImageInfo af_vk_refraction_color(const af_vk_refraction *r, uint32_t i) {
-    return (VkDescriptorImageInfo){r->color_sampler, r->frames[i].color.view,
-                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    return (VkDescriptorImageInfo){r->color_sampler, r->frames[i].color.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 }
 VkDescriptorImageInfo af_vk_refraction_depth(const af_vk_refraction *r, uint32_t i) {
-    return (VkDescriptorImageInfo){r->depth_sampler, r->frames[i].depth.view,
-                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    return (VkDescriptorImageInfo){r->depth_sampler, r->frames[i].depth.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 }
-static VkImageMemoryBarrier barrier(VkImage image, VkImageAspectFlags aspect, VkImageLayout before,
-                                    VkImageLayout after, VkAccessFlags source, VkAccessFlags target) {
+static VkImageMemoryBarrier barrier(VkImage image, VkImageAspectFlags aspect, VkImageLayout before, VkImageLayout after,
+                                    VkAccessFlags source, VkAccessFlags target) {
     return (VkImageMemoryBarrier){.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                   .srcAccessMask = source,
                                   .dstAccessMask = target,
@@ -155,17 +153,16 @@ void af_vk_refraction_prepare(af_vk_refraction *r, VkCommandBuffer command, uint
     frame *f = &r->frames[i];
     if (f->initialized)
         return;
-    VkImageMemoryBarrier barriers[] = {
-        barrier(f->color.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT),
-        barrier(f->depth.image, depth_aspects(r->depth_format), VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT)};
-    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 2, barriers);
+    VkImageMemoryBarrier barriers[] = {barrier(f->color.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT),
+                                       barrier(f->depth.image, depth_aspects(r->depth_format),
+                                               VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0,
+                                               VK_ACCESS_SHADER_READ_BIT)};
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL,
+                         0, NULL, 2, barriers);
     f->initialized = true;
 }
-void af_vk_refraction_copy(af_vk_refraction *r, VkCommandBuffer command, uint32_t i, VkImage color,
-                           VkImage depth) {
+void af_vk_refraction_copy(af_vk_refraction *r, VkCommandBuffer command, uint32_t i, VkImage color, VkImage depth) {
     frame *f = &r->frames[i];
     VkImageMemoryBarrier barriers[] = {
         barrier(color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -175,16 +172,13 @@ void af_vk_refraction_copy(af_vk_refraction *r, VkCommandBuffer command, uint32_
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT),
         barrier(f->color.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT),
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT),
         barrier(f->depth.image, depth_aspects(r->depth_format), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT)};
-    vkCmdPipelineBarrier(
-        command,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 4, barriers);
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT)};
+    vkCmdPipelineBarrier(command,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                             VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 4, barriers);
     VkImageCopy region = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                           .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                           .extent = {r->extent.width, r->extent.height, 1}};
@@ -198,17 +192,15 @@ void af_vk_refraction_copy(af_vk_refraction *r, VkCommandBuffer command, uint32_
                           VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
     barriers[1] = barrier(depth, depth_aspects(r->depth_format), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT,
-                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
-    barriers[2] = barrier(f->color.image, VK_IMAGE_ASPECT_COLOR_BIT,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-    barriers[3] = barrier(f->depth.image, depth_aspects(r->depth_format),
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-    vkCmdPipelineBarrier(
-        command, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0, 0, NULL, 0, NULL, 4, barriers);
+                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    barriers[2] =
+        barrier(f->color.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    barriers[3] =
+        barrier(f->depth.image, depth_aspects(r->depth_format), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                             VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0, 0, NULL, 0, NULL, 4, barriers);
 }

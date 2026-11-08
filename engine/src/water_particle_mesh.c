@@ -15,8 +15,7 @@ static af_vec3 normal_local(af_transform t, af_vec3 p) {
     t.position = (af_vec3){0};
     return local(t, p);
 }
-static bool drops(const wa_slot *a, float alpha, af_vertex **vertices, uint32_t **indices,
-                  af_mesh_data *mesh) {
+static bool drops(const wa_slot *a, float alpha, af_vertex **vertices, uint32_t **indices, af_mesh_data *mesh) {
     const wa_particles *f = a->particles;
     size_t count = f ? f->count : 0;
     if (!count)
@@ -28,20 +27,16 @@ static bool drops(const wa_slot *a, float alpha, af_vertex **vertices, uint32_t 
         free(ix);
         return false;
     }
-    static const af_vec3 directions[] = {{1, 0, 0},  {-1, 0, 0}, {0, 1, 0},
-                                         {0, -1, 0}, {0, 0, 1},  {0, 0, -1}};
-    static const unsigned triangles[] = {2, 4, 0, 2, 1, 4, 2, 5, 1, 2, 0, 5,
-                                         3, 0, 4, 3, 4, 1, 3, 1, 5, 3, 5, 0};
+    static const af_vec3 directions[] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    static const unsigned triangles[] = {2, 4, 0, 2, 1, 4, 2, 5, 1, 2, 0, 5, 3, 0, 4, 3, 4, 1, 3, 1, 5, 3, 5, 0};
     for (size_t i = 0; i < count; ++i) {
-        af_vec3 p =
-            f && i < f->count ? local(a->transform, position(&f->values[i], alpha)) : (af_vec3){0};
+        af_vec3 p = f && i < f->count ? local(a->transform, position(&f->values[i], alpha)) : (af_vec3){0};
         float radius = f && f->count ? f->spacing * .62f : 0;
         for (unsigned j = 0; j < 24; ++j) {
             af_vec3 n = directions[triangles[j]];
             size_t k = i * 24 + j;
-            v[k] = (af_vertex){.position = af_vec3_add(p, af_vec3_scale(n, radius)),
-                               .normal = n,
-                               .color = {1, 1, 1, 1}};
+            v[k] =
+                (af_vertex){.position = af_vec3_add(p, af_vec3_scale(n, radius)), .normal = n, .color = {1, 1, 1, 1}};
             ix[k] = (uint32_t)k;
         }
     }
@@ -74,9 +69,8 @@ static void triangle(builder *b, af_vec3 *p, af_vec3 *n) {
     }
     for (unsigned i = 0; i < 3; ++i) {
         unsigned k = order[i];
-        b->v[b->count] = (af_vertex){.position = local(b->transform, p[k]),
-                                     .normal = normal_local(b->transform, n[k]),
-                                     .color = {1, 1, 1, 1}};
+        b->v[b->count] = (af_vertex){
+            .position = local(b->transform, p[k]), .normal = normal_local(b->transform, n[k]), .color = {1, 1, 1, 1}};
         b->ix[b->count] = b->count;
         ++b->count;
     }
@@ -114,8 +108,7 @@ static void tetra(builder *b, const af_vec3 *p, const node *v) {
         unsigned x = pairs[k][0], y = pairs[k][1];
         float t = (.5f - v[x].value) / (v[y].value - v[x].value);
         points[k] = af_vec3_add(p[x], af_vec3_scale(af_vec3_sub(p[y], p[x]), t));
-        af_vec3 g =
-            af_vec3_add(v[x].gradient, af_vec3_scale(af_vec3_sub(v[y].gradient, v[x].gradient), t));
+        af_vec3 g = af_vec3_add(v[x].gradient, af_vec3_scale(af_vec3_sub(v[y].gradient, v[x].gradient), t));
         normals[k] = af_vec3_normalize(af_vec3_scale(g, -1));
     }
     triangle(b, points, normals);
@@ -124,8 +117,7 @@ static void tetra(builder *b, const af_vec3 *p, const node *v) {
         triangle(b, q, n);
     }
 }
-bool wa_particles_mesh(const wa_slot *a, float alpha, af_vertex **vertices, uint32_t **indices,
-                       af_mesh_data *mesh) {
+bool wa_particles_mesh(const wa_slot *a, float alpha, af_vertex **vertices, uint32_t **indices, af_mesh_data *mesh) {
     const wa_particles *f = a->particles;
     if (!f || f->count < 2 || a->config.quality == AF_WATER_LOW)
         return drops(a, alpha, vertices, indices, mesh);
@@ -160,16 +152,14 @@ bool wa_particles_mesh(const wa_slot *a, float alpha, af_vertex **vertices, uint
         for (int z = z0; z <= z1; ++z)
             for (int y = y0; y <= y1; ++y)
                 for (int x = x0; x <= x1; ++x) {
-                    af_vec3 d = af_vec3_sub((af_vec3){lo.x + (float)x * step, lo.y + (float)y * step,
-                                                      lo.z + (float)z * step},
-                                            p);
+                    af_vec3 d = af_vec3_sub(
+                        (af_vec3){lo.x + (float)x * step, lo.y + (float)y * step, lo.z + (float)z * step}, p);
                     float q = 1 - af_vec3_dot(d, d) / (radius * radius);
                     if (q <= 0)
                         continue;
                     node *n = &field[((size_t)z * ny + (size_t)y) * nx + (size_t)x];
                     n->value += q * q * q;
-                    n->gradient =
-                        af_vec3_add(n->gradient, af_vec3_scale(d, -6 * q * q / (radius * radius)));
+                    n->gradient = af_vec3_add(n->gradient, af_vec3_scale(d, -6 * q * q / (radius * radius)));
                 }
     }
     builder b = {.cap = 180000, .transform = a->transform};
@@ -191,8 +181,7 @@ bool wa_particles_mesh(const wa_slot *a, float alpha, af_vertex **vertices, uint
                 float low = 100000, high = 0;
                 for (unsigned k = 0; k < 8; ++k) {
                     unsigned xx = x + (k & 1u), yy = y + ((k >> 1u) & 1u), zz = z + ((k >> 2u) & 1u);
-                    p[k] = (af_vec3){lo.x + (float)xx * step, lo.y + (float)yy * step,
-                                     lo.z + (float)zz * step};
+                    p[k] = (af_vec3){lo.x + (float)xx * step, lo.y + (float)yy * step, lo.z + (float)zz * step};
                     v[k] = field[((size_t)zz * ny + yy) * nx + xx];
                     low = fminf(low, v[k].value);
                     high = fmaxf(high, v[k].value);

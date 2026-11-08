@@ -3,12 +3,12 @@
 #include <afterlight/water.h>
 #include <math.h>
 #include <stdio.h>
-#define CHECK(x)                                                                                        \
-    do {                                                                                                \
-        if (!(x)) {                                                                                     \
-            fprintf(stderr, "Fluid boundary %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));         \
-            return 1;                                                                                   \
-        }                                                                                               \
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "Fluid boundary %d: %s (%s)\n", __LINE__, #x, af_physics_error(p));                        \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 static af_object_id fluid(af_scene *s, af_vec3 center, af_vec3 velocity, unsigned count) {
     af_object_id id = af_scene_add_object(s, "Fluid", "__node");
@@ -66,8 +66,7 @@ int main(void) {
         b.enabled = true;
         b.type = AF_BODY_KINEMATIC;
         CHECK(af_scene_set_body(s, wall, b));
-        af_object_id owner =
-            fluid(s, rotation ? (af_vec3){1.16f, 0, .16f} : (af_vec3){.16f, 0, .16f}, (af_vec3){0}, 1);
+        af_object_id owner = fluid(s, rotation ? (af_vec3){1.16f, 0, .16f} : (af_vec3){.16f, 0, .16f}, (af_vec3){0}, 1);
         CHECK(owner);
         af_physics_reset(p);
         CHECK(af_physics_step(p, s, 1.f / 60));
