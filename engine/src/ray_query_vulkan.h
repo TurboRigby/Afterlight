@@ -4,7 +4,7 @@
 #include <afterlight/mesh.h>
 #include <vulkan/vulkan.h>
 typedef struct af_vk_ray_query af_vk_ray_query;
-enum { AF_RAY_SHADOW_MASK = 1, AF_RAY_REFLECTION_MASK = 2 };
+enum { AF_RAY_SHADOW_MASK = 1, AF_RAY_REFLECTION_MASK = 2, AF_RAY_GI_MASK = 4 };
 typedef struct af_ray_instance {
     uint64_t mesh_key;
     VkBuffer vertices, indices;

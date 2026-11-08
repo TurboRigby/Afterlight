@@ -50,6 +50,7 @@ typedef struct af_engine_stats {
     af_anti_aliasing effective_aa;
     bool ray_query_supported, ray_traced_shadows_active, ray_tracing_failed;
     bool ray_traced_water_reflections_active;
+    bool ray_traced_gi_active;
     uint64_t ray_tracing_bytes, ray_blas_builds, ray_tlas_builds;
     size_t ray_instances, ray_meshes, ray_raster_casters;
     double gpu_ray_build_ms;

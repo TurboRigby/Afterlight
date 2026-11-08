@@ -812,20 +812,54 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                                                     "chromatic_aberration",
                                                     "chromatic_aberration_strength",
                                                     "film_grain",
-                                                    "film_grain_intensity"};
+                                                    "film_grain_intensity",
+                                                    "ray_traced_gi",
+                                                    "rtgi_intensity",
+                                                    "rtgi_ray_distance",
+                                                    "rtgi_samples"};
+        static const char *const render_fields_no_post[] = {"exposure",
+                                                            "tone_mapping",
+                                                            "bloom",
+                                                            "bloom_strength",
+                                                            "bloom_threshold",
+                                                            "bloom_radius",
+                                                            "environment_enabled",
+                                                            "environment_profile",
+                                                            "environment_intensity",
+                                                            "environment_rotation",
+                                                            "local_shadow_resolution",
+                                                            "environment_asset",
+                                                            "skybox",
+                                                            "skybox_intensity",
+                                                            "underwater",
+                                                            "refraction",
+                                                            "refraction_strength",
+                                                            "anti_aliasing",
+                                                            "aa_sharpness",
+                                                            "taa_history_weight",
+                                                            "ray_traced_shadows",
+                                                            "ray_traced_water_reflections",
+                                                            "ray_traced_gi",
+                                                            "rtgi_intensity",
+                                                            "rtgi_ray_distance",
+                                                            "rtgi_samples"};
         const cJSON *render = cJSON_GetObjectItemCaseSensitive(root, "render"),
                     *tone = cJSON_GetObjectItemCaseSensitive(render, "tone_mapping");
         af_render_settings settings = af_render_settings_default();
         const cJSON *ray_reflections = cJSON_GetObjectItemCaseSensitive(render, "ray_traced_water_reflections");
         const cJSON *post_check = cJSON_GetObjectItemCaseSensitive(render, "tone_mapper");
-        size_t expected_render_fields = version->valuedouble >= 24   ? (post_check ? 43 : (ray_reflections ? 22 : 21))
-                                        : version->valuedouble >= 23 ? 20
-                                        : version->valuedouble >= 21 ? 17
-                                        : version->valuedouble >= 20 ? 15
-                                        : version->valuedouble >= 9  ? 14
-                                        : version->valuedouble >= 8  ? 11
-                                                                     : 2;
-        if (!exact_fields(render, render_fields, expected_render_fields) ||
+        const cJSON *rtgi_check = cJSON_GetObjectItemCaseSensitive(render, "ray_traced_gi");
+        size_t expected_render_fields =
+            version->valuedouble >= 24
+                ? (post_check ? (rtgi_check ? 47 : 43) : (rtgi_check ? 26 : (ray_reflections ? 22 : 21)))
+            : version->valuedouble >= 23 ? 20
+            : version->valuedouble >= 21 ? 17
+            : version->valuedouble >= 20 ? 15
+            : version->valuedouble >= 9  ? 14
+            : version->valuedouble >= 8  ? 11
+                                         : 2;
+        const char *const *active_render_fields = (!post_check && rtgi_check) ? render_fields_no_post : render_fields;
+        if (!exact_fields(render, active_render_fields, expected_render_fields) ||
             !read_float_field(render, "exposure", &settings.exposure) || !cJSON_IsBool(tone)) {
             set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid exposure/tone mapping settings.");
             goto fail;
@@ -974,6 +1008,21 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                 goto fail;
             }
             settings.film_grain = cJSON_IsTrue(fg) != 0;
+        }
+        if (rtgi_check) {
+            if (!cJSON_IsBool(rtgi_check)) {
+                set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid ray-traced GI toggle.");
+                goto fail;
+            }
+            settings.ray_traced_gi = cJSON_IsTrue(rtgi_check) != 0;
+            float samples = 1.0f;
+            if (!read_float_field(render, "rtgi_intensity", &settings.rtgi_intensity) ||
+                !read_float_field(render, "rtgi_ray_distance", &settings.rtgi_ray_distance) ||
+                !read_float_field(render, "rtgi_samples", &samples) || samples < 1.0f || samples > 16.0f) {
+                set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid ray-traced GI settings.");
+                goto fail;
+            }
+            settings.rtgi_samples = (uint32_t)samples;
         }
         settings.tone_mapping = cJSON_IsTrue(tone) != 0;
         if (!af_scene_set_render_settings(scene, settings)) {
@@ -1402,7 +1451,7 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
         !cJSON_AddBoolToObject(render, "skybox", rs->skybox) ||
         !cJSON_AddNumberToObject(render, "skybox_intensity", rs->skybox_intensity))
         goto fail;
-    if (rs->tone_mapper != AF_TONE_MAP_ACES || rs->auto_exposure || rs->depth_of_field || rs->motion_blur ||
+    if (rs->tone_mapper != AF_TONE_MAP_REINHARD || rs->auto_exposure || rs->depth_of_field || rs->motion_blur ||
         rs->vignette || rs->chromatic_aberration || rs->film_grain || rs->saturation != 1.0f || rs->contrast != 1.0f ||
         rs->color_filter.x != 1.0f || rs->color_filter.y != 1.0f || rs->color_filter.z != 1.0f) {
         const char *tm_str = rs->tone_mapper == AF_TONE_MAP_AGX        ? "agx"
@@ -1430,6 +1479,13 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
             !cJSON_AddNumberToObject(render, "chromatic_aberration_strength", rs->chromatic_aberration_strength) ||
             !cJSON_AddBoolToObject(render, "film_grain", rs->film_grain) ||
             !cJSON_AddNumberToObject(render, "film_grain_intensity", rs->film_grain_intensity))
+            goto fail;
+    }
+    if (rs->ray_traced_gi || rs->rtgi_intensity != 1.0f || rs->rtgi_ray_distance != 25.0f || rs->rtgi_samples != 1) {
+        if (!cJSON_AddBoolToObject(render, "ray_traced_gi", rs->ray_traced_gi) ||
+            !cJSON_AddNumberToObject(render, "rtgi_intensity", rs->rtgi_intensity) ||
+            !cJSON_AddNumberToObject(render, "rtgi_ray_distance", rs->rtgi_ray_distance) ||
+            !cJSON_AddNumberToObject(render, "rtgi_samples", (double)rs->rtgi_samples))
             goto fail;
     }
     cJSON *locals = cJSON_AddArrayToObject(root, "local_lights");

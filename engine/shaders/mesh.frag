@@ -44,6 +44,7 @@ layout(set = 0, binding = 0) uniform Frame {
     mat4 inverse_view_projection;
     vec4 sky_params;
     vec4 water_absorption, water_scattering, water_bounds, water_axes, water_screen, water_viewport, wind_time;
+    vec4 rtgi_params;
     mat4 unjittered_view_projection, previous_view_projection;
 }
 frame;
@@ -243,11 +244,17 @@ vec2 environment_uv(vec3 d) {
 vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal) {
     if (frame.render_params.z <= 0
 #ifdef AF_RAY_QUERY
-        && !(water_surface() && frame.sky_params.w > .5)
+        && !(water_surface() && frame.sky_params.w > .5) && !(frame.rtgi_params.x > .5)
 #endif
     )
         return vec3(0);
     vec3 diffuse = textureLod(irradiance_map, environment_uv(n), 0).rgb;
+#ifdef AF_RAY_QUERY
+    vec3 gi_radiance;
+    if (!water_surface() && trace_gi_bounce(world_position, n, gi_radiance)) {
+        diffuse = gi_radiance / max(0.001, frame.render_params.z);
+    }
+#endif
     if (draw.params.z < 0.5)
         return diffuse * base * frame.render_params.z;
     float rough = clamp(roughness, 0.04, 1.0), nv = max(dot(n, v), 0.0);

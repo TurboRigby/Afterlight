@@ -504,7 +504,10 @@ void af_vk_post_draw(af_vk_post *p, VkCommandBuffer command, uint32_t index, af_
     struct {
         af_vec4 settings, filter, viewport, aa, temporal, grading, lens, dof_grain;
     } push = {
-        .settings = {p->adapted_exposure, !settings.tone_mapping ? 0.0f : (float)settings.tone_mapper,
+        .settings = {p->adapted_exposure,
+                     !settings.tone_mapping ? 0.0f
+                                            : (settings.tone_mapper == AF_TONE_MAP_OFF ? (float)AF_TONE_MAP_REINHARD
+                                                                                       : (float)settings.tone_mapper),
                      settings.bloom ? settings.bloom_strength : 0.0f, settings.bloom_threshold},
         .filter = {0, 0, 0, settings.bloom ? settings.bloom_radius : 0.0f},
         .viewport = {area.x, area.y, area.x + area.width, area.y + area.height},

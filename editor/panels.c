@@ -300,6 +300,23 @@ void environment_panel(editor *app, float width, float height) {
             render.ray_traced_water_reflections = ray_reflections != 0;
             changed = true;
         }
+        nk_bool ray_gi = render.ray_traced_gi;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        if (nk_checkbox_label(ctx, "Ray-traced global illumination (RTGI)", &ray_gi)) {
+            render.ray_traced_gi = ray_gi != 0;
+            changed = true;
+        }
+        if (render.ray_traced_gi) {
+            nk_layout_row_dynamic(ctx, 28, 2);
+            changed |= nk_property_float(ctx, "RTGI intensity", 0.0f, &render.rtgi_intensity, 5.0f, 0.1f, 0.01f) != 0;
+            changed |= nk_property_float(ctx, "Max distance", 1.0f, &render.rtgi_ray_distance, 100.0f, 1.0f, 0.1f) != 0;
+            nk_layout_row_dynamic(ctx, 28, 1);
+            int samples = (int)render.rtgi_samples;
+            if (nk_property_int(ctx, "RTGI samples", 1, &samples, 4, 1, 1)) {
+                render.rtgi_samples = (uint32_t)samples;
+                changed = true;
+            }
+        }
         af_engine_stats ray_stats = af_engine_get_stats(app->engine);
         label(ctx,
               ray_stats.ray_query_supported ? "Hardware ray queries active (sun, point and spot lights)."
@@ -592,6 +609,11 @@ void performance_panel(editor *app, float width, float height) {
                  stats.ray_traced_water_reflections_active ? "active"
                  : stats.ray_query_supported               ? "off"
                                                            : "unsupported");
+        label(ctx, text, 26);
+        snprintf(text, sizeof(text), "Ray-traced GI: %s",
+                 stats.ray_traced_gi_active  ? "active"
+                 : stats.ray_query_supported ? "off"
+                                             : "unsupported");
         label(ctx, text, 26);
         snprintf(text, sizeof(text), "Ray AS %.2f MiB / build %.3f ms / %zu raster casters",
                  (double)stats.ray_tracing_bytes / 1048576, stats.gpu_ray_build_ms, stats.ray_raster_casters);

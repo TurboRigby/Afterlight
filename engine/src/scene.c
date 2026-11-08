@@ -476,7 +476,7 @@ af_render_settings af_render_settings_default(void) {
                                 .environment_intensity = 1.f,
                                 .skybox_intensity = 1.f,
                                 .local_shadow_resolution = 512,
-                                .tone_mapper = AF_TONE_MAP_ACES,
+                                .tone_mapper = AF_TONE_MAP_REINHARD,
                                 .auto_exposure_speed = 2.0f,
                                 .auto_exposure_min = -3.0f,
                                 .auto_exposure_max = 3.0f,
@@ -491,7 +491,11 @@ af_render_settings af_render_settings_default(void) {
                                 .vignette_intensity = 0.35f,
                                 .vignette_smoothness = 0.5f,
                                 .chromatic_aberration_strength = 0.005f,
-                                .film_grain_intensity = 0.035f};
+                                .film_grain_intensity = 0.035f,
+                                .ray_traced_gi = false,
+                                .rtgi_intensity = 1.0f,
+                                .rtgi_ray_distance = 25.0f,
+                                .rtgi_samples = 1};
 }
 af_render_settings af_scene_get_render_settings(const af_scene *scene) {
     return scene ? scene->render_settings : af_render_settings_default();
@@ -556,6 +560,19 @@ bool af_scene_set_render_settings(af_scene *scene, af_render_settings settings) 
     if (!isfinite(settings.film_grain_intensity) || settings.film_grain_intensity < 0 ||
         settings.film_grain_intensity > 1.0f)
         return false;
+    if (!isfinite(settings.rtgi_intensity) || settings.rtgi_intensity < 0.0f || settings.rtgi_intensity > 10.0f)
+        return false;
+    if (!isfinite(settings.rtgi_ray_distance) || settings.rtgi_ray_distance < 0.0f ||
+        settings.rtgi_ray_distance > 1000.0f)
+        return false;
+    if (settings.tone_mapping && settings.tone_mapper == AF_TONE_MAP_OFF)
+        settings.tone_mapper = AF_TONE_MAP_REINHARD;
+    if (settings.rtgi_ray_distance == 0.0f)
+        settings.rtgi_ray_distance = 25.0f;
+    if (settings.rtgi_samples > 16)
+        return false;
+    if (settings.rtgi_samples == 0)
+        settings.rtgi_samples = 1;
     if (!settings.local_shadow_resolution)
         settings.local_shadow_resolution = 512;
     scene->render_settings = settings;

@@ -213,6 +213,12 @@ void main() {
         return;
     }
     if (mode == 0 || mode == 5) {
+        bool inside = all(greaterThanEqual(uv, post.viewport.xy)) && all(lessThan(uv, post.viewport.zw));
+        if (!inside) {
+            vec3 raw = texture(source_image, uv).rgb;
+            out_color = vec4(mode == 5 ? sqrt(max(raw, vec3(0))) : raw, 1);
+            return;
+        }
         vec3 color = max(sample_with_chromatic_aberration(uv), vec3(0));
         if (post.settings.z > 0 && all(greaterThanEqual(uv, post.viewport.xy)) && all(lessThan(uv, post.viewport.zw)))
             color += texture(bloom_image, uv).rgb * post.settings.z;

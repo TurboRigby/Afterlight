@@ -61,6 +61,10 @@ typedef enum af_tone_mapping {
 typedef struct af_render_settings {
     bool ray_traced_shadows;           /* Optional hardware ray-query shadows; raster fallback. */
     bool ray_traced_water_reflections; /* Optional single-bounce reflection. */
+    bool ray_traced_gi;                /* Optional hardware ray-query diffuse indirect GI. */
+    float rtgi_intensity;              /* RTGI indirect bounce intensity multiplier. */
+    float rtgi_ray_distance;           /* RTGI max indirect ray trace distance. */
+    uint32_t rtgi_samples;             /* RTGI hemisphere sample count (1..4). */
     af_anti_aliasing anti_aliasing;
     float aa_sharpness, taa_history_weight;
     float exposure;
