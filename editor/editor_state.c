@@ -368,6 +368,34 @@ void poll_dialog(editor *app) {
             app->modal = true;
         }
     } else if (ed_document_load(&app->document, path, false)) {
+        if (!app->project_path[0]) {
+            char candidate[AF_ASSET_PATH_CAPACITY];
+            if (af_asset_resolve_path(path, "game.afterlight.project", candidate, sizeof(candidate))) {
+                SDL_PathInfo pi;
+                if (SDL_GetPathInfo(candidate, &pi) && pi.type == SDL_PATHTYPE_FILE) {
+                    af_project p;
+                    if (af_project_load(candidate, &p, NULL)) {
+                        app->project = p;
+                        snprintf(app->project_path, sizeof(app->project_path), "%s", candidate);
+                        if (!app->module_override)
+                            snprintf(app->module_path, sizeof(app->module_path), "%s", p.game_module);
+                    }
+                }
+            }
+            if (!app->project_path[0] &&
+                af_asset_resolve_path(path, "../game.afterlight.project", candidate, sizeof(candidate))) {
+                SDL_PathInfo pi;
+                if (SDL_GetPathInfo(candidate, &pi) && pi.type == SDL_PATHTYPE_FILE) {
+                    af_project p;
+                    if (af_project_load(candidate, &p, NULL)) {
+                        app->project = p;
+                        snprintf(app->project_path, sizeof(app->project_path), "%s", candidate);
+                        if (!app->module_override)
+                            snprintf(app->module_path, sizeof(app->module_path), "%s", p.game_module);
+                    }
+                }
+            }
+        }
         refresh(app);
         reset_camera(app);
         load_assets(app);

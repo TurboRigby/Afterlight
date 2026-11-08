@@ -4,4 +4,8 @@
 /compile_commands.json
 /CMakeUserPresets.json
 
+games/**/build/
+games/**/*.so
+*.so
+
 __pycache__/

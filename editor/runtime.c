@@ -206,13 +206,47 @@ void ed_runtime_stop(ed_runtime *r) {
     snprintf(r->status, sizeof(r->status), "Stopped. Editor scene restored.");
 }
 
+static bool resolve_existing_module(const char *source, char *resolved, size_t capacity, SDL_PathInfo *info) {
+    if (SDL_GetPathInfo(source, info) && info->type == SDL_PATHTYPE_FILE && info->size > 0 &&
+        info->size <= AF_ASSET_FILE_MAX_BYTES) {
+        snprintf(resolved, capacity, "%s", source);
+        return true;
+    }
+    char candidate[AF_ASSET_PATH_CAPACITY];
+    const char *build_slash = strstr(source, "/build/");
+    if (build_slash) {
+        size_t prefix_len = (size_t)(build_slash - source);
+        const char *filename = build_slash + 7;
+        snprintf(candidate, sizeof(candidate), "%.*s/%s", (int)prefix_len, source, filename);
+        if (SDL_GetPathInfo(candidate, info) && info->type == SDL_PATHTYPE_FILE && info->size > 0 &&
+            info->size <= AF_ASSET_FILE_MAX_BYTES) {
+            snprintf(resolved, capacity, "%s", candidate);
+            return true;
+        }
+    } else {
+        const char *last_slash = strrchr(source, '/');
+        if (last_slash) {
+            size_t prefix_len = (size_t)(last_slash - source);
+            const char *filename = last_slash + 1;
+            snprintf(candidate, sizeof(candidate), "%.*s/build/%s", (int)prefix_len, source, filename);
+            if (SDL_GetPathInfo(candidate, info) && info->type == SDL_PATHTYPE_FILE && info->size > 0 &&
+                info->size <= AF_ASSET_FILE_MAX_BYTES) {
+                snprintf(resolved, capacity, "%s", candidate);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static bool copy_module(const char *source, char *shadow, size_t capacity, char *error, size_t error_capacity) {
     SDL_PathInfo info;
-    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_FILE || !info.size ||
-        info.size > AF_ASSET_FILE_MAX_BYTES) {
-        snprintf(error, error_capacity, "Missing/oversized C game module.");
+    char resolved_source[AF_ASSET_PATH_CAPACITY];
+    if (!resolve_existing_module(source, resolved_source, sizeof(resolved_source), &info)) {
+        snprintf(error, error_capacity, "Missing/oversized C game module: %.160s", source);
         return false;
     }
+    source = resolved_source;
     char *directory = SDL_GetPrefPath("Afterlight", "Editor");
     if (!directory) {
         snprintf(error, error_capacity, "Cannot locate module cache.");

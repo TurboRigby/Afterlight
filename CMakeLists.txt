@@ -382,6 +382,12 @@ afterlight_warnings(lumina_game)
 if(UNIX)
     target_link_libraries(lumina_game PRIVATE m)
 endif()
+add_custom_command(TARGET lumina_game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/games/lumina/build"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:lumina_game>" "${CMAKE_CURRENT_SOURCE_DIR}/games/lumina/build/game.so"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:lumina_game>" "${CMAKE_CURRENT_SOURCE_DIR}/games/lumina/game.so"
+    COMMENT "Deploying Lumina game module"
+)
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/lumina.afterlight.project" CONTENT
     "{\"format\":\"afterlight.project\",\"version\":1,\"name\":\"LUMINA: Deep Core\",\"startup_scene\":\"${CMAKE_CURRENT_SOURCE_DIR}/games/lumina/scenes/lumina_core.afterlight.json\",\"game_module\":\"$<TARGET_FILE_NAME:lumina_game>\"}\n")
 target_include_directories(afterlight_playground_game PRIVATE engine/include)
