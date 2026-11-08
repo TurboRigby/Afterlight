@@ -38,6 +38,7 @@ struct af_vk_post {
   post_image display, history[2];
   bool initialized, history_valid;
   unsigned history_index;
+  float adapted_exposure;
   af_vk_texture *area_lut, *search_lut;
 };
 static bool ok(VkResult r) {
@@ -314,6 +315,7 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
   p->extent = extent;
   p->half = (VkExtent2D){(extent.width + 1) / 2, (extent.height + 1) / 2};
   p->count = count;
+  p->adapted_exposure = 1.0f;
   p->frames = calloc(count, sizeof(*p->frames));
   if (!p->frames)
     goto fail;
@@ -331,7 +333,7 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
       .pBindings = bindings};
   if (!ok(vkCreateDescriptorSetLayout(device, &layout, NULL, &p->layout)))
     goto fail;
-  VkPushConstantRange range = {VK_SHADER_STAGE_FRAGMENT_BIT, 0, 80};
+  VkPushConstantRange range = {VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128};
   VkPipelineLayoutCreateInfo pipeline_layout = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = 1,
@@ -459,7 +461,9 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device,
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
       if (j == 6 && p->area_lut)
         images[1] = af_vk_texture_image(p->area_lut);
-      if (motion && (j == 5 || j == 8 || j == 9))
+      if (motion && (j == 0 || j == 4 || j == 5 || j == 8 || j == 9 ||
+                     j == 10 || j == 11 || j == 12 || j == 13 ||
+                     j == UPSCALED_COMPOSITE_SET))
         images[2] =
             (VkDescriptorImageInfo){p->sampler, f->motion.view,
                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -507,6 +511,7 @@ void af_vk_post_reset_temporal(af_vk_post *p) {
   if (p) {
     p->history_valid = false;
     p->history_index = 0;
+    p->adapted_exposure = 1.0f;
   }
 }
 static void draw_pass(af_vk_post *p, VkCommandBuffer command,
@@ -532,25 +537,55 @@ static void draw_pass(af_vk_post *p, VkCommandBuffer command,
   vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           p->pipeline_layout, 0, 1, &set, 0, NULL);
   vkCmdPushConstants(command, p->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT,
-                     0, 80, push);
+                     0, 128, push);
   vkCmdDraw(command, 3, 1, 0, 0);
   if (!output)
     vkCmdEndRenderPass(command);
 }
 void af_vk_post_draw(af_vk_post *p, VkCommandBuffer command, uint32_t index,
                      af_render_settings settings, af_rect area, af_vec2 jitter,
-                     af_debug_view debug_view, bool upscaled) {
+                     af_debug_view debug_view, bool upscaled,
+                     float time_seconds, float delta_time) {
   post_frame *f = &p->frames[index];
+  float target_exposure = exp2f(settings.auto_exposure
+                                    ? fminf(fmaxf(settings.exposure, settings.auto_exposure_min),
+                                            settings.auto_exposure_max)
+                                    : settings.exposure);
+  if (p->adapted_exposure <= 0.0f || !isfinite(p->adapted_exposure))
+    p->adapted_exposure = target_exposure;
+  if (delta_time > 0.0f && settings.auto_exposure && settings.auto_exposure_speed > 0.0f) {
+    float blend = 1.0f - expf(-settings.auto_exposure_speed * delta_time);
+    p->adapted_exposure += (target_exposure - p->adapted_exposure) * blend;
+  } else {
+    p->adapted_exposure = target_exposure;
+  }
+  float sat = settings.saturation <= 0.0f && settings.contrast <= 0.0f &&
+              settings.color_filter.x <= 0.0f && settings.color_filter.y <= 0.0f &&
+              settings.color_filter.z <= 0.0f ? 1.0f : settings.saturation;
+  float con = settings.contrast <= 0.0f ? 1.0f : settings.contrast;
+  af_vec3 filter = (settings.color_filter.x <= 0.0f && settings.color_filter.y <= 0.0f && settings.color_filter.z <= 0.0f)
+                   ? (af_vec3){1.0f, 1.0f, 1.0f} : settings.color_filter;
   struct {
-    af_vec4 settings, filter, viewport, aa, temporal;
-  } push = {{exp2f(settings.exposure), settings.tone_mapping ? 1.0f : 0.0f,
-             settings.bloom ? settings.bloom_strength : 0,
-             settings.bloom_threshold},
-            {0, 0, 0, settings.bloom_radius},
-            {area.x, area.y, area.x + area.width, area.y + area.height},
-            {(float)settings.anti_aliasing, settings.aa_sharpness,
-             settings.taa_history_weight, p->history_valid ? 1.f : 0},
-            {jitter.x, jitter.y, 0, 0}};
+    af_vec4 settings, filter, viewport, aa, temporal, grading, lens, dof_grain;
+  } push = {
+      .settings = {p->adapted_exposure,
+                   !settings.tone_mapping ? 0.0f : (float)settings.tone_mapper,
+                   settings.bloom ? settings.bloom_strength : 0.0f,
+                   settings.bloom_threshold},
+      .filter = {0, 0, 0, settings.bloom ? settings.bloom_radius : 0.0f},
+      .viewport = {area.x, area.y, area.x + area.width, area.y + area.height},
+      .aa = {(float)settings.anti_aliasing, settings.aa_sharpness,
+             settings.taa_history_weight, p->history_valid ? 1.0f : 0.0f},
+      .temporal = {jitter.x, jitter.y, time_seconds,
+                   settings.motion_blur ? settings.motion_blur_strength : 0.0f},
+      .grading = {sat, con, filter.x, filter.y},
+      .lens = {filter.z,
+               settings.vignette ? settings.vignette_intensity : 0.0f,
+               settings.vignette_smoothness,
+               settings.chromatic_aberration ? settings.chromatic_aberration_strength : 0.0f},
+      .dof_grain = {settings.dof_focus_distance, settings.dof_focus_range,
+                    settings.depth_of_field ? settings.dof_blur_radius : 0.0f,
+                    settings.film_grain ? settings.film_grain_intensity : 0.0f}};
   bool bloom = settings.bloom && settings.bloom_strength > 0,
        aa = settings.anti_aliasing != AF_AA_OFF,
        taa = settings.anti_aliasing == AF_AA_TAA;

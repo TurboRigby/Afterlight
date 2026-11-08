@@ -73,7 +73,7 @@ typedef struct editor {
     af_joint_id edit_joint;ed_joint_part joint_part;af_joint initial_joint;uint64_t joint_drag_revision;
     bool invalid_name;
     bool failed;
-    bool show_environment;
+    bool show_environment,show_post_processing;
     bool show_performance,show_assets,show_colliders,show_input,show_prefab,show_physics;char prefab_path[4096];char input_path[4096];
     bool environment_pending;char environment_name[AF_MESH_NAME_CAPACITY],environment_path[ED_PATH_CAPACITY];uint64_t environment_document_revision;
     bool show_animation,animation_preview,show_skeleton;af_object_id animation_target;float animation_blend;
@@ -467,6 +467,17 @@ static void select_object(editor *app,af_object_id id)
     app->light_selected=false;
     if(app->document.selection!=id){app->document.selection=id;refresh(app);}
 }
+static void select_light(editor *app,size_t index)
+{
+    app->edit_joint=0;app->edit_part=0;
+    ed_document_end_edit(&app->document);
+    app->selected_light=index;
+    app->light_selected=true;
+    app->document.selection=0;
+    app->gizmo.dragging=false;
+    struct nk_window *inspector_window=nk_window_find(&app->gui.context,"Inspector");
+    if(inspector_window)inspector_window->scrollbar.y=0;
+}
 static void focus_selection(editor *app)
 {
     const af_scene_object *object=af_scene_get_object(app->document.scene,app->document.selection);
@@ -501,9 +512,28 @@ static void keyboard(editor *app,double delta)
     if(modifier&&!app->fields_active&&!app->runtime.playing){
         if(af_engine_key_pressed(engine,AF_KEY_Z)){if(shift)ed_document_redo(&app->document);else ed_document_undo(&app->document);refresh(app);}
         if(af_engine_key_pressed(engine,AF_KEY_Y)){ed_document_redo(&app->document);refresh(app);}
-        if(af_engine_key_pressed(engine,AF_KEY_D)){ed_document_duplicate(&app->document);refresh(app);}
+        if(af_engine_key_pressed(engine,AF_KEY_D)){
+            if(app->light_selected&&app->selected_light<af_scene_local_light_count(app->document.scene)){
+                af_local_light dup=*af_scene_local_light_at(app->document.scene,app->selected_light);
+                dup.position.x+=1.0f;
+                char copy_name[AF_OBJECT_NAME_CAPACITY+16];
+                snprintf(copy_name,sizeof(copy_name),"%.*s Copy",(int)(sizeof(dup.name)-6),dup.name);
+                snprintf(dup.name,sizeof(dup.name),"%s",copy_name);
+                if(ed_document_add_light(&app->document,dup.type)){
+                    size_t new_idx=af_scene_local_light_count(app->document.scene)-1;
+                    ed_document_local_light(&app->document,new_idx,dup);
+                    select_light(app,new_idx);
+                }
+            }else{ed_document_duplicate(&app->document);refresh(app);}
+        }
     }
-    if(!app->runtime.playing&&!app->fields_active&&!modifier&&af_engine_key_pressed(engine,AF_KEY_DELETE)){ed_document_delete(&app->document);refresh(app);}
+    if(!app->runtime.playing&&!app->fields_active&&!modifier&&af_engine_key_pressed(engine,AF_KEY_DELETE)){
+        if(app->light_selected&&app->selected_light<af_scene_local_light_count(app->document.scene)){
+            ed_document_remove_light(&app->document,app->selected_light);
+            app->light_selected=false;
+            app->gizmo.dragging=false;
+        }else{ed_document_delete(&app->document);refresh(app);}
+    }
     if(!app->runtime.playing&&!app->fields_active&&!modifier&&af_engine_key_pressed(engine,AF_KEY_F))focus_selection(app);
     if(af_engine_key_pressed(engine,AF_KEY_ESCAPE)){
         app->free_camera=app->resume_game_capture=false;
@@ -512,7 +542,7 @@ static void keyboard(editor *app,double delta)
     }
     if(modifier)return;
     af_vec2 mouse=af_engine_mouse_position(engine);
-    const char *floating[]={"Performance","Assets","Project","Extensions","Animation","HDR import","Input actions","Prefabs"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_extensions,app->show_animation,app->environment_pending,app->show_input,app->show_prefab};
+    const char *floating[]={"Performance","Assets","Project","Extensions","Animation","HDR import","Input actions","Prefabs","Environment","Post-processing"};bool open[]={app->show_performance,app->show_assets,app->show_project,app->show_extensions,app->show_animation,app->environment_pending,app->show_input,app->show_prefab,app->show_environment,app->show_post_processing};
     for(size_t i=0;i<sizeof(open)/sizeof(open[0]);++i)if(open[i]){struct nk_window *panel=nk_window_find(&app->gui.context,floating[i]);
         if(panel&&nk_input_is_mouse_hovering_rect(&app->gui.context.input,panel->bounds))return;}
     if(!app->runtime.playing&&inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_LEFT)&&!af_engine_mouse_captured(engine)){
@@ -526,7 +556,7 @@ static void keyboard(editor *app,double delta)
         else if(axis>=0&&joint){af_transform pose;if(ed_joint_edit_pose(app->document.scene,*joint,app->joint_part,&pose)){ed_document_end_edit(&app->document);app->initial_joint=*joint;app->joint_drag_revision=app->document.revision;ed_gizmo_begin(&app->gizmo,axis,0,pose,mouse);}}
         else if(axis>=0&&light){ed_document_end_edit(&app->document);app->initial_light=*light;app->drag_light=app->selected_light;app->light_drag_revision=app->document.revision;app->light_dragging=true;ed_gizmo_begin(&app->gizmo,axis,0,ed_light_transform(*light),mouse);}
         else if(axis>=0&&object){ed_document_end_edit(&app->document);ed_gizmo_begin(&app->gizmo,axis,object->id,object->transform,mouse);}
-        else{int picked=ed_light_pick(app->document.scene,&app->camera,app->viewport,mouse);if(picked>=0){ed_document_end_edit(&app->document);app->selected_light=(size_t)picked;app->light_selected=true;app->document.selection=0;app->gizmo.dragging=false;struct nk_window *inspector_window=nk_window_find(&app->gui.context,"Inspector");if(inspector_window)inspector_window->scrollbar.y=0;}else select_object(app,af_engine_pick_object(engine,mouse));}
+        else{int picked=ed_light_pick(app->document.scene,&app->camera,app->viewport,mouse);if(picked>=0){select_light(app,(size_t)picked);}else select_object(app,af_engine_pick_object(engine,mouse));}
     }
     if(inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_RIGHT)){
         ed_gui_unfocus(&app->gui);app->fields_active=false;
@@ -598,7 +628,7 @@ static void toolbar(editor *app,float width)
         bool compact=width<1160;
         if(app->runtime.playing){
             const char *maximize=app->maximize_play?(compact?"Restore":"Restore (F6)"):(compact?"Maximize":"Maximize (F6)");
-            nk_layout_row_dynamic(context,34,10);if(nk_button_label(context,maximize))app->maximize_play=!app->maximize_play;
+            nk_layout_row_dynamic(context,34,11);if(nk_button_label(context,maximize))app->maximize_play=!app->maximize_play;
             if(nk_button_label(context,app->runtime.paused?"Resume":"Pause"))app->runtime.paused=!app->runtime.paused;
             if(nk_button_label(context,"Step 1/60")){app->runtime.paused=true;af_engine_set_simulation_paused(app->engine,true);af_engine_step_simulation(app->engine);}
             if(nk_button_label(context,"Stop (F5)"))stop_play(app);
@@ -607,25 +637,27 @@ static void toolbar(editor *app,float width)
             if(nk_button_label(context,"Extensions"))app->show_extensions=!app->show_extensions;
             if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
             if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
+            if(nk_button_label(context,"Post-process"))app->show_post_processing=!app->show_post_processing;
             if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
         }else{
-        bool show_title=width>=1220;
-        float basic=compact?54:64;
-        nk_layout_row_begin(context,NK_STATIC,34,show_title?13:12);
-        nk_layout_row_push(context,compact?86:132);nk_label_colored(context,"Afterlight",NK_TEXT_LEFT,nk_rgb(245,190,112));
+        bool show_title=width>=1340;
+        float basic=compact?50:60;
+        nk_layout_row_begin(context,NK_STATIC,34,show_title?14:13);
+        nk_layout_row_push(context,compact?76:120);nk_label_colored(context,"Afterlight",NK_TEXT_LEFT,nk_rgb(245,190,112));
         nk_layout_row_push(context,basic);if(nk_button_label(context,"New"))request_action(app,ED_NEW);
         nk_layout_row_push(context,basic);if(nk_button_label(context,"Open"))request_action(app,ED_OPEN);
         nk_layout_row_push(context,basic);if(nk_button_label(context,"Save"))save_document(app,false,ED_NONE);
-        nk_layout_row_push(context,compact?74:80);if(nk_button_label(context,"Save As"))save_document(app,true,ED_NONE);
+        nk_layout_row_push(context,compact?68:76);if(nk_button_label(context,"Save As"))save_document(app,true,ED_NONE);
         nk_layout_row_push(context,basic);if(nk_button_label(context,"Undo")){ed_document_undo(&app->document);refresh(app);}
         nk_layout_row_push(context,basic);if(nk_button_label(context,"Redo")){ed_document_redo(&app->document);refresh(app);}
-        nk_layout_row_push(context,compact?70:80);if(nk_button_label(context,"Play"))toggle_play(app);
-        nk_layout_row_push(context,104);if(nk_button_label(context,"Extensions"))app->show_extensions=!app->show_extensions;
-        nk_layout_row_push(context,compact?100:120);if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
-        nk_layout_row_push(context,compact?100:120);if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
-        nk_layout_row_push(context,compact?64:70);if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
+        nk_layout_row_push(context,compact?64:74);if(nk_button_label(context,"Play"))toggle_play(app);
+        nk_layout_row_push(context,compact?88:104);if(nk_button_label(context,"Extensions"))app->show_extensions=!app->show_extensions;
+        nk_layout_row_push(context,compact?90:108);if(nk_button_label(context,"Performance"))app->show_performance=!app->show_performance;
+        nk_layout_row_push(context,compact?90:108);if(nk_button_label(context,"Environment"))app->show_environment=!app->show_environment;
+        nk_layout_row_push(context,compact?92:112);if(nk_button_label(context,"Post-process"))app->show_post_processing=!app->show_post_processing;
+        nk_layout_row_push(context,compact?60:68);if(nk_button_label(context,"Assets"))app->show_assets=!app->show_assets;
         if(show_title){
-            nk_layout_row_push(context,width-1160);
+            nk_layout_row_push(context,width-1280);
             char title[512];snprintf(title,sizeof(title),"%s%s",app->document.path[0]?ed_path_name(app->document.path):"Untitled scene",ed_document_dirty(&app->document)?" *":"");
             nk_label(context,title,NK_TEXT_RIGHT);
         }
@@ -654,35 +686,70 @@ static void object_list(editor *app,float height)
 {
     struct nk_context *context=&app->gui.context;
     if(nk_begin(context,"Objects",nk_rect(0,64,252,height-96),panel_flags(app)|NK_WINDOW_NO_SCROLLBAR)){
-        char title[64];snprintf(title,sizeof(title),"Objects  /  %zu",af_scene_object_count(app->document.scene));label(context,title,28);
+        size_t obj_count=af_scene_object_count(app->document.scene);
+        size_t light_count=af_scene_local_light_count(app->document.scene);
+        char title[64];snprintf(title,sizeof(title),"Objects  /  %zu",obj_count+light_count);label(context,title,28);
         nk_layout_row_dynamic(context,32,2);
-        if(nk_button_label(context,"Add cube")){ed_document_add_cube(&app->document);refresh(app);}
-        if(nk_button_label(context,"Duplicate")){ed_document_duplicate(&app->document);refresh(app);}
-        nk_layout_row_dynamic(context,30,2);if(nk_button_label(context,"Import model"))start_import(app,AF_ASSET_MESH);if(nk_button_label(context,"Add water")){ed_document_add_water(&app->document);refresh(app);}
-        nk_layout_row_dynamic(context,30,1);
-        if(nk_button_label(context,"Choose C game module")){app->dialog=ed_dialog_begin_module(app->engine);app->dialog_asset=3;app->dialog_save=false;}
-        nk_layout_row_dynamic(context,fmaxf(60,height-338),1);
+        if(nk_combo_begin_label(context,"+ Add Object",nk_vec2(220,200))){
+            nk_layout_row_dynamic(context,26,1);
+            if(nk_combo_item_label(context,"Cube (Mesh)",NK_TEXT_LEFT)){ed_document_add_cube(&app->document);refresh(app);}
+            if(nk_combo_item_label(context,"Point Light",NK_TEXT_LEFT)){if(ed_document_add_light(&app->document,AF_LIGHT_POINT)){select_light(app,af_scene_local_light_count(app->document.scene)-1);}}
+            if(nk_combo_item_label(context,"Spot Light",NK_TEXT_LEFT)){if(ed_document_add_light(&app->document,AF_LIGHT_SPOT)){select_light(app,af_scene_local_light_count(app->document.scene)-1);}}
+            if(nk_combo_item_label(context,"Water Plane",NK_TEXT_LEFT)){ed_document_add_water(&app->document);refresh(app);}
+            if(nk_combo_item_label(context,"Import 3D Model...",NK_TEXT_LEFT)){start_import(app,AF_ASSET_MESH);}
+            if(nk_combo_item_label(context,"Choose C Module...",NK_TEXT_LEFT)){app->dialog=ed_dialog_begin_module(app->engine);app->dialog_asset=3;app->dialog_save=false;}
+            nk_combo_end(context);
+        }
+        if(nk_button_label(context,"Duplicate")){
+            if(app->light_selected&&app->selected_light<af_scene_local_light_count(app->document.scene)){
+                af_local_light dup=*af_scene_local_light_at(app->document.scene,app->selected_light);
+                dup.position.x+=1.0f;
+                char copy_name[AF_OBJECT_NAME_CAPACITY+16];
+                snprintf(copy_name,sizeof(copy_name),"%.*s Copy",(int)(sizeof(dup.name)-6),dup.name);
+                snprintf(dup.name,sizeof(dup.name),"%s",copy_name);
+                if(ed_document_add_light(&app->document,dup.type)){
+                    size_t new_idx=af_scene_local_light_count(app->document.scene)-1;
+                    ed_document_local_light(&app->document,new_idx,dup);
+                    select_light(app,new_idx);
+                }
+            }else{ed_document_duplicate(&app->document);refresh(app);}
+        }
+        nk_layout_row_dynamic(context,fmaxf(60,height-268),1);
         if(nk_group_begin(context,"Object list",0)){
-            if(!af_scene_object_count(app->document.scene)){nk_layout_row_dynamic(context,50,1);nk_label_wrap(context,"No objects yet. Add a cube to begin.");}
+            if(!obj_count&&!light_count){nk_layout_row_dynamic(context,50,1);nk_label_wrap(context,"No objects yet. Click '+ Add Object' to begin.");}
             object_rows(app,AF_OBJECT_NONE,0);
+            for(size_t i=0;i<light_count;++i){
+                const af_local_light *light=af_scene_local_light_at(app->document.scene,i);
+                nk_layout_row_begin(context,NK_STATIC,34,3);
+                nk_layout_row_push(context,22);nk_bool enabled=light->enabled;
+                if(nk_checkbox_label(context,"",&enabled)){af_local_light mod=*light;mod.enabled=enabled!=0;ed_document_local_light(&app->document,i,mod);}
+                nk_layout_row_push(context,0);nk_spacing(context,1);
+                nk_layout_row_push(context,164);
+                char label_buf[AF_OBJECT_NAME_CAPACITY+16];
+                snprintf(label_buf,sizeof(label_buf),"[%s] %s",light->type==AF_LIGHT_SPOT?"Spot":"Point",light->name);
+                bool is_selected=app->light_selected&&app->selected_light==i;
+                if(nk_select_label(context,label_buf,NK_TEXT_LEFT,is_selected))select_light(app,i);
+                nk_layout_row_end(context);
+            }
             nk_group_end(context);
         }
         nk_layout_row_dynamic(context,32,1);
-        if(nk_button_label(context,"Delete selected")){ed_document_delete(&app->document);refresh(app);}
+        if(nk_button_label(context,"Delete selected")){
+            if(app->light_selected&&app->selected_light<af_scene_local_light_count(app->document.scene)){
+                ed_document_remove_light(&app->document,app->selected_light);
+                app->light_selected=false;
+                app->gizmo.dragging=false;
+            }else{ed_document_delete(&app->document);refresh(app);}
+        }
     }nk_end(context);
 }
 static void local_light_controls(editor *app)
 {
-    struct nk_context *ctx=&app->gui.context;label(ctx,"Point and spot lights",30);
-    nk_layout_row_dynamic(ctx,30,2);
-    if(nk_button_label(ctx,"Add point")){if(ed_document_add_light(&app->document,AF_LIGHT_POINT)){app->selected_light=af_scene_local_light_count(app->document.scene)-1;app->light_selected=true;app->document.selection=0;}}
-    if(nk_button_label(ctx,"Add spot")){if(ed_document_add_light(&app->document,AF_LIGHT_SPOT)){app->selected_light=af_scene_local_light_count(app->document.scene)-1;app->light_selected=true;app->document.selection=0;}}
-    size_t count=af_scene_local_light_count(app->document.scene);if(!count){label(ctx,"No local lights (maximum 16).",24);return;}
-    if(app->selected_light>=count)app->selected_light=count-1;
-    const char *names[AF_SCENE_MAX_LOCAL_LIGHTS];for(size_t i=0;i<count;++i)names[i]=af_scene_local_light_at(app->document.scene,i)->name;
-    nk_layout_row_dynamic(ctx,30,1);int selected=nk_combo(ctx,names,(int)count,(int)app->selected_light,26,nk_vec2(290,180));
-    if((size_t)selected!=app->selected_light){app->light_selected=true;app->document.selection=0;app->selected_light=(size_t)selected;ed_document_end_edit(&app->document);}
+    struct nk_context *ctx=&app->gui.context;
+    size_t count=af_scene_local_light_count(app->document.scene);
+    if(!app->light_selected||app->selected_light>=count)return;
     af_local_light local=*af_scene_local_light_at(app->document.scene,app->selected_light);af_local_light before=local;
+    char header[64];snprintf(header,sizeof(header),"%s light",local.type==AF_LIGHT_SPOT?"Spot":"Point");label(ctx,header,30);
     label(ctx,"Light name",22);nk_layout_row_dynamic(ctx,30,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,local.name,sizeof(local.name),nk_filter_default);
     nk_layout_row_dynamic(ctx,26,1);nk_bool enabled=local.enabled;nk_checkbox_label(ctx,"Light enabled",&enabled);local.enabled=enabled!=0;
     nk_layout_row_dynamic(ctx,30,1);static const char *types[]={"Point light","Spot light"};local.type=(af_light_type)nk_combo(ctx,types,2,(int)local.type,26,nk_vec2(290,90));
@@ -702,8 +769,13 @@ static void local_light_controls(editor *app)
     nk_layout_row_dynamic(ctx,26,1);nk_bool cast=local.cast_shadows;nk_checkbox_label(ctx,"Cast local shadows",&cast);local.cast_shadows=cast!=0;
     if(local.cast_shadows){nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Shadow depth bias",0,&local.shadow_bias,.1f,.0001f,.00001f);label(ctx,"First 4 enabled shadow lights share the budget.",24);}
     if(memcmp(&local,&before,sizeof(local)))ed_document_local_light(&app->document,app->selected_light,local);
-    nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Select light in viewport")){app->light_selected=true;app->document.selection=0;ed_document_end_edit(&app->document);}
-    nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Delete light")){ed_document_remove_light(&app->document,app->selected_light);app->light_selected=false;}
+    nk_layout_row_dynamic(ctx,32,2);
+    if(nk_button_label(ctx,"Focus"))focus_selection(app);
+    if(nk_button_label(ctx,"Delete light")){
+        ed_document_remove_light(&app->document,app->selected_light);
+        app->light_selected=false;
+        app->gizmo.dragging=false;
+    }
 }
 static void collider_controls(editor *app,af_scene_object object){
     struct nk_context *ctx=&app->gui.context;label(ctx,"Collider",30);af_collider value=object.collider,before=value;
@@ -903,6 +975,134 @@ static void asset_entry(editor *app,const af_scene_asset *asset){
     nk_layout_row_begin(ctx,NK_DYNAMIC,64,2);nk_layout_row_push(ctx,.17f);thumbnail_widget(app,asset,NULL);
     nk_layout_row_push(ctx,.83f);if(nk_select_label(ctx,title,NK_TEXT_LEFT,!strcmp(app->selected_asset,asset->name)))snprintf(app->selected_asset,sizeof(app->selected_asset),"%s",asset->name);nk_layout_row_end(ctx);
 }
+static bool post_processing_controls(struct nk_context *ctx, af_render_settings *render) {
+    bool changed = false;
+    label(ctx, "Tone mapping & Exposure", 28);
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool tone = render->tone_mapping;
+    if (nk_checkbox_label(ctx, "Tone mapping", &tone)) {
+        render->tone_mapping = tone != 0;
+        changed = true;
+    }
+    if (render->tone_mapping) {
+        static const char *tm_modes[] = {"Off", "Reinhard", "ACES (Filmic)", "AgX (Filmic)"};
+        nk_layout_row_dynamic(ctx, 28, 1);
+        int tm_sel = (render->tone_mapper >= 0 && render->tone_mapper <= 3) ? (int)render->tone_mapper : (int)AF_TONE_MAP_ACES;
+        int tm = nk_combo(ctx, tm_modes, 4, tm_sel, 26, nk_vec2(280, 150));
+        if (tm != (int)render->tone_mapper) {
+            render->tone_mapper = (af_tone_mapping)tm;
+            changed = true;
+        }
+    }
+    nk_layout_row_dynamic(ctx, 28, 1);
+    changed |= nk_property_float(ctx, "Exposure (stops)", -10, &render->exposure, 10, 0.25f, 0.025f) != 0;
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool ae = render->auto_exposure;
+    if (nk_checkbox_label(ctx, "Auto exposure (adaptation)", &ae)) {
+        render->auto_exposure = ae != 0;
+        changed = true;
+    }
+    if (render->auto_exposure) {
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Adaptation speed", 0.1f, &render->auto_exposure_speed, 10, 0.1f, 0.01f) != 0;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Min exposure", -10, &render->auto_exposure_min, 10, 0.25f, 0.025f) != 0;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Max exposure", -10, &render->auto_exposure_max, 10, 0.25f, 0.025f) != 0;
+    }
+
+    label(ctx, "Bloom", 28);
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool bloom = render->bloom;
+    if (nk_checkbox_label(ctx, "Bloom", &bloom)) {
+        render->bloom = bloom != 0;
+        changed = true;
+    }
+    if (render->bloom) {
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Bloom strength", 0, &render->bloom_strength, 5, 0.05f, 0.005f) != 0;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Bloom threshold", 0, &render->bloom_threshold, 100, 0.1f, 0.01f) != 0;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Bloom radius", 0.1f, &render->bloom_radius, 4, 0.1f, 0.01f) != 0;
+    }
+
+    label(ctx, "Color grading", 28);
+    nk_layout_row_dynamic(ctx, 28, 1);
+    changed |= nk_property_float(ctx, "Saturation", 0, &render->saturation, 3, 0.05f, 0.005f) != 0;
+    nk_layout_row_dynamic(ctx, 28, 1);
+    changed |= nk_property_float(ctx, "Contrast", 0, &render->contrast, 3, 0.05f, 0.005f) != 0;
+    nk_layout_row_dynamic(ctx, 28, 3);
+    changed |= nk_property_float(ctx, "Filter R", 0, &render->color_filter.x, 2, 0.05f, 0.005f) != 0;
+    changed |= nk_property_float(ctx, "Filter G", 0, &render->color_filter.y, 2, 0.05f, 0.005f) != 0;
+    changed |= nk_property_float(ctx, "Filter B", 0, &render->color_filter.z, 2, 0.05f, 0.005f) != 0;
+
+    label(ctx, "Depth of field", 28);
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool dof = render->depth_of_field;
+    if (nk_checkbox_label(ctx, "Depth of field", &dof)) {
+        render->depth_of_field = dof != 0;
+        changed = true;
+    }
+    if (render->depth_of_field) {
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Focus distance (m)", 0.1f, &render->dof_focus_distance, 500, 0.5f, 0.05f) != 0;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Focus range (m)", 0.1f, &render->dof_focus_range, 100, 0.25f, 0.025f) != 0;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Blur radius", 0.001f, &render->dof_blur_radius, 0.05f, 0.001f, 0.0001f) != 0;
+    }
+
+    label(ctx, "Motion blur", 28);
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool mb = render->motion_blur;
+    if (nk_checkbox_label(ctx, "Motion blur", &mb)) {
+        render->motion_blur = mb != 0;
+        changed = true;
+    }
+    if (render->motion_blur) {
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Shutter strength", 0, &render->motion_blur_strength, 5, 0.05f, 0.005f) != 0;
+    }
+
+    label(ctx, "Lens effects", 28);
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool vig = render->vignette;
+    if (nk_checkbox_label(ctx, "Vignette", &vig)) {
+        render->vignette = vig != 0;
+        changed = true;
+    }
+    if (render->vignette) {
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Vignette intensity", 0, &render->vignette_intensity, 2, 0.05f, 0.005f) != 0;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Vignette smoothness", 0.01f, &render->vignette_smoothness, 1, 0.05f, 0.005f) != 0;
+    }
+
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool ca = render->chromatic_aberration;
+    if (nk_checkbox_label(ctx, "Chromatic aberration", &ca)) {
+        render->chromatic_aberration = ca != 0;
+        changed = true;
+    }
+    if (render->chromatic_aberration) {
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Aberration strength", 0, &render->chromatic_aberration_strength, 0.05f, 0.001f, 0.0001f) != 0;
+    }
+
+    label(ctx, "Film grain", 28);
+    nk_layout_row_dynamic(ctx, 26, 1);
+    nk_bool fg = render->film_grain;
+    if (nk_checkbox_label(ctx, "Film grain", &fg)) {
+        render->film_grain = fg != 0;
+        changed = true;
+    }
+    if (render->film_grain) {
+        nk_layout_row_dynamic(ctx, 28, 1);
+        changed |= nk_property_float(ctx, "Grain intensity", 0, &render->film_grain_intensity, 0.2f, 0.005f, 0.001f) != 0;
+    }
+    return changed;
+}
 static void inspector(editor *app,float width,float height)
 {
     struct nk_context *context=&app->gui.context;
@@ -910,7 +1110,16 @@ static void inspector(editor *app,float width,float height)
         label(context,"Inspector",28);
         if(app->light_selected){local_light_controls(app);label(context,"W move / E rotate / R range / F focus",26);nk_end(context);return;}
         const af_scene_object *found=af_scene_get_object(app->document.scene,app->document.selection);
-        if(!found){label(context,"Select an object to edit it.",36);app->invalid_name=false;}
+        if(!found){
+            label(context,"Select an object or light to edit.",36);
+            app->invalid_name=false;
+            nk_layout_row_dynamic(context,32,1);
+            if(nk_button_label(context,"Open Environment"))app->show_environment=true;
+            if(nk_button_label(context,"Open Post-processing"))app->show_post_processing=true;
+            if(nk_button_label(context,"Open Assets"))app->show_assets=true;
+            nk_end(context);
+            return;
+        }
         else{
             af_scene_object object=*found;
             if(app->refresh_fields){snprintf(app->name,sizeof(app->name),"%s",object.name);snprintf(app->mesh,sizeof(app->mesh),"%s",object.mesh);snprintf(app->texture,sizeof(app->texture),"%s",object.material.texture);snprintf(app->normal_map,sizeof(app->normal_map),"%s",object.material.normal_map);app->refresh_fields=false;}
@@ -988,80 +1197,6 @@ static void inspector(editor *app,float width,float height)
             nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import texture"))start_import(app,AF_ASSET_TEXTURE);
             nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import normal map"))start_import(app,AF_ASSET_NORMAL_MAP);
         }
-        label(context,"Wind",30);af_wind wind=af_scene_get_wind(app->document.scene),wind_before=wind;
-        nk_layout_row_dynamic(context,26,1);nk_bool wind_enabled=wind.enabled;nk_checkbox_label(context,"Enable world wind",&wind_enabled);wind.enabled=wind_enabled!=0;
-        float heading=atan2f(wind.direction.z,wind.direction.x)*180/AF_PI,old_heading=heading;
-        nk_layout_row_dynamic(context,28,1);nk_property_float(context,"Direction (degrees)",-180,&heading,180,5,.5f);
-        if(heading!=old_heading)wind.direction=(af_vec3){cosf(heading*AF_PI/180),0,sinf(heading*AF_PI/180)};
-        nk_property_float(context,"Speed (m/s)",0,&wind.speed,60,.5f,.05f);
-        nk_property_float(context,"Gust strength",0,&wind.gust_strength,1,.05f,.005f);
-        nk_property_float(context,"Gust frequency (Hz)",0,&wind.gust_frequency,2,.05f,.005f);
-        nk_property_float(context,"Air density (kg/m3)",.01f,&wind.air_density,10,.1f,.01f);
-        if(memcmp(&wind,&wind_before,sizeof(wind)))ed_document_wind(&app->document,wind);
-        label(context,"Directional light",30);af_directional_light light=af_scene_get_light(app->document.scene);
-        bool light_changed=vector_fields(context,"Direction",&light.direction,0.1f,0.01f);
-        nk_layout_row_dynamic(context,30,1);
-        light_changed|=nk_property_float(context,"Ambient",0,&light.ambient,10,0.05f,0.005f)!=0;
-        nk_layout_row_dynamic(context,30,1);
-        light_changed|=nk_property_float(context,"Intensity",0,&light.intensity,100,0.1f,0.01f)!=0;
-        if(light_changed)ed_document_light(&app->document,light);
-        local_light_controls(app);
-        label(context,"Exposure and tone mapping",30);af_render_settings render=af_scene_get_render_settings(app->document.scene);
-        nk_layout_row_dynamic(context,30,1);bool render_changed=nk_property_float(context,"Exposure (stops)",-10,&render.exposure,10,0.25f,0.025f)!=0;
-        nk_layout_row_dynamic(context,26,1);nk_bool tone=render.tone_mapping;
-        if(nk_checkbox_label(context,"Tone mapping",&tone)){render.tone_mapping=tone!=0;render_changed=true;}
-        nk_bool refract=render.refraction;if(nk_checkbox_label(context,"Water scene refraction",&refract)){render.refraction=refract!=0;render_changed=true;}float strength=render.refraction_strength;nk_property_float(context,"Refraction strength",0,&render.refraction_strength,2,.05f,.01f);render_changed|=strength!=render.refraction_strength;
-        nk_bool submerged=render.underwater;if(nk_checkbox_label(context,"Underwater absorption",&submerged)){render.underwater=submerged!=0;render_changed=true;}
-        label(context,"Environment lighting",30);nk_layout_row_dynamic(context,26,1);nk_bool environment=render.environment_enabled;
-        if(nk_checkbox_label(context,"Image-based lighting",&environment)){render.environment_enabled=environment!=0;render_changed=true;}
-        nk_layout_row_dynamic(context,30,1);if(nk_button_label(context,"Import HDR environment"))start_import(app,AF_ASSET_ENVIRONMENT);
-        label(context,"Environment source",22);nk_layout_row_dynamic(context,30,1);
-        if(nk_combo_begin_label(context,render.environment_asset[0]?render.environment_asset:"Procedural profile",nk_vec2(290,180))){
-            nk_layout_row_dynamic(context,26,1);if(nk_combo_item_label(context,"Procedural profile",NK_TEXT_LEFT)){render.environment_asset[0]=0;render_changed=true;}
-            for(size_t i=0;i<af_scene_asset_count(app->document.scene);++i){const af_scene_asset *asset=af_scene_asset_at(app->document.scene,i);if(asset->kind==AF_ASSET_ENVIRONMENT&&nk_combo_item_label(context,asset->name,NK_TEXT_LEFT)){snprintf(render.environment_asset,sizeof(render.environment_asset),"%s",asset->name);render_changed=true;}}nk_combo_end(context);
-        }
-        nk_layout_row_dynamic(context,26,1);nk_bool sky=render.skybox;if(nk_checkbox_label(context,"Show environment skybox",&sky)){render.skybox=sky!=0;render_changed=true;}
-        if(render.skybox){nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Background brightness",0,&render.skybox_intensity,100,.1f,.01f)!=0;}
-        if(render.environment_enabled||render.skybox){
-            static const char *profiles[]={"Studio softboxes","Sunset sky","Overcast sky"};nk_layout_row_dynamic(context,30,1);
-            int profile=nk_combo(context,profiles,3,(int)render.environment_profile,26,nk_vec2(290,120));if((uint32_t)profile!=render.environment_profile){render.environment_profile=(uint32_t)profile;render_changed=true;}
-            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Environment intensity",0,&render.environment_intensity,100,.1f,.01f)!=0;
-            float degrees=render.environment_rotation*180/AF_PI;nk_layout_row_dynamic(context,30,1);
-            if(nk_property_float(context,"Environment rotation",-360,&degrees,360,5,.5f)){render.environment_rotation=degrees*AF_PI/180;render_changed=true;}
-        }
-        label(context,"Bloom",30);nk_layout_row_dynamic(context,26,1);nk_bool bloom=render.bloom;
-        if(nk_checkbox_label(context,"Bloom enabled",&bloom)){render.bloom=bloom!=0;render_changed=true;}
-        if(render.bloom){
-            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Bloom strength",0,&render.bloom_strength,5,.05f,.005f)!=0;
-            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Bloom threshold",0,&render.bloom_threshold,100,.1f,.01f)!=0;
-            nk_layout_row_dynamic(context,30,1);render_changed|=nk_property_float(context,"Bloom radius",0,&render.bloom_radius,4,.1f,.01f)!=0;
-        }
-        label(context,"Local shadow quality",28);static const char *local_resolutions[]={"256 px / face","512 px / face","1024 px / face"};
-        int local_quality=render.local_shadow_resolution==256?0:render.local_shadow_resolution==1024?2:1;
-        nk_layout_row_dynamic(context,30,1);int next_quality=nk_combo(context,local_resolutions,3,local_quality,26,nk_vec2(290,120));
-        if(next_quality!=local_quality){render.local_shadow_resolution=256u<<(unsigned)next_quality;render_changed=true;}
-        if(render_changed)ed_document_render_settings(&app->document,render);
-        label(context,"Shadows",30);af_shadow_settings shadows=af_scene_get_shadows(app->document.scene);
-        nk_layout_row_dynamic(context,26,1);nk_bool enabled=shadows.enabled;bool shadow_changed=nk_checkbox_label(context,"Enabled",&enabled)!=0;shadows.enabled=enabled!=0;
-        nk_layout_row_dynamic(context,30,1);static const char *modes[]={"Single map (simple)","4 cascades"};
-        int mode=shadows.mode==AF_SHADOW_CASCADED?1:0,next_mode=nk_combo(context,modes,2,mode,28,nk_vec2(290,90));
-        if(next_mode!=mode){shadows.mode=next_mode?AF_SHADOW_CASCADED:AF_SHADOW_SINGLE;shadow_changed=true;}
-        label(context,"Resolution per map",22);
-        nk_layout_row_dynamic(context,30,1);static const char *sizes[]={"512","1024","2048","4096"};int size=shadows.resolution==512?0:shadows.resolution==1024?1:shadows.resolution==2048?2:3;
-        int next_size=nk_combo(context,sizes,4,size,28,nk_vec2(290,150));if(next_size!=size){shadows.resolution=512u<<(unsigned)next_size;shadow_changed=true;}
-        nk_layout_row_dynamic(context,30,1);shadow_changed|=nk_property_float(context,"Shadow distance",1,&shadows.distance,1000,1,0.2f)!=0;
-        nk_layout_row_dynamic(context,30,1);shadow_changed|=nk_property_float(context,"Constant bias",0,&shadows.constant_bias,16,0.1f,0.01f)!=0;
-        nk_layout_row_dynamic(context,30,1);shadow_changed|=nk_property_float(context,"Slope bias",0,&shadows.slope_bias,16,0.1f,0.01f)!=0;
-        nk_layout_row_dynamic(context,30,1);shadow_changed|=nk_property_float(context,"Normal offset",0,&shadows.normal_bias,1,0.005f,0.001f)!=0;
-        nk_layout_row_dynamic(context,30,1);static const char *filters[]={"Hard edges","Soft edges","Softer edges"};int filter=nk_combo(context,filters,3,(int)shadows.filter_radius,28,nk_vec2(290,120));
-        if(filter!=(int)shadows.filter_radius){shadows.filter_radius=(uint32_t)filter;shadow_changed=true;}
-        if(shadows.mode==AF_SHADOW_CASCADED){
-            nk_layout_row_dynamic(context,30,1);shadow_changed|=nk_property_float(context,"Near detail",0,&shadows.split_lambda,1,0.05f,0.005f)!=0;
-            nk_layout_row_dynamic(context,30,1);shadow_changed|=nk_property_float(context,"Cascade blend",0,&shadows.blend_fraction,0.3f,0.01f,0.001f)!=0;
-            nk_layout_row_dynamic(context,26,1);nk_bool debug=shadows.debug_cascades;
-            if(nk_checkbox_label(context,"Show cascade regions",&debug)){shadows.debug_cascades=debug!=0;shadow_changed=true;}
-        }
-        if(shadow_changed)ed_document_shadows(&app->document,shadows);
     }nk_end(context);
 }
 static void draw_colliders(editor *app){
@@ -1124,11 +1259,11 @@ static void draw_gizmo(editor *app)
 }
 static void environment_panel(editor *app,float width,float height){
     if(!app->show_environment)return;struct nk_context *ctx=&app->gui.context;
-    nk_flags flags=NK_WINDOW_BORDER|NK_WINDOW_TITLE;
+    nk_flags flags=NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_SCALABLE;
     /* Nuklear's movable-window path requires input, including behind dialogs. */
     if(app->modal||app->dialog)flags|=NK_WINDOW_NO_INPUT;
     else flags|=NK_WINDOW_MOVABLE;
-    if(nk_begin(ctx,"Environment",nk_rect(fmaxf(20,(width-580)*.5f),80,fminf(580,width-40),fminf(720,height-120)),flags)){
+    if(nk_begin(ctx,"Environment",nk_rect(fmaxf(20,(width-600)*.5f),60,fminf(600,width-40),fminf(760,height-80)),flags)){
         af_scene *scene=app->runtime.playing?app->runtime.scene:app->document.scene;
         af_directional_light sun=af_scene_get_light(scene);af_render_settings render=af_scene_get_render_settings(scene);
         bool changed=false,preset=false;
@@ -1176,14 +1311,75 @@ static void environment_panel(editor *app,float width,float height){
         nk_layout_row_dynamic(ctx,26,1);nk_bool lighting=render.environment_enabled;if(nk_checkbox_label(ctx,"Environment lights objects",&lighting)){render.environment_enabled=lighting!=0;changed=true;}
         nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"Environment intensity",0,&render.environment_intensity,100,.1f,.01f)!=0;
         if(!app->runtime.playing&&nk_button_label(ctx,"Import HDR skybox"))start_import(app,AF_ASSET_ENVIRONMENT);
-        label(ctx,"Exposure",28);nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"Exposure (stops)",-10,&render.exposure,10,.25f,.025f)!=0;
-        nk_layout_row_dynamic(ctx,26,1);nk_bool tone=render.tone_mapping;if(nk_checkbox_label(ctx,"Tone mapping",&tone)){render.tone_mapping=tone!=0;changed=true;}
-        label(ctx,"Local lights and emissive objects keep their own brightness.",28);
+        label(ctx,"Wind",28);af_wind wind=af_scene_get_wind(scene),wind_before=wind;
+        nk_layout_row_dynamic(ctx,26,1);nk_bool wind_enabled=wind.enabled;
+        if(nk_checkbox_label(ctx,"Enable world wind",&wind_enabled))wind.enabled=wind_enabled!=0;
+        float wind_heading=atan2f(wind.direction.z,wind.direction.x)*180/AF_PI,old_wind_heading=wind_heading;
+        nk_layout_row_dynamic(ctx,28,1);nk_property_float(ctx,"Wind direction (degrees)",-180,&wind_heading,180,5,.5f);
+        if(wind_heading!=old_wind_heading)wind.direction=(af_vec3){cosf(wind_heading*AF_PI/180),0,sinf(wind_heading*AF_PI/180)};
+        nk_property_float(ctx,"Wind speed (m/s)",0,&wind.speed,60,.5f,.05f);
+        nk_property_float(ctx,"Gust strength",0,&wind.gust_strength,1,.05f,.005f);
+        nk_property_float(ctx,"Gust frequency (Hz)",0,&wind.gust_frequency,2,.05f,.005f);
+        nk_property_float(ctx,"Air density (kg/m3)",.01f,&wind.air_density,10,.1f,.01f);
+        if(memcmp(&wind,&wind_before,sizeof(wind))){
+            if(app->runtime.playing)af_scene_set_wind(scene,wind);
+            else ed_document_wind(&app->document,wind);
+        }
+        label(ctx,"Shadows",28);
+        af_shadow_settings shadows=af_scene_get_shadows(scene),shadows_before=shadows;
+        nk_layout_row_dynamic(ctx,26,1);nk_bool shadow_on=shadows.enabled;
+        if(nk_checkbox_label(ctx,"Sun shadows enabled",&shadow_on))shadows.enabled=shadow_on!=0;
+        nk_layout_row_dynamic(ctx,30,1);static const char *smodes[]={"Single map (simple)","4 cascades"};
+        int smode=shadows.mode==AF_SHADOW_CASCADED?1:0,next_smode=nk_combo(ctx,smodes,2,smode,28,nk_vec2(290,90));
+        if(next_smode!=smode)shadows.mode=next_smode?AF_SHADOW_CASCADED:AF_SHADOW_SINGLE;
+        label(ctx,"Resolution per map",22);nk_layout_row_dynamic(ctx,30,1);
+        static const char *ssizes[]={"512","1024","2048","4096"};int ssize=shadows.resolution==512?0:shadows.resolution==1024?1:shadows.resolution==2048?2:3;
+        int next_ssize=nk_combo(ctx,ssizes,4,ssize,28,nk_vec2(290,150));if(next_ssize!=ssize)shadows.resolution=512u<<(unsigned)next_ssize;
+        nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Shadow distance",1,&shadows.distance,1000,1,0.2f);
+        nk_property_float(ctx,"Constant bias",0,&shadows.constant_bias,16,0.1f,0.01f);
+        nk_property_float(ctx,"Slope bias",0,&shadows.slope_bias,16,0.1f,0.01f);
+        nk_property_float(ctx,"Normal offset",0,&shadows.normal_bias,1,0.005f,0.001f);
+        nk_layout_row_dynamic(ctx,30,1);static const char *sfilters[]={"Hard edges","Soft edges","Softer edges"};int sfilter=nk_combo(ctx,sfilters,3,(int)shadows.filter_radius,28,nk_vec2(290,120));
+        if(sfilter!=(int)shadows.filter_radius)shadows.filter_radius=(uint32_t)sfilter;
+        if(shadows.mode==AF_SHADOW_CASCADED){
+            nk_layout_row_dynamic(ctx,30,1);nk_property_float(ctx,"Near detail",0,&shadows.split_lambda,1,0.05f,0.005f);
+            nk_property_float(ctx,"Cascade blend",0,&shadows.blend_fraction,0.3f,0.01f,0.001f);
+            nk_layout_row_dynamic(ctx,26,1);nk_bool sdebug=shadows.debug_cascades;
+            if(nk_checkbox_label(ctx,"Show cascade regions",&sdebug))shadows.debug_cascades=sdebug!=0;
+        }
+        if(memcmp(&shadows,&shadows_before,sizeof(shadows))){
+            if(app->runtime.playing)af_scene_set_shadows(scene,shadows);
+            else ed_document_shadows(&app->document,shadows);
+        }
+        label(ctx,"Local shadow quality",28);static const char *local_resolutions[]={"256 px / face","512 px / face","1024 px / face"};
+        int local_quality=render.local_shadow_resolution==256?0:render.local_shadow_resolution==1024?2:1;
+        nk_layout_row_dynamic(ctx,30,1);int next_quality=nk_combo(ctx,local_resolutions,3,local_quality,26,nk_vec2(290,120));
+        if(next_quality!=local_quality){render.local_shadow_resolution=256u<<(unsigned)next_quality;changed=true;}
+        label(ctx,"Water scene effects",28);nk_layout_row_dynamic(ctx,26,1);
+        nk_bool refract=render.refraction;if(nk_checkbox_label(ctx,"Water scene refraction",&refract)){render.refraction=refract!=0;changed=true;}
+        if(render.refraction){nk_layout_row_dynamic(ctx,30,1);changed|=nk_property_float(ctx,"Refraction strength",0,&render.refraction_strength,2,.05f,.01f)!=0;}
+        nk_layout_row_dynamic(ctx,26,1);nk_bool submerged=render.underwater;if(nk_checkbox_label(ctx,"Underwater absorption",&submerged)){render.underwater=submerged!=0;changed=true;}
         if(changed){
             if(app->runtime.playing){af_scene_set_light(scene,sun);af_scene_set_render_settings(scene,render);}
             else{if(preset)ed_document_end_edit(&app->document);ed_document_environment(&app->document,sun,render);if(preset)ed_document_end_edit(&app->document);}
         }
         nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close environment"))app->show_environment=false;
+    }nk_end(ctx);
+}
+static void post_processing_panel(editor *app,float width,float height){
+    if(!app->show_post_processing)return;struct nk_context *ctx=&app->gui.context;
+    nk_flags flags=NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_SCALABLE;
+    if(app->modal||app->dialog)flags|=NK_WINDOW_NO_INPUT;
+    else flags|=NK_WINDOW_MOVABLE;
+    if(nk_begin(ctx,"Post-processing",nk_rect(fmaxf(20,(width-560)*.5f),70,fminf(560,width-40),fminf(720,height-90)),flags)){
+        af_scene *scene=app->runtime.playing?app->runtime.scene:app->document.scene;
+        af_render_settings render=af_scene_get_render_settings(scene);
+        label(ctx,app->runtime.playing?"Live preview: changes reset when Play stops.":"Scene post-processing: changes support Undo and Save.",28);
+        if(post_processing_controls(ctx,&render)){
+            if(app->runtime.playing)af_scene_set_render_settings(scene,render);
+            else ed_document_render_settings(&app->document,render);
+        }
+        nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close post-processing"))app->show_post_processing=false;
     }nk_end(ctx);
 }
 static void performance_panel(editor *app,float width,float height)
@@ -1521,7 +1717,7 @@ static void build_ui(editor *app,float width,float height)
         nk_layout_row_dynamic(context,18,1);nk_label(context,app->document.status,NK_TEXT_LEFT);
     }nk_end(context);
     nk_style_pop_vec2(context);
-    performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);extensions_panel(app,width,height);environment_panel(app,width,height);
+    performance_panel(app,width,height);asset_browser(app,width,height);project_panel(app,width,height);extensions_panel(app,width,height);environment_panel(app,width,height);post_processing_panel(app,width,height);
     af_engine_set_scene(app->engine,app->runtime.playing?app->runtime.scene:app->document.scene);
     animation_panel(app,width,height);input_panel(app);prefab_panel(app);
     if(app->modal){
@@ -1694,8 +1890,8 @@ static void smoke(editor *app)
     ed_document *d=&app->document;
     if(app->updates==152){app->show_colliders=true;
         for(size_t i=0;i<af_scene_object_count(d->scene)&&i<3;++i){af_collider collider=af_collider_default();collider.type=(af_collider_type)(i+1);af_scene_set_object_collider(d->scene,af_scene_object_at(d->scene,i)->id,collider);}}
-    if(app->updates==155){app->show_performance=true;app->show_assets=true;app->show_environment=true;}
-    if(app->updates==158){app->failed|=nk_window_find(&app->gui.context,"Performance")==NULL||nk_window_find(&app->gui.context,"Assets")==NULL||nk_window_find(&app->gui.context,"Environment")==NULL;app->show_performance=false;app->show_assets=false;app->show_environment=false;}
+    if(app->updates==155){app->show_performance=true;app->show_assets=true;app->show_environment=true;app->show_post_processing=true;}
+    if(app->updates==158){app->failed|=nk_window_find(&app->gui.context,"Performance")==NULL||nk_window_find(&app->gui.context,"Assets")==NULL||nk_window_find(&app->gui.context,"Environment")==NULL||nk_window_find(&app->gui.context,"Post-processing")==NULL;app->show_performance=false;app->show_assets=false;app->show_environment=false;app->show_post_processing=false;}
     if(app->updates==3)toggle_play(app);
     if(app->updates==7){const af_scene_object *o=af_scene_get_object(app->runtime.scene,1);app->failed|=!app->runtime.playing||!o||o->transform.rotation.y==0||af_scene_get_object(d->scene,1)->transform.rotation.y!=0;}
     if(app->updates==8){app->runtime.paused=true;af_engine_set_simulation_paused(app->engine,true);}
@@ -1732,7 +1928,8 @@ static void smoke(editor *app)
     if(app->updates==102){SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_MOTION;event.motion.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.motion.x=app->gizmo.start.x+app->gizmo.direction.x*0.4f;event.motion.y=app->gizmo.start.y+app->gizmo.direction.y*0.4f;app->failed|=!SDL_PushEvent(&event);}
     if(app->updates==104){SDL_Event event;SDL_zero(event);event.type=SDL_EVENT_MOUSE_BUTTON_UP;event.button.windowID=SDL_GetWindowID(af_engine_sdl_window(app->engine));event.button.button=SDL_BUTTON_LEFT;app->failed|=!SDL_PushEvent(&event);}
     if(app->updates==107){const af_scene_object *o=af_scene_get_object(d->scene,d->selection);app->failed|=!o||o->transform.position.x<=app->gizmo.initial.position.x||app->gizmo.dragging;app->failed|=!ed_document_undo(d);refresh(app);}
-    if(app->updates==115)smoke_click(app,75,132); /* Add cube through the UI. */
+    if(app->updates==114)smoke_click(app,75,132); /* Add object: open dropdown */
+    if(app->updates==116)smoke_click(app,75,165); /* Select Cube (Mesh) */
     if(app->updates==118)app->failed|=af_scene_object_count(d->scene)!=6;
     if(app->updates==120)smoke_click(app,175,132);
     if(app->updates==123)app->failed|=af_scene_object_count(d->scene)!=7;

@@ -95,15 +95,15 @@ bool af_json_valid_text(const char *text, size_t length)
 static bool exact_fields(const cJSON *object, const char *const *names, size_t count)
 {
     if (!cJSON_IsObject(object)) return false;
-    uint32_t seen = 0;
+    uint64_t seen = 0;
     const cJSON *field;
     cJSON_ArrayForEach(field, object) {
         size_t i;
         for (i = 0; i < count; ++i) if (strcmp(field->string, names[i]) == 0) break;
-        if (i == count || (seen & (1u << i))) return false;
-        seen |= 1u << i;
+        if (i == count || (seen & (UINT64_C(1) << i))) return false;
+        seen |= UINT64_C(1) << i;
     }
-    return seen == (1u << count) - 1;
+    return seen == (count >= 64 ? ~UINT64_C(0) : ((UINT64_C(1) << count) - 1));
 }
 
 static bool read_id(const cJSON *item, uint64_t *value)
@@ -348,10 +348,14 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         if(!af_scene_set_shadows(scene,settings)){set_error(error,AF_SCENE_ERROR_FORMAT,"Shadow settings outside supported ranges.");goto fail;}
     }
     if(version->valuedouble>=4){
-        static const char *const render_fields[]={"exposure","tone_mapping","bloom","bloom_strength","bloom_threshold","bloom_radius","environment_enabled","environment_profile","environment_intensity","environment_rotation","local_shadow_resolution","environment_asset","skybox","skybox_intensity","underwater","refraction","refraction_strength","anti_aliasing","aa_sharpness","taa_history_weight","ray_traced_shadows","ray_traced_water_reflections"};const cJSON *render=cJSON_GetObjectItemCaseSensitive(root,"render"),*tone=cJSON_GetObjectItemCaseSensitive(render,"tone_mapping");
+        static const char *const render_fields[]={"exposure","tone_mapping","bloom","bloom_strength","bloom_threshold","bloom_radius","environment_enabled","environment_profile","environment_intensity","environment_rotation","local_shadow_resolution","environment_asset","skybox","skybox_intensity","underwater","refraction","refraction_strength","anti_aliasing","aa_sharpness","taa_history_weight","ray_traced_shadows","ray_traced_water_reflections",
+            "tone_mapper","auto_exposure","auto_exposure_speed","auto_exposure_min","auto_exposure_max","saturation","contrast","color_filter","depth_of_field","dof_focus_distance","dof_focus_range","dof_blur_radius","motion_blur","motion_blur_strength","vignette","vignette_intensity","vignette_smoothness","chromatic_aberration","chromatic_aberration_strength","film_grain","film_grain_intensity"};
+        const cJSON *render=cJSON_GetObjectItemCaseSensitive(root,"render"),*tone=cJSON_GetObjectItemCaseSensitive(render,"tone_mapping");
         af_render_settings settings=af_render_settings_default();
         const cJSON *ray_reflections=cJSON_GetObjectItemCaseSensitive(render,"ray_traced_water_reflections");
-        if(!exact_fields(render,render_fields,version->valuedouble>=24?(ray_reflections?22:21):version->valuedouble>=23?20:version->valuedouble>=21?17:version->valuedouble>=20?15:version->valuedouble>=9?14:version->valuedouble>=8?11:2)||!read_float_field(render,"exposure",&settings.exposure)||!cJSON_IsBool(tone)){
+        const cJSON *post_check=cJSON_GetObjectItemCaseSensitive(render,"tone_mapper");
+        size_t expected_render_fields=version->valuedouble>=24?(post_check?43:(ray_reflections?22:21)):version->valuedouble>=23?20:version->valuedouble>=21?17:version->valuedouble>=20?15:version->valuedouble>=9?14:version->valuedouble>=8?11:2;
+        if(!exact_fields(render,render_fields,expected_render_fields)||!read_float_field(render,"exposure",&settings.exposure)||!cJSON_IsBool(tone)){
             set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid exposure/tone mapping settings.");goto fail;}
         if(version->valuedouble>=8){float profile,resolution;const cJSON *bloom=cJSON_GetObjectItemCaseSensitive(render,"bloom"),*environment=cJSON_GetObjectItemCaseSensitive(render,"environment_enabled");
             if(!cJSON_IsBool(bloom)||!cJSON_IsBool(environment)||!read_float_field(render,"bloom_strength",&settings.bloom_strength)||!read_float_field(render,"bloom_threshold",&settings.bloom_threshold)||!read_float_field(render,"bloom_radius",&settings.bloom_radius)||
@@ -374,6 +378,47 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         if(ray_reflections){
             if(!cJSON_IsBool(ray_reflections)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid ray-traced water reflections toggle.");goto fail;}
             settings.ray_traced_water_reflections=cJSON_IsTrue(ray_reflections)!=0;
+        }
+        if(post_check){
+            if(cJSON_IsString(post_check)){
+                if(!strcmp(post_check->valuestring,"agx"))settings.tone_mapper=AF_TONE_MAP_AGX;
+                else if(!strcmp(post_check->valuestring,"aces"))settings.tone_mapper=AF_TONE_MAP_ACES;
+                else if(!strcmp(post_check->valuestring,"reinhard"))settings.tone_mapper=AF_TONE_MAP_REINHARD;
+                else if(!strcmp(post_check->valuestring,"off"))settings.tone_mapper=AF_TONE_MAP_OFF;
+                else{set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid tone mapper.");goto fail;}
+            }else{set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid tone mapper.");goto fail;}
+            const cJSON *ae=cJSON_GetObjectItemCaseSensitive(render,"auto_exposure");
+            if(!cJSON_IsBool(ae)||!read_float_field(render,"auto_exposure_speed",&settings.auto_exposure_speed)||
+               !read_float_field(render,"auto_exposure_min",&settings.auto_exposure_min)||
+               !read_float_field(render,"auto_exposure_max",&settings.auto_exposure_max)||
+               !read_float_field(render,"saturation",&settings.saturation)||
+               !read_float_field(render,"contrast",&settings.contrast)||
+               !read_vector(cJSON_GetObjectItemCaseSensitive(render,"color_filter"),&settings.color_filter)){
+                set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid auto exposure or color grading.");goto fail;}
+            settings.auto_exposure=cJSON_IsTrue(ae)!=0;
+            const cJSON *dof=cJSON_GetObjectItemCaseSensitive(render,"depth_of_field");
+            if(!cJSON_IsBool(dof)||!read_float_field(render,"dof_focus_distance",&settings.dof_focus_distance)||
+               !read_float_field(render,"dof_focus_range",&settings.dof_focus_range)||
+               !read_float_field(render,"dof_blur_radius",&settings.dof_blur_radius)){
+                set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid depth of field settings.");goto fail;}
+            settings.depth_of_field=cJSON_IsTrue(dof)!=0;
+            const cJSON *mb=cJSON_GetObjectItemCaseSensitive(render,"motion_blur");
+            if(!cJSON_IsBool(mb)||!read_float_field(render,"motion_blur_strength",&settings.motion_blur_strength)){
+                set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid motion blur settings.");goto fail;}
+            settings.motion_blur=cJSON_IsTrue(mb)!=0;
+            const cJSON *vig=cJSON_GetObjectItemCaseSensitive(render,"vignette");
+            if(!cJSON_IsBool(vig)||!read_float_field(render,"vignette_intensity",&settings.vignette_intensity)||
+               !read_float_field(render,"vignette_smoothness",&settings.vignette_smoothness)){
+                set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid vignette settings.");goto fail;}
+            settings.vignette=cJSON_IsTrue(vig)!=0;
+            const cJSON *ca=cJSON_GetObjectItemCaseSensitive(render,"chromatic_aberration");
+            if(!cJSON_IsBool(ca)||!read_float_field(render,"chromatic_aberration_strength",&settings.chromatic_aberration_strength)){
+                set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid chromatic aberration settings.");goto fail;}
+            settings.chromatic_aberration=cJSON_IsTrue(ca)!=0;
+            const cJSON *fg=cJSON_GetObjectItemCaseSensitive(render,"film_grain");
+            if(!cJSON_IsBool(fg)||!read_float_field(render,"film_grain_intensity",&settings.film_grain_intensity)){
+                set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid film grain settings.");goto fail;}
+            settings.film_grain=cJSON_IsTrue(fg)!=0;
         }
         settings.tone_mapping=cJSON_IsTrue(tone)!=0;if(!af_scene_set_render_settings(scene,settings)){set_error(error,AF_SCENE_ERROR_FORMAT,"Exposure outside supported range.");goto fail;}
         const cJSON *lights=cJSON_GetObjectItemCaseSensitive(root,"local_lights");
@@ -535,6 +580,30 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
     if(!cJSON_AddBoolToObject(render,"bloom",rs->bloom)||!cJSON_AddNumberToObject(render,"bloom_strength",rs->bloom_strength)||!cJSON_AddNumberToObject(render,"bloom_threshold",rs->bloom_threshold)||!cJSON_AddNumberToObject(render,"bloom_radius",rs->bloom_radius)||
        !cJSON_AddBoolToObject(render,"environment_enabled",rs->environment_enabled)||!cJSON_AddNumberToObject(render,"environment_profile",rs->environment_profile)||!cJSON_AddNumberToObject(render,"environment_intensity",rs->environment_intensity)||!cJSON_AddNumberToObject(render,"environment_rotation",rs->environment_rotation)||!cJSON_AddNumberToObject(render,"local_shadow_resolution",rs->local_shadow_resolution))goto fail;
     if(!cJSON_AddStringToObject(render,"environment_asset",rs->environment_asset)||!cJSON_AddBoolToObject(render,"skybox",rs->skybox)||!cJSON_AddNumberToObject(render,"skybox_intensity",rs->skybox_intensity))goto fail;
+    if(rs->tone_mapper!=AF_TONE_MAP_ACES||rs->auto_exposure||rs->depth_of_field||rs->motion_blur||rs->vignette||rs->chromatic_aberration||rs->film_grain||rs->saturation!=1.0f||rs->contrast!=1.0f||rs->color_filter.x!=1.0f||rs->color_filter.y!=1.0f||rs->color_filter.z!=1.0f){
+        const char *tm_str = rs->tone_mapper == AF_TONE_MAP_AGX ? "agx" : rs->tone_mapper == AF_TONE_MAP_ACES ? "aces" : rs->tone_mapper == AF_TONE_MAP_REINHARD ? "reinhard" : "off";
+        if(!cJSON_AddStringToObject(render,"tone_mapper",tm_str)||
+           !cJSON_AddBoolToObject(render,"auto_exposure",rs->auto_exposure)||
+           !cJSON_AddNumberToObject(render,"auto_exposure_speed",rs->auto_exposure_speed)||
+           !cJSON_AddNumberToObject(render,"auto_exposure_min",rs->auto_exposure_min)||
+           !cJSON_AddNumberToObject(render,"auto_exposure_max",rs->auto_exposure_max)||
+           !cJSON_AddNumberToObject(render,"saturation",rs->saturation)||
+           !cJSON_AddNumberToObject(render,"contrast",rs->contrast)||
+           !add_vector(render,"color_filter",rs->color_filter)||
+           !cJSON_AddBoolToObject(render,"depth_of_field",rs->depth_of_field)||
+           !cJSON_AddNumberToObject(render,"dof_focus_distance",rs->dof_focus_distance)||
+           !cJSON_AddNumberToObject(render,"dof_focus_range",rs->dof_focus_range)||
+           !cJSON_AddNumberToObject(render,"dof_blur_radius",rs->dof_blur_radius)||
+           !cJSON_AddBoolToObject(render,"motion_blur",rs->motion_blur)||
+           !cJSON_AddNumberToObject(render,"motion_blur_strength",rs->motion_blur_strength)||
+           !cJSON_AddBoolToObject(render,"vignette",rs->vignette)||
+           !cJSON_AddNumberToObject(render,"vignette_intensity",rs->vignette_intensity)||
+           !cJSON_AddNumberToObject(render,"vignette_smoothness",rs->vignette_smoothness)||
+           !cJSON_AddBoolToObject(render,"chromatic_aberration",rs->chromatic_aberration)||
+           !cJSON_AddNumberToObject(render,"chromatic_aberration_strength",rs->chromatic_aberration_strength)||
+           !cJSON_AddBoolToObject(render,"film_grain",rs->film_grain)||
+           !cJSON_AddNumberToObject(render,"film_grain_intensity",rs->film_grain_intensity))goto fail;
+    }
     cJSON *locals=cJSON_AddArrayToObject(root,"local_lights");if(!locals)goto fail;
     for(size_t i=0;i<scene->local_light_count;++i){const af_local_light *value=&scene->local_lights[i];cJSON *local=cJSON_CreateObject();if(!local)goto fail;
         if(!cJSON_AddItemToArray(locals,local)){cJSON_Delete(local);goto fail;}

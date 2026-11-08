@@ -222,7 +222,37 @@ bool af_scene_object_visible(const af_scene *scene,af_object_id id){
 bool af_scene_set_shadows(af_scene *scene,af_shadow_settings settings){if(!scene||!af_shadow_settings_valid(settings))return false;scene->shadows=settings;return true;}
 af_shadow_settings af_scene_get_shadows(const af_scene *scene){return scene?scene->shadows:af_shadow_settings_default();}
 
-af_render_settings af_render_settings_default(void){return (af_render_settings){.taa_history_weight=.9f,.aa_sharpness=.1f,.underwater=true,.refraction=true,.refraction_strength=1,.bloom_strength=.12f,.bloom_threshold=1,.bloom_radius=1.5f,.environment_intensity=1,.skybox_intensity=1,.local_shadow_resolution=512};}
+af_render_settings af_render_settings_default(void){
+    return (af_render_settings){
+        .taa_history_weight=.9f,
+        .aa_sharpness=.1f,
+        .underwater=true,
+        .refraction=true,
+        .refraction_strength=1.f,
+        .bloom_strength=.12f,
+        .bloom_threshold=1.f,
+        .bloom_radius=1.5f,
+        .environment_intensity=1.f,
+        .skybox_intensity=1.f,
+        .local_shadow_resolution=512,
+        .tone_mapper=AF_TONE_MAP_ACES,
+        .auto_exposure_speed=2.0f,
+        .auto_exposure_min=-3.0f,
+        .auto_exposure_max=3.0f,
+        .saturation=1.0f,
+        .contrast=1.0f,
+        .color_filter={1.0f,1.0f,1.0f},
+        .dof_focus_distance=10.0f,
+        .dof_focus_range=5.0f,
+        .dof_blur_radius=0.008f,
+        .motion_blur_strength=1.0f,
+        .motion_blur_samples=16,
+        .vignette_intensity=0.35f,
+        .vignette_smoothness=0.5f,
+        .chromatic_aberration_strength=0.005f,
+        .film_grain_intensity=0.035f
+    };
+}
 af_render_settings af_scene_get_render_settings(const af_scene *scene){return scene?scene->render_settings:af_render_settings_default();}
 bool af_scene_set_render_settings(af_scene *scene,af_render_settings settings){
     if(settings.anti_aliasing<AF_AA_OFF||settings.anti_aliasing>AF_AA_TAA||!isfinite(settings.aa_sharpness)||settings.aa_sharpness<0||settings.aa_sharpness>1||!isfinite(settings.taa_history_weight)||settings.taa_history_weight<0||settings.taa_history_weight>.98f)return false;
@@ -235,6 +265,23 @@ bool af_scene_set_render_settings(af_scene *scene,af_render_settings settings){
        !memchr(settings.environment_asset,0,sizeof(settings.environment_asset))||!isfinite(settings.skybox_intensity)||settings.skybox_intensity<0||settings.skybox_intensity>100||
        !isfinite(settings.environment_intensity)||settings.environment_intensity<0||settings.environment_intensity>100||
        !isfinite(settings.environment_rotation)||fabsf(settings.environment_rotation)>1000)return false;
+    if(settings.tone_mapper<AF_TONE_MAP_OFF||settings.tone_mapper>AF_TONE_MAP_AGX)return false;
+    if(!isfinite(settings.auto_exposure_speed)||settings.auto_exposure_speed<0||settings.auto_exposure_speed>20.0f)return false;
+    if(!isfinite(settings.auto_exposure_min)||settings.auto_exposure_min< -10.0f||settings.auto_exposure_min>10.0f)return false;
+    if(!isfinite(settings.auto_exposure_max)||settings.auto_exposure_max< -10.0f||settings.auto_exposure_max>10.0f)return false;
+    if(!isfinite(settings.saturation)||settings.saturation<0.0f||settings.saturation>5.0f)return false;
+    if(!isfinite(settings.contrast)||settings.contrast<0.0f||settings.contrast>5.0f)return false;
+    if(!isfinite(settings.color_filter.x)||settings.color_filter.x<0.0f||settings.color_filter.x>5.0f||
+       !isfinite(settings.color_filter.y)||settings.color_filter.y<0.0f||settings.color_filter.y>5.0f||
+       !isfinite(settings.color_filter.z)||settings.color_filter.z<0.0f||settings.color_filter.z>5.0f)return false;
+    if(!isfinite(settings.dof_focus_distance)||settings.dof_focus_distance<0||settings.dof_focus_distance>10000.0f)return false;
+    if(!isfinite(settings.dof_focus_range)||settings.dof_focus_range<0||settings.dof_focus_range>1000.0f)return false;
+    if(!isfinite(settings.dof_blur_radius)||settings.dof_blur_radius<0||settings.dof_blur_radius>0.1f)return false;
+    if(!isfinite(settings.motion_blur_strength)||settings.motion_blur_strength<0||settings.motion_blur_strength>5.0f)return false;
+    if(!isfinite(settings.vignette_intensity)||settings.vignette_intensity<0||settings.vignette_intensity>1.0f)return false;
+    if(!isfinite(settings.vignette_smoothness)||settings.vignette_smoothness<0||settings.vignette_smoothness>1.0f)return false;
+    if(!isfinite(settings.chromatic_aberration_strength)||settings.chromatic_aberration_strength<0||settings.chromatic_aberration_strength>0.1f)return false;
+    if(!isfinite(settings.film_grain_intensity)||settings.film_grain_intensity<0||settings.film_grain_intensity>1.0f)return false;
     if(!settings.local_shadow_resolution)settings.local_shadow_resolution=512;
     scene->render_settings=settings;return true;
 }

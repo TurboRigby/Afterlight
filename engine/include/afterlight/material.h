@@ -43,12 +43,29 @@ typedef struct af_local_light {
 af_local_light af_local_light_default(af_light_type type);
 typedef enum af_anti_aliasing { AF_AA_OFF, AF_AA_FXAA, AF_AA_SMAA, AF_AA_TAA } af_anti_aliasing;
 typedef enum af_debug_view {AF_DEBUG_SHADED,AF_DEBUG_DEPTH,AF_DEBUG_MOTION,AF_DEBUG_HISTORY,AF_DEBUG_REJECTION,AF_DEBUG_COUNT} af_debug_view;
+typedef enum af_tone_mapping { AF_TONE_MAP_OFF = 0, AF_TONE_MAP_REINHARD = 1, AF_TONE_MAP_ACES = 2, AF_TONE_MAP_AGX = 3 } af_tone_mapping;
 typedef struct af_render_settings {
     bool ray_traced_shadows; /* Optional hardware ray-query shadows; raster fallback. */
     bool ray_traced_water_reflections; /* Optional single-bounce reflection. */
     af_anti_aliasing anti_aliasing;
     float aa_sharpness,taa_history_weight;
     float exposure; bool tone_mapping;
+    af_tone_mapping tone_mapper;
+    bool auto_exposure;
+    float auto_exposure_speed, auto_exposure_min, auto_exposure_max;
+    float saturation, contrast;
+    af_vec3 color_filter;
+    bool depth_of_field;
+    float dof_focus_distance, dof_focus_range, dof_blur_radius;
+    bool motion_blur;
+    float motion_blur_strength;
+    uint32_t motion_blur_samples;
+    bool vignette;
+    float vignette_intensity, vignette_smoothness;
+    bool chromatic_aberration;
+    float chromatic_aberration_strength;
+    bool film_grain;
+    float film_grain_intensity;
     bool underwater,refraction;float refraction_strength;
     bool bloom; float bloom_strength,bloom_threshold,bloom_radius;
     uint32_t local_shadow_resolution; /* 256, 512, 1024; zero selects 512. */

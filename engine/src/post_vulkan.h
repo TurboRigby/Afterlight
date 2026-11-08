@@ -16,6 +16,6 @@ void af_vk_post_upscaler_images(const af_vk_post *, uint32_t, af_vulkan_upscaler
 VkFramebuffer af_vk_post_scene_framebuffer(const af_vk_post *post,uint32_t image);
 VkRenderPass af_vk_post_output_pass(const af_vk_post *post);
 /* Ends with the presentation render pass open so the UI can render after HDR. */
-void af_vk_post_draw(af_vk_post *post,VkCommandBuffer command,uint32_t image,af_render_settings settings,af_rect normalized_viewport,af_vec2 normalized_jitter,af_debug_view debug_view,bool upscaled);
+void af_vk_post_draw(af_vk_post *post,VkCommandBuffer command,uint32_t image,af_render_settings settings,af_rect normalized_viewport,af_vec2 normalized_jitter,af_debug_view debug_view,bool upscaled,float time_seconds,float delta_time);
 void af_vk_post_reset_temporal(af_vk_post *);
 #endif

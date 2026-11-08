@@ -1713,6 +1713,8 @@ static uint64_t temporal_settings_hash(uint64_t h, af_render_settings value) {
                   sizeof(value.environment_intensity));
   h = shadow_hash(h, &value.environment_rotation,
                   sizeof(value.environment_rotation));
+  h = shadow_hash(h, &value.motion_blur, sizeof(value.motion_blur));
+  h = shadow_hash(h, &value.motion_blur_strength, sizeof(value.motion_blur_strength));
   h = shadow_hash(h, value.environment_asset, strlen(value.environment_asset));
   return h;
 }
@@ -1999,7 +2001,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (upscale) environment_settings.anti_aliasing = AF_AA_OFF;
     if(renderer->debug_view!=AF_DEBUG_SHADED)environment_settings.anti_aliasing=AF_AA_TAA;
     if(environment_settings.anti_aliasing==AF_AA_TAA&&!renderer->temporal_supported)environment_settings.anti_aliasing=AF_AA_FXAA;
-    uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u);
+    if(environment_settings.motion_blur&&!renderer->temporal_supported)environment_settings.motion_blur=false;
+    if(environment_settings.motion_blur&&!renderer->temporal_supported)environment_settings.motion_blur=false;
+    uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||environment_settings.motion_blur||environment_settings.depth_of_field||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u);
     if (upscale) resource_config |= AF_RESOURCE_UPSCALER | AF_RESOURCE_MOTION;
     if(renderer->ray_supported && !renderer->ray_failed){
         bool any_shadows = af_scene_get_shadows(scene).enabled;
@@ -2048,6 +2052,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         if(!af_renderer_wait_idle(renderer))return false;snprintf(renderer->active_environment,sizeof(renderer->active_environment),"%s",environment_settings.environment_asset);update_environment_descriptors(renderer);
     }
     if(environment_settings.anti_aliasing==AF_AA_TAA&&!renderer->temporal_supported)environment_settings.anti_aliasing=AF_AA_FXAA;
+    if(environment_settings.motion_blur&&!renderer->temporal_supported)environment_settings.motion_blur=false;
     af_frame_uniform uniform;af_shadow_view shadow_view;
     if(!prepare_shadows(renderer,scene,camera,resolve_viewport(renderer,viewport_rect),&uniform,&shadow_view))return false;
     af_frame *frame = &renderer->frames[renderer->frame_index];
@@ -2089,10 +2094,14 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     }
     if (result == VK_SUBOPTIMAL_KHR) renderer->resize_pending = renderer->swapchain_invalid = true;
     else if (!vk_ok(result, "vkAcquireNextImageKHR")) return false;
-    bool temporal = upscale || environment_settings.anti_aliasing == AF_AA_TAA;
+    bool temporal = renderer->temporal_supported &&
+                    (upscale || environment_settings.anti_aliasing == AF_AA_TAA ||
+                     environment_settings.motion_blur ||
+                     (renderer->capture_pending && renderer->capture_motion));
     bool spatial = upscale && renderer->upscaler->struct_size >= sizeof(*renderer->upscaler) &&
                    (renderer->upscaler->flags & AF_VULKAN_UPSCALER_SPATIAL);
-    if(!prepare_temporal(renderer,frame,scene,camera,resolve_viewport(renderer,viewport_rect),color,environment_settings,temporal,!spatial,&uniform))return false;
+    bool jitter = (upscale && !spatial) || environment_settings.anti_aliasing == AF_AA_TAA;
+    if(!prepare_temporal(renderer,frame,scene,camera,resolve_viewport(renderer,viewport_rect),color,environment_settings,temporal,jitter,&uniform))return false;
     VkDescriptorImageInfo refraction_images[]={af_vk_refraction_color(renderer->swapchain.refraction,image_index),af_vk_refraction_depth(renderer->swapchain.refraction,image_index)};VkWriteDescriptorSet water_writes[2];for(unsigned i=0;i<2;++i)water_writes[i]=(VkWriteDescriptorSet){.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=frame->descriptor,.dstBinding=7+i,.descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.pImageInfo=&refraction_images[i]};vkUpdateDescriptorSets(renderer->device,2,water_writes,0,NULL);
     if (overlay->index_count && (!renderer->ui || !af_vk_ui_prepare(renderer->ui, renderer->frame_index, overlay))) return false;
     void *mapped=NULL;if(!vk_ok(vkMapMemory(renderer->device,frame->uniform.memory,0,VK_WHOLE_SIZE,0,&mapped),"map frame uniform"))return false;
@@ -2233,7 +2242,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,2);
     bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
                                                 environment_settings.exposure, camera, frame_time_ms);
-    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,environment_settings,post_area,renderer->temporal_jitter,renderer->debug_view,upscaled);
+    float time_sec = (float)renderer->rendered_frames * (1.0f / 60.0f);
+    float delta_sec = frame_time_ms * 0.001f;
+    af_vk_post_draw(renderer->swapchain.post,frame->command,image_index,environment_settings,post_area,renderer->temporal_jitter,renderer->debug_view,upscaled,time_sec,delta_sec);
     if(frame->timestamps)vkCmdWriteTimestamp(frame->command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,frame->timestamps,3);
     if (renderer->ui && overlay->index_count)
         af_vk_ui_draw(renderer->ui, frame->command, renderer->frame_index, overlay, renderer->swapchain.extent);
