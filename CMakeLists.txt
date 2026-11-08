@@ -65,6 +65,8 @@ add_library(afterlight STATIC
     engine/src/body.c
     engine/src/water.c
     engine/src/water_io.c
+    engine/src/landscape.c
+    engine/src/landscape_io.c
     engine/src/wind.c
     engine/src/physics_wind.c
     engine/src/water_particles.c
@@ -1419,6 +1421,10 @@ if(BUILD_TESTING)
     target_link_libraries(afterlight_scene_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_scene_test)
     add_test(NAME afterlight.scene COMMAND afterlight_scene_test)
+    add_executable(afterlight_landscape_test tests/landscape.c)
+    target_link_libraries(afterlight_landscape_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_landscape_test)
+    add_test(NAME afterlight.landscape COMMAND afterlight_landscape_test)
     add_executable(afterlight_vulkan_policy_test tests/vulkan_policy.c)
     target_include_directories(afterlight_vulkan_policy_test PRIVATE engine/src)
     target_link_libraries(afterlight_vulkan_policy_test PRIVATE Vulkan::Vulkan)

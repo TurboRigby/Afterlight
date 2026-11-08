@@ -6,6 +6,7 @@
 
 #include "scene_internal.h"
 #include "water_internal.h"
+#include "landscape_internal.h"
 #include "cJSON.h"
 #include <errno.h>
 #include <float.h>
@@ -194,7 +195,7 @@ static bool read_body(const cJSON *json,af_rigid_body *out){
 static bool add_body(cJSON *json,af_rigid_body b){if(!af_rigid_body_valid(b))return false;cJSON *j=cJSON_AddObjectToObject(json,"body");return j&&cJSON_AddBoolToObject(j,"enabled",b.enabled)&&cJSON_AddStringToObject(j,"type",b.type==AF_BODY_DYNAMIC?"dynamic":b.type==AF_BODY_KINEMATIC?"kinematic":"static")&&cJSON_AddNumberToObject(j,"mass",b.mass)&&cJSON_AddNumberToObject(j,"friction",b.friction)&&cJSON_AddNumberToObject(j,"restitution",b.restitution)&&cJSON_AddNumberToObject(j,"linear_damping",b.linear_damping)&&cJSON_AddNumberToObject(j,"angular_damping",b.angular_damping)&&cJSON_AddNumberToObject(j,"gravity_scale",b.gravity_scale)&&cJSON_AddBoolToObject(j,"allow_sleep",b.allow_sleep)&&cJSON_AddBoolToObject(j,"continuous",b.continuous)&&add_vector(j,"velocity",b.velocity)&&add_vector(j,"angular_velocity",b.angular_velocity);}
 static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene_error *error)
 {
-    static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights", "joints", "next_joint", "collider_parts", "next_part", "water", "wind"};
+    static const char *const root_fields[] = {"format", "version", "next_id", "objects", "assets", "light", "shadows", "render", "local_lights", "joints", "next_joint", "collider_parts", "next_part", "water", "wind", "landscape"};
     static const char *const object_fields[] = {"id", "name", "mesh", "visible", "position", "rotation", "scale", "material", "parent", "collider", "gameplay", "animation", "model", "rig", "body"};
     const cJSON *format = cJSON_GetObjectItemCaseSensitive(root, "format");
     const cJSON *version = cJSON_GetObjectItemCaseSensitive(root, "version");
@@ -209,7 +210,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
-    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:version->valuedouble>=22?15:version->valuedouble>=17?14:version->valuedouble>=16?13:version->valuedouble>=14?11:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
+    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:version->valuedouble>=24?16:version->valuedouble>=22?15:version->valuedouble>=17?14:version->valuedouble>=16?13:version->valuedouble>=14?11:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
         cJSON_GetArraySize(objects) > (int)AF_SCENE_FILE_MAX_OBJECTS) {
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid next_id or object array (maximum %u objects).", AF_SCENE_FILE_MAX_OBJECTS);
         return NULL;
@@ -478,6 +479,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         w.enabled=cJSON_IsTrue(enabled)!=0;if(!af_scene_set_wind(scene,w)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid wind direction or limits.");goto fail;}
     }
     if(version->valuedouble>=17&&!wa_decode(scene,root)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid water fields, owner or limits.");goto fail;}
+    if(!ls_decode(scene,root)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid landscape fields or limits.");goto fail;}
     free(ids);
     return scene;
 part_fail:set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid collider part fields, owner, budget or ID counter.");goto fail;
@@ -564,6 +566,7 @@ static char *encode_scene(const af_scene *scene,const char *scene_path)
     cJSON *wind=cJSON_AddObjectToObject(root,"wind");af_wind w=af_scene_get_wind(scene);
     if(!wind||!af_wind_valid(w)||!cJSON_AddBoolToObject(wind,"enabled",w.enabled)||!add_vector(wind,"direction",w.direction)||!cJSON_AddNumberToObject(wind,"speed",w.speed)||!cJSON_AddNumberToObject(wind,"gust_strength",w.gust_strength)||!cJSON_AddNumberToObject(wind,"gust_frequency",w.gust_frequency)||!cJSON_AddNumberToObject(wind,"air_density",w.air_density))goto fail;
     if(!wa_encode(scene,root))goto fail;
+    if(!ls_encode(scene,root))goto fail;
     cJSON *parts=cJSON_AddArrayToObject(root,"collider_parts");if(!parts||!add_id(root,"next_part",scene->next_part_id))goto fail;
     for(size_t i=0;i<scene->part_count;++i){af_collider_part p=scene->parts[i];cJSON *entry=cJSON_CreateObject();if(!entry)goto fail;cJSON_AddItemToArray(parts,entry);if(!af_collider_part_valid(p)||!add_id(entry,"id",p.id)||!add_id(entry,"owner",p.owner)||!cJSON_AddStringToObject(entry,"name",p.name)||!add_vector(entry,"position",p.local.position)||!add_vector(entry,"rotation",p.local.rotation)||!add_vector(entry,"scale",p.local.scale)||!cJSON_AddStringToObject(entry,"type",p.collider.type==AF_COLLIDER_BOX?"box":"sphere")||!cJSON_AddBoolToObject(entry,"enabled",p.collider.enabled)||!add_vector(entry,"half_extents",p.collider.half_extents)||!cJSON_AddNumberToObject(entry,"radius",p.collider.radius)||!cJSON_AddNumberToObject(entry,"density",p.density))goto fail;}
     cJSON *joints=cJSON_AddArrayToObject(root,"joints");if(!joints||!add_id(root,"next_joint",scene->next_joint_id))goto fail;

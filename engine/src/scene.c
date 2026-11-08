@@ -36,6 +36,7 @@ af_scene *af_scene_create(void)
 void af_scene_destroy(af_scene *scene)
 {
     if (!scene) return;
+    af_landscape_destroy(scene->landscape);
     for(size_t i=0;i<scene->collision_mesh_count;++i)cm_release(scene->collision_meshes[i].mesh);
     free(scene->object_slots);
     free(scene->objects);
@@ -133,6 +134,7 @@ af_scene *af_scene_clone(const af_scene *source)
     memcpy(copy->waters,source->waters,sizeof(copy->waters));copy->water_count=source->water_count;
     memcpy(copy->parts,source->parts,sizeof(copy->parts));copy->part_count=source->part_count;copy->next_part_id=source->next_part_id;
     copy->wind=source->wind;copy->next_id = source->next_id;copy->light=source->light;copy->shadows=source->shadows;copy->render_settings=source->render_settings;copy->local_light_count=source->local_light_count;
+    copy->landscape = af_landscape_clone(source->landscape);
     memcpy(copy->local_lights,source->local_lights,sizeof(copy->local_lights));
     if (source->count) {
         copy->objects = malloc(source->count * sizeof(*copy->objects));
@@ -334,3 +336,24 @@ bool af_scene_set_model_binding(af_scene *scene,af_object_id id,af_model_binding
 }
 
 bool af_scene_set_character_rig(af_scene *s,af_object_id id,af_character_rig rig){af_scene_object *o=find_object(s,id);if(!o||!af_character_rig_valid(rig))return false;o->rig=rig;return true;}
+
+const af_landscape *af_scene_get_landscape(const af_scene *scene) {
+    return scene ? scene->landscape : NULL;
+}
+af_landscape *af_scene_get_landscape_mut(af_scene *scene) {
+    return scene ? scene->landscape : NULL;
+}
+bool af_scene_set_landscape(af_scene *scene, af_landscape *landscape) {
+    if (!scene) return false;
+    if (scene->landscape != landscape) {
+        af_landscape_destroy(scene->landscape);
+        scene->landscape = landscape;
+    }
+    return true;
+}
+bool af_scene_remove_landscape(af_scene *scene) {
+    if (!scene || !scene->landscape) return false;
+    af_landscape_destroy(scene->landscape);
+    scene->landscape = NULL;
+    return true;
+}

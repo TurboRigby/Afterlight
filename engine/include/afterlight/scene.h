@@ -97,6 +97,12 @@ af_render_settings af_scene_get_render_settings(const af_scene *scene);
 bool af_scene_set_shadows(af_scene *scene,af_shadow_settings settings);
 af_shadow_settings af_scene_get_shadows(const af_scene *scene);
 
+typedef struct af_landscape af_landscape;
+const af_landscape *af_scene_get_landscape(const af_scene *scene);
+af_landscape *af_scene_get_landscape_mut(af_scene *scene);
+bool af_scene_set_landscape(af_scene *scene, af_landscape *landscape);
+bool af_scene_remove_landscape(af_scene *scene);
+
 size_t af_scene_asset_count(const af_scene *scene);
 const af_scene_asset *af_scene_asset_at(const af_scene *scene,size_t index);
 const af_scene_asset *af_scene_find_asset(const af_scene *scene,const char *name);
