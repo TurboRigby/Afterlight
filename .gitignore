@@ -9,3 +9,5 @@ games/**/*.so
 *.so
 
 __pycache__/
+extensions/
+games/**/extensions/
