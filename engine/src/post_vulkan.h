@@ -19,7 +19,8 @@ VkFramebuffer af_vk_post_scene_framebuffer(const af_vk_post *post, uint32_t imag
 VkRenderPass af_vk_post_output_pass(const af_vk_post *post);
 /* Denoises the raw GI attachment and blends it into the HDR scene image.
    Call after the scene render pass and before the upscaler/post chain. */
-void af_vk_post_denoise_gi(af_vk_post *post, VkCommandBuffer command, uint32_t image, af_rect normalized_viewport);
+void af_vk_post_denoise_gi(af_vk_post *post, VkCommandBuffer command, uint32_t image,
+                           af_rect normalized_viewport, af_vec2 previous_minus_current_jitter);
 /* Ends with the presentation render pass open so the UI can render after HDR. */
 void af_vk_post_draw(af_vk_post *post, VkCommandBuffer command, uint32_t image, af_render_settings settings,
                      af_rect normalized_viewport, af_vec2 normalized_jitter, af_debug_view debug_view, bool upscaled,

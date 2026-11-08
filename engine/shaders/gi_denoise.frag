@@ -24,7 +24,7 @@ layout(set = 0, binding = 2) uniform sampler2D history_image;
 layout(push_constant) uniform Push {
     vec4 viewport; /* xy = first pixel UV, zw = one past last pixel UV. */
     vec4 texel;    /* xy = 1/size, z = temporal blend, w = history valid. */
-    vec4 params;   /* x = radius in pixels, y = spatial sigma. */
+    vec4 params;   /* xy = radius/sigma; zw = previous-minus-current TAA jitter in UV. */
 } push;
 
 layout(location = 0) out vec4 out_history;
@@ -33,6 +33,18 @@ layout(location = 1) out vec4 out_color;
 void main() {
     ivec2 size = textureSize(gi_image, 0);
     ivec2 pixel = ivec2(gl_FragCoord.xy);
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+
+    /* Evaluate derivatives before any per-pixel early return. Adjacent lanes in
+     * a fragment quad can cover different viewport/depth-validity branches; doing
+     * dFdx/dFdy after those branches makes the result undefined at those edges. */
+    vec4 center_motion = texelFetch(motion_image, pixel, 0);
+    float center_depth = center_motion.w;
+    float inv_z = 1.0 / max(center_depth, 0.001);
+    vec2 d_inv_z = vec2(dFdx(inv_z), dFdy(inv_z));
+    float max_d_inv_z = 0.5 * inv_z;
+    d_inv_z = clamp(d_inv_z, -vec2(max_d_inv_z), vec2(max_d_inv_z));
+
     ivec2 lo = ivec2(round(push.viewport.xy * vec2(size)));
     ivec2 hi = ivec2(round(push.viewport.zw * vec2(size))) - 1;
     if (lo.x > hi.x || lo.y > hi.y) {
@@ -46,28 +58,13 @@ void main() {
         return;
     }
 
-    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
-    vec4 center_motion = texelFetch(motion_image, pixel, 0);
-    float center_depth = center_motion.w;
     vec4 raw_sample = texelFetch(gi_image, pixel, 0);
     vec3 raw = raw_sample.rgb;
-
     if (center_depth >= 65000.0 || center_depth <= 0.0 || raw_sample.w < 0.5) {
         out_history = vec4(0);
         out_color = vec4(0);
         return;
     }
-
-    /* In perspective projection, reciprocal eye depth (1/Z) is strictly affine
-     * in screen space coordinates across any planar polygon.
-     * Using 1/Z derivatives eliminates the non-linear hyperbolic curvature that
-     * corrupts linear depth gradients at grazing angles. */
-    float inv_z = 1.0 / max(center_depth, 0.001);
-    vec2 d_inv_z = vec2(dFdx(inv_z), dFdy(inv_z));
-
-    /* Clamp derivative quad spikes across geometry silhouettes: */
-    float max_d_inv_z = 0.5 * inv_z;
-    d_inv_z = clamp(d_inv_z, -vec2(max_d_inv_z), vec2(max_d_inv_z));
 
     float sigma = max(push.params.y, 0.25);
     int radius = int(clamp(push.params.x, 1.0, 4.0));
@@ -109,7 +106,8 @@ void main() {
     vec3 spatial_sq = weight_sum > 1e-6 ? sum_sq / weight_sum : raw * raw;
     vec3 sigma_color = sqrt(max(spatial_sq - spatial_result * spatial_result, vec3(0.0)));
 
-    vec2 old_uv = uv + center_motion.xy;
+    /* Motion is unjittered; history coordinates include each frame's TAA jitter. */
+    vec2 old_uv = uv + center_motion.xy + push.params.zw;
     bool valid = push.texel.w > 0.5 && center_motion.z > 0.0 &&
                  all(greaterThanEqual(old_uv, push.viewport.xy)) && all(lessThanEqual(old_uv, push.viewport.zw));
     vec4 history_sample = texture(history_image, clamp(old_uv, push.viewport.xy, push.viewport.zw));

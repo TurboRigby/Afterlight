@@ -231,7 +231,7 @@ struct af_renderer {
     uint64_t temporal_signature, temporal_frame, temporal_resets;
     uint32_t temporal_objects, temporal_skins;
     bool temporal_valid, temporal_supported;
-    af_vec2 temporal_jitter;
+    af_vec2 temporal_jitter, previous_temporal_jitter;
     uint64_t texture_revision, mesh_revision;
     uint32_t shadow_passes, shadow_cached_passes;
     af_gpu_buffer capture_buffer;
@@ -2998,6 +2998,14 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (!prepare_temporal(renderer, frame, scene, camera, resolve_viewport(renderer, viewport_rect), color,
                           environment_settings, temporal, jitter, &uniform))
         return false;
+    /* Motion vectors are generated from unjittered clip coordinates, while GI
+       history is stored in the jittered render-target pixel grid. Convert the
+       current pixel to the previous frame's grid during history reprojection. */
+    af_vec2 gi_jitter_delta = {0};
+    if (renderer->temporal_valid) {
+        gi_jitter_delta.x = renderer->previous_temporal_jitter.x - renderer->temporal_jitter.x;
+        gi_jitter_delta.y = renderer->previous_temporal_jitter.y - renderer->temporal_jitter.y;
+    }
     VkDescriptorImageInfo refraction_images[] = {af_vk_refraction_color(renderer->swapchain.refraction, image_index),
                                                  af_vk_refraction_depth(renderer->swapchain.refraction, image_index)};
     VkWriteDescriptorSet water_writes[2];
@@ -3191,7 +3199,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 if (((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) || refract) {
                     vkCmdEndRenderPass(frame->command);
                     if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) {
-                        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_norm_area);
+                        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_norm_area,
+                                              gi_jitter_delta);
                         gi_denoised = true;
                     }
                     if (refract)
@@ -3585,7 +3594,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (frame->timestamps)
         vkCmdWriteTimestamp(frame->command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, frame->timestamps, 2);
     if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised)
-        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_area);
+        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_area,
+                              gi_jitter_delta);
     bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
                                                environment_settings.exposure, camera, frame_time_ms);
     float time_sec = (float)renderer->rendered_frames * (1.0f / 60.0f);
@@ -3686,6 +3696,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         renderer->motion_next = spare;
         renderer->motion_next_capacity = spare_capacity;
         renderer->previous_view_projection = uniform.unjittered_view_projection;
+        renderer->previous_temporal_jitter = renderer->temporal_jitter;
         renderer->previous_skin_count = renderer->skin_count;
         memcpy(renderer->previous_skins, renderer->skins, renderer->skin_count * sizeof(renderer->skins[0]));
         renderer->temporal_valid = true;

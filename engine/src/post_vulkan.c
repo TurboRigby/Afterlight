@@ -651,7 +651,8 @@ void af_vk_post_reset_temporal(af_vk_post *p) {
         p->adapted_exposure = 1.0f;
     }
 }
-void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t index, af_rect area) {
+void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t index, af_rect area,
+                           af_vec2 previous_minus_current_jitter) {
     if (!p || !p->gi)
         return;
     post_frame *f = &p->frames[index];
@@ -691,7 +692,7 @@ void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t inde
         af_vec4 viewport, texel, params;
     } push = {.viewport = {area.x, area.y, area.x + area.width, area.y + area.height},
               .texel = {1.0f / (float)size.width, 1.0f / (float)size.height, 0.08f, p->gi_history_valid ? 1.0f : 0.0f},
-              .params = {4.0f, 2.5f, 0, 0}};
+              .params = {4.0f, 2.5f, previous_minus_current_jitter.x, previous_minus_current_jitter.y}};
     VkClearValue clear = {0};
     VkRenderPassBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                                    .renderPass = p->gi_pass,

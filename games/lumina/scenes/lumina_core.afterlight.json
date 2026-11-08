@@ -4049,7 +4049,7 @@
 		"ray_traced_gi":	true,
 		"rtgi_intensity":	1.3500000238418579,
 		"rtgi_ray_distance":	45,
-		"rtgi_samples":	1
+		"rtgi_samples":	4
 	},
 	"local_lights":	[{
 			"name":	"Player_Spotlight",
