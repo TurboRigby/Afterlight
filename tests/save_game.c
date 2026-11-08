@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     af_object_id id = af_scene_add_object(scene, "Counter", "cube");
     CHECK(af_scene_save(scene, "progress.afterlight.json", NULL));
     CHECK(ed_runtime_set_project(&r, "progress.afterlight.project", "progress.afterlight.json"));
-    CHECK(SDL_CopyFile(argv[1], "state.module") && ed_runtime_start_file(&r, scene, NULL, "state.module"));
+    CHECK(SDL_CopyFile(argv[1], "save_state.module") && ed_runtime_start_file(&r, scene, NULL, "save_state.module"));
     ed_runtime_update(&r, .01, false);
     ed_runtime_update(&r, .01, false);
     CHECK(ed_runtime_save_game(&r, "progress.save"));
@@ -33,12 +33,12 @@ int main(int argc, char **argv) {
     CHECK(!ed_runtime_load_game(&r, "progress.save") && af_scene_get_object(r.scene, id)->transform.position.x == 3);
     CHECK(ed_runtime_save_game(&r, "progress.save"));
     CHECK(!ed_runtime_save_game(&r, "missing/folder/save"));
-    CHECK(SDL_CopyFile(argv[2], "state.module") && !ed_runtime_load_game(&r, "progress.save"));
+    CHECK(SDL_CopyFile(argv[2], "save_state.module") && !ed_runtime_load_game(&r, "progress.save"));
     ed_runtime_update(&r, .01, false);
     CHECK(af_scene_get_object(r.scene, id)->transform.position.x == 4);
     ed_runtime_stop(&r);
     af_scene_destroy(scene);
-    remove("state.module");
+    remove("save_state.module");
     remove("progress.save");
     remove("progress.afterlight.json");
     puts("Progress saves: scene/module/version, paused restore, corruption "
