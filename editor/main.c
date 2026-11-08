@@ -28,6 +28,7 @@
 #include <SDL3/SDL_process.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
+#include <SDL3/SDL_mouse.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
@@ -123,6 +124,11 @@ typedef struct editor {
     uint64_t play_test_focus_losses;
     /* Landscape editor */
     bool landscape_mode;
+    /* Resizable sidebars */
+    float left_sidebar_width;
+    float right_sidebar_width;
+    bool dragging_left_splitter;
+    bool dragging_right_splitter;
     /* Blueprint editor */
     bool blueprint_mode;
     ed_blueprint_state blueprint_state;
@@ -720,6 +726,8 @@ static void select_object(editor *app, af_object_id id) {
     }
 }
 static void select_light(editor *app, size_t index) {
+    if (app->light_selected && app->selected_light == index)
+        return;
     app->edit_joint = 0;
     app->edit_part = 0;
     ed_document_end_edit(&app->document);
@@ -837,9 +845,41 @@ static void keyboard(editor *app, double delta) {
         (void)af_engine_set_mouse_capture(engine, false);
         ed_gui_unfocus(&app->gui);
     }
+    af_vec2 mouse = af_engine_mouse_position(engine);
+    int win_w = 0, win_h = 0;
+    af_engine_get_window_size(engine, &win_w, &win_h);
+    float width = (float)win_w, height = (float)win_h;
+
+    /* Handle Sidebar Splitters */
+    if (!app->runtime.playing || !app->maximize_play) {
+        bool lmb_down = af_engine_mouse_down(engine, AF_MOUSE_LEFT);
+        bool lmb_pressed = af_engine_mouse_pressed(engine, AF_MOUSE_LEFT);
+
+        if (!lmb_down) {
+            app->dragging_left_splitter = false;
+            app->dragging_right_splitter = false;
+        }
+
+        if (lmb_pressed && mouse.y >= 64.0f && mouse.y <= height - 32.0f) {
+            if (fabsf(mouse.x - app->left_sidebar_width) <= 6.0f) {
+                app->dragging_left_splitter = true;
+            } else if (fabsf(mouse.x - (width - app->right_sidebar_width)) <= 6.0f) {
+                app->dragging_right_splitter = true;
+            }
+        }
+
+        if (app->dragging_left_splitter) {
+            app->left_sidebar_width = fminf(fmaxf(180.0f, mouse.x), width * 0.45f);
+            return;
+        }
+        if (app->dragging_right_splitter) {
+            app->right_sidebar_width = fminf(fmaxf(220.0f, width - mouse.x), width * 0.45f);
+            return;
+        }
+    }
+
     if (modifier)
         return;
-    af_vec2 mouse = af_engine_mouse_position(engine);
     const char *floating[] = {"Performance", "Assets",        "Project", "Extensions",  "Animation",
                               "HDR import",  "Input actions", "Prefabs", "Environment", "Post-processing"};
     bool open[] = {app->show_performance, app->show_assets,         app->show_project, app->show_extensions,
@@ -1220,7 +1260,8 @@ static void object_rows(editor *app, af_object_id parent, unsigned depth) {
         }
         nk_layout_row_push(context, indent);
         nk_spacing(context, 1);
-        nk_layout_row_push(context, 164 - indent);
+        float name_w = fmaxf(100.0f, app->left_sidebar_width - 88.0f - indent);
+        nk_layout_row_push(context, name_w);
         if (nk_select_label(context, object.name, NK_TEXT_LEFT, app->document.selection == object.id))
             select_object(app, object.id);
         nk_layout_row_end(context);
@@ -1530,7 +1571,8 @@ static void landscape_panel(editor *app, float height) {
                     fl->visible = vis != 0;
                     ++app->document.revision;
                 }
-                nk_layout_row_push(context, 130);
+                float fol_w = fmaxf(80.0f, app->left_sidebar_width - 122.0f);
+                nk_layout_row_push(context, fol_w);
                 char layer_title[64];
                 snprintf(layer_title, sizeof(layer_title), "%s (%zu)", fl->name, fl->total_instances);
                 if (nk_select_label(context, layer_title, NK_TEXT_LEFT, app->active_foliage_layer == i)) {
@@ -1680,14 +1722,21 @@ static void landscape_panel(editor *app, float height) {
 
 static void object_list(editor *app, float height) {
     struct nk_context *context = &app->gui.context;
-    if (nk_begin(context, "Objects", nk_rect(0, 64, 252, height - 96), panel_flags(app) | NK_WINDOW_NO_SCROLLBAR)) {
+    if (nk_begin(context, "Objects", nk_rect(0, 64, app->left_sidebar_width, height - 96),
+                 panel_flags(app) | NK_WINDOW_NO_SCROLLBAR)) {
         nk_style_push_vec2(context, &context->style.button.padding, nk_vec2(2, 2));
         nk_layout_row_dynamic(context, 26, 3);
+        const char *landscape_title;
+        if (app->left_sidebar_width >= 270.0f) {
+            landscape_title = app->landscape_mode ? "[Landscape]" : "Landscape";
+        } else {
+            landscape_title = app->landscape_mode ? "[Terrain]" : "Terrain";
+        }
         if (nk_button_label(context, (!app->landscape_mode && !app->blueprint_mode) ? "[Objects]" : "Objects")) {
             app->landscape_mode = false;
             app->blueprint_mode = false;
         }
-        if (nk_button_label(context, app->landscape_mode ? "[Landscape]" : "Landscape")) {
+        if (nk_button_label(context, landscape_title)) {
             app->landscape_mode = true;
             app->blueprint_mode = false;
             app->document.selection = AF_OBJECT_NONE;
@@ -1783,7 +1832,8 @@ static void object_list(editor *app, float height) {
                 }
                 nk_layout_row_push(context, 0);
                 nk_spacing(context, 1);
-                nk_layout_row_push(context, 164);
+                float light_w = fmaxf(100.0f, app->left_sidebar_width - 88.0f);
+                nk_layout_row_push(context, light_w);
                 char label_buf[AF_OBJECT_NAME_CAPACITY + 16];
                 snprintf(label_buf, sizeof(label_buf), "[%s] %s", light->type == AF_LIGHT_SPOT ? "Spot" : "Point",
                          light->name);
@@ -2584,7 +2634,9 @@ static bool post_processing_controls(struct nk_context *ctx, af_render_settings 
 }
 static void inspector(editor *app, float width, float height) {
     struct nk_context *context = &app->gui.context;
-    if (nk_begin(context, "Inspector", nk_rect(width - 334, 64, 334, height - 96), panel_flags(app))) {
+    if (nk_begin(context, "Inspector",
+                 nk_rect(width - app->right_sidebar_width, 64, app->right_sidebar_width, height - 96),
+                 panel_flags(app))) {
         label(context, "Inspector", 28);
         if (app->blueprint_mode) {
             af_scene *scene = app->runtime.playing ? app->runtime.scene : app->document.scene;
@@ -4122,6 +4174,52 @@ static void prefab_panel(editor *app) {
     }
     nk_end(ctx);
 }
+static void draw_splitters(editor *app, float width, float height) {
+    if (app->runtime.playing && app->maximize_play)
+        return;
+    struct nk_context *ctx = &app->gui.context;
+    af_vec2 mouse = af_engine_mouse_position(app->engine);
+    float l_x = app->left_sidebar_width;
+    float r_x = width - app->right_sidebar_width;
+    float top_y = 64.0f;
+    float bot_h = height - 96.0f;
+
+    bool hover_l = fabsf(mouse.x - l_x) <= 4.0f && mouse.y >= top_y && mouse.y <= top_y + bot_h;
+    bool hover_r = fabsf(mouse.x - r_x) <= 4.0f && mouse.y >= top_y && mouse.y <= top_y + bot_h;
+
+    /* Set cursor when hovering or dragging splitters */
+    static SDL_Cursor *cursor_resize_ew = NULL;
+    static SDL_Cursor *cursor_default = NULL;
+    if (hover_l || hover_r || app->dragging_left_splitter || app->dragging_right_splitter) {
+        if (!cursor_resize_ew)
+            cursor_resize_ew = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE);
+        if (cursor_resize_ew)
+            SDL_SetCursor(cursor_resize_ew);
+    } else if (cursor_resize_ew) {
+        if (!cursor_default)
+            cursor_default = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+        if (cursor_default)
+            SDL_SetCursor(cursor_default);
+    }
+
+    /* Left splitter handle */
+    struct nk_color col_l = (app->dragging_left_splitter || hover_l) ? nk_rgb(145, 125, 235) : nk_rgb(46, 49, 60);
+    nk_style_push_style_item(ctx, &ctx->style.window.fixed_background, nk_style_item_color(col_l));
+    if (nk_begin(ctx, "Splitter L", nk_rect(l_x - 2.0f, top_y, 4.0f, bot_h),
+                 NK_WINDOW_NO_INPUT | NK_WINDOW_NO_SCROLLBAR)) {
+        nk_end(ctx);
+    }
+    nk_style_pop_style_item(ctx);
+
+    /* Right splitter handle */
+    struct nk_color col_r = (app->dragging_right_splitter || hover_r) ? nk_rgb(145, 125, 235) : nk_rgb(46, 49, 60);
+    nk_style_push_style_item(ctx, &ctx->style.window.fixed_background, nk_style_item_color(col_r));
+    if (nk_begin(ctx, "Splitter R", nk_rect(r_x - 2.0f, top_y, 4.0f, bot_h),
+                 NK_WINDOW_NO_INPUT | NK_WINDOW_NO_SCROLLBAR)) {
+        nk_end(ctx);
+    }
+    nk_style_pop_style_item(ctx);
+}
 static void build_ui(editor *app, float width, float height) {
     struct nk_context *context = &app->gui.context;
     ed_thumbnails_begin(&app->thumbnails);
@@ -4144,10 +4242,13 @@ static void build_ui(editor *app, float width, float height) {
     if (!app->runtime.playing || !app->maximize_play) {
         object_list(app, height);
         inspector(app, width, height);
+        draw_splitters(app, width, height);
     }
     nk_style_push_vec2(context, &context->style.window.padding, nk_vec2(14, 5));
     if (!app->runtime.playing || !app->maximize_play) {
-        if (nk_begin(context, "Viewport tools", nk_rect(252, 64, width - 586, 40),
+        float tools_x = app->left_sidebar_width;
+        float tools_w = fmaxf(1.0f, width - app->left_sidebar_width - app->right_sidebar_width);
+        if (nk_begin(context, "Viewport tools", nk_rect(tools_x, 64, tools_w, 40),
                      panel_flags(app) | NK_WINDOW_NO_SCROLLBAR)) {
             nk_layout_row_dynamic(context, 22, 10);
             if (nk_button_label(context, app->gizmo.mode == ED_GIZMO_MOVE ? "[Move]" : "Move"))
@@ -4196,8 +4297,8 @@ static void build_ui(editor *app, float width, float height) {
     if (nk_begin(context, "Status", nk_rect(0, height - 32, width, 32), NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_NO_INPUT)) {
         nk_layout_row_dynamic(context, 18, 1);
         nk_label(context, app->document.status, NK_TEXT_LEFT);
+        nk_end(context);
     }
-    nk_end(context);
     nk_style_pop_vec2(context);
     performance_panel(app, width, height);
     asset_browser(app, width, height);
@@ -4241,6 +4342,10 @@ static bool init(af_engine *engine, void *userdata) {
     app->engine = engine;
     af_engine_set_animation_playback(engine, false, false);
     app->landscape_mode = false;
+    app->left_sidebar_width = 252.0f;
+    app->right_sidebar_width = 334.0f;
+    app->dragging_left_splitter = false;
+    app->dragging_right_splitter = false;
     app->blueprint_mode = false;
     ed_blueprint_state_init(&app->blueprint_state);
     app->landscape_subtool = 0;
@@ -4786,13 +4891,13 @@ static void smoke(editor *app) {
         refresh(app);
     }
     if (app->updates == 114)
-        smoke_click(app, 75, 132); /* Add object: open dropdown */
+        smoke_click(app, 70, 167); /* Add object: open dropdown */
     if (app->updates == 116)
-        smoke_click(app, 75, 165); /* Select Cube (Mesh) */
+        smoke_click(app, 70, 202); /* Select Cube (Mesh) */
     if (app->updates == 118)
         app->failed |= af_scene_object_count(d->scene) != 6;
     if (app->updates == 120)
-        smoke_click(app, 175, 132);
+        smoke_click(app, 180, 167);
     if (app->updates == 123)
         app->failed |= af_scene_object_count(d->scene) != 7;
     if (app->updates == 125)
@@ -4920,9 +5025,16 @@ static void update(af_engine *engine, double delta, void *userdata) {
     int w = 0, h = 0;
     af_engine_get_window_size(engine, &w, &h);
     float width = (float)w, height = (float)h;
-    app->viewport = app->runtime.playing && app->maximize_play
-                        ? (af_rect){0, 64, width, fmaxf(1, height - 96)}
-                        : (af_rect){252, 104, fmaxf(1, width - 586), fmaxf(1, height - 136)};
+    float max_sidebar = fmaxf(100.0f, width * 0.45f);
+    if (app->left_sidebar_width > max_sidebar)
+        app->left_sidebar_width = max_sidebar;
+    if (app->right_sidebar_width > max_sidebar)
+        app->right_sidebar_width = max_sidebar;
+    app->viewport =
+        app->runtime.playing && app->maximize_play
+            ? (af_rect){0, 64, width, fmaxf(1, height - 96)}
+            : (af_rect){app->left_sidebar_width, 104,
+                        fmaxf(1, width - app->left_sidebar_width - app->right_sidebar_width), fmaxf(1, height - 136)};
     af_engine_set_viewport(engine, &app->viewport);
     const af_scene_object *selected = af_scene_get_object(app->document.scene, app->document.selection);
     const af_joint *editing = af_scene_get_joint(app->document.scene, app->edit_joint);
