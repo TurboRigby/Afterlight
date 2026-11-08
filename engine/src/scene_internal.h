@@ -12,6 +12,7 @@
 #include <afterlight/compound.h>
 #include <afterlight/water.h>
 #include <afterlight/landscape.h>
+#include <afterlight/blueprint.h>
 
 struct af_scene {
     cm_slot collision_meshes[AF_COLLISION_MESH_MAX_ASSETS];
@@ -26,6 +27,9 @@ struct af_scene {
     size_t water_count;
     af_wind wind;
     af_landscape *landscape;
+    struct af_blueprint **blueprints;
+    size_t blueprint_count;
+    size_t blueprint_capacity;
     size_t *object_slots;
     size_t object_slot_capacity;
     af_scene_object *objects;

@@ -24,6 +24,7 @@
 #include <afterlight/animation.h>
 #include <afterlight/locomotion.h>
 #include <afterlight/landscape.h>
+#include <afterlight/blueprint.h>
 
 /* All engine/window operations run on the main thread. One engine at a time. */
 typedef struct af_engine af_engine;

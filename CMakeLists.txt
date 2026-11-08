@@ -67,6 +67,9 @@ add_library(afterlight STATIC
     engine/src/water_io.c
     engine/src/landscape.c
     engine/src/landscape_io.c
+    engine/src/blueprint.c
+    engine/src/blueprint_vm.c
+    engine/src/blueprint_io.c
     engine/src/wind.c
     engine/src/physics_wind.c
     engine/src/water_particles.c
@@ -158,7 +161,7 @@ target_link_libraries(afterlight_editor_document PUBLIC Afterlight::Engine SDL3:
 afterlight_warnings(afterlight_editor_document)
 add_library(afterlight_nuklear STATIC editor/nuklear.c)
 target_include_directories(afterlight_nuklear PUBLIC third_party/nuklear editor)
-add_library(afterlight_editor_ui STATIC editor/gui.c editor/dialog.c editor/play_hud.c editor/thumbnail.c)
+add_library(afterlight_editor_ui STATIC editor/gui.c editor/dialog.c editor/play_hud.c editor/thumbnail.c editor/blueprint_editor.c)
 target_include_directories(afterlight_editor_ui PRIVATE engine/src sandbox)
 target_link_libraries(afterlight_editor_ui PUBLIC afterlight_nuklear Afterlight::Engine PRIVATE SDL3::SDL3)
 afterlight_warnings(afterlight_editor_ui)
@@ -1425,6 +1428,10 @@ if(BUILD_TESTING)
     target_link_libraries(afterlight_landscape_test PRIVATE Afterlight::Engine)
     afterlight_warnings(afterlight_landscape_test)
     add_test(NAME afterlight.landscape COMMAND afterlight_landscape_test)
+    add_executable(afterlight_blueprint_test tests/blueprint.c)
+    target_link_libraries(afterlight_blueprint_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_blueprint_test)
+    add_test(NAME afterlight.blueprint COMMAND afterlight_blueprint_test)
     add_executable(afterlight_vulkan_policy_test tests/vulkan_policy.c)
     target_include_directories(afterlight_vulkan_policy_test PRIVATE engine/src)
     target_link_libraries(afterlight_vulkan_policy_test PRIVATE Vulkan::Vulkan)

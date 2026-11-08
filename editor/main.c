@@ -21,6 +21,7 @@
 #include "gui.h"
 #include "play_hud.h"
 #include "dialog.h"
+#include "blueprint_editor.h"
 #include "platform_sdl.h"
 #include "render_test.h"
 #include "cube.h"
@@ -122,6 +123,9 @@ typedef struct editor {
     uint64_t play_test_focus_losses;
     /* Landscape editor */
     bool landscape_mode;
+    /* Blueprint editor */
+    bool blueprint_mode;
+    ed_blueprint_state blueprint_state;
     int landscape_subtool;
     af_brush_mode brush_mode;
     af_brush_falloff brush_falloff;
@@ -760,6 +764,16 @@ static void keyboard(editor *app, double delta) {
         toggle_play(app);
     if (app->runtime.playing && af_engine_key_pressed(engine, AF_KEY_F6))
         app->maximize_play = !app->maximize_play;
+    if (app->runtime.playing && app->runtime.scene) {
+        if (af_engine_key_pressed(engine, AF_KEY_SPACE))
+            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "Space", true);
+        if (af_engine_key_pressed(engine, AF_KEY_E))
+            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "E", true);
+        if (af_engine_key_pressed(engine, AF_KEY_F))
+            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "F", true);
+        if (af_engine_key_pressed(engine, AF_KEY_R))
+            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "R", true);
+    }
     bool modifier = af_engine_key_down(engine, AF_KEY_LEFT_CONTROL) || af_engine_key_down(engine, AF_KEY_LEFT_SUPER) ||
                     af_engine_key_pressed(engine, AF_KEY_LEFT_CONTROL) ||
                     af_engine_key_pressed(engine, AF_KEY_LEFT_SUPER);
@@ -1667,17 +1681,31 @@ static void landscape_panel(editor *app, float height) {
 static void object_list(editor *app, float height) {
     struct nk_context *context = &app->gui.context;
     if (nk_begin(context, "Objects", nk_rect(0, 64, 252, height - 96), panel_flags(app) | NK_WINDOW_NO_SCROLLBAR)) {
-        nk_style_push_vec2(context, &context->style.button.padding, nk_vec2(4, 2));
-        nk_layout_row_dynamic(context, 26, 2);
-        if (nk_button_label(context, app->landscape_mode ? "Objects" : "[ Objects ]")) {
+        nk_style_push_vec2(context, &context->style.button.padding, nk_vec2(2, 2));
+        nk_layout_row_dynamic(context, 26, 3);
+        if (nk_button_label(context, (!app->landscape_mode && !app->blueprint_mode) ? "[Objects]" : "Objects")) {
             app->landscape_mode = false;
+            app->blueprint_mode = false;
         }
-        if (nk_button_label(context, app->landscape_mode ? "[ Landscape ]" : "Landscape")) {
+        if (nk_button_label(context, app->landscape_mode ? "[Landscape]" : "Landscape")) {
             app->landscape_mode = true;
+            app->blueprint_mode = false;
+            app->document.selection = AF_OBJECT_NONE;
+            app->light_selected = false;
+        }
+        if (nk_button_label(context, app->blueprint_mode ? "[Scripts]" : "Scripts")) {
+            app->blueprint_mode = true;
+            app->landscape_mode = false;
             app->document.selection = AF_OBJECT_NONE;
             app->light_selected = false;
         }
         nk_style_pop_vec2(context);
+        if (app->blueprint_mode) {
+            ed_blueprint_sidebar_panel(&app->blueprint_state, context,
+                                       app->runtime.playing ? app->runtime.scene : app->document.scene, height);
+            nk_end(context);
+            return;
+        }
         if (app->landscape_mode) {
             landscape_panel(app, height);
             nk_end(context);
@@ -2558,6 +2586,30 @@ static void inspector(editor *app, float width, float height) {
     struct nk_context *context = &app->gui.context;
     if (nk_begin(context, "Inspector", nk_rect(width - 334, 64, 334, height - 96), panel_flags(app))) {
         label(context, "Inspector", 28);
+        if (app->blueprint_mode) {
+            af_scene *scene = app->runtime.playing ? app->runtime.scene : app->document.scene;
+            size_t bp_count = af_scene_blueprint_count(scene);
+            label(context, "Blueprint Overview", 24);
+            if (bp_count > 0 && app->blueprint_state.active_graph_index < bp_count) {
+                const af_blueprint *bp = af_scene_get_blueprint_const(scene, app->blueprint_state.active_graph_index);
+                char info[128];
+                snprintf(info, sizeof(info), "Graph: %s", bp->name);
+                label(context, info, 20);
+                snprintf(info, sizeof(info), "Nodes: %zu | Links: %zu", bp->node_count, bp->link_count);
+                label(context, info, 20);
+                snprintf(info, sizeof(info), "Variables: %zu", bp->var_count);
+                label(context, info, 20);
+                const af_scene_object *target = af_scene_get_object(scene, bp->bound_object);
+                snprintf(info, sizeof(info), "Target: %s", target ? target->name : "Scene Global");
+                label(context, info, 20);
+                snprintf(info, sizeof(info), "Execution: %s", app->runtime.playing ? "Live Active" : "Editing");
+                label(context, info, 20);
+            } else {
+                label(context, "No active graph.", 20);
+            }
+            nk_end(context);
+            return;
+        }
         if (app->landscape_mode) {
             const af_landscape *ls = af_scene_get_landscape(app->document.scene);
             label(context, "Terrain Overview", 24);
@@ -4079,7 +4131,12 @@ static void build_ui(editor *app, float width, float height) {
     draw_skeleton(app);
     draw_lights(app);
     draw_landscape_brush(app);
-    if (!app->animation_preview && !app->landscape_mode)
+    if (app->blueprint_mode) {
+        ed_blueprint_canvas_panel(&app->blueprint_state, context,
+                                  app->runtime.playing ? app->runtime.scene : app->document.scene, app->viewport,
+                                  app->runtime.playing);
+    }
+    if (!app->animation_preview && !app->landscape_mode && !app->blueprint_mode)
         draw_gizmo(app);
     toolbar(app, width);
     if (!app->runtime.playing || !app->maximize_play) {
@@ -4182,6 +4239,8 @@ static bool init(af_engine *engine, void *userdata) {
     app->engine = engine;
     af_engine_set_animation_playback(engine, false, false);
     app->landscape_mode = false;
+    app->blueprint_mode = false;
+    ed_blueprint_state_init(&app->blueprint_state);
     app->landscape_subtool = 0;
     app->brush_mode = AF_BRUSH_SCULPT_RAISE;
     app->brush_falloff = AF_FALLOFF_SMOOTH;
@@ -4927,6 +4986,9 @@ static void update(af_engine *engine, double delta, void *userdata) {
     ed_runtime_frame_update(&app->runtime, delta,
                             !af_engine_mouse_down(engine, AF_MOUSE_RIGHT) && !app->fields_active && !app->modal &&
                                 !app->dialog);
+    if (app->runtime.playing && app->runtime.scene) {
+        af_scene_step_blueprints(app->runtime.scene, engine, (float)delta);
+    }
     if (app->runtime.playing)
         app->camera = af_engine_get_camera(engine);
     if (app->runtime.playing && strcmp(app->runtime_status, app->runtime.status)) {

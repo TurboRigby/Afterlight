@@ -93,6 +93,9 @@ af_scene *af_scene_create(void) {
 void af_scene_destroy(af_scene *scene) {
     if (!scene)
         return;
+    for (size_t i = 0; i < scene->blueprint_count; ++i)
+        af_blueprint_destroy(scene->blueprints[i]);
+    free(scene->blueprints);
     af_landscape_destroy(scene->landscape);
     for (size_t i = 0; i < scene->collision_mesh_count; ++i)
         cm_release(scene->collision_meshes[i].mesh);
@@ -250,6 +253,15 @@ af_scene *af_scene_clone(const af_scene *source) {
     copy->render_settings = source->render_settings;
     copy->local_light_count = source->local_light_count;
     copy->landscape = af_landscape_clone(source->landscape);
+    if (source->blueprint_count) {
+        copy->blueprints = malloc(source->blueprint_count * sizeof(*copy->blueprints));
+        if (copy->blueprints) {
+            for (size_t i = 0; i < source->blueprint_count; ++i) {
+                copy->blueprints[i] = af_blueprint_clone(source->blueprints[i]);
+            }
+            copy->blueprint_count = copy->blueprint_capacity = source->blueprint_count;
+        }
+    }
     memcpy(copy->local_lights, source->local_lights, sizeof(copy->local_lights));
     if (source->count) {
         copy->objects = malloc(source->count * sizeof(*copy->objects));
