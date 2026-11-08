@@ -95,7 +95,7 @@ af_terrain_layer af_terrain_layer_default(size_t index) {
     af_terrain_layer layer = {0};
     layer.roughness = 0.8f;
     layer.metalness = 0.0f;
-    layer.uv_scale = 4.0f;
+    layer.uv_scale = 1.0f;
     layer.color = (af_color){1.0f, 1.0f, 1.0f, 1.0f};
 
     switch (index) {
@@ -893,7 +893,23 @@ bool af_landscape_build_chunk_mesh(const af_landscape *ls, size_t chunk_idx, af_
         return false;
 
     const af_terrain_chunk *c = &ls->chunks[chunk_idx];
-    float uv_scale = 0.25f; /* 1 UV tile per 4 meters */
+
+    /* Find dominant layer for this chunk to determine UV scale and material bindings */
+    uint64_t sum_weights[AF_LANDSCAPE_MAX_LAYERS] = {0};
+    for (size_t i = 0; i < CHUNK_V * CHUNK_V; ++i) {
+        sum_weights[0] += c->weights[i * 4 + 0];
+        sum_weights[1] += c->weights[i * 4 + 1];
+        sum_weights[2] += c->weights[i * 4 + 2];
+        sum_weights[3] += c->weights[i * 4 + 3];
+    }
+    size_t dominant = 0;
+    for (size_t l = 1; l < AF_LANDSCAPE_MAX_LAYERS; ++l) {
+        if (sum_weights[l] > sum_weights[dominant]) dominant = l;
+    }
+
+    float layer_scale = ls->layers[dominant].uv_scale;
+    if (layer_scale < 0.001f) layer_scale = 1.0f;
+    float uv_scale = layer_scale * 0.25f; /* 1 UV tile per 4m scaled by layer uv_scale */
 
     /* Build vertices */
     for (uint32_t vz = 0; vz < CHUNK_V; ++vz) {

@@ -360,6 +360,14 @@ static void start_import(editor *app,af_asset_kind kind)
     app->dialog_save=false;
     if(!app->dialog)set_status(app,"Cannot open import dialog.");
 }
+static void start_import_terrain_layer(editor *app, size_t layer_idx, bool normal)
+{
+    if (app->dialog || app->modal) return;
+    app->dialog = ed_dialog_begin_asset(app->engine, normal ? AF_ASSET_NORMAL_MAP : AF_ASSET_TEXTURE);
+    app->dialog_asset = (int)(normal ? (30 + layer_idx) : (20 + layer_idx));
+    app->dialog_save = false;
+    if (!app->dialog) set_status(app, "Cannot open import dialog.");
+}
 static bool load_assets(editor *app)
 {
     af_asset_error error;
@@ -432,6 +440,45 @@ static void poll_dialog(editor *app)
         else set_status(app,project_error.message);app->dialog_asset=0;
     }else if(app->dialog_asset==3){
         snprintf(app->module_path,sizeof(app->module_path),"%s",path);set_status(app,"C game selected. Press Play to load it.");app->dialog_asset=0;
+    }else if(app->dialog_asset>=20 && app->dialog_asset<24){
+        size_t layer_idx=(size_t)(app->dialog_asset-20);
+        uint64_t hash=UINT64_C(14695981039346656037);for(const unsigned char *p=(const unsigned char*)path;*p;++p){hash^=*p;hash*=UINT64_C(1099511628211);}
+        char name[AF_MESH_NAME_CAPACITY];snprintf(name,sizeof(name),"terrain_tex_%016" PRIx64,hash);
+        af_asset_error asset_error;
+        if(af_engine_load_texture(app->engine,name,path,&asset_error)){
+            ed_document_push_undo(&app->document);
+            af_scene_set_asset(app->document.scene,name,AF_ASSET_TEXTURE,path);
+            af_landscape *ls=af_scene_get_landscape_mut(app->document.scene);
+            if(ls && layer_idx<ls->layer_count){
+                snprintf(ls->layers[layer_idx].diffuse_texture,sizeof(ls->layers[layer_idx].diffuse_texture),"%s",name);
+                ls->layers[layer_idx].color=(af_color){1.0f,1.0f,1.0f,1.0f};
+                for(size_t c=0;c<ls->chunk_count;++c)ls->chunks[c].dirty_mesh=true;
+                ls->modification_version++;
+            }
+            ++app->document.revision;
+            refresh(app);
+            set_status(app,"Terrain layer diffuse texture imported.");
+        }else set_status(app,asset_error.message);
+        app->dialog_asset=0;
+    }else if(app->dialog_asset>=30 && app->dialog_asset<34){
+        size_t layer_idx=(size_t)(app->dialog_asset-30);
+        uint64_t hash=UINT64_C(14695981039346656037);for(const unsigned char *p=(const unsigned char*)path;*p;++p){hash^=*p;hash*=UINT64_C(1099511628211);}
+        char name[AF_MESH_NAME_CAPACITY];snprintf(name,sizeof(name),"terrain_norm_%016" PRIx64,hash);
+        af_asset_error asset_error;
+        if(af_engine_load_normal_map(app->engine,name,path,&asset_error)){
+            ed_document_push_undo(&app->document);
+            af_scene_set_asset(app->document.scene,name,AF_ASSET_NORMAL_MAP,path);
+            af_landscape *ls=af_scene_get_landscape_mut(app->document.scene);
+            if(ls && layer_idx<ls->layer_count){
+                snprintf(ls->layers[layer_idx].normal_texture,sizeof(ls->layers[layer_idx].normal_texture),"%s",name);
+                for(size_t c=0;c<ls->chunk_count;++c)ls->chunks[c].dirty_mesh=true;
+                ls->modification_version++;
+            }
+            ++app->document.revision;
+            refresh(app);
+            set_status(app,"Terrain layer normal map imported.");
+        }else set_status(app,asset_error.message);
+        app->dialog_asset=0;
     }else if(app->dialog_asset){
         uint64_t hash=UINT64_C(14695981039346656037);for(const unsigned char *p=(const unsigned char*)path;*p;++p){hash^=*p;hash*=UINT64_C(1099511628211);}
         char name[AF_MESH_NAME_CAPACITY];snprintf(name,sizeof(name),"%s_%016" PRIx64,app->dialog_asset==9?"environment":app->dialog_asset==1?"mesh":app->dialog_asset==7?"sound":app->dialog_asset==4?"normal":"texture",hash);
@@ -858,17 +905,170 @@ static void landscape_panel(editor *app, float height)
 
             label(context, "Layer Settings", 22);
             af_terrain_layer *l = &ls->layers[app->active_paint_layer];
+
+            label(context, "Layer Name", 20);
+            nk_layout_row_dynamic(context, 26, 1);
+            nk_edit_string_zero_terminated(context, NK_EDIT_FIELD, l->name, sizeof(l->name), nk_filter_default);
+
+            label(context, "Diffuse Texture", 22);
+            nk_layout_row_dynamic(context, 26, 1);
+            const char *diff_combo_title = l->diffuse_texture[0] ? l->diffuse_texture : "[Select Scene Texture]";
+            if (nk_combo_begin_label(context, diff_combo_title, nk_vec2(220, 200))) {
+                nk_layout_row_dynamic(context, 24, 1);
+                if (nk_combo_item_label(context, "[None (Solid Color)]", NK_TEXT_LEFT)) {
+                    if (l->diffuse_texture[0] != '\0') {
+                        ed_document_push_undo(&app->document);
+                        ls = af_scene_get_landscape_mut(app->document.scene);
+                        l = &ls->layers[app->active_paint_layer];
+                        l->diffuse_texture[0] = '\0';
+                        for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                        ls->modification_version++;
+                        refresh(app);
+                    }
+                }
+                for (size_t a = 0; a < af_scene_asset_count(app->document.scene); ++a) {
+                    const af_scene_asset *asset = af_scene_asset_at(app->document.scene, a);
+                    if (asset->kind == AF_ASSET_TEXTURE) {
+                        if (nk_combo_item_label(context, asset->name, NK_TEXT_LEFT)) {
+                            if (strcmp(l->diffuse_texture, asset->name) != 0) {
+                                ed_document_push_undo(&app->document);
+                                ls = af_scene_get_landscape_mut(app->document.scene);
+                                l = &ls->layers[app->active_paint_layer];
+                                snprintf(l->diffuse_texture, sizeof(l->diffuse_texture), "%s", asset->name);
+                                l->color = (af_color){1.0f, 1.0f, 1.0f, 1.0f};
+                                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                                ls->modification_version++;
+                                refresh(app);
+                            }
+                        }
+                    }
+                }
+                nk_combo_end(context);
+            }
+
+            nk_layout_row_dynamic(context, 26, 1);
+            char prev_diffuse[AF_ASSET_PATH_CAPACITY];
+            snprintf(prev_diffuse, sizeof(prev_diffuse), "%s", l->diffuse_texture);
+            nk_edit_string_zero_terminated(context, NK_EDIT_FIELD, l->diffuse_texture, sizeof(l->diffuse_texture), nk_filter_default);
+            if (strcmp(prev_diffuse, l->diffuse_texture) != 0) {
+                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                ls->modification_version++;
+                ++app->document.revision;
+            }
+
+            nk_layout_row_dynamic(context, 28, 1);
+            if (nk_button_label(context, "Import Texture File...")) {
+                start_import_terrain_layer(app, app->active_paint_layer, false);
+            }
+
+            label(context, "Normal Map", 22);
+            nk_layout_row_dynamic(context, 26, 1);
+            const char *norm_combo_title = l->normal_texture[0] ? l->normal_texture : "[Select Normal Map]";
+            if (nk_combo_begin_label(context, norm_combo_title, nk_vec2(220, 200))) {
+                nk_layout_row_dynamic(context, 24, 1);
+                if (nk_combo_item_label(context, "[None (Flat Normal)]", NK_TEXT_LEFT)) {
+                    if (l->normal_texture[0] != '\0') {
+                        ed_document_push_undo(&app->document);
+                        ls = af_scene_get_landscape_mut(app->document.scene);
+                        l = &ls->layers[app->active_paint_layer];
+                        l->normal_texture[0] = '\0';
+                        for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                        ls->modification_version++;
+                        refresh(app);
+                    }
+                }
+                for (size_t a = 0; a < af_scene_asset_count(app->document.scene); ++a) {
+                    const af_scene_asset *asset = af_scene_asset_at(app->document.scene, a);
+                    if (asset->kind == AF_ASSET_NORMAL_MAP) {
+                        if (nk_combo_item_label(context, asset->name, NK_TEXT_LEFT)) {
+                            if (strcmp(l->normal_texture, asset->name) != 0) {
+                                ed_document_push_undo(&app->document);
+                                ls = af_scene_get_landscape_mut(app->document.scene);
+                                l = &ls->layers[app->active_paint_layer];
+                                snprintf(l->normal_texture, sizeof(l->normal_texture), "%s", asset->name);
+                                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                                ls->modification_version++;
+                                refresh(app);
+                            }
+                        }
+                    }
+                }
+                nk_combo_end(context);
+            }
+
+            nk_layout_row_dynamic(context, 26, 1);
+            char prev_normal[AF_ASSET_PATH_CAPACITY];
+            snprintf(prev_normal, sizeof(prev_normal), "%s", l->normal_texture);
+            nk_edit_string_zero_terminated(context, NK_EDIT_FIELD, l->normal_texture, sizeof(l->normal_texture), nk_filter_default);
+            if (strcmp(prev_normal, l->normal_texture) != 0) {
+                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                ls->modification_version++;
+                ++app->document.revision;
+            }
+
+            nk_layout_row_dynamic(context, 28, 1);
+            if (nk_button_label(context, "Import Normal Map File...")) {
+                start_import_terrain_layer(app, app->active_paint_layer, true);
+            }
+
+            label(context, "Layer Material", 22);
             nk_layout_row_dynamic(context, 24, 1);
-            nk_property_float(context, "Radius (m)", 1.0f, &app->brush_radius, 50.0f, 0.5f, 0.5f);
-            nk_property_float(context, "Strength", 0.05f, &app->brush_strength, 2.0f, 0.05f, 0.05f);
+            float prev_scale = l->uv_scale;
+            nk_property_float(context, "UV Scale", 0.05f, &l->uv_scale, 20.0f, 0.1f, 0.05f);
+            if (fabsf(l->uv_scale - prev_scale) > 1e-5f) {
+                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                ls->modification_version++;
+                ++app->document.revision;
+            }
+
+            float prev_roughness = l->roughness;
+            float prev_metalness = l->metalness;
             nk_property_float(context, "Roughness", 0.0f, &l->roughness, 1.0f, 0.05f, 0.05f);
             nk_property_float(context, "Metalness", 0.0f, &l->metalness, 1.0f, 0.05f, 0.05f);
+            if (fabsf(l->roughness - prev_roughness) > 1e-5f || fabsf(l->metalness - prev_metalness) > 1e-5f) {
+                ls->modification_version++;
+                ++app->document.revision;
+            }
 
-            label(context, "Layer Color", 22);
+            label(context, "Layer Color & Tint", 22);
             nk_layout_row_dynamic(context, 22, 1);
+            af_color prev_col = l->color;
             nk_property_float(context, "Red", 0.0f, &l->color.r, 1.0f, 0.02f, 0.02f);
             nk_property_float(context, "Green", 0.0f, &l->color.g, 1.0f, 0.02f, 0.02f);
             nk_property_float(context, "Blue", 0.0f, &l->color.b, 1.0f, 0.02f, 0.02f);
+            if (fabsf(l->color.r - prev_col.r) > 1e-5f ||
+                fabsf(l->color.g - prev_col.g) > 1e-5f ||
+                fabsf(l->color.b - prev_col.b) > 1e-5f) {
+                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                ls->modification_version++;
+                ++app->document.revision;
+            }
+
+            nk_layout_row_dynamic(context, 26, 2);
+            if (nk_button_label(context, "Reset (White)")) {
+                ed_document_push_undo(&app->document);
+                ls = af_scene_get_landscape_mut(app->document.scene);
+                l = &ls->layers[app->active_paint_layer];
+                l->color = (af_color){1.0f, 1.0f, 1.0f, 1.0f};
+                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                ls->modification_version++;
+                refresh(app);
+            }
+            if (nk_button_label(context, "Reset (Default)")) {
+                ed_document_push_undo(&app->document);
+                ls = af_scene_get_landscape_mut(app->document.scene);
+                l = &ls->layers[app->active_paint_layer];
+                af_terrain_layer def = af_terrain_layer_default(app->active_paint_layer);
+                l->color = def.color;
+                for (size_t c = 0; c < ls->chunk_count; ++c) ls->chunks[c].dirty_mesh = true;
+                ls->modification_version++;
+                refresh(app);
+            }
+
+            label(context, "Brush & Painting", 22);
+            nk_layout_row_dynamic(context, 24, 1);
+            nk_property_float(context, "Radius (m)", 1.0f, &app->brush_radius, 50.0f, 0.5f, 0.5f);
+            nk_property_float(context, "Strength", 0.05f, &app->brush_strength, 2.0f, 0.05f, 0.05f);
 
             label(context, "Auto-Slope Texturing", 22);
             nk_layout_row_dynamic(context, 30, 1);

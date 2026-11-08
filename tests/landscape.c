@@ -169,7 +169,25 @@ int main(void) {
     CHECK(batch_count == 0); /* Hidden layer produces 0 batches! */
     CHECK(af_landscape_set_foliage_visible(ls, 0, true));
 
-    /* 10. Scene Integration & Serialization */
+    /* 10. Custom Layer Textures & UV Scaling */
+    snprintf(ls->layers[0].diffuse_texture, sizeof(ls->layers[0].diffuse_texture), "grass_diffuse.png");
+    snprintf(ls->layers[0].normal_texture, sizeof(ls->layers[0].normal_texture), "grass_normal.png");
+    ls->layers[0].uv_scale = 2.0f;
+    ls->layers[0].roughness = 0.72f;
+    ls->layers[0].metalness = 0.05f;
+
+    snprintf(ls->layers[1].diffuse_texture, sizeof(ls->layers[1].diffuse_texture), "dirt_diffuse.png");
+    snprintf(ls->layers[1].normal_texture, sizeof(ls->layers[1].normal_texture), "dirt_normal.png");
+    ls->layers[1].uv_scale = 1.5f;
+
+    /* Verify chunk mesh UVs scale with dominant layer */
+    af_vertex v_test[AF_LANDSCAPE_CHUNK_VERTICES * AF_LANDSCAPE_CHUNK_VERTICES];
+    uint32_t i_test[AF_LANDSCAPE_CHUNK_QUADS * AF_LANDSCAPE_CHUNK_QUADS * 6];
+    CHECK(af_landscape_build_chunk_mesh(ls, 0, v_test, i_test));
+    /* Delta wx between adjacent vertices is spacing (2.0m). With uv_scale=2.0 (0.5/m), delta uv.x is 1.0 */
+    CHECK(fabsf((v_test[1].uv.x - v_test[0].uv.x) - 1.0f) < 1e-4f);
+
+    /* 11. Scene Integration & Serialization */
     af_scene *scene = af_scene_create();
     CHECK(scene != NULL);
     CHECK(af_scene_get_landscape(scene) == NULL);
@@ -186,6 +204,9 @@ int main(void) {
     CHECK(cloned_ls->chunk_count == ls->chunk_count);
     CHECK(cloned_ls->foliage_layer_count == ls->foliage_layer_count);
     CHECK(cloned_ls->total_foliage_instances == ls->total_foliage_instances);
+    CHECK(!strcmp(cloned_ls->layers[0].diffuse_texture, "grass_diffuse.png"));
+    CHECK(!strcmp(cloned_ls->layers[0].normal_texture, "grass_normal.png"));
+    CHECK(fabsf(cloned_ls->layers[0].uv_scale - 2.0f) < 1e-4f);
 
     /* Save and Load scene */
     const char *test_path = "landscape_test_scene.afterlight.json";
@@ -201,6 +222,16 @@ int main(void) {
     CHECK(loaded_ls->foliage_layer_count == 1);
     CHECK(!strcmp(loaded_ls->foliage_layers[0].name, "Pine Tree"));
     CHECK(loaded_ls->total_foliage_instances > 0);
+
+    /* Verify custom layer textures and properties persisted */
+    CHECK(!strcmp(loaded_ls->layers[0].diffuse_texture, "grass_diffuse.png"));
+    CHECK(!strcmp(loaded_ls->layers[0].normal_texture, "grass_normal.png"));
+    CHECK(fabsf(loaded_ls->layers[0].uv_scale - 2.0f) < 1e-4f);
+    CHECK(fabsf(loaded_ls->layers[0].roughness - 0.72f) < 1e-4f);
+    CHECK(fabsf(loaded_ls->layers[0].metalness - 0.05f) < 1e-4f);
+    CHECK(!strcmp(loaded_ls->layers[1].diffuse_texture, "dirt_diffuse.png"));
+    CHECK(!strcmp(loaded_ls->layers[1].normal_texture, "dirt_normal.png"));
+    CHECK(fabsf(loaded_ls->layers[1].uv_scale - 1.5f) < 1e-4f);
 
     /* Verify heights loaded accurately */
     float h_orig = af_landscape_get_height(ls, 5.0f, 5.0f);

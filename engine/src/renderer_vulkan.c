@@ -2373,17 +2373,56 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 }
                 ++renderer->visible_objects;
 
+                /* Dominant layer of this chunk determines texture and surface bindings */
+                uint64_t sum_weights[AF_LANDSCAPE_MAX_LAYERS] = {0};
+                for (size_t v_i = 0; v_i < AF_LANDSCAPE_CHUNK_VERTICES * AF_LANDSCAPE_CHUNK_VERTICES; ++v_i) {
+                    sum_weights[0] += chunk->weights[v_i * 4 + 0];
+                    sum_weights[1] += chunk->weights[v_i * 4 + 1];
+                    sum_weights[2] += chunk->weights[v_i * 4 + 2];
+                    sum_weights[3] += chunk->weights[v_i * 4 + 3];
+                }
+                size_t dominant = 0;
+                for (size_t l_i = 1; l_i < AF_LANDSCAPE_MAX_LAYERS; ++l_i) {
+                    if (sum_weights[l_i] > sum_weights[dominant]) dominant = l_i;
+                }
+
+                af_vk_texture *diffuse_tex = renderer->white;
+                if (ls->layers[dominant].diffuse_texture[0] != '\0') {
+                    for (size_t t = 0; t < renderer->texture_count; ++t) {
+                        if (!renderer->textures[t].normal && !strcmp(renderer->textures[t].name, ls->layers[dominant].diffuse_texture)) {
+                            diffuse_tex = renderer->textures[t].texture;
+                            break;
+                        }
+                    }
+                }
+
+                af_vk_texture *normal_tex = renderer->flat_normal;
+                bool has_normal = false;
+                if (ls->layers[dominant].normal_texture[0] != '\0') {
+                    for (size_t t = 0; t < renderer->texture_count; ++t) {
+                        if (renderer->textures[t].normal && !strcmp(renderer->textures[t].name, ls->layers[dominant].normal_texture)) {
+                            normal_tex = renderer->textures[t].texture;
+                            has_normal = true;
+                            break;
+                        }
+                    }
+                }
+
+                float roughness = ls->layers[dominant].roughness;
+                float metalness = ls->layers[dominant].metalness;
+
                 struct { af_mat4 model; af_color tint; af_vec4 params, surface, emission; } chunk_transform = {
                     .model = af_mat4_identity(),
                     .tint = {1.0f, 1.0f, 1.0f, 1.0f},
-                    .params = {(float)((uint32_t)AF_ALPHA_OPAQUE << 1u), 1.0f, 1.0f, 0.0f},
-                    .surface = {0.85f, 0.05f, 1.0f, 0.0f},
+                    .params = {(float)((uint32_t)AF_ALPHA_OPAQUE << 1u), 1.0f, 1.0f, has_normal ? 1.0f : 0.0f},
+                    .surface = {roughness, metalness, 1.0f, 0.0f},
                     .emission = {0.0f, 0.0f, 0.0f, 0.0f}
                 };
-                VkDescriptorSet desc_white = af_vk_texture_descriptor(renderer->white);
-                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 1, 1, &desc_white, 0, NULL);
-                VkDescriptorSet desc_norm = af_vk_texture_descriptor(renderer->flat_normal);
+                VkDescriptorSet desc_diff = af_vk_texture_descriptor(diffuse_tex);
+                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 1, 1, &desc_diff, 0, NULL);
+                VkDescriptorSet desc_norm = af_vk_texture_descriptor(normal_tex);
                 vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 3, 1, &desc_norm, 0, NULL);
+                VkDescriptorSet desc_white = af_vk_texture_descriptor(renderer->white);
                 vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 4, 1, &desc_white, 0, NULL);
                 vkCmdPushConstants(frame->command, renderer->swapchain.pipeline_layout,
                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(chunk_transform), &chunk_transform);
