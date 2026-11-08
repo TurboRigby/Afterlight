@@ -338,6 +338,7 @@ af_material af_material_default(void) {
                          .cast_shadows = true,
                          .receive_shadows = true,
                          .roughness = 0.6f,
+                         .ior = 1.45f,
                          .normal_strength = 1};
 }
 af_directional_light af_directional_light_default(void) {
@@ -365,6 +366,8 @@ bool af_scene_set_object_material(af_scene *scene, af_object_id id, af_material 
         if (!isfinite(emission[i]) || emission[i] < 0 || emission[i] > 1)
             return false;
     if (!isfinite(material.emission_strength) || material.emission_strength < 0 || material.emission_strength > 1000)
+        return false;
+    if (!isfinite(material.ior) || material.ior < 1.0f || material.ior > 3.0f)
         return false;
     if (!isfinite(material.normal_strength) || material.normal_strength < 0 || material.normal_strength > 4)
         return false;

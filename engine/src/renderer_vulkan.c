@@ -46,7 +46,9 @@ enum {
     AF_RESOURCE_RAY_REFLECTIONS = 64u,
     AF_RESOURCE_UPSCALER = 128u,
     AF_RESOURCE_RAY_GI = 256u,
-    AF_RESOURCE_RAY_QUERY = AF_RESOURCE_RAY_SHADOWS | AF_RESOURCE_RAY_REFLECTIONS | AF_RESOURCE_RAY_GI
+    AF_RESOURCE_RAY_MATERIALS = 512u,
+    AF_RESOURCE_RAY_QUERY = AF_RESOURCE_RAY_SHADOWS | AF_RESOURCE_RAY_REFLECTIONS | AF_RESOURCE_RAY_GI |
+                            AF_RESOURCE_RAY_MATERIALS
 };
 #define AF_PORTABILITY_SUBSET "VK_KHR_portability_subset"
 #define AF_STARTUP_EXTENSION_CAPACITY (AF_EXTENSION_LIMIT * AF_VULKAN_STARTUP_MAX_EXTENSIONS)
@@ -75,8 +77,9 @@ typedef struct af_frame_uniform {
     af_vec4 water_absorption, water_scattering, water_bounds, water_axes, water_screen, water_viewport, wind_time;
     af_vec4 rtgi_params;
     af_mat4 unjittered_view_projection, previous_view_projection;
+    af_vec4 ray_params;
 } af_frame_uniform;
-_Static_assert(sizeof(af_frame_uniform) == 3360, "Shader frame layout");
+_Static_assert(sizeof(af_frame_uniform) == 3376, "Shader frame layout");
 typedef struct af_blend_draw {
     size_t index;
     float depth;
@@ -2406,7 +2409,7 @@ static uint64_t shadow_hash(uint64_t h, const void *data, size_t size) {
     return h;
 }
 static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *scene, bool shadows, bool reflections,
-                              bool gi) {
+                              bool gi, bool material_effects) {
     if (r->rays && r->ray_revision != r->mesh_revision) {
         if (!af_renderer_wait_idle(r))
             return false;
@@ -2435,13 +2438,13 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
         af_shadow_draw *caster = NULL;
         if (shadow_index < r->shadow_count && r->shadow_draws[shadow_index].object_index == i)
             caster = &r->shadow_draws[shadow_index++];
-        if (!reflections && !gi && !caster)
+        if (!reflections && !gi && !material_effects && !caster)
             continue;
 
         const af_scene_object *object = af_scene_object_at(scene, i);
         const af_material *material = &object->material;
-        uint8_t mask = (shadows && caster ? AF_RAY_SHADOW_MASK : 0) | (reflections ? AF_RAY_REFLECTION_MASK : 0) |
-                       (gi ? AF_RAY_GI_MASK : 0);
+        uint8_t mask = (shadows && caster ? AF_RAY_SHADOW_MASK : 0) |
+                       ((reflections || material_effects) ? AF_RAY_REFLECTION_MASK : 0) | (gi ? AF_RAY_GI_MASK : 0);
         if (!mask || material->alpha_mode != AF_ALPHA_OPAQUE || af_scene_get_water(scene, object->id) ||
             (!caster && !af_scene_object_visible(scene, object->id)))
             continue;
@@ -2478,7 +2481,8 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
         for (size_t i = 0; i < r->shadow_count; ++i)
             if (!r->shadow_draws[i].ray_caster)
                 ++r->ray_raster_casters;
-    return af_vk_ray_query_prepare(r->rays, r->frame_index, r->ray_inputs, count, reflections || gi, frame->descriptor);
+    return af_vk_ray_query_prepare(r->rays, r->frame_index, r->ray_inputs, count,
+                                   reflections || gi || material_effects, frame->descriptor);
 }
 static uint64_t shadow_signature(af_renderer *r, af_mat4 matrix, af_shadow_settings settings, bool enabled) {
     uint64_t h = shadow_hash(UINT64_C(14695981039346656037), &matrix, sizeof(matrix));
@@ -2852,6 +2856,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 }
             }
         }
+        if (environment_settings.ray_traced_material_effects)
+            resource_config |= AF_RESOURCE_RAY_MATERIALS;
         if (environment_settings.ray_traced_gi) {
             resource_config |= AF_RESOURCE_RAY_GI;
             /* The GI denoiser reprojects with motion vectors. */
@@ -2923,16 +2929,18 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     bool ray_shadows = (resource_config & AF_RESOURCE_RAY_SHADOWS) != 0;
     bool ray_reflections = (resource_config & AF_RESOURCE_RAY_REFLECTIONS) != 0;
     bool ray_gi = (resource_config & AF_RESOURCE_RAY_GI) != 0;
+    bool ray_material_effects = (resource_config & AF_RESOURCE_RAY_MATERIALS) != 0;
     uniform.sky_params.z = ray_shadows ? 1.f : 0.f;
     uniform.sky_params.w = ray_reflections ? 1.f : 0.f;
+    uniform.ray_params = (af_vec4){ray_material_effects && !renderer->ray_failed ? 1.0f : 0.0f, 0, 0, 0};
     uniform.rtgi_params = (af_vec4){
         ray_gi && !renderer->ray_failed ? 1.0f : 0.0f,
         environment_settings.rtgi_intensity,
         environment_settings.rtgi_ray_distance,
         (float)environment_settings.rtgi_samples,
     };
-    if ((ray_shadows || ray_reflections || ray_gi) &&
-        !prepare_ray_scene(renderer, frame, scene, ray_shadows, ray_reflections, ray_gi)) {
+    if ((ray_shadows || ray_reflections || ray_gi || ray_material_effects) &&
+        !prepare_ray_scene(renderer, frame, scene, ray_shadows, ray_reflections, ray_gi, ray_material_effects)) {
         af_log("warning", "Ray-query initialization/build preparation failed; using raster and environment fallbacks.");
         renderer->ray_failed = true;
         renderer->resize_pending = true;
@@ -3265,9 +3273,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                     world,
                     base,
                     {(float)((object->material.unlit ? 1u : 0u) | ((uint32_t)object->material.alpha_mode << 1u) |
-                             ((uint32_t)lroundf(object->material.alpha_cutoff * 65535) << 3u)),
+                             ((uint32_t)lroundf(object->material.alpha_cutoff * 65535) << 3u) |
+                             (object->material.normal_map[0] ? (1u << 23u) : 0u)),
                      object->material.receive_shadows ? 1.0f : 0.0f, object->material.physically_based ? 1.0f : 0.0f,
-                     object->material.normal_map[0] ? 1.0f : 0.0f},
+                     object->material.ior},
                     {object->material.roughness, object->material.metallic, object->material.normal_strength,
                      (float)skin_base(renderer, object->id, mesh)},
                     {object->material.emission.x, object->material.emission.y, object->material.emission.z,
@@ -3436,7 +3445,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                     } chunk_transform = {
                         .model = af_mat4_identity(),
                         .tint = {1.0f, 1.0f, 1.0f, 1.0f},
-                        .params = {(float)((uint32_t)AF_ALPHA_OPAQUE << 1u), 1.0f, 1.0f, has_normal ? 1.0f : 0.0f},
+                        .params = {(float)(((uint32_t)AF_ALPHA_OPAQUE << 1u) | (has_normal ? (1u << 23u) : 0u)),
+                                   1.0f, 1.0f, 1.45f},
                         .surface = {roughness, metalness, 1.0f, 0.0f},
                         .emission = {0.0f, 0.0f, 0.0f, 0.0f}};
                     VkDescriptorSet desc_diff = af_vk_texture_descriptor(diffuse_tex);
@@ -3562,10 +3572,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                                 .tint = fl->material.base_color,
                                 .params = {(float)((fl->material.unlit ? 1u : 0u) |
                                                    ((uint32_t)fl->material.alpha_mode << 1u) |
-                                                   ((uint32_t)lroundf(fl->material.alpha_cutoff * 65535.0f) << 3u)),
+                                                   ((uint32_t)lroundf(fl->material.alpha_cutoff * 65535.0f) << 3u) |
+                                                   (fl->material.normal_map[0] ? (1u << 23u) : 0u)),
                                            fl->material.receive_shadows ? 1.0f : 0.0f,
-                                           fl->material.physically_based ? 1.0f : 0.0f,
-                                           fl->material.normal_map[0] ? 1.0f : 0.0f},
+                                           fl->material.physically_based ? 1.0f : 0.0f, fl->material.ior},
                                 .surface = {fl->material.roughness, fl->material.metallic, fl->material.normal_strength,
                                             0.0f},
                                 .emission = {fl->material.emission.x, fl->material.emission.y, fl->material.emission.z,
@@ -3792,6 +3802,8 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer) {
             (renderer->swapchain.resource_config & AF_RESOURCE_RAY_SHADOWS) != 0 && !renderer->ray_failed,
         .ray_traced_water_reflections_active =
             (renderer->swapchain.resource_config & AF_RESOURCE_RAY_REFLECTIONS) != 0 && !renderer->ray_failed,
+        .ray_traced_material_effects_active =
+            (renderer->swapchain.resource_config & AF_RESOURCE_RAY_MATERIALS) != 0 && !renderer->ray_failed,
         .ray_traced_gi_active =
             (renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) != 0 && !renderer->ray_failed,
         .ray_tracing_failed = renderer->ray_failed,

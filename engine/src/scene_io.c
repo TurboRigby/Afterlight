@@ -372,7 +372,7 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
         version->valuedouble != 16 && version->valuedouble != 17 && version->valuedouble != 18 &&
         version->valuedouble != 19 && version->valuedouble != 20 && version->valuedouble != 21 &&
         version->valuedouble != 22 && version->valuedouble != 23 && version->valuedouble != 24 &&
-        version->valuedouble != AF_SCENE_FILE_VERSION) {
+        version->valuedouble != 25 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -544,14 +544,16 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                                                  "normal_strength",
                                                  "metallic_roughness_map",
                                                  "alpha_mode",
-                                                 "alpha_cutoff"};
+                                                 "alpha_cutoff",
+                                                 "ior"};
             const cJSON *m = cJSON_GetObjectItemCaseSensitive(item, "material"),
                         *color = cJSON_GetObjectItemCaseSensitive(m, "base_color"),
                         *texture = cJSON_GetObjectItemCaseSensitive(m, "texture"),
                         *unlit = cJSON_GetObjectItemCaseSensitive(m, "unlit");
             af_material material = af_material_default();
             if (!exact_fields(m, fields,
-                              version->valuedouble >= 12  ? 15
+                              version->valuedouble >= 26 ? 16
+                              : version->valuedouble >= 12 ? 15
                               : version->valuedouble >= 7 ? 13
                               : version->valuedouble >= 4 ? 12
                                                           : (version->valuedouble >= 3 ? 5 : 3)) ||
@@ -623,6 +625,10 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                     set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid alpha mode.");
                     goto fail;
                 }
+            }
+            if (version->valuedouble >= 26 && !read_float_field(m, "ior", &material.ior)) {
+                set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid material index of refraction.");
+                goto fail;
             }
             if (!af_scene_set_object_material(scene, object->id, material)) {
                 set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid material.");
@@ -843,14 +849,90 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                                                             "rtgi_intensity",
                                                             "rtgi_ray_distance",
                                                             "rtgi_samples"};
+        static const char *const render_fields_v26[] = {"exposure",
+                                                    "tone_mapping",
+                                                    "bloom",
+                                                    "bloom_strength",
+                                                    "bloom_threshold",
+                                                    "bloom_radius",
+                                                    "environment_enabled",
+                                                    "environment_profile",
+                                                    "environment_intensity",
+                                                    "environment_rotation",
+                                                    "local_shadow_resolution",
+                                                    "environment_asset",
+                                                    "skybox",
+                                                    "skybox_intensity",
+                                                    "underwater",
+                                                    "refraction",
+                                                    "refraction_strength",
+                                                    "anti_aliasing",
+                                                    "aa_sharpness",
+                                                    "taa_history_weight",
+                                                    "ray_traced_shadows",
+                                                    "ray_traced_water_reflections",
+                                                    "ray_traced_material_effects",
+                                                    "tone_mapper",
+                                                    "auto_exposure",
+                                                    "auto_exposure_speed",
+                                                    "auto_exposure_min",
+                                                    "auto_exposure_max",
+                                                    "saturation",
+                                                    "contrast",
+                                                    "color_filter",
+                                                    "depth_of_field",
+                                                    "dof_focus_distance",
+                                                    "dof_focus_range",
+                                                    "dof_blur_radius",
+                                                    "motion_blur",
+                                                    "motion_blur_strength",
+                                                    "vignette",
+                                                    "vignette_intensity",
+                                                    "vignette_smoothness",
+                                                    "chromatic_aberration",
+                                                    "chromatic_aberration_strength",
+                                                    "film_grain",
+                                                    "film_grain_intensity",
+                                                    "ray_traced_gi",
+                                                    "rtgi_intensity",
+                                                    "rtgi_ray_distance",
+                                                    "rtgi_samples"};
+        static const char *const render_fields_no_post_v26[] = {"exposure",
+                                                            "tone_mapping",
+                                                            "bloom",
+                                                            "bloom_strength",
+                                                            "bloom_threshold",
+                                                            "bloom_radius",
+                                                            "environment_enabled",
+                                                            "environment_profile",
+                                                            "environment_intensity",
+                                                            "environment_rotation",
+                                                            "local_shadow_resolution",
+                                                            "environment_asset",
+                                                            "skybox",
+                                                            "skybox_intensity",
+                                                            "underwater",
+                                                            "refraction",
+                                                            "refraction_strength",
+                                                            "anti_aliasing",
+                                                            "aa_sharpness",
+                                                            "taa_history_weight",
+                                                            "ray_traced_shadows",
+                                                            "ray_traced_water_reflections",
+                                                            "ray_traced_material_effects",
+                                                            "ray_traced_gi",
+                                                            "rtgi_intensity",
+                                                            "rtgi_ray_distance",
+                                                            "rtgi_samples"};
         const cJSON *render = cJSON_GetObjectItemCaseSensitive(root, "render"),
                     *tone = cJSON_GetObjectItemCaseSensitive(render, "tone_mapping");
         af_render_settings settings = af_render_settings_default();
         const cJSON *ray_reflections = cJSON_GetObjectItemCaseSensitive(render, "ray_traced_water_reflections");
         const cJSON *post_check = cJSON_GetObjectItemCaseSensitive(render, "tone_mapper");
         const cJSON *rtgi_check = cJSON_GetObjectItemCaseSensitive(render, "ray_traced_gi");
-        size_t expected_render_fields =
-            version->valuedouble >= 24
+        size_t expected_render_fields = version->valuedouble >= 26
+            ? (post_check ? (rtgi_check ? 48 : 44) : (rtgi_check ? 27 : (ray_reflections ? 23 : 22)))
+            : version->valuedouble >= 24
                 ? (post_check ? (rtgi_check ? 47 : 43) : (rtgi_check ? 26 : (ray_reflections ? 22 : 21)))
             : version->valuedouble >= 23 ? 20
             : version->valuedouble >= 21 ? 17
@@ -858,7 +940,9 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
             : version->valuedouble >= 9  ? 14
             : version->valuedouble >= 8  ? 11
                                          : 2;
-        const char *const *active_render_fields = (!post_check && rtgi_check) ? render_fields_no_post : render_fields;
+        const char *const *active_render_fields = version->valuedouble >= 26
+            ? ((!post_check && rtgi_check) ? render_fields_no_post_v26 : render_fields_v26)
+            : ((!post_check && rtgi_check) ? render_fields_no_post : render_fields);
         if (!exact_fields(render, active_render_fields, expected_render_fields) ||
             !read_float_field(render, "exposure", &settings.exposure) || !cJSON_IsBool(tone)) {
             set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid exposure/tone mapping settings.");
@@ -935,6 +1019,14 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                 goto fail;
             }
             settings.ray_traced_shadows = cJSON_IsTrue(r) != 0;
+        }
+        if (version->valuedouble >= 26) {
+            const cJSON *material_effects = cJSON_GetObjectItemCaseSensitive(render, "ray_traced_material_effects");
+            if (!cJSON_IsBool(material_effects)) {
+                set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid ray-traced material-effects toggle.");
+                goto fail;
+            }
+            settings.ray_traced_material_effects = cJSON_IsTrue(material_effects) != 0;
         }
         if (ray_reflections) {
             if (!cJSON_IsBool(ray_reflections)) {
@@ -1432,7 +1524,8 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
         !cJSON_AddNumberToObject(render, "taa_history_weight", rs->taa_history_weight))
         goto fail;
     if (!cJSON_AddBoolToObject(render, "ray_traced_shadows", rs->ray_traced_shadows) ||
-        !cJSON_AddBoolToObject(render, "ray_traced_water_reflections", rs->ray_traced_water_reflections))
+        !cJSON_AddBoolToObject(render, "ray_traced_water_reflections", rs->ray_traced_water_reflections) ||
+        !cJSON_AddBoolToObject(render, "ray_traced_material_effects", rs->ray_traced_material_effects))
         goto fail;
     if (!cJSON_AddBoolToObject(render, "underwater", rs->underwater) ||
         !cJSON_AddBoolToObject(render, "refraction", rs->refraction) ||
@@ -1624,7 +1717,8 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
             !cJSON_AddNumberToObject(material, "emission_strength", source->material.emission_strength) ||
             !cJSON_AddStringToObject(material, "normal_map", source->material.normal_map) ||
             !cJSON_AddNumberToObject(material, "normal_strength", source->material.normal_strength) ||
-            !cJSON_AddStringToObject(material, "metallic_roughness_map", source->material.metallic_roughness_map))
+            !cJSON_AddStringToObject(material, "metallic_roughness_map", source->material.metallic_roughness_map) ||
+            !cJSON_AddNumberToObject(material, "ior", source->material.ior))
             goto fail;
         const af_collider *value = &source->collider;
         static const char *const types[] = {"none", "box", "sphere", "capsule", "mesh", "compound"};

@@ -849,6 +849,10 @@ void inspector(editor *app, float width, float height) {
             material_changed |= nk_property_float(context, "Roughness", 0, &material.roughness, 1, 0.05f, 0.005f) != 0;
             nk_layout_row_dynamic(context, 30, 1);
             material_changed |= nk_property_float(context, "Metallic", 0, &material.metallic, 1, 0.05f, 0.005f) != 0;
+            if (material.alpha_mode == AF_ALPHA_BLEND) {
+                nk_layout_row_dynamic(context, 30, 1);
+                material_changed |= nk_property_float(context, "Index of refraction", 1.0f, &material.ior, 3.0f, 0.05f, 0.01f) != 0;
+            }
             label(context, "Emission (linear RGB)", 22);
             nk_layout_row_dynamic(context, 30, 3);
             material_changed |= nk_property_float(context, "#R", 0, &material.emission.x, 1, 0.05f, 0.005f) != 0;

@@ -433,7 +433,7 @@ bool ed_document_material(ed_document *d, af_material material) {
         a->base_color.b == material.base_color.b && a->base_color.a == material.base_color.a &&
         a->unlit == material.unlit && a->cast_shadows == material.cast_shadows &&
         a->receive_shadows == material.receive_shadows && a->physically_based == material.physically_based &&
-        a->roughness == material.roughness && a->metallic == material.metallic &&
+        a->roughness == material.roughness && a->metallic == material.metallic && a->ior == material.ior &&
         same_vector(a->emission, material.emission) && a->emission_strength == material.emission_strength &&
         a->normal_strength == material.normal_strength &&
         !strcmp(a->metallic_roughness_map, material.metallic_roughness_map) &&

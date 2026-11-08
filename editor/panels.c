@@ -300,6 +300,12 @@ void environment_panel(editor *app, float width, float height) {
             render.ray_traced_water_reflections = ray_reflections != 0;
             changed = true;
         }
+        nk_bool material_rays = render.ray_traced_material_effects;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        if (nk_checkbox_label(ctx, "Ray-traced material reflections / transmission / AO", &material_rays)) {
+            render.ray_traced_material_effects = material_rays != 0;
+            changed = true;
+        }
         nk_bool ray_gi = render.ray_traced_gi;
         nk_layout_row_dynamic(ctx, 28, 1);
         if (nk_checkbox_label(ctx, "Ray-traced global illumination (RTGI)", &ray_gi)) {
@@ -609,6 +615,11 @@ void performance_panel(editor *app, float width, float height) {
                  stats.ray_traced_water_reflections_active ? "active"
                  : stats.ray_query_supported               ? "off"
                                                            : "unsupported");
+        label(ctx, text, 26);
+        snprintf(text, sizeof(text), "Ray material effects: %s",
+                 stats.ray_traced_material_effects_active ? "active"
+                 : stats.ray_query_supported                ? "off"
+                                                          : "unsupported");
         label(ctx, text, 26);
         snprintf(text, sizeof(text), "Ray-traced GI: %s",
                  stats.ray_traced_gi_active  ? "active"

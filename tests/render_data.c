@@ -152,6 +152,9 @@ int main(int argc, char **argv) {
     invalid.metallic = 2;
     CHECK(!af_scene_set_object_material(copy, object, invalid));
     invalid = m;
+    invalid.ior = 0.5f;
+    CHECK(!af_scene_set_object_material(copy, object, invalid));
+    invalid = m;
     invalid.normal_strength = -1;
     CHECK(!af_scene_set_object_material(copy, object, invalid));
     invalid = m;

@@ -45,20 +45,27 @@ vec3 shade_reflection_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction) {
     vec3 sky = textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z;
 
     vec3 local_light = vec3(0.0);
-    for (int i = 0; i < int(min(frame.light_count.x, 4.0)); ++i) {
+    for (int i = 0; i < int(frame.light_count.x); ++i) {
         LocalLight light = frame.lights[i];
         vec3 offset = light.position_range.xyz - hit_pos;
         float dist_sq = dot(offset, offset);
-        if (dist_sq < light.position_range.w * light.position_range.w) {
-            float dist = sqrt(dist_sq);
-            vec3 l = offset / max(dist, 0.001);
-            float n_dot_l = max(dot(normal, l), 0.0);
-            if (n_dot_l > 0.0) {
-                float falloff = clamp(1.0 - pow(dist / light.position_range.w, 4.0), 0.0, 1.0);
-                float atten = falloff * falloff / max(dist_sq, 0.01);
-                local_light += light.color_intensity.rgb * (light.color_intensity.w * atten * n_dot_l);
-            }
+        float range = max(light.position_range.w, 0.001);
+        if (dist_sq >= range * range || dist_sq < 1e-8)
+            continue;
+        float dist = sqrt(dist_sq);
+        vec3 l = offset / dist;
+        float n_dot_l = max(dot(normal, l), 0.0);
+        if (n_dot_l <= 0.0)
+            continue;
+        float falloff = clamp(1.0 - pow(dist / range, 4.0), 0.0, 1.0);
+        float attenuation = falloff * falloff / max(dist_sq, 0.01);
+        if (light.params.y > 0.5) {
+            float cone = dot(-l, normalize(light.direction_inner.xyz));
+            float blend = clamp((cone - light.params.x) /
+                                max(light.direction_inner.w - light.params.x, 1e-5), 0.0, 1.0);
+            attenuation *= blend * blend * (3.0 - 2.0 * blend);
         }
+        local_light += light.color_intensity.rgb * (light.color_intensity.w * attenuation * n_dot_l);
     }
 
     return base * (frame.color_ambient.w + sun + sky + local_light) + surface.emission_unlit.rgb;
@@ -126,111 +133,142 @@ vec3 sample_ggx(vec2 u, vec3 n, vec3 b1, vec3 b2, float roughness) {
     float alpha2 = alpha * alpha;
     float phi = 6.28318530718 * u.x;
     float cos_theta = sqrt(clamp((1.0 - u.y) / (1.0 + (alpha2 - 1.0) * u.y), 0.0, 1.0));
-    float sin_theta = sqrt(clamp(1.0 - cos_theta * cos_theta, 0.0, 1.0));
+    float sin_theta = sqrt(max(1.0 - cos_theta * cos_theta, 0.0));
     return normalize(b1 * (cos(phi) * sin_theta) + b2 * (sin(phi) * sin_theta) + n * cos_theta);
 }
 
+vec2 ray_effect_seed() {
+    // Stable without TAA (no frame-to-frame sparkle); subpixel TAA jitter naturally changes the seed.
+    return hash22(gl_FragCoord.xy);
+}
+
 bool trace_glossy_reflection(vec3 pos, vec3 n, vec3 v, float roughness, out vec3 radiance) {
-    if (frame.sky_params.w < 0.5 || roughness >= 0.75)
+    if (frame.ray_params.x < 0.5 || roughness >= 0.75)
         return false;
-    float rough = clamp(roughness, 0.02, 1.0);
-    vec3 L = reflect(-v, n);
-    if (dot(L, n) <= 0.0)
+
+    float rough = clamp(roughness, 0.02, 0.75);
+    vec3 b1, b2;
+    create_orthonormal_basis(n, b1, b2);
+    vec3 h = sample_ggx(ray_effect_seed(), n, b1, b2, rough);
+    vec3 direction = reflect(-v, h);
+    if (dot(direction, n) <= 0.0)
         return false;
 
     float bias = max(0.005, frame.shadow_params.w * 0.15);
     vec3 origin = pos + n * bias;
     rayQueryEXT query;
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, L, 150.0);
+    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, direction, 150.0);
     while (rayQueryProceedEXT(query)) {
     }
     if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
-        radiance = textureLod(environment_map, environment_uv(L), rough * 5.0).rgb * frame.render_params.z;
-        return false;
-    }
-    float hit_t = rayQueryGetIntersectionTEXT(query, true);
-    vec3 hit_pos = origin + L * hit_t;
-    radiance = shade_reflection_hit(query, hit_pos, L);
-    return true;
-}
-
-bool trace_refraction(vec3 pos, vec3 n, vec3 v, float roughness, float ior, out vec3 transmitted_radiance) {
-    if (frame.sky_params.w < 0.5)
-        return false;
-    float eta = 1.0 / max(ior, 1.001);
-    vec3 N = n;
-    float cos_theta = dot(N, v);
-    if (cos_theta < 0.0) {
-        N = -N;
-        eta = max(ior, 1.001);
-    }
-    vec3 T = refract(-v, N, eta);
-    if (dot(T, T) < 1e-6)
-        T = reflect(-v, N);
-
-    vec3 origin = pos - N * 0.005;
-    rayQueryEXT query;
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, T, 150.0);
-    while (rayQueryProceedEXT(query)) {
-    }
-    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
-        transmitted_radiance = textureLod(environment_map, environment_uv(T), roughness * 5.0).rgb * frame.render_params.z;
+        radiance = textureLod(environment_map, environment_uv(direction), rough * 5.0).rgb * frame.render_params.z;
         return true;
     }
+
     float hit_t = rayQueryGetIntersectionTEXT(query, true);
-    vec3 hit_pos = origin + T * hit_t;
-    vec3 hit_rad = shade_reflection_hit(query, hit_pos, T);
+    vec3 hit_pos = origin + direction * hit_t;
+    radiance = shade_reflection_hit(query, hit_pos, direction);
+    return true;
+}
+
+float dielectric_fresnel(float cos_i, float eta_i, float eta_t, out bool total_internal_reflection) {
+    cos_i = clamp(abs(cos_i), 0.0, 1.0);
+    float sin_i = sqrt(max(1.0 - cos_i * cos_i, 0.0));
+    float sin_t = (eta_i / eta_t) * sin_i;
+    total_internal_reflection = sin_t >= 1.0;
+    if (total_internal_reflection)
+        return 1.0;
+    float cos_t = sqrt(max(1.0 - sin_t * sin_t, 0.0));
+    float rs_denom = eta_i * cos_i + eta_t * cos_t;
+    float rp_denom = eta_t * cos_i + eta_i * cos_t;
+    float rs = abs(rs_denom) > 1e-7 ? (eta_i * cos_i - eta_t * cos_t) / rs_denom : 1.0;
+    float rp = abs(rp_denom) > 1e-7 ? (eta_t * cos_i - eta_i * cos_t) / rp_denom : 1.0;
+    return clamp(0.5 * (rs * rs + rp * rp), 0.0, 1.0);
+}
+
+bool trace_refraction(vec3 pos, vec3 n, vec3 v, float roughness, float ior,
+                      out vec3 transmitted_radiance, out float fresnel) {
+    transmitted_radiance = vec3(0.0);
+    if (frame.ray_params.x < 0.5)
+        return false;
+
+    float material_ior = clamp(ior, 1.0, 3.0);
+    bool entering = dot(n, v) >= 0.0;
+    vec3 interface_normal = entering ? normalize(n) : -normalize(n);
+    float eta_i = entering ? 1.0 : material_ior;
+    float eta_t = entering ? material_ior : 1.0;
+    float eta = eta_i / eta_t;
+    bool tir = false;
+    fresnel = dielectric_fresnel(dot(interface_normal, v), eta_i, eta_t, tir);
+    if (tir) {
+        transmitted_radiance = vec3(0.0);
+        return true;
+    }
+
+    vec3 direction = refract(-v, interface_normal, eta);
+    if (dot(direction, direction) < 1e-8) {
+        fresnel = 1.0;
+        return true;
+    }
+    direction = normalize(direction);
+    vec3 origin = pos - interface_normal * 0.005;
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, direction, 150.0);
+    while (rayQueryProceedEXT(query)) {
+    }
+    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
+        transmitted_radiance = textureLod(environment_map, environment_uv(direction), roughness * 5.0).rgb *
+                               frame.render_params.z;
+        return true;
+    }
+
+    float hit_t = rayQueryGetIntersectionTEXT(query, true);
+    vec3 hit_pos = origin + direction * hit_t;
+    vec3 hit_radiance = shade_reflection_hit(query, hit_pos, direction);
     if (roughness > 0.08) {
-        vec3 env_blur = textureLod(environment_map, environment_uv(T), roughness * 5.0).rgb * frame.render_params.z;
-        transmitted_radiance = mix(hit_rad, env_blur, smoothstep(0.08, 0.75, roughness));
+        vec3 environment_blur = textureLod(environment_map, environment_uv(direction), roughness * 5.0).rgb *
+                                frame.render_params.z;
+        transmitted_radiance = mix(hit_radiance, environment_blur, smoothstep(0.08, 0.75, roughness));
     } else {
-        transmitted_radiance = hit_rad;
+        transmitted_radiance = hit_radiance;
     }
     return true;
 }
 
-bool trace_rtao(vec3 pos, vec3 normal, out float ao) {
-    if (frame.rtgi_params.x < 0.5 && frame.sky_params.w < 0.5) {
+bool trace_rtao(vec3 pos, vec3 geometric_normal, out float ao) {
+    if (frame.ray_params.x < 0.5) {
         ao = 1.0;
         return false;
     }
 
-    vec3 d1 = dFdx(pos);
-    vec3 d2 = dFdy(pos);
-    vec3 geometric = cross(d1, d2);
-    geometric = dot(geometric, geometric) > 1e-12 ? normalize(geometric) : normal;
-    if (dot(geometric, normal) < 0.0)
-        geometric = -geometric;
-
+    vec3 geometric = dot(geometric_normal, geometric_normal) > 1e-12
+                         ? normalize(geometric_normal)
+                         : vec3(0.0, 1.0, 0.0);
     vec3 b1, b2;
     create_orthonormal_basis(geometric, b1, b2);
-
     float bias = max(0.008, frame.shadow_params.w * 0.15);
     vec3 origin = pos + geometric * bias;
 
-    // Deterministic cosine-weighted hemisphere sampling: zero temporal flicker and clean gradients
     const uint samples = 4u;
-    const float r_ao = 2.0;
+    const float radius = 2.0;
+    vec2 seed = hash22(gl_FragCoord.xy + vec2(13.0, 37.0));
     float total_occlusion = 0.0;
-
     for (uint s = 0u; s < samples; ++s) {
-        vec2 u = sample_hammersley(s, samples, vec2(0.0));
-        vec3 dir = sample_cosine_hemisphere(u, geometric, b1, b2);
-
+        vec2 u = sample_hammersley(s, samples, seed);
+        vec3 direction = sample_cosine_hemisphere(u, geometric, b1, b2);
         rayQueryEXT query;
         rayQueryInitializeEXT(query, scene_acceleration,
                               gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
-                              4 | 2, origin, 0.005, dir, r_ao);
+                              2, origin, 0.005, direction, radius);
         while (rayQueryProceedEXT(query)) {
         }
         if (rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
             float hit_t = rayQueryGetIntersectionTEXT(query, true);
-            float occ = clamp(1.0 - (hit_t / r_ao), 0.0, 1.0);
-            total_occlusion += occ * occ;
+            float occlusion = clamp(1.0 - hit_t / radius, 0.0, 1.0);
+            total_occlusion += occlusion * occlusion;
         }
     }
-
-    ao = clamp(1.0 - (total_occlusion / float(samples)), 0.0, 1.0);
+    ao = clamp(1.0 - total_occlusion / float(samples), 0.0, 1.0);
     return true;
 }
 

@@ -18,6 +18,7 @@ typedef struct af_material {
     bool cast_shadows, receive_shadows;
     bool physically_based;
     float roughness, metallic;
+    float ior; /* Dielectric index of refraction; used by ray-traced material transmission. */
     af_vec3 emission;
     float emission_strength;
     char normal_map[AF_MESH_NAME_CAPACITY]; /* Linear tangent-space RGB; empty means flat. */
@@ -60,7 +61,8 @@ typedef enum af_tone_mapping {
 } af_tone_mapping;
 typedef struct af_render_settings {
     bool ray_traced_shadows;           /* Optional hardware ray-query shadows; raster fallback. */
-    bool ray_traced_water_reflections; /* Optional single-bounce reflection. */
+    bool ray_traced_water_reflections; /* Optional single-bounce water reflection. */
+    bool ray_traced_material_effects; /* Optional glossy reflections, material transmission and RTAO. */
     bool ray_traced_gi;                /* Optional hardware ray-query diffuse indirect GI. */
     float rtgi_intensity;              /* RTGI indirect bounce intensity multiplier. */
     float rtgi_ray_distance;           /* RTGI max indirect ray trace distance. */

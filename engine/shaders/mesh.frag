@@ -47,6 +47,7 @@ layout(set = 0, binding = 0) uniform Frame {
     vec4 water_absorption, water_scattering, water_bounds, water_axes, water_screen, water_viewport, wind_time;
     vec4 rtgi_params;
     mat4 unjittered_view_projection, previous_view_projection;
+    vec4 ray_params;
 }
 frame;
 layout(set = 0, binding = 1) uniform sampler2DArray local_shadow_map;
@@ -248,7 +249,8 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, 
     has_gi = false;
     if (frame.render_params.z <= 0
 #ifdef AF_RAY_QUERY
-        && !(water_surface() && frame.sky_params.w > .5) && !(frame.rtgi_params.x > .5) && !(frame.sky_params.w > .5)
+        && !(water_surface() && frame.sky_params.w > .5) && !(frame.rtgi_params.x > .5) &&
+        !(frame.ray_params.x > .5) && !(frame.sky_params.w > .5)
 #endif
     )
         return vec3(0);
@@ -306,7 +308,7 @@ void main() {
     vec3 px = dFdx(world_position), py = dFdy(world_position);
     vec2 ux = dFdx(uv), uy = dFdy(uv);
     float determinant = ux.x * uy.y - ux.y * uy.x;
-    if (!water_surface() && draw.params.w > 0.5 && abs(determinant) > 1e-10) {
+    if (!water_surface() && (uint(draw.params.x) & (1u << 23u)) != 0u && abs(determinant) > 1e-10) {
         vec3 tangent = (px * uy.y - py * ux.y) / determinant;
         vec3 bitangent = (py * ux.x - px * uy.x) / determinant;
         tangent -= n * dot(n, tangent);
@@ -348,14 +350,13 @@ void main() {
         }
         base.rgb = vec3(0);
     }
-    float ao = 1.0;
-#ifdef AF_RAY_QUERY
-    if (!water) {
-        trace_rtao(world_position, n, ao);
-    }
-#endif
     vec4 mr = texture(metallic_roughness_texture, uv);
     float roughness = draw.surface.x * mr.g, metal = water ? 0 : draw.surface.y * mr.b;
+    float ao = 1.0;
+#ifdef AF_RAY_QUERY
+    if (!water && mode != 2u && (uint(draw.params.x) & 1u) == 0u && frame.ray_params.x > 0.5)
+        trace_rtao(world_position, dot(geometric, n) < 0.0 ? -geometric : geometric, ao);
+#endif
     vec3 ambient = base.rgb * frame.color_ambient.w * ao * (draw.params.z > 0.5 ? 1.0 - metal : 1.0);
     float sun_visibility = shadow_visibility(n);
     vec3 output_rgb =
@@ -428,20 +429,21 @@ void main() {
         float f = water_f0() + (1.0 - water_f0()) * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         transmitted_scene = texture(refracted_scene, coordinate).rgb * water_transmission(n, v) * (1.0 - f);
     }
-    if (!water)
-        output_rgb += draw.emission.rgb * draw.emission.w;
 #ifdef AF_RAY_QUERY
-    if (!water && mode == 2u) {
+    if (!water && mode == 2u && frame.ray_params.x > 0.5) {
         vec3 transmitted = vec3(0.0);
-        float mat_ior = draw.emission.w > 1.0 ? draw.emission.w : 1.45;
-        if (trace_refraction(world_position, n, v, roughness, mat_ior, transmitted)) {
-            float f0 = pow((mat_ior - 1.0) / (mat_ior + 1.0), 2.0);
-            float fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(n, v), 0.0), 5.0);
-            output_rgb = mix(transmitted * base.rgb, output_rgb, fresnel) + draw.emission.rgb * draw.emission.w;
-            base.a = mix(base.a, 1.0, fresnel);
+        float fresnel = 1.0;
+        float material_ior = clamp(draw.params.w, 1.0, 3.0);
+        if (trace_refraction(world_position, n, v, roughness, material_ior, transmitted, fresnel)) {
+            // The ray already includes the scene behind this interface, so output it as a fully composed pixel.
+            output_rgb = mix(transmitted * base.rgb, output_rgb, fresnel);
+            base.a = 1.0;
         }
     }
 #endif
+    // Add the surface's own emission once, after transmission/reflection composition.
+    if (!water)
+        output_rgb += draw.emission.rgb * draw.emission.w;
     float depth = dot(world_position - frame.camera_position.xyz, frame.camera_forward.xyz);
     if (frame.cascade_params.w > 0.5 && frame.shadow_params.x > 0.5 && depth >= 0 &&
         depth <= frame.cascade_splits[int(frame.cascade_params.x) - 1]) {

@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **26** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **27** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 26 modules.
+to use newly built ABI 27 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -210,7 +210,7 @@ diagnostics in `af_engine_stats`, and host `get_render_settings` / `get_stats`
 callbacks. The requested scene preference and actual active path are separate;
 check `ray_traced_shadows_active` and `ray_query_supported`. The
 [ray lab](../game/ray_shadow_game.c) demonstrates toggling and reporting fallback.
-Scene format is 24; rebuild modules and restart old processes.
+Scene format is 26; rebuild modules and restart old processes.
 
 ABI 25 adds `af_render_settings.ray_traced_water_reflections` and the active
 reflection flag in `af_engine_stats`. The C game ABI is independent of the
@@ -222,3 +222,11 @@ ABI 26 adds `af_render_settings.ray_traced_gi`, `rtgi_intensity`,
 game modules and restart editor/player processes built against earlier ABIs;
 the struct layout is not backward compatible. `rtgi_samples` is clamped to
 1..4. Scene format is 25 and stores the GI fields only when non-default.
+
+
+ABI 27 adds `af_material.ior` (1.0–3.0) and
+`af_render_settings.ray_traced_material_effects`, plus the corresponding active
+renderer statistic. The IOR is serialized in scene format 26; older scenes load
+with a default IOR of 1.45 and material ray effects disabled. Rebuild game modules
+and restart editor/player processes because the public material and render-settings
+struct layouts changed.

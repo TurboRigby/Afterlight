@@ -235,6 +235,7 @@ int main(int argc, char **argv) {
         mat.base_color = (af_color){0.15f, 0.95f, 1.0f, 0.45f};
         mat.roughness = 0.05f;
         mat.metallic = 0.0f;
+        mat.ior = 1.45f;
         mat.emission = (af_vec3){0.1f, 0.9f, 1.0f};
         mat.emission_strength = 2.5f;
         af_scene_set_object_material(scene, c1, mat);
@@ -250,6 +251,7 @@ int main(int argc, char **argv) {
         mat.base_color = (af_color){1.0f, 0.7f, 0.15f, 0.45f};
         mat.roughness = 0.05f;
         mat.metallic = 0.0f;
+        mat.ior = 1.45f;
         mat.emission = (af_vec3){1.0f, 0.65f, 0.1f};
         mat.emission_strength = 2.5f;
         af_scene_set_object_material(scene, c2, mat);
@@ -265,6 +267,7 @@ int main(int argc, char **argv) {
         mat.base_color = (af_color){1.0f, 0.2f, 0.15f, 0.45f};
         mat.roughness = 0.05f;
         mat.metallic = 0.0f;
+        mat.ior = 1.45f;
         mat.emission = (af_vec3){1.0f, 0.15f, 0.1f};
         mat.emission_strength = 2.5f;
         af_scene_set_object_material(scene, c3, mat);
@@ -512,6 +515,7 @@ int main(int argc, char **argv) {
         af_render_settings rs = af_render_settings_default();
         rs.ray_traced_shadows = true;
         rs.ray_traced_water_reflections = true;
+        rs.ray_traced_material_effects = true;
         rs.ray_traced_gi = true;
         rs.rtgi_intensity = 1.35f;
         rs.rtgi_ray_distance = 45.0f;

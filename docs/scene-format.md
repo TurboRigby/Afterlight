@@ -637,3 +637,16 @@ GPU activation depends on capabilities and resource availability. See the
 Version 24 also accepts optional Boolean `render.ray_traced_water_reflections`.
 A missing field selects environment reflections. The editor writes the field
 when saving.
+
+## Ray-traced material effects (version 26)
+
+Version 26 adds the required Boolean `render.ray_traced_material_effects` and
+per-material finite `ior` (1.0–3.0, default 1.45). The toggle enables the
+experimental opaque-scene ray-query path used by GGX-sampled glossy reflections,
+single-interface material transmission and four-sample ray-traced ambient
+occlusion. It is independent of the existing water-reflection and diffuse RTGI
+toggles. Ray queries currently intersect opaque, rigid, non-skinned scene meshes;
+transparent layers, animated/skinned geometry and multi-interface volumetric
+transmission are not traced. Versions 1–25 remain readable and receive the
+material IOR default with material ray effects disabled. Game ABI 27 requires
+rebuilding native game modules.

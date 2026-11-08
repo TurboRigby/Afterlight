@@ -79,6 +79,7 @@ int main(int argc, char **argv) {
     CHECK(af_scene_set_object_visible(scene, first, false));
     af_material material = af_material_default();
     material.base_color = (af_color){0.2f, 0.3f, 0.4f, 1};
+    material.ior = 1.52f;
     material.unlit = true;
     material.cast_shadows = false;
     material.receive_shadows = false;
@@ -97,6 +98,9 @@ int main(int argc, char **argv) {
     light.intensity = 2;
     light.ambient = 0.35f;
     CHECK(af_scene_set_light(scene, light));
+    af_render_settings render_settings = af_scene_get_render_settings(scene);
+    render_settings.ray_traced_material_effects = true;
+    CHECK(af_scene_set_render_settings(scene, render_settings));
     for (unsigned i = 0; i < 256; ++i)
         CHECK(af_scene_add_object(scene, "Shared object", "unloaded/mesh"));
     af_object_id removed = af_scene_add_object(scene, "Deleted highest ID", "cube");
@@ -115,7 +119,7 @@ int main(int argc, char **argv) {
         CHECK(same_vector(a->transform.rotation, b->transform.rotation));
         CHECK(same_vector(a->transform.scale, b->transform.scale));
         CHECK(a->material.unlit == b->material.unlit && !strcmp(a->material.texture, b->material.texture));
-        CHECK(a->material.base_color.g == b->material.base_color.g &&
+        CHECK(a->material.base_color.g == b->material.base_color.g && a->material.ior == b->material.ior &&
               a->material.cast_shadows == b->material.cast_shadows &&
               a->material.receive_shadows == b->material.receive_shadows);
     }
@@ -124,6 +128,7 @@ int main(int argc, char **argv) {
           restored.filter_radius == 2 && restored.split_lambda == 0.7f && restored.blend_fraction == 0.15f &&
           restored.debug_cascades);
     CHECK(af_scene_get_light(copy).intensity == 2 && af_scene_get_light(copy).ambient == 0.35f);
+    CHECK(af_scene_get_render_settings(copy).ray_traced_material_effects);
     CHECK(!af_scene_get_object(copy, removed));
     CHECK(af_scene_add_object(copy, "New ID", "cube") == removed + 1);
     af_scene_destroy(copy);
