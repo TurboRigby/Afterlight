@@ -190,7 +190,17 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     )
 endif()
-add_executable(afterlight_editor editor/main.c)
+add_executable(afterlight_editor
+    editor/main.c
+    editor/editor_state.c
+    editor/hierarchy.c
+    editor/inspector.c
+    editor/landscape_editor.c
+    editor/panels.c
+    editor/project_tools.c
+    editor/smoke_tests.c
+    editor/viewport_overlays.c
+)
 target_include_directories(afterlight_editor PRIVATE engine/src sandbox)
 target_link_libraries(afterlight_editor PRIVATE afterlight_editor_document afterlight_editor_ui SDL3::SDL3)
 afterlight_warnings(afterlight_editor)
