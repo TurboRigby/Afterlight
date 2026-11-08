@@ -774,8 +774,7 @@ static bool create_pipeline(af_renderer *renderer) {
                                                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
     VkPipelineColorBlendAttachmentState motion_attachment[3] = {attachment, attachment, attachment};
     VkPipelineColorBlendStateCreateInfo blending = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                                                    .attachmentCount =
-                                                        (swapchain->resource_config & AF_RESOURCE_RAY_GI) ? 3u : 2u,
+                                                    .attachmentCount = 3u,
                                                     .pAttachments = motion_attachment};
     VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamic = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -903,8 +902,7 @@ static bool create_sky_pipeline(af_renderer *r) {
     VkPipelineColorBlendAttachmentState attachment[3] = {
         {.colorWriteMask = 15}, {.colorWriteMask = 15}, {.colorWriteMask = 15}};
     VkPipelineColorBlendStateCreateInfo blend = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                                                 .attachmentCount =
-                                                     (r->swapchain.resource_config & AF_RESOURCE_RAY_GI) ? 3u : 2u,
+                                                 .attachmentCount = 3u,
                                                  .pAttachments = attachment};
     VkPipelineDepthStencilStateCreateInfo depth = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
@@ -1601,7 +1599,7 @@ static bool create_swapchain(af_renderer *renderer, af_render_settings settings,
     VkAttachmentReference depth_reference = {.attachment = 1,
                                              .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     VkSubpassDescription subpass = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    .colorAttachmentCount = (config & AF_RESOURCE_RAY_GI) ? 3u : 2u,
+                                    .colorAttachmentCount = 3u,
                                     .pColorAttachments = color_reference,
                                     .pDepthStencilAttachment = &depth_reference};
     VkPipelineStageFlags attachment_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
