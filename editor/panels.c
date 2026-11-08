@@ -349,6 +349,14 @@ void environment_panel(editor *app, float width, float height) {
         nk_layout_row_dynamic(ctx, 28, 1);
         changed |= nk_property_float(ctx, "Sun intensity", 0, &sun.intensity, 100, .1f, .01f) != 0;
         changed |= nk_property_float(ctx, "Ambient light", 0, &sun.ambient, 10, .02f, .002f) != 0;
+        float sun_radius_degrees = sun.angular_radius * 180.0f / AF_PI;
+        float old_sun_radius_degrees = sun_radius_degrees;
+        nk_layout_row_dynamic(ctx, 28, 1);
+        nk_property_float(ctx, "Ray shadow softness (sun radius, degrees)", 0, &sun_radius_degrees, 10, .05f, .005f);
+        if (sun_radius_degrees != old_sun_radius_degrees) {
+            sun.angular_radius = sun_radius_degrees * AF_PI / 180.0f;
+            changed = true;
+        }
         label(ctx, "Skybox and environment lighting", 28);
         nk_layout_row_dynamic(ctx, 26, 1);
         nk_bool sky = render.skybox;

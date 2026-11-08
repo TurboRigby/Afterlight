@@ -29,6 +29,7 @@ typedef struct af_directional_light {
     af_vec3 direction; /* Direction the light travels; nonzero. */
     af_vec3 color;     /* Linear RGB. */
     float intensity, ambient;
+    float angular_radius; /* Apparent sun radius in radians; 0 selects hard ray shadows. */
 } af_directional_light;
 #define AF_SCENE_MAX_LOCAL_LIGHTS 16
 typedef enum af_light_type { AF_LIGHT_POINT, AF_LIGHT_SPOT } af_light_type;

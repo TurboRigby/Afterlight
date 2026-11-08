@@ -372,7 +372,7 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
         version->valuedouble != 16 && version->valuedouble != 17 && version->valuedouble != 18 &&
         version->valuedouble != 19 && version->valuedouble != 20 && version->valuedouble != 21 &&
         version->valuedouble != 22 && version->valuedouble != 23 && version->valuedouble != 24 &&
-        version->valuedouble != 25 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+        version->valuedouble != 25 && version->valuedouble != 26 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -666,15 +666,20 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
             goto fail;
         }
     if (version->valuedouble >= 2) {
-        static const char *const light_fields[] = {"direction", "color", "intensity", "ambient"};
+        static const char *const light_fields_legacy[] = {"direction", "color", "intensity", "ambient"};
+        static const char *const light_fields_v27[] = {"direction", "color", "intensity", "ambient", "angular_radius"};
+        const bool has_angular_radius = version->valuedouble >= 27;
         const cJSON *l = cJSON_GetObjectItemCaseSensitive(root, "light"),
                     *intensity = cJSON_GetObjectItemCaseSensitive(l, "intensity"),
-                    *ambient = cJSON_GetObjectItemCaseSensitive(l, "ambient");
-        af_directional_light light;
-        if (!exact_fields(l, light_fields, 4) ||
+                    *ambient = cJSON_GetObjectItemCaseSensitive(l, "ambient"),
+                    *angular_radius = cJSON_GetObjectItemCaseSensitive(l, "angular_radius");
+        af_directional_light light = af_directional_light_default();
+        const char *const *light_fields = has_angular_radius ? light_fields_v27 : light_fields_legacy;
+        size_t light_field_count = has_angular_radius ? 5u : 4u;
+        if (!exact_fields(l, light_fields, light_field_count) ||
             !read_vector(cJSON_GetObjectItemCaseSensitive(l, "direction"), &light.direction) ||
             !read_vector(cJSON_GetObjectItemCaseSensitive(l, "color"), &light.color) || !cJSON_IsNumber(intensity) ||
-            !cJSON_IsNumber(ambient)) {
+            !cJSON_IsNumber(ambient) || (has_angular_radius && !cJSON_IsNumber(angular_radius))) {
             set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid directional light.");
             goto fail;
         }
@@ -685,6 +690,13 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
         }
         light.intensity = (float)intensity->valuedouble;
         light.ambient = (float)ambient->valuedouble;
+        if (has_angular_radius) {
+            if (!isfinite(angular_radius->valuedouble) || fabs(angular_radius->valuedouble) > FLT_MAX) {
+                set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid sun angular radius.");
+                goto fail;
+            }
+            light.angular_radius = (float)angular_radius->valuedouble;
+        }
         if (!af_scene_set_light(scene, light)) {
             set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid directional light values.");
             goto fail;
@@ -1625,7 +1637,8 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
     if (!light || !add_vector(light, "direction", scene->light.direction) ||
         !add_vector(light, "color", scene->light.color) ||
         !cJSON_AddNumberToObject(light, "intensity", scene->light.intensity) ||
-        !cJSON_AddNumberToObject(light, "ambient", scene->light.ambient))
+        !cJSON_AddNumberToObject(light, "ambient", scene->light.ambient) ||
+        !cJSON_AddNumberToObject(light, "angular_radius", scene->light.angular_radius))
         goto fail;
     cJSON *assets = cJSON_AddArrayToObject(root, "assets");
     if (!assets)

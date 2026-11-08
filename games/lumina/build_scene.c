@@ -393,7 +393,8 @@ int main(int argc, char **argv) {
             .direction = {0.35f, -0.88f, 0.32f},
             .color = {0.95f, 0.90f, 0.82f},
             .intensity = 1.9f,
-            .ambient = 0.06f // Low ambient so RTGI bounces create natural fill
+            .ambient = 0.06f, // Low ambient so RTGI bounces create natural fill
+            .angular_radius = 0.00465f
         };
         af_scene_set_light(scene, sun);
     }

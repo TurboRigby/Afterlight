@@ -42,13 +42,13 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t abi_version);
 
 Return NULL for an unsupported host ABI. The descriptor specifies ABI/struct
 sizes, name, a bounded state allocation size, and init/update/shutdown callbacks.
-The current ABI is **27** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
+The current ABI is **28** (0.10 adds animation components and playback/posed-world host functions; 0.9 added named HDR environment/skybox settings; 0.8 added HDR/environment/bloom settings, local shadow
 fields, overlay image IDs and renderer diagnostics), including PBR/emission/normal material fields and
 host functions for local lights, directional light, render settings, collision
 queries, character movement, input edges, camera/capture control, world transforms, gameplay status and sound
 playback. Scene objects also carry saved player/camera/role components. Rebuild
 modules with the current headers; editors using earlier ABIs must be restarted
-to use newly built ABI 27 modules.
+to use newly built ABI 28 modules.
 Use the host's function table to inspect, create, delete, parent, transform and
 assign materials to objects and query input. The game does not link its own copy
 of the engine. `game/demo_game.c` is the complete working example and CMake target.
@@ -230,3 +230,8 @@ renderer statistic. The IOR is serialized in scene format 26; older scenes load
 with a default IOR of 1.45 and material ray effects disabled. Rebuild game modules
 and restart editor/player processes because the public material and render-settings
 struct layouts changed.
+
+ABI 28 adds `af_directional_light.angular_radius` in radians (0–0.25). It controls
+area-sun sampling for ray-traced shadows; the default 0.00465 radians approximates
+the physical sun. Scene format 27 persists this value. Rebuild native game modules
+and restart editor/player processes because the public directional-light layout changed.

@@ -650,3 +650,12 @@ transparent layers, animated/skinned geometry and multi-interface volumetric
 transmission are not traced. Versions 1–25 remain readable and receive the
 material IOR default with material ray effects disabled. Game ABI 27 requires
 rebuilding native game modules.
+
+## Area-sun ray-traced shadows (version 27)
+
+Version 27 adds `light.angular_radius` in radians (0–0.25). Versions 1–26 load with the physical-sun default of 0.00465 radians; version 27 requires the
+field. Zero selects a single hard shadow ray. Nonzero values sample a disk around
+the directional-light vector with four deterministic ray queries per receiver
+sample. The Environment panel exposes the radius in degrees. Raster fallback
+and local point/spot shadow paths are unchanged. The same area-sun visibility is
+used for direct RTGI hit lighting. Game ABI 28 requires rebuilding native modules.

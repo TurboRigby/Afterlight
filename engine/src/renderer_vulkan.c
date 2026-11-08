@@ -2932,7 +2932,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     bool ray_material_effects = (resource_config & AF_RESOURCE_RAY_MATERIALS) != 0;
     uniform.sky_params.z = ray_shadows ? 1.f : 0.f;
     uniform.sky_params.w = ray_reflections ? 1.f : 0.f;
-    uniform.ray_params = (af_vec4){ray_material_effects && !renderer->ray_failed ? 1.0f : 0.0f, 0, 0, 0};
+    af_directional_light sun = af_scene_get_light(scene);
+    uniform.ray_params = (af_vec4){ray_material_effects && !renderer->ray_failed ? 1.0f : 0.0f,
+                                   sun.angular_radius, 4.0f, 0.0f};
     uniform.rtgi_params = (af_vec4){
         ray_gi && !renderer->ray_failed ? 1.0f : 0.0f,
         environment_settings.rtgi_intensity,

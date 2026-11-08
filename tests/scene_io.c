@@ -60,6 +60,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 2);
     af_scene *legacy = af_scene_load(argv[1], &error);
     CHECK(legacy && af_scene_get_shadows(legacy).mode == AF_SHADOW_CASCADED);
+    CHECK(af_scene_get_light(legacy).angular_radius == af_directional_light_default().angular_radius);
     CHECK(af_scene_object_at(legacy, 0)->material.cast_shadows &&
           af_scene_object_at(legacy, 0)->material.receive_shadows);
     af_scene_destroy(legacy);
@@ -97,6 +98,7 @@ int main(int argc, char **argv) {
     af_directional_light light = af_directional_light_default();
     light.intensity = 2;
     light.ambient = 0.35f;
+    light.angular_radius = 0.025f;
     CHECK(af_scene_set_light(scene, light));
     af_render_settings render_settings = af_scene_get_render_settings(scene);
     render_settings.ray_traced_material_effects = true;
@@ -127,8 +129,15 @@ int main(int argc, char **argv) {
     CHECK(restored.mode == AF_SHADOW_CASCADED && restored.resolution == 1024 && restored.distance == 120 &&
           restored.filter_radius == 2 && restored.split_lambda == 0.7f && restored.blend_fraction == 0.15f &&
           restored.debug_cascades);
-    CHECK(af_scene_get_light(copy).intensity == 2 && af_scene_get_light(copy).ambient == 0.35f);
+    CHECK(af_scene_get_light(copy).intensity == 2 && af_scene_get_light(copy).ambient == 0.35f &&
+          af_scene_get_light(copy).angular_radius == 0.025f);
     CHECK(af_scene_get_render_settings(copy).ray_traced_material_effects);
+    af_directional_light invalid_sun = af_directional_light_default();
+    invalid_sun.angular_radius = NAN;
+    CHECK(!af_scene_set_light(copy, invalid_sun));
+    invalid_sun = af_directional_light_default();
+    invalid_sun.angular_radius = 0.3f;
+    CHECK(!af_scene_set_light(copy, invalid_sun));
     CHECK(!af_scene_get_object(copy, removed));
     CHECK(af_scene_add_object(copy, "New ID", "cube") == removed + 1);
     af_scene_destroy(copy);

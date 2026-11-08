@@ -78,6 +78,9 @@ material flags, shadow settings and legacy version 2 loading.
 
 The Environment panel can enable ray queries for opaque rigid casters. Skinned,
 cutout and streamed casters retain directional maps; local-light shadows keep
-their full map path. Traced shadows have hard edges, independent of map PCF.
-Unsupported GPUs use raster shadows. The [comparison lab and limits](development-022.md)
-cover activation, lifecycle, diagnostics and validation.
+their full map path. A zero sun angular radius gives hard traced edges; a nonzero
+radius samples the finite solar disk to estimate soft penumbrae. The default
+0.266-degree radius approximates the physical sun, and the Environment panel can
+increase it for art direction. Unsupported GPUs use raster shadows. The
+[comparison lab and limits](development-022.md) cover activation, lifecycle,
+diagnostics and validation.

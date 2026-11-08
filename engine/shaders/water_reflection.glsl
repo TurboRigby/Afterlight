@@ -315,16 +315,9 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     float n_dot_l = max(dot(normal, sun_dir), 0.0);
     vec3 sun = vec3(0.0);
     if (n_dot_l > 0.0 && frame.direction_intensity.w > 0.0) {
-        // GI instances carry the GI mask regardless of whether ray-traced shadow casters are enabled.
-        rayQueryEXT shadow_query;
-        rayQueryInitializeEXT(shadow_query, scene_acceleration,
-                              gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
-                              4, hit_pos + normal * 0.005, 0.002, sun_dir, 150.0);
-        while (rayQueryProceedEXT(shadow_query)) {
-        }
-        if (rayQueryGetIntersectionTypeEXT(shadow_query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
-            sun = frame.color_ambient.rgb * frame.direction_intensity.w * n_dot_l;
-        }
+        // GI instances carry mask 4 even when the main shadow effect is disabled.
+        float visibility = trace_sun_visibility(hit_pos, normal, sun_dir, 0.005, 4u);
+        sun = frame.color_ambient.rgb * frame.direction_intensity.w * n_dot_l * visibility;
     }
     vec3 sky = textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z;
     vec3 reflected = base * (frame.color_ambient.w + sun + sky);

@@ -111,6 +111,37 @@ float raster_shadow_visibility(vec3 n) {
     }
     return visibility;
 }
+#ifdef AF_RAY_QUERY
+float trace_sun_visibility(vec3 position, vec3 geometric_normal, vec3 light_direction, float bias, uint mask) {
+    vec3 helper = abs(light_direction.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(helper, light_direction));
+    vec3 bitangent = cross(light_direction, tangent);
+    float angular_radius = clamp(frame.ray_params.y, 0.0, 0.25);
+    int sample_count = angular_radius <= 1e-6 ? 1 : clamp(int(frame.ray_params.z + 0.5), 1, 4);
+    float rotation = 6.28318530718 * fract(sin(dot(floor(gl_FragCoord.xy), vec2(127.1, 311.7))) * 43758.5453);
+    float c = cos(rotation), s = sin(rotation);
+    vec3 origin = position + geometric_normal * max(bias, 0.001);
+    float visible = 0.0;
+    const float golden_angle = 2.39996322973;
+    for (int i = 0; i < sample_count; ++i) {
+        float radius = sqrt((float(i) + 0.5) / float(sample_count));
+        float angle = float(i) * golden_angle;
+        vec2 disk = radius * vec2(cos(angle), sin(angle));
+        disk = mat2(c, -s, s, c) * disk;
+        vec3 direction = normalize(light_direction +
+                                   (tangent * disk.x + bitangent * disk.y) * tan(angular_radius));
+        rayQueryEXT query;
+        rayQueryInitializeEXT(query, scene_acceleration,
+                              gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, mask, origin, 0.001,
+                              direction, 10000.0);
+        while (rayQueryProceedEXT(query)) {
+        }
+        if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT)
+            visible += 1.0;
+    }
+    return visible / float(sample_count);
+}
+#endif
 float shadow_visibility(vec3 n) {
     float raster = raster_shadow_visibility(n);
 #ifdef AF_RAY_QUERY
@@ -126,12 +157,7 @@ float shadow_visibility(vec3 n) {
     if (dot(geometric, l) < 0)
         geometric = -geometric;
     float bias = max(.001, frame.shadow_params.w * .1);
-    rayQueryEXT query;
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, 1,
-                          world_position + geometric * bias, .001, l, 10000.0);
-    while (rayQueryProceedEXT(query)) {
-    }
-    return rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT ? raster : 0.0;
+    return raster * trace_sun_visibility(world_position, geometric, l, bias, 1u);
 #else
     return raster;
 #endif

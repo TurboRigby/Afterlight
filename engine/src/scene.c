@@ -343,7 +343,8 @@ af_material af_material_default(void) {
 }
 af_directional_light af_directional_light_default(void) {
     return (af_directional_light){
-        .direction = {-0.6f, -1, -0.4f}, .color = {1, 0.95f, 0.86f}, .intensity = 1.2f, .ambient = 0.22f};
+        .direction = {-0.6f, -1, -0.4f}, .color = {1, 0.95f, 0.86f}, .intensity = 1.2f, .ambient = 0.22f,
+        .angular_radius = 0.00465f}; /* Physical solar angular radius: about 0.266 degrees. */
 }
 bool af_scene_set_object_material(af_scene *scene, af_object_id id, af_material material) {
     af_scene_object *object = find_object(scene, id);
@@ -376,14 +377,15 @@ bool af_scene_set_object_material(af_scene *scene, af_object_id id, af_material 
 }
 bool af_scene_set_light(af_scene *scene, af_directional_light light) {
     float values[] = {light.direction.x, light.direction.y, light.direction.z, light.color.x,
-                      light.color.y,     light.color.z,     light.intensity,   light.ambient};
+                      light.color.y,     light.color.z,     light.intensity,   light.ambient, light.angular_radius};
     if (!scene)
         return false;
-    for (unsigned i = 0; i < 8; ++i)
+    for (unsigned i = 0; i < 9; ++i)
         if (!isfinite(values[i]))
             return false;
     if (af_vec3_length(light.direction) < 1e-6f || light.color.x < 0 || light.color.y < 0 || light.color.z < 0 ||
-        light.intensity < 0 || light.intensity > 100 || light.ambient < 0 || light.ambient > 10)
+        light.intensity < 0 || light.intensity > 100 || light.ambient < 0 || light.ambient > 10 ||
+        light.angular_radius < 0 || light.angular_radius > 0.25f)
         return false;
     scene->light = light;
     return true;
