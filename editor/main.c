@@ -110,6 +110,7 @@ typedef struct editor {
     char new_foliage_name[AF_LANDSCAPE_NAME_CAPACITY];
     char new_foliage_mesh[AF_MESH_NAME_CAPACITY];
     bool terrain_hit;
+    bool landscape_stroke_active;
     af_vec3 terrain_hit_point;
     af_vec3 terrain_hit_normal;
 } editor;
@@ -577,7 +578,13 @@ static void keyboard(editor *app,double delta)
 
     if (app->landscape_mode) {
         if (!app->runtime.playing && inside(app->viewport, mouse) && !af_engine_mouse_captured(engine)) {
-            if (app->terrain_hit && af_engine_mouse_down(engine, AF_MOUSE_LEFT)) {
+            bool lmb_down = af_engine_mouse_down(engine, AF_MOUSE_LEFT);
+            if (app->terrain_hit && lmb_down) {
+                if (!app->landscape_stroke_active) {
+                    app->landscape_stroke_active = true;
+                    ed_document_push_undo(&app->document);
+                    ls = af_scene_get_landscape_mut(app->document.scene);
+                }
                 float strength = app->brush_strength * (float)delta * 5.0f;
                 if (strength > 2.0f) strength = 2.0f;
                 if (strength < 0.001f) strength = 0.001f;
@@ -613,7 +620,18 @@ static void keyboard(editor *app,double delta)
                         ++app->document.revision;
                     }
                 }
+            } else if (app->landscape_stroke_active && !lmb_down) {
+                app->landscape_stroke_active = false;
+                ed_document_end_edit(&app->document);
             }
+        } else if (app->landscape_stroke_active) {
+            app->landscape_stroke_active = false;
+            ed_document_end_edit(&app->document);
+        }
+        if (app->landscape_stroke_active && af_engine_key_pressed(engine, AF_KEY_ESCAPE)) {
+            ed_document_undo(&app->document);
+            app->landscape_stroke_active = false;
+            refresh(app);
         }
     } else {
         if(!app->runtime.playing&&inside(app->viewport,mouse)&&af_engine_mouse_pressed(engine,AF_MOUSE_LEFT)&&!af_engine_mouse_captured(engine)){
@@ -855,8 +873,10 @@ static void landscape_panel(editor *app, float height)
             label(context, "Auto-Slope Texturing", 22);
             nk_layout_row_dynamic(context, 30, 1);
             if (nk_button_label(context, "Apply Slope Auto-Texture")) {
+                ed_document_push_undo(&app->document);
+                ls = af_scene_get_landscape_mut(app->document.scene);
                 af_landscape_auto_paint_slopes(ls, 2, 0.6f, 3, 0.5f);
-                ++app->document.revision;
+                refresh(app);
             }
 
             nk_layout_row_dynamic(context, 18, 1);
@@ -885,10 +905,12 @@ static void landscape_panel(editor *app, float height)
                 }
                 nk_layout_row_push(context, 40);
                 if (nk_button_label(context, "X")) {
+                    ed_document_push_undo(&app->document);
+                    ls = af_scene_get_landscape_mut(app->document.scene);
                     af_landscape_remove_foliage_layer(ls, i);
                     if (app->active_foliage_layer >= ls->foliage_layer_count && ls->foliage_layer_count > 0)
                         app->active_foliage_layer = ls->foliage_layer_count - 1;
-                    ++app->document.revision;
+                    refresh(app);
                     break;
                 }
                 nk_layout_row_end(context);
@@ -902,11 +924,13 @@ static void landscape_panel(editor *app, float height)
             nk_layout_row_dynamic(context, 28, 1);
             if (nk_button_label(context, "+ Add Foliage Layer")) {
                 if (app->new_foliage_mesh[0]) {
+                    ed_document_push_undo(&app->document);
+                    ls = af_scene_get_landscape_mut(app->document.scene);
                     int added = af_landscape_add_foliage_layer(ls, app->new_foliage_name[0] ? app->new_foliage_name : "Foliage", app->new_foliage_mesh);
                     if (added >= 0) {
                         app->active_foliage_layer = (size_t)added;
-                        ++app->document.revision;
                     }
+                    refresh(app);
                 }
             }
 
@@ -946,14 +970,18 @@ static void landscape_panel(editor *app, float height)
                 label(context, "Foliage Actions", 22);
                 nk_layout_row_dynamic(context, 28, 1);
                 if (nk_button_label(context, "Populate Procedurally")) {
+                    ed_document_push_undo(&app->document);
+                    ls = af_scene_get_landscape_mut(app->document.scene);
                     static uint32_t pop_seed = 42;
                     pop_seed += 13;
                     af_landscape_populate_procedural_foliage(ls, app->active_foliage_layer, pop_seed);
-                    ++app->document.revision;
+                    refresh(app);
                 }
                 if (nk_button_label(context, "Clear Layer Instances")) {
+                    ed_document_push_undo(&app->document);
+                    ls = af_scene_get_landscape_mut(app->document.scene);
                     af_landscape_clear_foliage(ls, (int)app->active_foliage_layer);
-                    ++app->document.revision;
+                    refresh(app);
                 }
             }
 
@@ -974,28 +1002,34 @@ static void landscape_panel(editor *app, float height)
 
             nk_layout_row_dynamic(context, 28, 1);
             if (nk_button_label(context, "Generate Hills")) {
+                ed_document_push_undo(&app->document);
+                ls = af_scene_get_landscape_mut(app->document.scene);
                 af_landscape_generate_procedural_hills(ls, hill_size, hill_amp, (uint32_t)hill_seed);
-                ++app->document.revision;
+                refresh(app);
             }
 
             label(context, "Terrain Actions", 22);
             nk_layout_row_dynamic(context, 28, 1);
             if (nk_button_label(context, "Flatten Entire Terrain")) {
+                ed_document_push_undo(&app->document);
+                ls = af_scene_get_landscape_mut(app->document.scene);
                 for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
                     af_terrain_chunk *c = &ls->chunks[c_idx];
                     memset(c->heights, 0, sizeof(c->heights));
                     c->dirty_mesh = true;
                 }
                 af_landscape_recompute_normals(ls, 0, 0, (int32_t)ls->chunk_count_x - 1, (int32_t)ls->chunk_count_z - 1);
-                ++app->document.revision;
+                refresh(app);
             }
             if (nk_button_label(context, "Clear All Foliage")) {
+                ed_document_push_undo(&app->document);
+                ls = af_scene_get_landscape_mut(app->document.scene);
                 af_landscape_clear_foliage(ls, -1);
-                ++app->document.revision;
+                refresh(app);
             }
             if (nk_button_label(context, "Delete Landscape")) {
+                ed_document_push_undo(&app->document);
                 af_scene_remove_landscape(app->document.scene);
-                ++app->document.revision;
                 refresh(app);
             }
         }
@@ -2154,6 +2188,7 @@ static bool init(af_engine *engine,void *userdata)
     app->brush_target_height = 0.0f;
     app->active_paint_layer = 0;
     app->active_foliage_layer = 0;
+    app->landscape_stroke_active = false;
     snprintf(app->new_foliage_name, sizeof(app->new_foliage_name), "Trees");
     snprintf(app->new_foliage_mesh, sizeof(app->new_foliage_mesh), "cube");
     if(!ed_document_init(&app->document))return false;

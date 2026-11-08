@@ -36,6 +36,7 @@ bool ed_document_new(ed_document *document);
 void ed_document_end_edit(ed_document *document);
 bool ed_document_undo(ed_document *document);
 bool ed_document_redo(ed_document *document);
+bool ed_document_push_undo(ed_document *document);
 bool ed_document_transform(ed_document *document, af_transform transform);
 bool ed_document_name(ed_document *document, const char *name);
 bool ed_document_mesh(ed_document *document, const char *mesh);

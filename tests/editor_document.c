@@ -5,6 +5,7 @@
  */
 
 #include "document.h"
+#include <afterlight/landscape.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -54,6 +55,45 @@ int main(void)
     af_material material=af_scene_get_object(document.scene,document.selection)->material;material.cast_shadows=false;
     CHECK(ed_document_material(&document,material));ed_document_end_edit(&document);CHECK(ed_document_undo(&document)&&af_scene_get_object(document.scene,document.selection)->material.cast_shadows);
     CHECK(ed_document_new(&document)&&af_scene_object_count(document.scene)==0&&!ed_document_dirty(&document));
+
+    /* Landscape Undo / Redo */
+    af_landscape *ls = af_landscape_create(2, 2, 1.0f);
+    CHECK(ls != NULL);
+    CHECK(ed_document_push_undo(&document));
+    af_scene_set_landscape(document.scene, ls);
+    CHECK(af_scene_get_landscape(document.scene) != NULL);
+    CHECK(ed_document_undo(&document));
+    CHECK(af_scene_get_landscape(document.scene) == NULL);
+    CHECK(ed_document_redo(&document));
+    CHECK(af_scene_get_landscape(document.scene) != NULL);
+
+    /* Sculpting Undo / Redo */
+    CHECK(ed_document_push_undo(&document));
+    af_landscape *mut_ls = af_scene_get_landscape_mut(document.scene);
+    CHECK(af_landscape_sculpt_raise_lower(mut_ls, (af_vec3){0, 0, 0}, 5.0f, 3.0f, AF_FALLOFF_SMOOTH));
+    float h_sculpted = af_landscape_get_height(af_scene_get_landscape(document.scene), 0, 0);
+    CHECK(h_sculpted > 1.0f);
+    CHECK(ed_document_undo(&document));
+    float h_undone = af_landscape_get_height(af_scene_get_landscape(document.scene), 0, 0);
+    CHECK(h_undone == 0.0f);
+    CHECK(ed_document_redo(&document));
+    float h_redone = af_landscape_get_height(af_scene_get_landscape(document.scene), 0, 0);
+    CHECK(h_redone == h_sculpted);
+
+    /* Foliage Undo / Redo */
+    CHECK(ed_document_push_undo(&document));
+    mut_ls = af_scene_get_landscape_mut(document.scene);
+    int layer = af_landscape_add_foliage_layer(mut_ls, "Trees", "tree.obj");
+    CHECK(layer >= 0);
+    CHECK(af_landscape_paint_foliage(mut_ls, (size_t)layer, (af_vec3){0, 0, 0}, 10.0f, 1.0f, 42));
+    size_t f_count = mut_ls->foliage_layers[layer].total_instances;
+    CHECK(f_count > 0);
+    CHECK(ed_document_undo(&document));
+    CHECK(af_scene_get_landscape(document.scene)->foliage_layer_count == 0);
+    CHECK(ed_document_redo(&document));
+    CHECK(af_scene_get_landscape(document.scene)->foliage_layer_count == 1);
+    CHECK(af_scene_get_landscape(document.scene)->foliage_layers[0].total_instances == f_count);
+
     for(unsigned i=0;i<80;++i){CHECK(ed_document_add_cube(&document));ed_document_end_edit(&document);}
     CHECK(document.undo_count==ED_HISTORY_LIMIT);
     ed_document_destroy(&document);

@@ -246,6 +246,7 @@ af_landscape *af_landscape_clone(const af_landscape *src) {
 
     for (size_t c = 0; c < src->chunk_count; ++c) {
         memcpy(&dst->chunks[c], &src->chunks[c], sizeof(af_terrain_chunk));
+        dst->chunks[c].dirty_mesh = true;
         /* Deep clone foliage chunks */
         for (size_t fl = 0; fl < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++fl) {
             const af_foliage_chunk *sc = &src->chunks[c].foliage[fl];

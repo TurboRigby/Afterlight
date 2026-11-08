@@ -8,6 +8,7 @@
 #include <afterlight/prefab.h>
 #include <afterlight/model.h>
 #include <afterlight/collision_mesh.h>
+#include <afterlight/landscape.h>
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
@@ -26,7 +27,15 @@ static void clear_history(ed_snapshot *history, size_t *count)
 }
 static size_t snapshot_bytes(ed_snapshot snapshot)
 {
-    return af_scene_object_count(snapshot.scene) * sizeof(af_scene_object) + af_scene_asset_count(snapshot.scene)*sizeof(af_scene_asset) + sizeof(snapshot);
+    size_t bytes = af_scene_object_count(snapshot.scene) * sizeof(af_scene_object) + af_scene_asset_count(snapshot.scene)*sizeof(af_scene_asset) + sizeof(snapshot);
+    const af_landscape *ls = af_scene_get_landscape(snapshot.scene);
+    if (ls) {
+        bytes += sizeof(af_landscape) + ls->chunk_count * sizeof(af_terrain_chunk);
+        for (size_t i = 0; i < ls->foliage_layer_count; ++i) {
+            bytes += ls->foliage_layers[i].total_instances * sizeof(af_foliage_instance);
+        }
+    }
+    return bytes;
 }
 static void push_history(ed_snapshot *history, size_t *count, ed_snapshot snapshot)
 {
@@ -218,6 +227,18 @@ bool ed_document_redo(ed_document *d)
     ed_snapshot next = d->redo[--d->redo_count];
     d->scene=next.scene; d->selection=next.selection; d->revision=next.revision;
     ed_document_end_edit(d); status(d,"Redo"); return true;
+}
+bool ed_document_push_undo(ed_document *d)
+{
+    if (!d || !d->scene) return false;
+    af_scene *backup = af_scene_clone(d->scene);
+    if (!backup) return false;
+    clear_history(d->redo, &d->redo_count);
+    push_history(d->undo, &d->undo_count, (ed_snapshot){backup, d->selection, d->revision});
+    d->revision = ++d->serial;
+    ed_document_end_edit(d);
+    status(d, "Unsaved changes");
+    return true;
 }
 
 bool ed_document_import_mesh(ed_document *d,const char *name,const char *path){
