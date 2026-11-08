@@ -94,6 +94,59 @@ vec3 sample_cosine_hemisphere(vec2 u, vec3 n, vec3 b1, vec3 b2) {
     return normalize(b1 * (cos(phi) * sin_theta) + b2 * (sin(phi) * sin_theta) + n * cos_theta);
 }
 
+float compute_gi_falloff(float d, float max_dist) {
+    float norm = clamp(d / max_dist, 0.0, 1.0);
+    float window = clamp(1.0 - norm * norm, 0.0, 1.0);
+    float dist_sq = d * d;
+    return (1.0 / (1.0 + dist_sq * 0.25)) * window;
+}
+
+vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dist, float hit_t) {
+    ReflectionSurface surface = reflection.surfaces[rayQueryGetIntersectionInstanceCustomIndexEXT(query, true)];
+    MeshWords vertices = MeshWords(surface.addresses.xy);
+    MeshWords indices = MeshWords(surface.addresses.zw);
+    uint triangle = 3u * uint(rayQueryGetIntersectionPrimitiveIndexEXT(query, true));
+    uvec3 index = uvec3(indices.words[triangle], indices.words[triangle + 1], indices.words[triangle + 2]);
+    vec2 uv_hit = rayQueryGetIntersectionBarycentricsEXT(query, true);
+    vec3 weights = vec3(1.0 - uv_hit.x - uv_hit.y, uv_hit);
+    vec3 base = surface.color.rgb * (vertex_attribute(vertices, index.x, 3) * weights.x +
+                                     vertex_attribute(vertices, index.y, 3) * weights.y +
+                                     vertex_attribute(vertices, index.z, 3) * weights.z);
+    float falloff = compute_gi_falloff(hit_t, max_dist);
+    if (surface.emission_unlit.w > .5)
+        return (base + surface.emission_unlit.rgb) * falloff;
+
+    vec3 normal = vertex_attribute(vertices, index.x, 7) * weights.x +
+                  vertex_attribute(vertices, index.y, 7) * weights.y +
+                  vertex_attribute(vertices, index.z, 7) * weights.z;
+    if (dot(normal, normal) < 1e-12) {
+        vec3 a = vertex_attribute(vertices, index.x, 0);
+        normal = cross(vertex_attribute(vertices, index.y, 0) - a, vertex_attribute(vertices, index.z, 0) - a);
+    }
+    normal = transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(query, true))) * normal;
+    normal = dot(normal, normal) > 1e-12 ? normalize(normal) : -direction;
+    if (dot(normal, direction) > 0.0)
+        normal = -normal;
+
+    vec3 sun_dir = -frame.direction_intensity.xyz;
+    float n_dot_l = max(dot(normal, sun_dir), 0.0);
+    vec3 sun = vec3(0.0);
+    if (n_dot_l > 0.0 && frame.direction_intensity.w > 0.0) {
+        rayQueryEXT shadow_query;
+        rayQueryInitializeEXT(shadow_query, scene_acceleration,
+                              gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
+                              1, hit_pos + normal * 0.005, 0.002, sun_dir, 150.0);
+        while (rayQueryProceedEXT(shadow_query)) {
+        }
+        if (rayQueryGetIntersectionTypeEXT(shadow_query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
+            sun = frame.color_ambient.rgb * frame.direction_intensity.w * n_dot_l;
+        }
+    }
+    vec3 sky = textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z;
+    float cos_emitter = max(dot(normal, -direction), 0.0);
+    return (base * (frame.color_ambient.w + (sun + sky) * cos_emitter) + surface.emission_unlit.rgb) * falloff;
+}
+
 bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
     if (frame.rtgi_params.x < 0.5)
         return false;
@@ -107,25 +160,29 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
     if (dot(geometric, normal) < 0.0)
         geometric = -geometric;
 
-    float bias = max(0.003, frame.shadow_params.w * 0.15);
+    // Use the geometric normal for hemisphere sampling so rays never point into the surface geometry
+    vec3 b1, b2;
+    create_orthonormal_basis(geometric, b1, b2);
+
+    float bias = max(0.005, frame.shadow_params.w * 0.15);
     vec3 origin = pos + geometric * bias;
 
-    vec3 b1, b2;
-    create_orthonormal_basis(normal, b1, b2);
-
-    vec2 seed = fract(gl_FragCoord.xy * vec2(0.754877666, 0.569840291));
+    float time_jitter = frame.wind_time.z * 1.6180339887;
+    vec2 seed = fract(gl_FragCoord.xy * vec2(0.754877666, 0.569840291) + time_jitter);
 
     vec3 accum = vec3(0.0);
     for (uint s = 0u; s < samples; ++s) {
         vec2 u = sample_hammersley(s, samples, seed);
-        vec3 dir = sample_cosine_hemisphere(u, normal, b1, b2);
+        vec3 dir = sample_cosine_hemisphere(u, geometric, b1, b2);
 
         rayQueryEXT query;
-        rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 4, origin, 0.002, dir, max_dist);
+        rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 4, origin, 0.003, dir, max_dist);
         while (rayQueryProceedEXT(query)) {
         }
         if (rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
-            accum += shade_reflection_hit(query, dir);
+            float hit_t = rayQueryGetIntersectionTEXT(query, true);
+            vec3 hit_pos = origin + dir * hit_t;
+            accum += shade_gi_hit(query, hit_pos, dir, max_dist, hit_t);
         } else {
             accum += textureLod(irradiance_map, environment_uv(dir), 0).rgb * frame.render_params.z;
         }
