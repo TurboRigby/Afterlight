@@ -16,6 +16,11 @@ static void setup_materials_and_colliders(af_scene *scene, af_object_id id, af_v
     af_scene_set_object_collider(scene, id, col);
 }
 
+static void setup_mesh_collider(af_scene *scene, af_object_id id) {
+    af_collider col = {.type = AF_COLLIDER_MESH, .enabled = true, .layer = 1};
+    af_scene_set_object_collider(scene, id, col);
+}
+
 int main(int argc, char **argv) {
     const char *output = argc > 1 ? argv[1] : "games/lumina/scenes/lumina_core.afterlight.json";
     af_scene *scene = af_scene_create();
@@ -97,7 +102,7 @@ int main(int argc, char **argv) {
         mat.emission = (af_vec3){0.1f, 0.85f, 1.0f};
         mat.emission_strength = 2.5f;
         af_scene_set_object_material(scene, core, mat);
-        setup_materials_and_colliders(scene, core, (af_vec3){2.2f, 5.0f, 2.2f});
+        setup_mesh_collider(scene, core);
     }
 
     // 4. Eight Conduit Pillars around the Chamber (Octagon r = 14m)
@@ -133,7 +138,11 @@ int main(int argc, char **argv) {
         mat.roughness = 0.5f;
         mat.metallic = 0.8f;
         af_scene_set_object_material(scene, cw, mat);
-        setup_materials_and_colliders(scene, cw, (af_vec3){1.5f, 0.15f, 3.0f});
+        if (i == 1) {
+            setup_mesh_collider(scene, cw);
+        } else {
+            setup_materials_and_colliders(scene, cw, (af_vec3){1.5f, 0.15f, 3.0f});
+        }
     }
     // East Branch (Wing 2)
     for (int i = 0; i < 4; ++i) {
@@ -148,7 +157,11 @@ int main(int argc, char **argv) {
         mat.roughness = 0.5f;
         mat.metallic = 0.8f;
         af_scene_set_object_material(scene, cw, mat);
-        setup_materials_and_colliders(scene, cw, (af_vec3){3.0f, 0.15f, 1.5f});
+        if (i == 0) {
+            setup_mesh_collider(scene, cw);
+        } else {
+            setup_materials_and_colliders(scene, cw, (af_vec3){3.0f, 0.15f, 1.5f});
+        }
     }
     // West Branch (Wing 3)
     for (int i = 0; i < 4; ++i) {
@@ -177,7 +190,11 @@ int main(int argc, char **argv) {
         mat.roughness = 0.5f;
         mat.metallic = 0.8f;
         af_scene_set_object_material(scene, cw, mat);
-        setup_materials_and_colliders(scene, cw, (af_vec3){1.5f, 0.15f, 3.0f});
+        if (i == 0) {
+            setup_mesh_collider(scene, cw);
+        } else {
+            setup_materials_and_colliders(scene, cw, (af_vec3){1.5f, 0.15f, 3.0f});
+        }
     }
 
     // 6. Three Relay Pedestals

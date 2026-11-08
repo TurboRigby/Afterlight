@@ -78,7 +78,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -177,7 +178,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -276,7 +278,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -375,7 +378,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -474,7 +478,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -573,7 +578,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -672,14 +678,15 @@
 				"emission_strength":	2.5,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
-				"half_extents":	[2.2000000476837158, 5, 2.2000000476837158],
+				"half_extents":	[0, 0, 0],
 				"radius":	0,
 				"half_height":	0,
 				"layer":	1
@@ -771,7 +778,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -870,7 +878,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -969,7 +978,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1068,7 +1078,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1167,7 +1178,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1266,7 +1278,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1365,7 +1378,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1464,7 +1478,8 @@
 				"emission_strength":	0.800000011920929,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1563,7 +1578,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1662,14 +1678,15 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
-				"half_extents":	[1.5, 0.15000000596046448, 3],
+				"half_extents":	[0, 0, 0],
 				"radius":	0,
 				"half_height":	0,
 				"layer":	1
@@ -1761,7 +1778,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1860,7 +1878,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -1959,14 +1978,15 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
-				"half_extents":	[3, 0.15000000596046448, 1.5],
+				"half_extents":	[0, 0, 0],
 				"radius":	0,
 				"half_height":	0,
 				"layer":	1
@@ -2058,7 +2078,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2157,7 +2178,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2256,7 +2278,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2355,7 +2378,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2454,7 +2478,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2553,7 +2578,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2652,7 +2678,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2751,14 +2778,15 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"mesh",
 				"enabled":	true,
 				"trigger":	false,
 				"center":	[0, 0, 0],
-				"half_extents":	[1.5, 0.15000000596046448, 3],
+				"half_extents":	[0, 0, 0],
 				"radius":	0,
 				"half_height":	0,
 				"layer":	1
@@ -2850,7 +2878,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -2949,7 +2978,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3048,7 +3078,8 @@
 				"emission_strength":	0.5,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3147,7 +3178,8 @@
 				"emission_strength":	0.5,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3246,7 +3278,8 @@
 				"emission_strength":	0.5,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3345,7 +3378,8 @@
 				"emission_strength":	2.5,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3444,7 +3478,8 @@
 				"emission_strength":	2.5,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3543,7 +3578,8 @@
 				"emission_strength":	2.5,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3642,7 +3678,8 @@
 				"emission_strength":	1,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3741,7 +3778,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"box",
@@ -3840,7 +3878,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"none",
@@ -3939,7 +3978,8 @@
 				"emission_strength":	0,
 				"normal_map":	"",
 				"normal_strength":	1,
-				"metallic_roughness_map":	""
+				"metallic_roughness_map":	"",
+				"ior":	1.4500000476837158
 			},
 			"collider":	{
 				"type":	"capsule",
@@ -3961,7 +4001,7 @@
 			"scale":	[1, 1, 1]
 		}],
 	"format":	"afterlight.scene",
-	"version":	25,
+	"version":	26,
 	"next_id":	"41",
 	"wind":	{
 		"enabled":	false,
@@ -4010,6 +4050,7 @@
 		"taa_history_weight":	0.87999999523162842,
 		"ray_traced_shadows":	true,
 		"ray_traced_water_reflections":	true,
+		"ray_traced_material_effects":	true,
 		"underwater":	true,
 		"refraction":	true,
 		"refraction_strength":	0.449999988079071,
