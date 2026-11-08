@@ -8,6 +8,15 @@
 from __future__ import annotations
 import argparse, copy, json, os, pathlib, shutil, subprocess, sys, tempfile
 ROOT=pathlib.Path(__file__).resolve().parents[1]
+def get_max_scene_version():
+    scene_h = ROOT / 'engine/include/afterlight/scene.h'
+    if scene_h.is_file():
+        import re
+        m = re.search(r'#define\s+AF_SCENE_FILE_VERSION\s+(\d+)', scene_h.read_text(encoding='utf-8', errors='ignore'))
+        if m:
+            return int(m.group(1))
+    return 26
+MAX_SCENE_VERSION = get_max_scene_version()
 def write_json(path, data):
     path.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
 def create_project(destination, name):
@@ -197,7 +206,7 @@ def export_project(project_path, destination, player_path, icd=None):
         startup_name=None
         for index,source in enumerate(scenes):
             document=read_json(source)
-            if document.get('format')!='afterlight.scene' or document.get('version') not in range(1,25):raise ValueError(f'Unsupported scene: {source}')
+            if document.get('format')!='afterlight.scene' or document.get('version') not in range(1, MAX_SCENE_VERSION + 1):raise ValueError(f'Unsupported scene: {source}')
             for asset in document.get('assets',[]):
                 original,separator,selector=asset['path'].partition('#');packed=copy_asset(source.parent/original)
                 asset['path']='../assets/'+packed.name+(separator+selector if separator else '')
@@ -412,7 +421,7 @@ def bundle_project(project_path, destination, player_path, extensions=None, icd=
         startup_name = None
         for index, source in enumerate(scenes):
             document = read_json(source)
-            if document.get('format') != 'afterlight.scene' or document.get('version') not in range(1, 25):
+            if document.get('format') != 'afterlight.scene' or document.get('version') not in range(1, MAX_SCENE_VERSION + 1):
                 raise ValueError(f'Unsupported scene: {source}')
             for asset in document.get('assets', []):
                 original, separator, selector = asset['path'].partition('#')
