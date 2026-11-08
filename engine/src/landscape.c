@@ -30,27 +30,51 @@ static float pseudo_rand_float(uint32_t *state) {
     return (float)(*state & 0x00ffffffu) / 16777215.0f;
 }
 
+static inline af_vec2 grad2d(uint32_t hash) {
+    static const float g[8][2] = {
+        { 1.0f,  0.0f},
+        {-1.0f,  0.0f},
+        { 0.0f,  1.0f},
+        { 0.0f, -1.0f},
+        { 0.70710678f,  0.70710678f},
+        {-0.70710678f,  0.70710678f},
+        { 0.70710678f, -0.70710678f},
+        {-0.70710678f, -0.70710678f}
+    };
+    return (af_vec2){g[hash & 7u][0], g[hash & 7u][1]};
+}
+
 static float noise2d(float x, float z) {
-    int ix = (int)floorf(x);
-    int iz = (int)floorf(z);
+    int32_t ix = (int32_t)floorf(x);
+    int32_t iz = (int32_t)floorf(z);
     float fx = x - (float)ix;
     float fz = z - (float)iz;
-    float wx = fx * fx * (3.0f - 2.0f * fx);
-    float wz = fz * fz * (3.0f - 2.0f * fz);
 
-    uint32_t h00 = hash_u32((uint32_t)ix * 374761393u + (uint32_t)iz * 668265263u);
-    uint32_t h10 = hash_u32((uint32_t)(ix + 1) * 374761393u + (uint32_t)iz * 668265263u);
-    uint32_t h01 = hash_u32((uint32_t)ix * 374761393u + (uint32_t)(iz + 1) * 668265263u);
-    uint32_t h11 = hash_u32((uint32_t)(ix + 1) * 374761393u + (uint32_t)(iz + 1) * 668265263u);
+    /* Quintic Hermite interpolant: 6t^5 - 15t^4 + 10t^3 (C2 continuous) */
+    float wx = fx * fx * fx * (fx * (fx * 6.0f - 15.0f) + 10.0f);
+    float wz = fz * fz * fz * (fz * (fz * 6.0f - 15.0f) + 10.0f);
 
-    float v00 = ((float)(h00 & 0xffff) / 65535.0f) * 2.0f - 1.0f;
-    float v10 = ((float)(h10 & 0xffff) / 65535.0f) * 2.0f - 1.0f;
-    float v01 = ((float)(h01 & 0xffff) / 65535.0f) * 2.0f - 1.0f;
-    float v11 = ((float)(h11 & 0xffff) / 65535.0f) * 2.0f - 1.0f;
+    uint32_t uix = (uint32_t)(ix + 0x100000);
+    uint32_t uiz = (uint32_t)(iz + 0x100000);
 
-    float a = v00 + wx * (v10 - v00);
-    float b = v01 + wx * (v11 - v01);
-    return a + wz * (b - a);
+    uint32_t h00 = hash_u32(uix * 374761393u + uiz * 668265263u);
+    uint32_t h10 = hash_u32((uix + 1u) * 374761393u + uiz * 668265263u);
+    uint32_t h01 = hash_u32(uix * 374761393u + (uiz + 1u) * 668265263u);
+    uint32_t h11 = hash_u32((uix + 1u) * 374761393u + (uiz + 1u) * 668265263u);
+
+    af_vec2 g00 = grad2d(h00);
+    af_vec2 g10 = grad2d(h10);
+    af_vec2 g01 = grad2d(h01);
+    af_vec2 g11 = grad2d(h11);
+
+    float d00 = g00.x * fx + g00.y * fz;
+    float d10 = g10.x * (fx - 1.0f) + g10.y * fz;
+    float d01 = g01.x * fx + g01.y * (fz - 1.0f);
+    float d11 = g11.x * (fx - 1.0f) + g11.y * (fz - 1.0f);
+
+    float nx0 = d00 + wx * (d10 - d00);
+    float nx1 = d01 + wx * (d11 - d01);
+    return nx0 + wz * (nx1 - nx0);
 }
 
 static float fbm2d(float x, float z, int octaves) {
@@ -61,8 +85,8 @@ static float fbm2d(float x, float z, int octaves) {
     for (int i = 0; i < octaves; ++i) {
         val += noise2d(x * freq, z * freq) * amp;
         max_amp += amp;
-        amp *= 0.5f;
-        freq *= 2.02f;
+        amp *= 0.45f;
+        freq *= 2.0f;
     }
     return val / max_amp;
 }
@@ -691,10 +715,18 @@ bool af_landscape_auto_paint_slopes(af_landscape *ls, size_t rock_layer, float m
 
 bool af_landscape_generate_procedural_hills(af_landscape *ls, float scale, float amplitude, uint32_t seed) {
     if (!ls || !ls->chunks) return false;
-    if (scale <= 0.001f) scale = 40.0f;
-    if (amplitude <= 0.001f) amplitude = 12.0f;
+    if (amplitude <= 0.001f) amplitude = 8.0f;
 
-    float inv_scale = 1.0f / scale;
+    /* Support both wavelength in meters (e.g. 45.0m) and frequency (e.g. 0.02) */
+    float inv_scale;
+    if (scale <= 0.0001f) {
+        inv_scale = 1.0f / 45.0f;
+    } else if (scale < 0.2f) {
+        inv_scale = scale;
+    } else {
+        inv_scale = 1.0f / scale;
+    }
+
     float seed_offset_x = (float)(hash_u32(seed) % 10000);
     float seed_offset_z = (float)(hash_u32(seed + 1337u) % 10000);
 
@@ -711,8 +743,9 @@ bool af_landscape_generate_procedural_hills(af_landscape *ls, float scale, float
                     float nx = (wx + seed_offset_x) * inv_scale;
                     float nz = (wz + seed_offset_z) * inv_scale;
 
-                    /* 4-octave fractal noise */
-                    float elevation = fbm2d(nx, nz, 4) * amplitude;
+                    /* 4-octave fractal noise normalized smoothly to [0, amplitude] */
+                    float n = fbm2d(nx, nz, 4);
+                    float elevation = (n * 0.5f + 0.5f) * amplitude;
                     c->heights[(size_t)vz * CHUNK_V + (size_t)vx] = elevation;
                 }
             }
@@ -720,7 +753,7 @@ bool af_landscape_generate_procedural_hills(af_landscape *ls, float scale, float
         }
     }
     af_landscape_recompute_normals(ls, 0, 0, (int32_t)ls->chunk_count_x - 1, (int32_t)ls->chunk_count_z - 1);
-    af_landscape_auto_paint_slopes(ls, 2, 0.6f, 3, 0.5f);
+    af_landscape_auto_paint_slopes(ls, 2, 0.65f, 3, 0.8f);
     return true;
 }
 

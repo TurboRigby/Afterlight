@@ -782,14 +782,17 @@ static void landscape_panel(editor *app, float height)
         return;
     }
 
-    /* Subtool tabs: [Sculpt] [Layers] [Foliage] [Manage] */
-    nk_layout_row_dynamic(context, 26, 4);
-    if (nk_button_label(context, app->landscape_subtool == 0 ? "[Sculpt]" : "Sculpt")) app->landscape_subtool = 0;
-    if (nk_button_label(context, app->landscape_subtool == 1 ? "[Layers]" : "Layers")) app->landscape_subtool = 1;
-    if (nk_button_label(context, app->landscape_subtool == 2 ? "[Foliage]" : "Foliage")) app->landscape_subtool = 2;
-    if (nk_button_label(context, app->landscape_subtool == 3 ? "[Manage]" : "Manage")) app->landscape_subtool = 3;
+    /* Subtool tabs: [ Sculpt ] [ Layers ] / [ Foliage ] [ Manage ] */
+    nk_style_push_vec2(context, &context->style.button.padding, nk_vec2(4, 2));
+    nk_layout_row_dynamic(context, 24, 2);
+    if (nk_button_label(context, app->landscape_subtool == 0 ? "[ Sculpt ]" : "Sculpt")) app->landscape_subtool = 0;
+    if (nk_button_label(context, app->landscape_subtool == 1 ? "[ Layers ]" : "Layers")) app->landscape_subtool = 1;
+    nk_layout_row_dynamic(context, 24, 2);
+    if (nk_button_label(context, app->landscape_subtool == 2 ? "[ Foliage ]" : "Foliage")) app->landscape_subtool = 2;
+    if (nk_button_label(context, app->landscape_subtool == 3 ? "[ Manage ]" : "Manage")) app->landscape_subtool = 3;
+    nk_style_pop_vec2(context);
 
-    nk_layout_row_dynamic(context, fmaxf(60, height - 210), 1);
+    nk_layout_row_dynamic(context, fmaxf(60, height - 238), 1);
     if (nk_group_begin(context, "Landscape controls", 0)) {
         if (app->landscape_subtool == 0) {
             /* Sculpt */
@@ -817,8 +820,10 @@ static void landscape_panel(editor *app, float height)
             int next_falloff = nk_combo(context, falloff_names, 4, cur_falloff, 24, nk_vec2(200, 120));
             if (next_falloff != cur_falloff) app->brush_falloff = (af_brush_falloff)next_falloff;
 
-            nk_layout_row_dynamic(context, 50, 1);
-            nk_label_wrap(context, "Tip: Hold LMB in viewport to sculpt. Hold Shift to invert raise/lower.");
+            nk_layout_row_dynamic(context, 18, 1);
+            nk_label(context, "Hold LMB to sculpt terrain.", NK_TEXT_LEFT);
+            nk_layout_row_dynamic(context, 18, 1);
+            nk_label(context, "Hold Shift to invert raise/lower.", NK_TEXT_LEFT);
         } else if (app->landscape_subtool == 1) {
             /* Material Layers */
             label(context, "Terrain Layers", 24);
@@ -853,6 +858,9 @@ static void landscape_panel(editor *app, float height)
                 af_landscape_auto_paint_slopes(ls, 2, 0.6f, 3, 0.5f);
                 ++app->document.revision;
             }
+
+            nk_layout_row_dynamic(context, 18, 1);
+            nk_label(context, "Hold LMB in viewport to paint.", NK_TEXT_LEFT);
         } else if (app->landscape_subtool == 2) {
             /* Foliage / Mesh Painting */
             label(context, "Foliage Layers", 24);
@@ -948,20 +956,25 @@ static void landscape_panel(editor *app, float height)
                     ++app->document.revision;
                 }
             }
+
+            nk_layout_row_dynamic(context, 18, 1);
+            nk_label(context, "Hold LMB to paint instances.", NK_TEXT_LEFT);
+            nk_layout_row_dynamic(context, 18, 1);
+            nk_label(context, "Hold Shift to erase instances.", NK_TEXT_LEFT);
         } else if (app->landscape_subtool == 3) {
             /* Manage / Heightmaps */
-            label(context, "Procedural Generation", 24);
-            static float hill_scale = 0.015f;
+            label(context, "Procedural Generation", 22);
+            static float hill_size = 45.0f;
             static float hill_amp = 8.0f;
             static int hill_seed = 1234;
             nk_layout_row_dynamic(context, 24, 1);
-            nk_property_float(context, "Frequency", 0.002f, &hill_scale, 0.08f, 0.002f, 0.002f);
-            nk_property_float(context, "Amplitude (m)", 1.0f, &hill_amp, 40.0f, 0.5f, 0.5f);
+            nk_property_float(context, "Hill Size (m)", 15.0f, &hill_size, 150.0f, 2.0f, 2.0f);
+            nk_property_float(context, "Height (m)", 1.0f, &hill_amp, 40.0f, 0.5f, 0.5f);
             nk_property_int(context, "Seed", 0, &hill_seed, 99999, 1, 1);
 
-            nk_layout_row_dynamic(context, 30, 1);
+            nk_layout_row_dynamic(context, 28, 1);
             if (nk_button_label(context, "Generate Hills")) {
-                af_landscape_generate_procedural_hills(ls, hill_scale, hill_amp, (uint32_t)hill_seed);
+                af_landscape_generate_procedural_hills(ls, hill_size, hill_amp, (uint32_t)hill_seed);
                 ++app->document.revision;
             }
 
@@ -994,15 +1007,17 @@ static void object_list(editor *app,float height)
 {
     struct nk_context *context=&app->gui.context;
     if(nk_begin(context,"Objects",nk_rect(0,64,252,height-96),panel_flags(app)|NK_WINDOW_NO_SCROLLBAR)){
-        nk_layout_row_dynamic(context,26,2);
-        if(nk_button_label(context,app->landscape_mode?"Objects":"[ Objects ]")){
-            app->landscape_mode=false;
+        nk_style_push_vec2(context, &context->style.button.padding, nk_vec2(4, 2));
+        nk_layout_row_dynamic(context, 26, 2);
+        if (nk_button_label(context, app->landscape_mode ? "Objects" : "[ Objects ]")) {
+            app->landscape_mode = false;
         }
-        if(nk_button_label(context,app->landscape_mode?"[ Landscape ]":"Landscape")){
-            app->landscape_mode=true;
-            app->document.selection=AF_OBJECT_NONE;
-            app->light_selected=false;
+        if (nk_button_label(context, app->landscape_mode ? "[ Landscape ]" : "Landscape")) {
+            app->landscape_mode = true;
+            app->document.selection = AF_OBJECT_NONE;
+            app->light_selected = false;
         }
+        nk_style_pop_vec2(context);
         if(app->landscape_mode){
             landscape_panel(app,height);
             nk_end(context);
