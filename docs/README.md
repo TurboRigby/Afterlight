@@ -27,7 +27,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
-- [0.22: ray-traced sun shadows and water reflections](development-022.md)
+- [0.22: ray tracing, landscape system, post-processing, and bundling](development-022.md)
 - [0.21: engine foundations and native Linux](development-021.md)
 - [0.20: anti-aliasing](development-020.md)
 - [0.19: water boundaries, ripple texture and wind](development-019.md)

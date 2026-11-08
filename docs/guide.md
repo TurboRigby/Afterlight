@@ -13,8 +13,12 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
-Afterlight 0.22 adds optional ray-query sun shadows; start with
-`run_ray-shadow-lab_editor` and see the [comparison guide](development-022.md).
+Afterlight 0.22 adds interactive terrain editing and sculpting, multi-layer texturing,
+GPU-instanced foliage painting with spatial chunk partitioning, a comprehensive
+post-processing pipeline (ACES/AgX tone mapping, bloom, color grading, bokeh DoF,
+motion blur), single-binary packaging, native extensions, and optional ray-query sun
+shadows and water reflections. See the [0.22 guide](development-022.md).
+Start with `run_ray-shadow-lab_editor` and see the [comparison guide](development-022.md).
 
 Afterlight 0.21 adds player menus, saved progress/preferences, resource/debug
 views and measured culling, with native Linux verification; see the

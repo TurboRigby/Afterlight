@@ -3,11 +3,12 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.22** adds optional hardware ray-traced sun shadows and water
-reflections. Try the shadow comparison lab or the water expedition on a capable
-Vulkan GPU. The tested macOS/MoltenVK path uses shadow maps and environment reflections. The engine also has FXAA/SMAA/TAA, player menus, saved
-progress, the playable water expedition, and a lot, A LOT MORE. See the [ray-shadow guide](docs/development-022.md)
-and [0.21 foundations](docs/development-021.md).
+Afterlight **0.22** features a complete landscape terrain sculpting and instanced
+foliage system, comprehensive post-processing pipeline (ACES/AgX tone mapping,
+bloom, color grading, stochastic bokeh DoF, motion blur, vignette, chromatic
+aberration, film grain), single-binary game bundling, native extensions (AMD FSR,
+NVIDIA DLSS/NGX), and optional hardware ray-traced sun shadows and water reflections.
+See the [0.22 release guide](docs/development-022.md) and [documentation index](docs/README.md).
 
 ## Build and run
 

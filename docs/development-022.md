@@ -1,7 +1,9 @@
-# Optional ray-traced sun shadows and water reflections in 0.22
+# 0.22: Ray tracing, landscape system, post-processing, and bundling
 
-The first hardware ray-tracing effect is deterministic hard sun shadows, using
-Vulkan ray queries in the existing raster material shader.
+Afterlight 0.22 introduces optional hardware ray-traced sun shadows and water reflections,
+an interactive landscape sculpting and painting system, spatially-partitioned GPU-instanced
+foliage, a cinematic HDR post-processing pipeline, native extensions (AMD FSR, NVIDIA DLSS/NGX),
+single-binary game bundling, and full undo/redo support.
 
 ## Try the comparison lab
 
@@ -160,3 +162,87 @@ or game module.
 [Khronos ray tracing overview](https://docs.vulkan.org/guide/latest/extensions/ray_tracing.html),
 [ray-query feature requirements](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceRayQueryFeaturesKHR.html)
 and [acceleration-structure lifetime/build rules](https://docs.vulkan.org/spec/latest/chapters/accelstructures.html).
+
+## Landscape system
+
+The landscape system provides multi-chunk editable terrain with real-time GPU mesh updates,
+multi-layer texture blending, and sculpting tools.
+
+### Terrain architecture
+
+Terrain is divided into a grid of independent chunks (default $4 \times 4$, 16 chunks total)
+with $64 \times 64$ heightmap vertices per chunk ($65{,}536$ vertices total):
+
+- **Chunked updates**: Sculpting or painting dirty chunks only re-uploads modified chunk vertex and normal buffers to the GPU.
+- **Normal recalculation**: Surface normals are recalculated on the fly across chunk seams to maintain smooth shading.
+- **Multi-layer texturing**: Supports up to 4 layers (Grass, Dirt, Rock, Sand, Snow) with custom diffuse maps, normal maps, roughness, and UV tiling scales.
+- **Procedural generation**: Gradient Perlin noise generation with frequency, amplitude, and seed controls.
+- **Heightmap persistence**: Landscape configurations and height arrays are serialized within `.afterlight.json` scene files under the `"landscape"` object.
+
+### Sculpting and painting tools
+
+The editor sidebar provides a dedicated **[ Landscape ]** mode with sub-tabs for:
+
+- **Sculpt**: Raise, Lower, Smooth, and Flatten brushes with interactive viewport ring overlays, adjustable brush radius ($1$ to $50$ meters), strength, and falloff profiles (Smooth, Linear, Sphere, Sharp). Holding **Shift** reverses the active sculpt tool.
+- **Layers**: Multi-layer weight painting with visual color swatches, opacity controls, custom texture file selection, normal mapping, and per-layer UV tiling scales.
+- **Foliage**: Mesh painting onto the landscape with spatial partitioning into chunk instance batches.
+- **Manage**: Global landscape operations including procedural generation, flattening, clearing, and layer definitions.
+
+## Instanced foliage system
+
+Foliage is rendered via hardware GPU instancing with spatially partitioned instance batches:
+
+```
+Terrain
+└── Terrain Chunks (e.g. 4x4)
+    ├── Foliage Layer 0 (Grass) -> Shared mesh reference + instance transforms
+    ├── Foliage Layer 1 (Trees) -> Shared mesh reference + instance transforms
+    └── Foliage Layer 2 (Rocks) -> Shared mesh reference + instance transforms
+```
+
+### Key capabilities:
+- **GPU Instancing**: Instanced draw calls eliminate CPU overhead for thousands of rendered instances.
+- **Spatial Partitioning**: Each chunk maintains its own foliage instances, enabling distance and frustum culling per chunk.
+- **Placement Rules**:
+  - Random yaw rotation ($0$ to $360^\circ$).
+  - Random scale variation within configurable min/max bounds.
+  - Slope constraints (min/max angle in degrees) to prevent placement on steep cliffs or flat surfaces.
+  - Height thresholds (min/max world elevation).
+  - Surface normal alignment with adjustable blend factor.
+- **Viewport Painting**: Paint and erase foliage instances directly using the viewport brush with density control.
+
+## Undo and Redo
+
+All landscape actions are integrated into the engine's transaction and command history:
+- Sculpt strokes capture delta heightmap states for affected chunks on mouse release.
+- Layer weight painting captures weight buffer modifications.
+- Foliage painting and erasing record instance addition and removal batches.
+- Procedural generation snapshots and restores previous landscape state.
+- **Undo** (`Cmd+Z` / `Ctrl+Z`) and **Redo** (`Cmd+Shift+Z` / `Ctrl+Shift+Z`) seamlessly revert and reapply all landscape modifications.
+
+## Post-processing pipeline
+
+Afterlight 0.22 implements a complete HDR post-processing stack in Vulkan:
+
+- **Tone Mapping**: Selectable operators:
+  - ACES Filmic
+  - AgX
+  - Reinhard
+  - Neutral / Linear
+- **Exposure**: Manual exposure compensation and automatic luminance-based auto-exposure.
+- **Bloom**: Dual-pass downsampling/upsampling Gaussian pyramid with thresholding and knee control.
+- **Color Grading**: Saturation, contrast, color filter RGB multipliers, and white balance tinting.
+- **Depth of Field**: Physically-based bokeh depth of field with focus distance, focal range, and blur radius.
+- **Motion Blur**: Camera and velocity-vector based motion blur with shutter angle and sample controls.
+- **Cinematic Artifacts**:
+  - Vignette with adjustable roundness and softness.
+  - Chromatic Aberration with radial spectral displacement.
+  - Film Grain with procedural animated noise and luminance masking.
+
+All post-processing parameters are exposed under the **Post-process** editor panel and persisted within the scene file.
+
+## Single-binary game bundling
+
+The standalone player and editor support packaging games into single-file self-contained executables:
+- Embeds scene descriptions, meshes, textures, audio, fonts, and game modules into a single binary.
+- Requires zero external file dependencies at runtime.
