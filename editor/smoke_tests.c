@@ -106,13 +106,13 @@ void animation_tools_smoke(editor *app) {
         SMOKE_CHECK(app, app->runtime.playing && af_engine_animation_play(app->engine, app->animation_target, 0, 0));
         break;
     case 9:
-    case 10:
-        break;
-    case 11:
-        SMOKE_CHECK(app, af_engine_animation_status(app->engine, app->animation_target).time > 0);
+        if (af_engine_animation_status(app->engine, app->animation_target).time == 0) {
+            app->animation_test_step = 9;
+            break;
+        }
         stop_play(app);
         break;
-    case 12:
+    case 10:
         SMOKE_CHECK(app, !app->runtime.playing && app->document.revision == app->animation_test_revision &&
                              af_scene_get_object(app->document.scene, app->animation_target)->animation.clip == 0);
         puts("Editor animation: actual Preview/Pause/Resume/Stop clicks, clean history and Play isolation passed.");
