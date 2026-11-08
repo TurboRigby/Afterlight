@@ -181,11 +181,13 @@ commands and the macOS sanitizer module-unload regression and fix.
 
 ## Player, New Project, models and export (0.7)
 
-Ctrl/Cmd+Shift+N opens the Project panel, which includes a New Project wizard and **Export saved project**.
+Ctrl/Cmd+Shift+N opens the Project panel, which includes a New Project wizard, **Export directory**, and **Build single binary**.
 Enter a name/new destination for creation; existing directories are preserved.
 The wizard generates a C module, scene, headers and CMake project. Build that
-module before Play. Export packages the generic player with saved scene/assets
-and module. Full commands and platform limits are in [shipping](shipping.md).
+module before Play. **Export directory** packages the player with saved scene/assets
+and module into a folder or app. **Build single binary** compiles the game into a
+single self-contained executable that runs without external asset or extension folders.
+Full commands and platform limits are in [shipping](shipping.md).
 
 The glTF importer preserves hierarchy and per-primitive materials, including
 base-color/normal/metallic-roughness images. The Assets panel adds packed surface

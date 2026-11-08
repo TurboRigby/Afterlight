@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "bundle.h"
 #include "cube.h"
 #include "gui.h"
 #include "play_hud.h"
@@ -30,7 +31,7 @@ typedef struct player {
   uint64_t frames;
   bool failed, hot_reload, menu, started, finished_recorded, preferences_loaded;
   af_player_preferences preferences;
-  char preferences_path[4096], save_path[4096], message[256];
+  char preferences_path[4096], save_path[4096], message[256], bundle_directory[4096];
   uint64_t menu_test;
 } player;
 static int check_project(const af_project *project) {
@@ -147,6 +148,34 @@ static void store_preferences(player *app) {
                                   &error))
     snprintf(app->message, sizeof(app->message), "%s", error.message);
 }
+static void apply_upscaler_preference(player *app, af_engine *engine) {
+  size_t count = af_engine_extension_count(engine);
+  if (!count) return;
+
+  if (!strcmp(app->preferences.upscaler, "off")) {
+    for (size_t i = 0; i < count; ++i) {
+      af_extension_info info;
+      if (af_engine_get_extension(engine, i, &info) && info.vulkan_upscaler && info.enabled)
+        af_engine_set_extension_enabled(engine, i, false);
+    }
+  } else if (app->preferences.upscaler[0]) {
+    for (size_t i = 0; i < count; ++i) {
+      af_extension_info info;
+      if (af_engine_get_extension(engine, i, &info) && info.vulkan_upscaler &&
+          !strcmp(info.id, app->preferences.upscaler)) {
+        af_engine_set_extension_enabled(engine, i, true);
+        break;
+      }
+    }
+  }
+
+  uint32_t qualities = af_engine_upscaler_quality_count(engine);
+  if (qualities) {
+    if (app->preferences.upscaler_quality >= qualities)
+      app->preferences.upscaler_quality = 0;
+    af_engine_set_upscaler_quality(engine, app->preferences.upscaler_quality);
+  }
+}
 static void set_menu(player *app, af_engine *engine, bool menu) {
   app->menu = menu;
   app->runtime.paused = menu;
@@ -170,11 +199,18 @@ static bool init(af_engine *engine, void *memory) {
   }
   char font[AF_ASSET_PATH_CAPACITY];
   const char *base = af_engine_get_base_path(engine);
-  if (!base ||
-      snprintf(font, sizeof(font), "%sfonts/FiraSans-Regular.ttf", base) >=
-          (int)sizeof(font) ||
-      !ed_gui_init(&app->gui, engine, font))
-    return false;
+  bool font_loaded = false;
+  if (app->bundle_directory[0]) {
+    snprintf(font, sizeof(font), "%s/fonts/FiraSans-Regular.ttf", app->bundle_directory);
+    font_loaded = ed_gui_init(&app->gui, engine, font);
+  }
+  if (!font_loaded) {
+    if (!base ||
+        snprintf(font, sizeof(font), "%sfonts/FiraSans-Regular.ttf", base) >=
+            (int)sizeof(font) ||
+        !ed_gui_init(&app->gui, engine, font))
+      return false;
+  }
   if (!ed_runtime_set_project(&app->runtime, app->project_path,
                               app->project.startup_scene))
     return false;
@@ -220,12 +256,7 @@ static bool init(af_engine *engine, void *memory) {
     }
   }
   apply_preferences(app);
-  uint32_t qualities = af_engine_upscaler_quality_count(engine);
-  if (qualities) {
-    if (app->preferences.upscaler_quality >= qualities)
-      app->preferences.upscaler_quality = 0;
-    af_engine_set_upscaler_quality(engine, app->preferences.upscaler_quality);
-  }
+  apply_upscaler_preference(app, engine);
   set_menu(app, engine, (!app->frames || app->menu_test));
   return true;
 }
@@ -414,31 +445,65 @@ static void update(af_engine *engine, double delta, void *memory) {
       changed |=
           nk_property_float(ctx, "Mouse sensitivity", .1f,
                             &app->preferences.sensitivity, 4, .1f, .01f) != 0;
-      uint32_t quality_count = af_engine_upscaler_quality_count(engine);
-      if (quality_count) {
-        const char *names[16];
-        if (quality_count > 16)
-          quality_count = 16;
-        for (uint32_t i = 0; i < quality_count; ++i) {
-          names[i] = af_engine_upscaler_quality_name(engine, i);
-          if (!names[i])
-            names[i] = "Default";
+      size_t upscaler_count = 0;
+      size_t upscaler_indices[16];
+      const char *upscaler_names[17];
+      upscaler_names[0] = "Off";
+      int current_upscaler = 0;
+      for (size_t i = 0; i < af_engine_extension_count(engine) && upscaler_count < 16; ++i) {
+        af_extension_info info;
+        if (af_engine_get_extension(engine, i, &info) && info.vulkan_upscaler) {
+          upscaler_indices[upscaler_count] = i;
+          upscaler_names[upscaler_count + 1] = info.id;
+          if (info.enabled)
+            current_upscaler = (int)upscaler_count + 1;
+          upscaler_count++;
         }
-        const char *quality_label = "Upscaler quality";
-        for (size_t i = 0; i < af_engine_extension_count(engine); ++i) {
-          af_extension_info info;
-          if (af_engine_get_extension(engine, i, &info) && info.enabled &&
-              info.vulkan_upscaler && strstr(info.id, "DLSS"))
-            quality_label = "DLSS quality";
-        }
-        nk_label(ctx, quality_label, NK_TEXT_LEFT);
-        int current = (int)af_engine_upscaler_quality(engine);
-        int selected = nk_combo(ctx, names, (int)quality_count, current, 26,
-                                nk_vec2(width - 32, 150));
-        if (selected != current &&
-            af_engine_set_upscaler_quality(engine, (uint32_t)selected)) {
-          app->preferences.upscaler_quality = (uint32_t)selected;
+      }
+      if (upscaler_count > 0) {
+        nk_label(ctx, "Upscaler", NK_TEXT_LEFT);
+        int selected_upscaler = nk_combo(ctx, upscaler_names, (int)upscaler_count + 1, current_upscaler, 26,
+                                         nk_vec2(width - 32, 150));
+        if (selected_upscaler != current_upscaler) {
+          if (selected_upscaler == 0) {
+            for (size_t u = 0; u < upscaler_count; ++u)
+              af_engine_set_extension_enabled(engine, upscaler_indices[u], false);
+            snprintf(app->preferences.upscaler, sizeof(app->preferences.upscaler), "off");
+          } else {
+            size_t chosen_idx = upscaler_indices[selected_upscaler - 1];
+            af_engine_set_extension_enabled(engine, chosen_idx, true);
+            af_extension_info info;
+            if (af_engine_get_extension(engine, chosen_idx, &info))
+              snprintf(app->preferences.upscaler, sizeof(app->preferences.upscaler), "%s", info.id);
+          }
+          current_upscaler = selected_upscaler;
           store_preferences(app);
+        }
+
+        if (current_upscaler > 0) {
+          uint32_t quality_count = af_engine_upscaler_quality_count(engine);
+          if (quality_count) {
+            const char *names[16];
+            if (quality_count > 16)
+              quality_count = 16;
+            for (uint32_t i = 0; i < quality_count; ++i) {
+              names[i] = af_engine_upscaler_quality_name(engine, i);
+              if (!names[i])
+                names[i] = "Default";
+            }
+            const char *active_name = upscaler_names[current_upscaler];
+            const char *quality_label = strstr(active_name, "DLSS") ? "DLSS quality" :
+                                        strstr(active_name, "FSR") ? "FSR quality" : "Upscaler quality";
+            nk_label(ctx, quality_label, NK_TEXT_LEFT);
+            int current = (int)af_engine_upscaler_quality(engine);
+            int selected = nk_combo(ctx, names, (int)quality_count, current, 26,
+                                    nk_vec2(width - 32, 150));
+            if (selected != current &&
+                af_engine_set_upscaler_quality(engine, (uint32_t)selected)) {
+              app->preferences.upscaler_quality = (uint32_t)selected;
+              store_preferences(app);
+            }
+          }
         }
       }
       nk_bool ray_tracing = app->preferences.ray_traced_shadows ||
@@ -498,7 +563,44 @@ static void shutdown(af_engine *engine, void *memory) {
     printf("Ray water reflections: %s.\n",
            stats.ray_traced_water_reflections_active ? "hardware ray queries"
                                                     : "environment fallback");
+  af_bundle_cleanup();
 }
+typedef struct ext_discovery {
+  const char **paths;
+  size_t *count;
+  char storage[AF_EXTENSION_LIMIT][AF_ASSET_PATH_CAPACITY];
+} ext_discovery;
+
+static SDL_EnumerationResult SDLCALL scan_ext_file(void *userdata, const char *dirname, const char *fname) {
+  ext_discovery *d = userdata;
+  if (*d->count >= AF_EXTENSION_LIMIT) return SDL_ENUM_SUCCESS;
+  const char *dot = strrchr(fname, '.');
+  if (dot && (!strcmp(dot, ".so") || !strcmp(dot, ".dylib") || !strcmp(dot, ".dll"))) {
+    char candidate[AF_ASSET_PATH_CAPACITY];
+    int len = snprintf(candidate, sizeof(candidate), "%s/%s", dirname, fname);
+    if (len <= 0 || len >= AF_ASSET_PATH_CAPACITY) return SDL_ENUM_CONTINUE;
+    for (size_t i = 0; i < *d->count; ++i) {
+      if (!strcmp(d->paths[i], candidate)) return SDL_ENUM_CONTINUE;
+      const char *existing_base = strrchr(d->paths[i], '/');
+      existing_base = existing_base ? existing_base + 1 : d->paths[i];
+      if (!strcmp(existing_base, fname)) return SDL_ENUM_CONTINUE;
+    }
+    size_t idx = *d->count;
+    memcpy(d->storage[idx], candidate, (size_t)len + 1);
+    d->paths[idx] = d->storage[idx];
+    (*d->count)++;
+  }
+  return SDL_ENUM_CONTINUE;
+}
+
+static void discover_ext_in_dir(const char *dir, ext_discovery *d) {
+  if (!dir || *d->count >= AF_EXTENSION_LIMIT) return;
+  SDL_PathInfo info;
+  if (SDL_GetPathInfo(dir, &info) && info.type == SDL_PATHTYPE_DIRECTORY) {
+    SDL_EnumerateDirectory(dir, scan_ext_file, d);
+  }
+}
+
 int main(int argc, char **argv) {
   player app = {0};
   bool check = false;
@@ -544,6 +646,10 @@ int main(int argc, char **argv) {
       return 1;
   }
   char bundled[AF_ASSET_PATH_CAPACITY];
+  if (!project && af_bundle_extract(app.bundle_directory, sizeof(app.bundle_directory))) {
+    snprintf(bundled, sizeof(bundled), "%s/game.afterlight.project", app.bundle_directory);
+    project = bundled;
+  }
   if (!project) {
     const char *base = SDL_GetBasePath();
     if (!base || snprintf(bundled, sizeof(bundled), "%sgame.afterlight.project",
@@ -564,6 +670,27 @@ int main(int argc, char **argv) {
   }
   if (check)
     return check_project(&app.project);
+
+  ext_discovery disc = {.paths = extensions, .count = &extension_count};
+  if (extension_count == 0) {
+    if (app.bundle_directory[0]) {
+      char b_ext[AF_ASSET_PATH_CAPACITY];
+      snprintf(b_ext, sizeof(b_ext), "%s/extensions", app.bundle_directory);
+      discover_ext_in_dir(b_ext, &disc);
+    }
+    char proj_dir[AF_ASSET_PATH_CAPACITY];
+    if (af_asset_resolve_path(project, "extensions", proj_dir, sizeof(proj_dir))) {
+      discover_ext_in_dir(proj_dir, &disc);
+    }
+    const char *base = SDL_GetBasePath();
+    if (base) {
+      char base_ext[AF_ASSET_PATH_CAPACITY];
+      snprintf(base_ext, sizeof(base_ext), "%sextensions", base);
+      discover_ext_in_dir(base_ext, &disc);
+      snprintf(base_ext, sizeof(base_ext), "%s../extensions", base);
+      discover_ext_in_dir(base_ext, &disc);
+    }
+  }
   af_engine *engine = af_engine_create_with_extensions(&config, extensions, extension_count);
   if (!engine)
     return 1;

@@ -21,6 +21,7 @@ int main(void) {
   p.ray_traced_shadows = true;
   p.ray_traced_water_reflections = false;
   p.upscaler_quality = 2;
+  snprintf(p.upscaler, sizeof(p.upscaler), "NVIDIA DLSS");
   snprintf(p.best_scene, sizeof(p.best_scene), "water-expedition");
   CHECK(af_player_preferences_save("preferences.json", &p, &e));
   af_player_preferences restored = {0};
@@ -32,6 +33,7 @@ int main(void) {
         restored.ray_traced_water_reflections ==
             p.ray_traced_water_reflections &&
         restored.upscaler_quality == p.upscaler_quality &&
+        !strcmp(restored.upscaler, p.upscaler) &&
         !strcmp(restored.best_scene, p.best_scene));
   const char *legacy =
       "{\"version\":1,\"aa\":3,\"sharpness\":0.2,\"history\":0.8,"
@@ -44,11 +46,28 @@ int main(void) {
       (af_render_settings){.ray_traced_shadows = true});
   migrated.ray_traced_water_reflections = true;
   migrated.upscaler_quality = 3;
+  snprintf(migrated.upscaler, sizeof(migrated.upscaler), "AMD FSR 2.3.3");
   CHECK(af_player_preferences_load("legacy.json", &migrated, &e) &&
         migrated.aa == AF_AA_TAA && migrated.ray_traced_shadows &&
         migrated.ray_traced_water_reflections &&
-        migrated.upscaler_quality == 3);
+        migrated.upscaler_quality == 3 &&
+        !strcmp(migrated.upscaler, "AMD FSR 2.3.3"));
   remove("legacy.json");
+  const char *v2_text =
+      "{\"version\":2,\"aa\":2,\"sharpness\":0.1,\"history\":0.5,"
+      "\"exposure\":0,\"sensitivity\":1.0,\"best_time\":0,"
+      "\"best_scene\":\"\",\"ray_traced_shadows\":true,"
+      "\"ray_traced_water_reflections\":false,\"upscaler_quality\":1}";
+  FILE *v2_file = fopen("v2.json", "wb");
+  CHECK(v2_file && fputs(v2_text, v2_file) >= 0 && fclose(v2_file) == 0);
+  af_player_preferences v2_migrated = af_player_preferences_default(af_render_settings_default());
+  snprintf(v2_migrated.upscaler, sizeof(v2_migrated.upscaler), "off");
+  CHECK(af_player_preferences_load("v2.json", &v2_migrated, &e) &&
+        v2_migrated.aa == AF_AA_SMAA && v2_migrated.ray_traced_shadows &&
+        !v2_migrated.ray_traced_water_reflections &&
+        v2_migrated.upscaler_quality == 1 &&
+        !strcmp(v2_migrated.upscaler, "off"));
+  remove("v2.json");
   p.history = NAN;
   CHECK(!af_player_preferences_save("preferences.json", &p, &e) &&
         af_player_preferences_load("preferences.json", &restored, &e));

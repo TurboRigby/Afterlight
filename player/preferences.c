@@ -22,6 +22,7 @@ af_player_preferences af_player_preferences_default(af_render_settings r) {
       .ray_traced_shadows = r.ray_traced_shadows,
       .ray_traced_water_reflections = r.ray_traced_water_reflections,
       .upscaler_quality = 0,
+      .upscaler = {0},
   };
 }
 static bool valid(const af_player_preferences *p) {
@@ -32,7 +33,7 @@ static bool valid(const af_player_preferences *p) {
          isfinite(p->sensitivity) && p->sensitivity >= .1f &&
          p->sensitivity <= 4 && isfinite(p->best_time) && p->best_time >= 0 &&
          p->best_time <= 1e9 && memchr(p->best_scene, 0, sizeof(p->best_scene)) &&
-         p->upscaler_quality <= 15;
+         p->upscaler_quality <= 15 && memchr(p->upscaler, 0, sizeof(p->upscaler));
 }
 static bool fail(af_asset_error *e, const char *text) {
   if (e)
@@ -49,7 +50,7 @@ bool af_player_preferences_save(const char *path,
   cJSON *j = cJSON_CreateObject();
   if (!j)
     return false;
-  bool ok = cJSON_AddNumberToObject(j, "version", 2) &&
+  bool ok = cJSON_AddNumberToObject(j, "version", 3) &&
             cJSON_AddNumberToObject(j, "aa", p->aa) &&
             cJSON_AddNumberToObject(j, "sharpness", p->sharpness) &&
             cJSON_AddNumberToObject(j, "history", p->history) &&
@@ -62,7 +63,8 @@ bool af_player_preferences_save(const char *path,
             cJSON_AddBoolToObject(j, "ray_traced_water_reflections",
                                   p->ray_traced_water_reflections) &&
             cJSON_AddNumberToObject(j, "upscaler_quality",
-                                    p->upscaler_quality);
+                                    p->upscaler_quality) &&
+            cJSON_AddStringToObject(j, "upscaler", p->upscaler);
   char *json = ok ? cJSON_Print(j) : NULL;
   cJSON_Delete(j);
   if (!json)
@@ -109,12 +111,13 @@ bool af_player_preferences_load(const char *path, af_player_preferences *out,
   if (!ok || !af_json_valid_text(bytes, n))
     return fail(e, "Invalid player preferences JSON.");
   cJSON *j = cJSON_Parse(bytes);
-  enum { CORE_KEYS = 8, PREFERENCE_KEYS = 11 };
+  enum { CORE_KEYS = 8, V2_KEYS = 11, PREFERENCE_KEYS = 12 };
   static const char *keys[PREFERENCE_KEYS] = {
       "version",   "aa",        "sharpness", "history", "exposure",
       "sensitivity", "best_time", "best_scene", "ray_traced_shadows",
-      "ray_traced_water_reflections", "upscaler_quality"};
+      "ray_traced_water_reflections", "upscaler_quality", "upscaler"};
   const unsigned core_mask = (1u << CORE_KEYS) - 1u,
+                 v2_mask = (1u << V2_KEYS) - 1u,
                  all_mask = (1u << PREFERENCE_KEYS) - 1u;
   unsigned seen = 0;
   const cJSON *item;
@@ -133,17 +136,19 @@ bool af_player_preferences_load(const char *path, af_player_preferences *out,
     if (i < CORE_KEYS - 1 && !cJSON_IsNumber(item))
       ok = false;
   }
-  /* Version 1 files predate ray tracing and upscaler quality. Keep those
-     fields from the caller's scene-derived defaults when loading them. */
+  /* Versions 1 and 2 predate upscaler selection. Keep caller's defaults
+     for fields missing in legacy versions. */
   af_player_preferences p = *out;
   if (ok) {
     const cJSON *version =
         cJSON_GetObjectItemCaseSensitive(j, "version");
     ok = cJSON_IsNumber(version) && version->valuedouble == floor(version->valuedouble) &&
-         (version->valueint == 1 || version->valueint == 2);
+         (version->valueint == 1 || version->valueint == 2 || version->valueint == 3);
     if (ok && version->valueint == 1)
       ok = (seen & core_mask) == core_mask && !(seen & ~core_mask);
     if (ok && version->valueint == 2)
+      ok = (seen & v2_mask) == v2_mask && !(seen & ~v2_mask);
+    if (ok && version->valueint == 3)
       ok = seen == all_mask;
     const cJSON *a = cJSON_GetObjectItemCaseSensitive(j, "aa"),
                 *s = cJSON_GetObjectItemCaseSensitive(j, "best_scene");
@@ -164,7 +169,7 @@ bool af_player_preferences_load(const char *path, af_player_preferences *out,
       p.best_time =
           cJSON_GetObjectItemCaseSensitive(j, "best_time")->valuedouble;
       snprintf(p.best_scene, sizeof(p.best_scene), "%s", s->valuestring);
-      if (version->valueint == 2) {
+      if (version->valueint >= 2) {
         const cJSON *shadows =
                           cJSON_GetObjectItemCaseSensitive(j, "ray_traced_shadows"),
                     *reflections = cJSON_GetObjectItemCaseSensitive(
@@ -180,6 +185,14 @@ bool af_player_preferences_load(const char *path, af_player_preferences *out,
           p.ray_traced_water_reflections = cJSON_IsTrue(reflections);
           p.upscaler_quality = (uint32_t)quality->valueint;
         }
+      }
+      if (version->valueint >= 3) {
+        const cJSON *upscaler =
+            cJSON_GetObjectItemCaseSensitive(j, "upscaler");
+        ok = ok && cJSON_IsString(upscaler) &&
+             strlen(upscaler->valuestring) < sizeof(p.upscaler);
+        if (ok)
+          snprintf(p.upscaler, sizeof(p.upscaler), "%s", upscaler->valuestring);
       }
       ok = ok && valid(&p);
     }

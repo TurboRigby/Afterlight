@@ -484,7 +484,7 @@ add_library(afterlight_player_preferences STATIC player/preferences.c)
 target_include_directories(afterlight_player_preferences PUBLIC player PRIVATE third_party/cjson)
 target_link_libraries(afterlight_player_preferences PUBLIC Afterlight::Engine PRIVATE afterlight_json SDL3::SDL3)
 afterlight_warnings(afterlight_player_preferences)
-add_executable(afterlight_player player/main.c)
+add_executable(afterlight_player player/main.c player/bundle.c)
 target_include_directories(afterlight_player PRIVATE sandbox)
 target_link_libraries(afterlight_player PRIVATE afterlight_editor_document afterlight_editor_ui afterlight_player_preferences)
 afterlight_warnings(afterlight_player)
@@ -590,6 +590,12 @@ set(AFTERLIGHT_EXPORT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/exported-game" CACH
 add_custom_target(export_game
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/afterlight.py" export "${AFTERLIGHT_EXPORT_PROJECT}"
         --output "${AFTERLIGHT_EXPORT_DIRECTORY}" --player "${afterlight_player_package}"
+    DEPENDS afterlight_player afterlight_playground_game USES_TERMINAL VERBATIM)
+
+set(AFTERLIGHT_BUNDLE_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/afterlight_game_standalone" CACHE FILEPATH "Destination path for standalone single binary game")
+add_custom_target(bundle_game
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/afterlight.py" bundle "${AFTERLIGHT_EXPORT_PROJECT}"
+        --output "${AFTERLIGHT_BUNDLE_OUTPUT}" --player "${afterlight_player_package}"
     DEPENDS afterlight_player afterlight_playground_game USES_TERMINAL VERBATIM)
 
 include(CTest)
@@ -1247,6 +1253,8 @@ if(BUILD_TESTING)
 
     add_test(NAME afterlight.ray_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/ray_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_ray_shadow_game>" ${package_test_flags})
     set_tests_properties(afterlight.ray_export PROPERTIES TIMEOUT 180 LABELS "graphics;packaging" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
+    add_test(NAME afterlight.bundle_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/bundle_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_playground_game>" --extension "$<TARGET_FILE:afterlight_upscaler_fixture>" ${package_test_flags})
+    set_tests_properties(afterlight.bundle_export PROPERTIES TIMEOUT 180 LABELS "graphics;packaging" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
     add_test(NAME afterlight.water_course_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/water_export.py" --courses --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_water_course_game>" --play-test "$<TARGET_FILE:afterlight_water_course_test>" ${package_test_flags})
     set_tests_properties(afterlight.water_course_export PROPERTIES TIMEOUT 300 LABELS "graphics;packaging")
     add_test(NAME afterlight.water_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/water_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_water_game>" --play-test "$<TARGET_FILE:afterlight_water_demo_test>" ${package_test_flags})

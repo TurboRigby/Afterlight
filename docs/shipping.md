@@ -209,7 +209,34 @@ is deferred. Run [the native verifier](testing.md#native-linux-021) on other tar
 ## Optional ray shadows (0.22)
 
 The saved scene's `ray_traced_shadows` preference travels with the exported game.
+Hardware ray queries cover all shadow casters: directional sun shadows and local point
+and spot lights. When ray tracing is active, shadow rays test occluder visibility along
+the light vector up to the light distance before falling back to raster shadow maps.
 Exports include both embedded shader variants; no runtime shader compiler is
 required. Unsupported devices retain raster rendering and report fallback.
 `run_ray-shadow-lab_player` is the native comparison player; see the
 [ray-shadow guide](development-022.md) for requirements and limits.
+
+## Single-binary executable bundle
+
+In addition to directory exports, projects can be compiled into a single self-contained
+binary executable that runs without `run.sh`, loose `extensions/` directories, or external
+asset folders:
+
+```sh
+python3 scripts/afterlight.py bundle build/release/playground.afterlight.project \
+  --output build/my_game --player build/release/afterlight_player.app \
+  [--extensions /path/to/upscaler.so]
+```
+
+Or via CMake:
+
+```sh
+cmake --build build/release --target bundle_game
+```
+
+The resulting binary (`AFTERLIGHT_BUNDLE_OUTPUT`, defaulting to `afterlight_game_standalone`):
+- Embeds the project descriptor, C game module, scenes, rewritten assets, fonts, licenses, source archives, and optional native engine extensions.
+- On macOS, embeds the payload into a dedicated Mach-O section with valid ad-hoc code signature; on Linux and Windows, packages via executable payload.
+- Automatically unpacks into a private, temporary folder on launch, auto-discovers bundled extensions in `<bundle>/extensions`, executes natively, and safely cleans up upon termination.
+- Can be moved to any directory and run directly (e.g. `./my_game`) without helper scripts.

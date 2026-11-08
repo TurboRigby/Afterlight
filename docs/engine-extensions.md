@@ -197,11 +197,19 @@ DLSS runtime in the SDK's `lib/Linux_x86_64/rel` directory. Set
 `AFTERLIGHT_NGX_RUNTIME_DIR` to use a different runtime directory.
 
 The module publishes **Quality**, **Balanced**, **Performance** and
-**Ultra Performance** presets. Quality is the default. The standalone player's
-pause/settings menu shows a **DLSS quality** selector when the module is
-loaded, and the same menu has a **Ray tracing** switch that enables or disables
-ray-traced sun shadows and water reflections together. The choices persist in
-the player's preferences alongside anti-aliasing and exposure.
+**Ultra Performance** presets. Quality is the default.
+
+## Upscaler selection and pause menu controls
+
+When one or more upscaler extensions are loaded (via `--extension`, project-local `extensions/`,
+or embedded bundle), the standalone player's pause/settings menu (Escape / F6) presents an
+**Upscaler** selector:
+- **Off**: Disables upscaling, restoring full native resolution and the player's chosen built-in anti-aliasing (FXAA, SMAA, TAA).
+- **Upscaler name / ID**: Switches active upscaling to that specific provider (e.g. DLSS or FSR 1/2/3) and disables other upscalers.
+- **Quality preset**: When an upscaler is active and publishes presets, a quality combo allows selecting between its supported presets (e.g. Quality, Balanced, Performance).
+- Preferences are saved in the user preferences file (`preferences.bin`, version 3) and restored on next startup. Legacy version 1 and 2 preferences load seamlessly.
+
+The same menu includes a **Ray tracing** switch that controls hardware ray queries across all shadows (directional sun shadows as well as local point and spot lights) and water reflections. Extensions in `<bundle>/extensions` or `<project>/extensions` are auto-discovered at startup.
 
 ## Other SDKs
 

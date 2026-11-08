@@ -134,7 +134,7 @@ float local_depth_test(int layer,vec3 receiver,vec2 offset,float bias){
     if(p.z<=0||p.z>=1||any(lessThan(texcoord,vec2(0)))||any(greaterThan(texcoord,vec2(1))))return 1;
     return p.z-bias<=textureLod(local_shadow_map,vec3(texcoord,layer),0).r?1.0:0.0;
 }
-float local_visibility(LocalLight light,vec3 n){
+float raster_local_visibility(LocalLight light,vec3 n){
     if(draw.params.y<.5||light.params.z<.5)return 1;
     int base=int(light.params.z)-1;vec3 receiver=world_position+n*min(.01,light.position_range.w*.0005);
     float sum=0;vec3 direction=receiver-light.position_range.xyz;
@@ -144,6 +144,25 @@ float local_visibility(LocalLight light,vec3 n){
         else{vec3 point=receiver+(t*float(x)+b*float(y))*length(direction)*2.0*frame.light_count.y;
             sum+=local_depth_test(base+point_face(point-light.position_range.xyz),point,vec2(0),light.params.w);}
     }return sum/9.0;
+}
+float local_visibility(LocalLight light,vec3 n,vec3 l,float distance_to_light){
+    float raster=raster_local_visibility(light,n);
+#ifdef AF_RAY_QUERY
+    if(frame.sky_params.z<.5)return raster;
+    if(draw.params.y<.5||light.params.z<.5||((uint(draw.params.x)&1u)!=0u))return 1;
+    if(dot(n,l)<=0)return raster;
+    vec3 geometric=normalize(cross(dFdx(world_position),dFdy(world_position)));
+    if(dot(geometric,l)<0)geometric=-geometric;
+    float bias=max(.001,min(.01,light.position_range.w*.0005));
+    if(distance_to_light<=bias)return raster;
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query,scene_acceleration,gl_RayFlagsTerminateOnFirstHitEXT|gl_RayFlagsOpaqueEXT,
+        1,world_position+geometric*bias,.001,l,distance_to_light-bias);
+    while(rayQueryProceedEXT(query)){}
+    return rayQueryGetIntersectionTypeEXT(query,true)==gl_RayQueryCommittedIntersectionNoneEXT?raster:0.0;
+#else
+    return raster;
+#endif
 }
 vec2 environment_uv(vec3 d){return vec2((atan(d.z,d.x)-frame.render_params.w)/(2.0*3.14159265359)+0.5,acos(clamp(d.y,-1.0,1.0))/3.14159265359);}
 #ifdef AF_RAY_QUERY
@@ -223,7 +242,7 @@ void main(){
             float blend=clamp((cone-light.params.x)/max(light.direction_inner.w-light.params.x,0.00001),0.0,1.0);
             attenuation*=blend*blend*(3.0-2.0*blend);
         }
-        float visibility=local_visibility(light,n);
+        float visibility=local_visibility(light,n,l,distance_to_light);
         if(water)output_rgb+=water_scatter(n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation)*(bulk_water?1.0:visibility);
         output_rgb+=direct_light(base.rgb,n,v,l,light.color_intensity.rgb*light.color_intensity.w*attenuation,roughness,metal)*visibility;
     }

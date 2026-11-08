@@ -2002,7 +2002,17 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     uint32_t resource_config=(uint32_t)environment_settings.anti_aliasing|(environment_settings.bloom?AF_RESOURCE_BLOOM:0u)|((environment_settings.anti_aliasing==AF_AA_TAA||(renderer->capture_pending&&renderer->capture_motion))?AF_RESOURCE_MOTION:0u)|((environment_settings.refraction&&af_scene_water_count(scene)>0)?AF_RESOURCE_REFRACTION:0u);
     if (upscale) resource_config |= AF_RESOURCE_UPSCALER | AF_RESOURCE_MOTION;
     if(renderer->ray_supported && !renderer->ray_failed){
-        if(environment_settings.ray_traced_shadows && af_scene_get_shadows(scene).enabled)
+        bool any_shadows = af_scene_get_shadows(scene).enabled;
+        if (!any_shadows) {
+            for (size_t i = 0; i < af_scene_local_light_count(scene); ++i) {
+                const af_local_light *local = af_scene_local_light_at(scene, i);
+                if (local->enabled && local->cast_shadows && local->intensity > 0) {
+                    any_shadows = true;
+                    break;
+                }
+            }
+        }
+        if(environment_settings.ray_traced_shadows && any_shadows)
             resource_config|=AF_RESOURCE_RAY_SHADOWS;
         if(environment_settings.ray_traced_water_reflections){
             for(size_t i=0;i<af_scene_water_count(scene);++i){
@@ -2121,7 +2131,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         af_vk_shadows_begin(renderer->local_shadows,frame->command,renderer->frame_index,layer,bias,frame->descriptor);
         for(size_t i=0;layer<(uint32_t)uniform.light_count.z&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(uniform.local_shadow_matrices[layer],&renderer->shadow_bounds[i]))continue;
-            af_shadow_draw draw=renderer->shadow_draws[i];const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
+            af_shadow_draw draw=renderer->shadow_draws[i];if(ray_shadows&&draw.ray_caster)continue;const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
             af_mat4 mvp=af_mat4_mul(uniform.local_shadow_matrices[layer],draw.model);af_vk_shadows_push(renderer->local_shadows,frame->command,mvp.elements,draw.skin_base,draw.alpha_mode,draw.alpha,draw.cutoff,af_vk_texture_descriptor(draw.texture));
             VkDeviceSize offset=0;vkCmdBindVertexBuffers(frame->command,0,1,&mesh->vertices.handle,&offset);vkCmdBindIndexBuffer(frame->command,mesh->indices.handle,0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++renderer->shadow_draw_calls;
         }vkCmdEndRenderPass(frame->command);

@@ -8,6 +8,7 @@
 #include <afterlight/project.h>
 #include <afterlight/asset_watch.h>
 #include <afterlight/extension.h>
+#include <afterlight/extension_vulkan.h>
 #include "document.h"
 #include "environment.h"
 #include "asset_browser.h"
@@ -135,7 +136,33 @@ static void read_startup_extension(editor *app)
     SDL_CloseIO(file);
 }
 
-static void schedule_startup_extension(editor *app, const char *path)
+static bool is_startup_extension_scheduled(const editor *app, const char *path)
+{
+    if (!app->startup_extension[0] || !path || !path[0]) return false;
+    const char *p = app->startup_extension;
+    size_t path_len = strlen(path);
+    const char *p_base = strrchr(path, '/');
+    p_base = p_base ? p_base + 1 : path;
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        size_t line_len = nl ? (size_t)(nl - p) : strlen(p);
+        if (line_len && p[line_len - 1] == '\r') line_len--;
+        if (line_len == path_len && !strncmp(p, path, path_len)) return true;
+        char line_buf[AF_ASSET_PATH_CAPACITY];
+        if (line_len > 0 && line_len < sizeof(line_buf)) {
+            memcpy(line_buf, p, line_len);
+            line_buf[line_len] = '\0';
+            const char *l_base = strrchr(line_buf, '/');
+            l_base = l_base ? l_base + 1 : line_buf;
+            if (!strcmp(l_base, p_base)) return true;
+        }
+        if (!nl) break;
+        p = nl + 1;
+    }
+    return false;
+}
+
+static void schedule_startup_extension(editor *app, const char *path, bool enable)
 {
     if (!app->startup_pref[0]) {
         set_status(app, "Cannot access editor startup preferences.");
@@ -144,19 +171,142 @@ static void schedule_startup_extension(editor *app, const char *path)
     if (!path) {
         if (SDL_RemovePath(app->startup_pref)) {
             app->startup_extension[0] = 0;
-            set_status(app, "Startup extension preference cleared.");
+            set_status(app, "Startup extension preferences cleared.");
         } else set_status(app, SDL_GetError());
         return;
     }
+    char new_buf[sizeof(app->startup_extension)] = {0};
+    size_t new_len = 0;
+    const char *p = app->startup_extension;
+    size_t path_len = strlen(path);
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        size_t line_len = nl ? (size_t)(nl - p) : strlen(p);
+        size_t check_len = (line_len && p[line_len - 1] == '\r') ? line_len - 1 : line_len;
+        if (check_len == path_len && !strncmp(p, path, path_len)) {
+            /* matched */
+        } else if (line_len > 0) {
+            if (new_len + check_len + 2 < sizeof(new_buf)) {
+                memcpy(new_buf + new_len, p, check_len);
+                new_len += check_len;
+                new_buf[new_len++] = '\n';
+            }
+        }
+        if (!nl) break;
+        p = nl + 1;
+    }
+    if (enable) {
+        if (new_len + path_len + 2 < sizeof(new_buf)) {
+            memcpy(new_buf + new_len, path, path_len);
+            new_len += path_len;
+            new_buf[new_len++] = '\n';
+        }
+    }
+    new_buf[new_len] = 0;
     char temporary[AF_ASSET_PATH_CAPACITY + 32];
     snprintf(temporary, sizeof(temporary), "%s.%" PRIu64, app->startup_pref, (uint64_t)SDL_GetTicksNS());
-    if (!SDL_SaveFile(temporary, path, strlen(path)) || !SDL_RenamePath(temporary, app->startup_pref)) {
+    if (new_len == 0) {
+        SDL_RemovePath(app->startup_pref);
+        app->startup_extension[0] = 0;
+        set_status(app, "Startup extension preference cleared.");
+        return;
+    }
+    if (!SDL_SaveFile(temporary, new_buf, new_len) || !SDL_RenamePath(temporary, app->startup_pref)) {
         set_status(app, SDL_GetError());
         SDL_RemovePath(temporary);
         return;
     }
-    snprintf(app->startup_extension, sizeof(app->startup_extension), "%s", path);
-    set_status(app, "Restart Afterlight Editor to activate the startup extension.");
+    memcpy(app->startup_extension, new_buf, sizeof(app->startup_extension));
+    set_status(app, "Restart Afterlight Editor to activate scheduled startup extensions.");
+}
+
+static void schedule_startup_upscaler(editor *app, const char *path, bool enable)
+{
+    if (!app || !app->engine) return;
+    size_t count = af_engine_extension_count(app->engine);
+    for (size_t i = 0; i < count; ++i) {
+        af_extension_info info;
+        if (af_engine_get_extension(app->engine, i, &info) && info.vulkan_upscaler) {
+            schedule_startup_extension(app, info.path, false);
+        }
+    }
+    if (enable && path) {
+        schedule_startup_extension(app, path, true);
+    }
+}
+
+typedef struct ext_discovery {
+    const char **paths;
+    size_t *count;
+    char storage[AF_EXTENSION_LIMIT][AF_ASSET_PATH_CAPACITY];
+} ext_discovery;
+
+static void add_editor_extension(ext_discovery *d, const char *path)
+{
+    if (!path || !path[0] || *d->count >= AF_EXTENSION_LIMIT) return;
+    const char *fname = strrchr(path, '/');
+    fname = fname ? fname + 1 : path;
+    for (size_t i = 0; i < *d->count; ++i) {
+        if (!strcmp(d->paths[i], path)) return;
+        const char *existing_base = strrchr(d->paths[i], '/');
+        existing_base = existing_base ? existing_base + 1 : d->paths[i];
+        if (!strcmp(existing_base, fname)) return;
+    }
+    size_t idx = *d->count;
+    snprintf(d->storage[idx], sizeof(d->storage[idx]), "%s", path);
+    d->paths[idx] = d->storage[idx];
+    (*d->count)++;
+}
+
+static void add_scheduled_startup_extensions(ext_discovery *d, const char *startup_extension)
+{
+    if (!startup_extension || !startup_extension[0]) return;
+    const char *p = startup_extension;
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        size_t line_len = nl ? (size_t)(nl - p) : strlen(p);
+        if (line_len && p[line_len - 1] == '\r') line_len--;
+        if (line_len > 0 && line_len < AF_ASSET_PATH_CAPACITY) {
+            char path[AF_ASSET_PATH_CAPACITY];
+            memcpy(path, p, line_len);
+            path[line_len] = '\0';
+            add_editor_extension(d, path);
+        }
+        if (!nl) break;
+        p = nl + 1;
+    }
+}
+
+static SDL_EnumerationResult SDLCALL scan_editor_ext_file(void *userdata, const char *dirname, const char *fname)
+{
+    ext_discovery *d = userdata;
+    if (*d->count >= AF_EXTENSION_LIMIT) return SDL_ENUM_SUCCESS;
+    const char *dot = strrchr(fname, '.');
+    if (dot && (!strcmp(dot, ".so") || !strcmp(dot, ".dylib") || !strcmp(dot, ".dll"))) {
+        char candidate[AF_ASSET_PATH_CAPACITY];
+        int len = snprintf(candidate, sizeof(candidate), "%s/%s", dirname, fname);
+        if (len <= 0 || len >= AF_ASSET_PATH_CAPACITY) return SDL_ENUM_CONTINUE;
+        for (size_t i = 0; i < *d->count; ++i) {
+            if (!strcmp(d->paths[i], candidate)) return SDL_ENUM_CONTINUE;
+            const char *existing_base = strrchr(d->paths[i], '/');
+            existing_base = existing_base ? existing_base + 1 : d->paths[i];
+            if (!strcmp(existing_base, fname)) return SDL_ENUM_CONTINUE;
+        }
+        size_t idx = *d->count;
+        memcpy(d->storage[idx], candidate, (size_t)len + 1);
+        d->paths[idx] = d->storage[idx];
+        (*d->count)++;
+    }
+    return SDL_ENUM_CONTINUE;
+}
+
+static void discover_editor_ext_in_dir(const char *dir, ext_discovery *d)
+{
+    if (!dir || *d->count >= AF_EXTENSION_LIMIT) return;
+    SDL_PathInfo info;
+    if (SDL_GetPathInfo(dir, &info) && info.type == SDL_PATHTYPE_DIRECTORY) {
+        SDL_EnumerateDirectory(dir, scan_editor_ext_file, d);
+    }
 }
 static void refresh(editor *app) { app->refresh_fields=true;ed_document_end_edit(&app->document); }
 static void stop_play(editor *app)
@@ -251,7 +401,7 @@ static void poll_dialog(editor *app)
         bool loaded = af_engine_load_extension(app->engine, path);
         af_extension_info info;
         if (loaded && af_engine_get_extension(app->engine, af_engine_extension_count(app->engine) - 1, &info) &&
-            info.startup_status == AF_EXTENSION_RESTART_REQUIRED) schedule_startup_extension(app, info.path);
+            info.startup_status == AF_EXTENSION_RESTART_REQUIRED) schedule_startup_extension(app, info.path, true);
         else set_status(app, loaded ? "Engine extension enabled." :
                                      "Extension load failed. Check its dependencies, ABI and ID.");
         app->dialog_asset = 0;
@@ -990,7 +1140,7 @@ static void environment_panel(editor *app,float width,float height){
         int aa=nk_combo(ctx,aa_modes,4,(int)render.anti_aliasing,26,nk_vec2(280,150));if(aa!=(int)render.anti_aliasing){render.anti_aliasing=(af_anti_aliasing)aa;changed=true;}
         if(render.anti_aliasing==AF_AA_TAA){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"History weight",0,&render.taa_history_weight,.98f,.05f,.005f)!=0;}
         if(render.anti_aliasing!=AF_AA_OFF){nk_layout_row_dynamic(ctx,28,1);changed|=nk_property_float(ctx,"AA sharpening",0,&render.aa_sharpness,1,.05f,.005f)!=0;}
-        nk_layout_row_dynamic(ctx,28,1);nk_bool ray_shadows=render.ray_traced_shadows;if(nk_checkbox_label(ctx,"Ray-traced sun shadows (experimental)",&ray_shadows)){render.ray_traced_shadows=ray_shadows!=0;changed=true;}
+        nk_layout_row_dynamic(ctx,28,1);nk_bool ray_shadows=render.ray_traced_shadows;if(nk_checkbox_label(ctx,"Ray-traced shadows (all lights)",&ray_shadows)){render.ray_traced_shadows=ray_shadows!=0;changed=true;}
         nk_bool ray_reflections=render.ray_traced_water_reflections;
         nk_layout_row_dynamic(ctx,28,1);
         if(nk_checkbox_label(ctx,"Ray-traced water reflections",&ray_reflections)){
@@ -998,7 +1148,7 @@ static void environment_panel(editor *app,float width,float height){
             changed=true;
         }
         af_engine_stats ray_stats=af_engine_get_stats(app->engine);
-        label(ctx,ray_stats.ray_query_supported?"Hardware ray queries available; unsupported casters use maps.":"Hardware ray queries unavailable: using raster shadows.",38);
+        label(ctx,ray_stats.ray_query_supported?"Hardware ray queries active (sun, point and spot lights).":"Hardware ray queries unavailable: using raster shadows.",38);
         if(ray_stats.ray_tracing_failed)label(ctx,"Ray resources unavailable: raster fallback active.",28);
         label(ctx,"Sun / directional light",28);
         float heading=atan2f(-sun.direction.z,-sun.direction.x)*180/AF_PI;
@@ -1127,6 +1277,8 @@ static void asset_browser(editor *app,float width,float height)
         nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close assets"))app->show_assets=false;
     }nk_end(ctx);
 }
+enum { ED_TOOL_NEW = 1, ED_TOOL_EXPORT = 2, ED_TOOL_BUNDLE = 3 };
+
 static void poll_project_tool(editor *app)
 {
     if(!app->tool_process)return;int result;
@@ -1136,22 +1288,25 @@ static void poll_project_tool(editor *app)
     SDL_DestroyProcess(app->tool_process);app->tool_process=NULL;
     app->tool_success=result==0;
     if(result){set_status(app,"Project tool failed. Check the application log for details.");return;}
-    if(app->tool_action==1){set_status(app,"Project created. Configure/build its CMake project, then open it to Play.");}
+    if(app->tool_action==ED_TOOL_NEW){set_status(app,"Project created. Configure/build its CMake project, then open it to Play.");}
+    else if(app->tool_action==ED_TOOL_BUNDLE){set_status(app,"Single-binary build completed.");}
     else set_status(app,"Export completed.");
 }
-static void start_project_tool(editor *app,bool export)
+static void start_project_tool(editor *app,int mode)
 {
     if(app->tool_process||app->runtime.playing||app->dialog||app->modal)return;
-    if(!app->wizard_folder[0]){set_status(app,"Enter a new destination directory.");return;}
-    if(!export&&!app->wizard_name[0]){set_status(app,"Enter a project name.");return;}
-    if(export&&(!app->project_path[0]||app->project_is_template||ed_document_dirty(&app->document))){set_status(app,"Save the scene and project before exporting.");return;}
+    if(!app->wizard_folder[0]){set_status(app,"Enter a destination path or directory.");return;}
+    if(mode==ED_TOOL_NEW&&!app->wizard_name[0]){set_status(app,"Enter a project name.");return;}
+    if(mode!=ED_TOOL_NEW&&(!app->project_path[0]||app->project_is_template||ed_document_dirty(&app->document))){set_status(app,"Save the scene and project before exporting or building.");return;}
     char tool[AF_ASSET_PATH_CAPACITY],player[AF_ASSET_PATH_CAPACITY];const char *base=af_engine_get_base_path(app->engine);SDL_PathInfo info;
     snprintf(tool,sizeof(tool),"%stools/scripts/afterlight.py",base?base:"");if(!SDL_GetPathInfo(tool,&info))snprintf(tool,sizeof(tool),"%s",AF_PROJECT_TOOL_PATH);
     snprintf(player,sizeof(player),"%stools/afterlight_player.app",base?base:"");if(!SDL_GetPathInfo(player,&info))snprintf(player,sizeof(player),"%s",AF_PLAYER_PACKAGE_PATH);
     const char *create[]={AF_PYTHON_PATH,tool,"new",app->wizard_folder,"--name",app->wizard_name,NULL};
     const char *package[]={AF_PYTHON_PATH,tool,"export",app->project_path,"--output",app->wizard_folder,"--player",player,NULL};
-    app->tool_success=false;app->tool_process=SDL_CreateProcess(export?package:create,true);app->tool_action=export?2:1;
-    set_status(app,app->tool_process?(export?"Exporting project...":"Creating project..."):SDL_GetError());
+    const char *bundle[]={AF_PYTHON_PATH,tool,"bundle",app->project_path,"--output",app->wizard_folder,"--player",player,NULL};
+    const char **cmd=mode==ED_TOOL_NEW?create:(mode==ED_TOOL_BUNDLE?bundle:package);
+    app->tool_success=false;app->tool_process=SDL_CreateProcess(cmd,true);app->tool_action=mode;
+    set_status(app,app->tool_process?(mode==ED_TOOL_NEW?"Creating project...":(mode==ED_TOOL_BUNDLE?"Building single binary...":"Exporting project...")):SDL_GetError());
 }
 static void project_panel(editor *app,float width,float height)
 {
@@ -1172,11 +1327,12 @@ static void project_panel(editor *app,float width,float height)
             if(!app->document.path[0]||ed_document_dirty(&app->document))set_status(app,"Save the startup scene before saving its project.");
             else{app->dialog=ed_dialog_begin_project(app->engine,true,!app->project_is_template&&app->project_path[0]?app->project_path:"Untitled.afterlight.project");app->dialog_asset=6;}
         }
-        label(ctx,"New Project wizard / Export",28);
-        label(ctx,"Project name",22);nk_layout_row_dynamic(ctx,30,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->wizard_name,sizeof(app->wizard_name),nk_filter_default);
-        label(ctx,"New destination directory (must not exist)",22);nk_layout_row_dynamic(ctx,30,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->wizard_folder,sizeof(app->wizard_folder),nk_filter_default);
-        nk_layout_row_dynamic(ctx,34,2);if(nk_button_label(ctx,app->tool_process?"Working...":"Create starter project")&&!app->tool_process)start_project_tool(app,false);
-        if(nk_button_label(ctx,"Export saved project")&&!app->tool_process)start_project_tool(app,true);
+        label(ctx,"New Project wizard / Export / Build",28);
+        label(ctx,"Project name (for starter project)",22);nk_layout_row_dynamic(ctx,30,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->wizard_name,sizeof(app->wizard_name),nk_filter_default);
+        label(ctx,"Destination directory or binary path",22);nk_layout_row_dynamic(ctx,30,1);nk_edit_string_zero_terminated(ctx,NK_EDIT_FIELD,app->wizard_folder,sizeof(app->wizard_folder),nk_filter_default);
+        nk_layout_row_dynamic(ctx,34,3);if(nk_button_label(ctx,app->tool_process?"Working...":"Create starter project")&&!app->tool_process)start_project_tool(app,ED_TOOL_NEW);
+        if(nk_button_label(ctx,"Export directory")&&!app->tool_process)start_project_tool(app,ED_TOOL_EXPORT);
+        if(nk_button_label(ctx,"Build single binary")&&!app->tool_process)start_project_tool(app,ED_TOOL_BUNDLE);
         nk_layout_row_dynamic(ctx,30,1);if(nk_button_label(ctx,"Close project panel"))app->show_project=false;
     }nk_end(ctx);
 }
@@ -1198,10 +1354,10 @@ static void extensions_panel(editor *app, float width, float height)
             if (!af_engine_get_extension(app->engine, i, &info)) continue;
             nk_layout_row_dynamic(ctx, 30, 2);
             if (info.startup_status == AF_EXTENSION_RESTART_REQUIRED) {
-                nk_bool scheduled = !strcmp(app->startup_extension, info.path);
+                nk_bool scheduled = is_startup_extension_scheduled(app, info.path);
                 if (nk_checkbox_label(ctx, info.id, &scheduled))
-                    schedule_startup_extension(app, scheduled ? info.path : NULL);
-                nk_label(ctx, "Restart required", NK_TEXT_LEFT);
+                    schedule_startup_extension(app, info.path, scheduled != 0);
+                nk_label(ctx, scheduled ? "Scheduled (restart)" : "Restart required", NK_TEXT_LEFT);
                 continue;
             }
             if (info.startup_status == AF_EXTENSION_STARTUP_UNAVAILABLE) {
@@ -1210,16 +1366,38 @@ static void extensions_panel(editor *app, float width, float height)
                 continue;
             }
             nk_bool enabled = info.enabled;
-            if (nk_checkbox_label(ctx, info.id, &enabled))
+            if (nk_checkbox_label(ctx, info.id, &enabled)) {
                 (void)af_engine_set_extension_enabled(app->engine, i, enabled != 0);
+                if (info.vulkan_upscaler) {
+                    schedule_startup_upscaler(app, info.path, enabled != 0);
+                    if (enabled) set_status(app, "Upscaler activated and saved for startup.");
+                    else set_status(app, "Upscaler deactivated. Startup preference cleared.");
+                }
+            }
             const char *state = info.enabled ? "Enabled" : "Disabled";
             if (info.vulkan_upscaler && info.enabled)
                 state = info.upscaler_active ? "Upscaler active" : "Built-in rendering";
             nk_label(ctx, state, NK_TEXT_LEFT);
+            if (info.vulkan_upscaler && info.enabled && info.upscaler_active) {
+                uint32_t q_count = af_engine_upscaler_quality_count(app->engine);
+                if (q_count > 1) {
+                    nk_layout_row_dynamic(ctx, 28, 2);
+                    nk_label(ctx, "Quality preset:", NK_TEXT_LEFT);
+                    uint32_t current_q = af_engine_upscaler_quality(app->engine);
+                    const char *q_names[16];
+                    for (uint32_t q = 0; q < q_count && q < 16; ++q) {
+                        const char *qn = af_engine_upscaler_quality_name(app->engine, q);
+                        q_names[q] = qn ? qn : "Preset";
+                    }
+                    int selected_q = nk_combo(ctx, q_names, (int)q_count, (int)current_q, 24, nk_vec2(220, 140));
+                    if (selected_q != (int)current_q && selected_q >= 0)
+                        (void)af_engine_set_upscaler_quality(app->engine, (uint32_t)selected_q);
+                }
+            }
         }
         if (app->startup_extension[0]) {
             nk_layout_row_dynamic(ctx, 32, 1);
-            if (nk_button_label(ctx, "Forget startup extension")) schedule_startup_extension(app, NULL);
+            if (nk_button_label(ctx, "Forget saved startup extensions")) schedule_startup_extension(app, NULL, false);
         }
         nk_layout_row_dynamic(ctx, 34, 2);
         if (nk_button_label(ctx, "Load extension") && !app->dialog) {
@@ -1603,7 +1781,7 @@ static void update(af_engine *engine,double delta,void *userdata)
     }
     if(app->thumbnail_test){app->show_assets=true;if(app->updates==12)app->asset_filter=2;}
     if(app->wizard_test){
-        if(app->updates==3){app->show_project=true;snprintf(app->wizard_name,sizeof(app->wizard_name),"Editor wizard check");start_project_tool(app,false);if(!app->tool_process){app->failed=true;af_engine_request_quit(engine);}}
+        if(app->updates==3){app->show_project=true;snprintf(app->wizard_name,sizeof(app->wizard_name),"Editor wizard check");start_project_tool(app,ED_TOOL_NEW);if(!app->tool_process){app->failed=true;af_engine_request_quit(engine);}}
         if(app->updates>3&&!app->tool_process){char path[AF_ASSET_PATH_CAPACITY];af_project project;af_asset_error error;
             bool valid=snprintf(path,sizeof(path),"%s/game.afterlight.project",app->wizard_folder)<(int)sizeof(path)&&af_project_load(path,&project,&error);
             app->failed|=!app->tool_success||!valid||af_scene_object_count(app->document.scene)!=4||ed_document_dirty(&app->document)||nk_window_find(&app->gui.context,"Project")==NULL;af_engine_request_quit(engine);}
@@ -1701,14 +1879,56 @@ int main(int argc,char **argv)
         else{fprintf(stderr,"Unknown/incomplete argument: %s\n",argv[i]);return 1;}
     }
     read_startup_extension(&app);
-    af_engine *engine = NULL;
-    if (!extension_count && !app.frame_limit && app.startup_extension[0]) {
-        const char *saved[] = {app.startup_extension};
-        engine = af_engine_create_with_extensions(&config, saved, 1);
-        if (!engine) fputs("Saved startup extension failed to load. Starting the editor without it.\n", stderr);
+    ext_discovery disc = {.paths = extensions, .count = &extension_count};
+    bool cli_extensions = (extension_count > 0);
+    bool is_automated_test = (app.smoke_path != NULL || app.play_controls_test || app.wizard_test ||
+                              app.thumbnail_test || app.light_test || app.animation_test_path != NULL);
+    if (!is_automated_test) {
+        add_scheduled_startup_extensions(&disc, app.startup_extension);
+        const char *base = SDL_GetBasePath();
+        if (base) {
+            char base_ext[AF_ASSET_PATH_CAPACITY];
+            snprintf(base_ext, sizeof(base_ext), "%sextensions", base);
+            discover_editor_ext_in_dir(base_ext, &disc);
+            snprintf(base_ext, sizeof(base_ext), "%s../extensions", base);
+            discover_editor_ext_in_dir(base_ext, &disc);
+        }
+        if (app.initial_project) {
+            char proj_dir[AF_ASSET_PATH_CAPACITY];
+            if (af_asset_resolve_path(app.initial_project, "extensions", proj_dir, sizeof(proj_dir))) {
+                discover_editor_ext_in_dir(proj_dir, &disc);
+            }
+        }
     }
-    if (!engine) engine = af_engine_create_with_extensions(&config, extensions, extension_count);
+    af_engine *engine = af_engine_create_with_extensions(&config, extensions, extension_count);
+    if (!engine && extension_count > 0) {
+        fputs("Extensions failed to load. Starting the editor without extensions.\n", stderr);
+        engine = af_engine_create_with_extensions(&config, NULL, 0);
+    }
     if (!engine) return 1;
+
+    size_t ext_count = af_engine_extension_count(engine);
+    if (ext_count > 0 && !cli_extensions) {
+        bool has_scheduled_upscaler = false;
+        for (size_t i = 0; i < ext_count; ++i) {
+            af_extension_info info;
+            if (af_engine_get_extension(engine, i, &info) && info.vulkan_upscaler) {
+                if (is_startup_extension_scheduled(&app, info.path)) {
+                    has_scheduled_upscaler = true;
+                    af_engine_set_extension_enabled(engine, i, true);
+                    break;
+                }
+            }
+        }
+        if (!has_scheduled_upscaler) {
+            for (size_t i = 0; i < ext_count; ++i) {
+                af_extension_info info;
+                if (af_engine_get_extension(engine, i, &info) && info.vulkan_upscaler) {
+                    af_engine_set_extension_enabled(engine, i, false);
+                }
+            }
+        }
+    }
     const char *require_validation=getenv("AFTERLIGHT_REQUIRE_VALIDATION");
     if((app.smoke_path||app.play_controls_test)&&require_validation&&!strcmp(require_validation,"1")&&!af_engine_get_stats(engine).validation_enabled){
         fputs("Editor smoke test requires validation.\n",stderr);af_engine_destroy(engine);return 1;

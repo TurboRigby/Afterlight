@@ -288,14 +288,260 @@ def export_project(project_path, destination, player_path, icd=None):
         shutil.rmtree(stage,ignore_errors=True);raise
     return destination
 
+def bundle_project(project_path, destination, player_path, extensions=None, icd=None):
+    import hashlib, struct, urllib.parse, stat
+    project_path = project_path.resolve()
+    destination = destination.resolve()
+    player_path = player_path.resolve()
+    if destination.is_dir():
+        destination = destination / ('game.exe' if sys.platform == 'win32' else 'game')
+    project = read_json(project_path)
+    if project.get('format') != 'afterlight.project' or project.get('version') != 1:
+        raise ValueError('Unsupported Afterlight project.')
+    if not player_path.exists():
+        raise ValueError('Build the generic player before bundling (--player PATH).')
+    module = (project_path.parent / project['game_module']).resolve()
+    startup = (project_path.parent / project['startup_scene']).resolve()
+    if not module.is_file() or not startup.is_file():
+        raise ValueError('Build the C module and save the startup scene before bundling.')
+
+    if sys.platform.startswith('linux'):
+        for binary in (player_path, module):
+            for line in subprocess.check_output(['ldd', str(binary)], text=True).splitlines():
+                if '=>' not in line:
+                    continue
+                name, value = line.strip().split('=>', 1)
+                name = pathlib.Path(name.strip()).name
+                if name.startswith('libasan.') or 'clang_rt.asan' in name:
+                    raise ValueError('Export a normal Release build, not an AddressSanitizer runtime.')
+
+    validator = player_path / 'Contents/MacOS/afterlight_player' if player_path.is_dir() else player_path
+    subprocess.run([str(validator), '--project', str(project_path), '--check'], check=True)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    stage = pathlib.Path(tempfile.mkdtemp(prefix='.afterlight-bundle-', dir=destination.parent if destination.parent.exists() else None))
+    try:
+        (stage / 'assets').mkdir(exist_ok=True)
+        (stage / 'scenes').mkdir(exist_ok=True)
+        (stage / 'game').mkdir(exist_ok=True)
+        (stage / 'fonts').mkdir(exist_ok=True)
+        (stage / 'source').mkdir(exist_ok=True)
+
+        font_candidates = [
+            player_path / 'Contents/Resources/fonts/FiraSans-Regular.ttf' if player_path.is_dir() else player_path.parent / 'fonts/FiraSans-Regular.ttf',
+            player_path.parent / 'fonts/FiraSans-Regular.ttf',
+            ROOT / 'editor/assets/FiraSans-Regular.ttf',
+            ROOT / 'sandbox/fonts/FiraSans-Regular.ttf',
+        ]
+        font_file = next((f for f in font_candidates if f.is_file()), None)
+        if font_file:
+            shutil.copy2(font_file, stage / 'fonts/FiraSans-Regular.ttf')
+
+        source_candidates = [
+            player_path / 'Contents/Resources/source/afterlight-source.zip' if player_path.is_dir() else player_path.parent / 'source/afterlight-source.zip',
+            ROOT / 'build/release/source/afterlight-source.zip',
+            ROOT / 'build/debug/source/afterlight-source.zip',
+        ]
+        source_file = next((s for s in source_candidates if s.is_file()), None)
+        if source_file:
+            shutil.copy2(source_file, stage / 'source/afterlight-source.zip')
+
+        for name in ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md']:
+            for cand in [player_path / 'Contents/Resources' / name if player_path.is_dir() else player_path.parent / name, ROOT / name]:
+                if cand.is_file():
+                    shutil.copy2(cand, stage / name)
+                    break
+
+        module_source = module.with_name(module.name + '.source.zip')
+        if module_source.is_file():
+            shutil.copy2(module_source, stage / 'source/game-source.zip')
+
+        copied = {}
+        total = 0
+        def copy_asset(source):
+            nonlocal total
+            source = source.resolve()
+            if source in copied:
+                return copied[source]
+            if not source.is_file():
+                raise ValueError(f'Missing asset dependency: {source}')
+            size = source.stat().st_size
+            if size > 64 * 1024 * 1024 or total + size > 1024 * 1024 * 1024:
+                raise ValueError('Export assets exceed file/total size limits.')
+            total += size
+            name = hashlib.sha256(str(source).encode()).hexdigest()[:16] + '_' + source.name
+            target = stage / 'assets' / name
+            copied[source] = target
+            extension = source.suffix.lower()
+            if extension in ['.gltf', '.glb']:
+                binary = None
+                if extension == '.glb':
+                    raw = source.read_bytes()
+                    if len(raw) < 20 or raw[:4] != b'glTF' or struct.unpack_from('<I', raw, 8)[0] != len(raw):
+                        raise ValueError('Invalid GLB while packaging.')
+                    length, kind = struct.unpack_from('<II', raw, 12)
+                    if kind != 0x4e4f534a or 20 + length > len(raw):
+                        raise ValueError('Invalid GLB JSON chunk.')
+                    document = json.loads(raw[20:20 + length])
+                    binary = raw[20 + length:]
+                else:
+                    document = read_json(source)
+                for item in document.get('buffers', []) + document.get('images', []):
+                    uri = item.get('uri')
+                    if not uri or uri.startswith('data:'):
+                        continue
+                    parsed = urllib.parse.urlsplit(uri)
+                    if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+                        raise ValueError('Only local glTF dependency paths can be exported.')
+                    dependency = copy_asset(source.parent / urllib.parse.unquote(parsed.path))
+                    item['uri'] = urllib.parse.quote(dependency.name)
+                if binary is None:
+                    write_json(target, document)
+                else:
+                    text = json.dumps(document, separators=(',', ':')).encode()
+                    text += b' ' * ((-len(text)) % 4)
+                    target.write_bytes(struct.pack('<III', 0x46546c67, 2, 20 + len(text) + len(binary)) +
+                                       struct.pack('<II', len(text), 0x4e4f534a) + text + binary)
+            else:
+                shutil.copy2(source, target)
+            return target
+
+        scenes = [startup] + sorted(p for p in startup.parent.glob('*.afterlight.json') if p.resolve() != startup)
+        if len(scenes) > 256:
+            raise ValueError('Too many scenes in startup directory.')
+        startup_name = None
+        for index, source in enumerate(scenes):
+            document = read_json(source)
+            if document.get('format') != 'afterlight.scene' or document.get('version') not in range(1, 25):
+                raise ValueError(f'Unsupported scene: {source}')
+            for asset in document.get('assets', []):
+                original, separator, selector = asset['path'].partition('#')
+                packed = copy_asset(source.parent / original)
+                asset['path'] = '../assets/' + packed.name + (separator + selector if separator else '')
+            name = source.name
+            write_json(stage / 'scenes' / name, document)
+            if index == 0:
+                startup_name = name
+
+        input_map = project_path.parent / 'input.json'
+        if input_map.is_file():
+            shutil.copy2(input_map, stage / 'input.json')
+        prefabs = project_path.parent / 'prefabs'
+        if prefabs.is_dir():
+            files = sorted(prefabs.rglob('*.afterlight.prefab'))
+            if len(files) > 128:
+                raise ValueError('Too many prefabs (maximum 128).')
+            for source in files:
+                document = read_json(source)
+                target = stage / 'prefabs' / source.relative_to(prefabs)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                for asset in document.get('assets', []):
+                    original, separator, selector = asset['path'].partition('#')
+                    packed = copy_asset(source.parent / original)
+                    asset['path'] = os.path.relpath(packed, target.parent) + (separator + selector if separator else '')
+                write_json(target, document)
+
+        game_module = stage / 'game' / ('game' + module.suffix)
+        shutil.copy2(module, game_module)
+        write_json(stage / 'game.afterlight.project', {
+            'format': 'afterlight.project',
+            'version': 1,
+            'name': project['name'],
+            'startup_scene': 'scenes/' + startup_name,
+            'game_module': 'game/' + game_module.name
+        })
+
+        ext_list = []
+        if extensions:
+            for ext in extensions:
+                ext_path = pathlib.Path(ext).resolve()
+                if ext_path.is_file() and ext_path not in ext_list:
+                    ext_list.append(ext_path)
+        for ext_folder in [project_path.parent / 'extensions', player_path.parent / 'extensions']:
+            if ext_folder.is_dir():
+                for ext in sorted(ext_folder.glob('*')):
+                    if ext.is_file() and ext.suffix.lower() in ['.so', '.dylib', '.dll']:
+                        if ext not in ext_list:
+                            ext_list.append(ext)
+        if ext_list:
+            (stage / 'extensions').mkdir(exist_ok=True)
+            for ext in ext_list:
+                shutil.copy2(ext, stage / 'extensions' / ext.name)
+
+        entries = []
+        for root, dirs, files in os.walk(stage):
+            for f in files:
+                full = pathlib.Path(root) / f
+                rel = full.relative_to(stage).as_posix()
+                data = full.read_bytes()
+                mode = full.stat().st_mode & 0o777
+                entries.append((rel, mode, data))
+        entries.sort(key=lambda x: x[0])
+
+        payload = bytearray()
+        payload.extend(b'AFBUNDLE')
+        payload.extend(struct.pack('<Q', len(entries)))
+        for rel, mode, data in entries:
+            rel_bytes = rel.encode('utf-8')
+            payload.extend(struct.pack('<H', len(rel_bytes)))
+            payload.extend(rel_bytes)
+            payload.extend(struct.pack('<QI', len(data), mode))
+            payload.extend(data)
+
+        executable = player_path / 'Contents/MacOS/afterlight_player' if player_path.is_dir() else player_path
+        if destination.exists():
+            destination.unlink()
+        shutil.copy2(executable, destination)
+
+        if sys.platform == 'darwin':
+            bundle_bin = stage / 'bundle.bin'
+            bundle_bin.write_bytes(payload)
+            llvm_objcopy = shutil.which('llvm-objcopy')
+            if not llvm_objcopy:
+                try:
+                    res = subprocess.run(['xcrun', '-f', 'llvm-objcopy'], capture_output=True, text=True)
+                    if res.returncode == 0 and res.stdout.strip():
+                        llvm_objcopy = res.stdout.strip()
+                except Exception:
+                    pass
+            if not llvm_objcopy:
+                for candidate in ['/opt/homebrew/opt/llvm/bin/llvm-objcopy', '/usr/local/opt/llvm/bin/llvm-objcopy']:
+                    if pathlib.Path(candidate).is_file():
+                        llvm_objcopy = candidate
+                        break
+            if llvm_objcopy:
+                subprocess.run([llvm_objcopy, '--add-section', '__BUNDLE,__bundle=' + str(bundle_bin), str(destination)], check=True)
+                subprocess.run(['codesign', '--force', '--sign', '-', str(destination)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                with open(destination, 'ab') as f:
+                    offset = f.tell()
+                    f.write(payload)
+                    f.write(struct.pack('<QQQQ', 0x5F544C5245544641, 0x5F454C444E55425F, offset, len(entries)))
+                try:
+                    subprocess.run(['codesign', '--force', '--sign', '-', str(destination)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+        else:
+            with open(destination, 'ab') as f:
+                offset = f.tell()
+                f.write(payload)
+                f.write(struct.pack('<QQQQ', 0x5F544C5245544641, 0x5F454C444E55425F, offset, len(entries)))
+
+        destination.chmod(0o755)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    return destination
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__);commands=parser.add_subparsers(dest='command',required=True)
     new=commands.add_parser('new',help='Create a starter project in a new directory');new.add_argument('directory',type=pathlib.Path);new.add_argument('--name',required=True)
     export=commands.add_parser('export',help='Package a saved project and generic player');export.add_argument('project',type=pathlib.Path);export.add_argument('--output',required=True,type=pathlib.Path);export.add_argument('--player',required=True,type=pathlib.Path);export.add_argument('--icd',type=pathlib.Path)
+    bundle=commands.add_parser('bundle',help='Bundle a saved project into a single standalone binary executable without external folders');bundle.add_argument('project',type=pathlib.Path);bundle.add_argument('--output',required=True,type=pathlib.Path);bundle.add_argument('--player',required=True,type=pathlib.Path);bundle.add_argument('--extensions',nargs='*',type=pathlib.Path,default=[]);bundle.add_argument('--icd',type=pathlib.Path)
     args=parser.parse_args()
     try:
         if args.command=='new':print(create_project(args.directory,args.name))
         elif args.command=='export':print(export_project(args.project,args.output,args.player,args.icd))
+        elif args.command=='bundle':print(bundle_project(args.project,args.output,args.player,args.extensions,args.icd))
     except (OSError,ValueError,subprocess.CalledProcessError) as error:print(f'Afterlight: {error}',file=sys.stderr);return 1
     return 0
 if __name__=='__main__':sys.exit(main())
