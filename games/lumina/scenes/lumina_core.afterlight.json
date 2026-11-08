@@ -3855,11 +3855,11 @@
 			"parent":	"0",
 			"id":	"39",
 			"name":	"Cooling_Basin_Water",
-			"mesh":	"cube",
+			"mesh":	"__node",
 			"visible":	true,
 			"position":	[0, -0.449999988079071, 0],
 			"rotation":	[0, 0, 0],
-			"scale":	[68, 0.10000000149011612, 68]
+			"scale":	[1, 1, 1]
 		}, {
 			"body":	{
 				"enabled":	false,
@@ -3971,7 +3971,32 @@
 		"gust_frequency":	0.20000000298023224,
 		"air_density":	1.2250000238418579
 	},
-	"water":	[],
+	"water":	[{
+			"owner":	"39",
+			"enabled":	true,
+			"mode":	"pool",
+			"quality":	2,
+			"half_size":	[34, 34],
+			"absorption":	[0.019999999552965164, 0.14000000059604645, 0.18000000715255737],
+			"scattering":	[0.00999999977648258, 0.079999998211860657, 0.119999997317791],
+			"flow_speed":	1.5,
+			"path":	[[0, 0, -4], [0, 0, 4]],
+			"particle_spacing":	0.15999999642372131,
+			"initial_volume":	0.25,
+			"emission_rate":	0,
+			"viscosity":	3,
+			"emission_velocity":	[0, -1, 0],
+			"ripple_scale":	0.600000023841858,
+			"ripple_strength":	0.18000000715255737,
+			"depth":	2,
+			"density":	1000,
+			"drag":	1.5,
+			"wave_speed":	1.3999999761581421,
+			"damping":	0.98500001430511475,
+			"wind":	0.014999999664723873,
+			"roughness":	0.05000000074505806,
+			"ior":	1.3329999446868896
+		}],
 	"landscape":	null,
 	"collider_parts":	[],
 	"next_part":	"1",

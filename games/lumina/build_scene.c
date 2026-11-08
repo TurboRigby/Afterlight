@@ -300,9 +300,12 @@ int main(int argc, char **argv) {
 
     // 9. Flooded Cooling Basin Water (Hardware Ray Water Reflections!)
     {
-        af_object_id water_obj = af_scene_add_object(scene, "Cooling_Basin_Water", "cube");
-        af_transform t = {.position = {0, -0.45f, 0}, .scale = {68.0f, 0.1f, 68.0f}};
+        af_object_id water_obj = af_scene_add_object(scene, "Cooling_Basin_Water", "__node");
+        af_transform t = {.position = {0, -0.45f, 0}, .rotation = {0, 0, 0}, .scale = {1.0f, 1.0f, 1.0f}};
         af_scene_set_object_transform(scene, water_obj, t);
+
+        af_collider col = {.enabled = false, .type = AF_COLLIDER_NONE};
+        af_scene_set_object_collider(scene, water_obj, col);
 
         af_water w = af_water_default();
         w.owner = water_obj;
@@ -321,7 +324,9 @@ int main(int argc, char **argv) {
         w.scattering = (af_vec3){0.01f, 0.08f, 0.12f};
         w.ripple_scale = 0.6f;
         w.ripple_strength = 0.18f;
-        af_scene_set_water(scene, water_obj, w);
+        if (!af_scene_set_water(scene, water_obj, w)) {
+            fprintf(stderr, "Warning: af_scene_set_water returned false!\n");
+        }
     }
 
     // 10. Player Character Object
