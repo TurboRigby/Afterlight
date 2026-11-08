@@ -3188,23 +3188,24 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             if (alpha_pass) {
                 if (blend_count == 0)
                     break;
-                if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) {
+                if (((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) || refract) {
                     vkCmdEndRenderPass(frame->command);
-                    af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_norm_area);
-                    gi_denoised = true;
+                    if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) {
+                        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_norm_area);
+                        gi_denoised = true;
+                    }
                     if (refract)
                         af_vk_refraction_copy(renderer->swapchain.refraction, frame->command, image_index,
                                               af_vk_post_scene_image(renderer->swapchain.post, image_index),
                                               renderer->swapchain.depths[image_index].image);
                     pass.renderPass = renderer->swapchain.water_pass;
                     vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
-                } else if (refract) {
-                    vkCmdEndRenderPass(frame->command);
-                    af_vk_refraction_copy(renderer->swapchain.refraction, frame->command, image_index,
-                                          af_vk_post_scene_image(renderer->swapchain.post, image_index),
-                                          renderer->swapchain.depths[image_index].image);
-                    pass.renderPass = renderer->swapchain.water_pass;
-                    vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
+                    vkCmdSetViewport(frame->command, 0, 1, &viewport);
+                    vkCmdSetScissor(frame->command, 0, 1, &scissor);
+                    vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            renderer->swapchain.pipeline_layout, 0, 1, &frame->descriptor, 0, NULL);
+                    vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            renderer->swapchain.pipeline_layout, 2, 1, &shadow_descriptor, 0, NULL);
                 }
             }
             vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,

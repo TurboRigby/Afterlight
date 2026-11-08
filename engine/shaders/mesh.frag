@@ -258,8 +258,10 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, 
 #endif
     vec3 diffuse = has_gi ? gi_radiance : textureLod(irradiance_map, environment_uv(n), 0).rgb * frame.render_params.z;
     if (draw.params.z < 0.5) {
-        if (has_gi)
+        if (has_gi) {
             gi_contribution = diffuse * base;
+            return vec3(0);
+        }
         return diffuse * base;
     }
     float rough = clamp(roughness, 0.04, 1.0), nv = max(dot(n, v), 0.0);
@@ -274,8 +276,10 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, 
 #endif
     vec2 brdf = texture(brdf_lut, vec2(nv, rough)).rg;
     vec3 diffuse_brdf = (vec3(1) - fresnel) * (1.0 - metal) * base;
-    if (has_gi)
+    if (has_gi) {
         gi_contribution = diffuse_brdf * diffuse;
+        return radiance * (f0 * brdf.x + brdf.y);
+    }
     return diffuse_brdf * diffuse + radiance * (f0 * brdf.x + brdf.y);
 }
 #include "water_fog.glsl"

@@ -33,8 +33,8 @@ layout(location = 1) out vec4 out_color;
 void main() {
     ivec2 size = textureSize(gi_image, 0);
     ivec2 pixel = ivec2(gl_FragCoord.xy);
-    ivec2 lo = ivec2(ceil(push.viewport.xy * vec2(size)));
-    ivec2 hi = ivec2(floor(push.viewport.zw * vec2(size))) - 1;
+    ivec2 lo = ivec2(round(push.viewport.xy * vec2(size)));
+    ivec2 hi = ivec2(round(push.viewport.zw * vec2(size))) - 1;
     if (lo.x > hi.x || lo.y > hi.y) {
         out_history = vec4(0);
         out_color = vec4(0);
@@ -65,13 +65,9 @@ void main() {
     float inv_z = 1.0 / max(center_depth, 0.001);
     vec2 d_inv_z = vec2(dFdx(inv_z), dFdy(inv_z));
 
-    /* Guard against derivative quad spikes across geometry silhouettes:
-     * On continuous surfaces, change in 1/Z per pixel is at most ~5% of 1/Z. */
-    float max_d_inv_z = 0.08 * inv_z;
-    if (abs(d_inv_z.x) > max_d_inv_z)
-        d_inv_z.x = 0.0;
-    if (abs(d_inv_z.y) > max_d_inv_z)
-        d_inv_z.y = 0.0;
+    /* Clamp derivative quad spikes across geometry silhouettes: */
+    float max_d_inv_z = 0.5 * inv_z;
+    d_inv_z = clamp(d_inv_z, -vec2(max_d_inv_z), vec2(max_d_inv_z));
 
     float sigma = max(push.params.y, 0.25);
     int radius = int(clamp(push.params.x, 1.0, 4.0));
@@ -97,7 +93,7 @@ void main() {
             float neighbor_inv_z = 1.0 / max(movement.w, 0.001);
             float expected_inv_z = inv_z + float(x) * d_inv_z.x + float(y) * d_inv_z.y;
             float inv_z_diff = abs(neighbor_inv_z - expected_inv_z);
-            float inv_z_scale = max(0.04 * inv_z, 0.001);
+            float inv_z_scale = max(0.12 * inv_z, 0.002);
             float depth_weight = exp(-inv_z_diff / inv_z_scale);
 
             float spatial_weight = exp(-float(x * x + y * y) / (2.0 * sigma * sigma));
@@ -141,6 +137,6 @@ void main() {
     vec3 result = mix(history, spatial_result, clamp(alpha, 0.0, 1.0));
 
     out_history = vec4(result, center_depth);
-    /* Add only the difference; the scene already contains the raw GI term. */
-    out_color = vec4(result - raw, 0.0);
+    /* Pure additive blending: output the clean denoised GI directly */
+    out_color = vec4(result, 0.0);
 }
