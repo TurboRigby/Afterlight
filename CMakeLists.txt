@@ -16,7 +16,7 @@ find_package(SDL3 3.4 CONFIG REQUIRED)
 
 # Compile GLSL into embedded SPIR-V; no runtime paths or shader compiler needed.
 set(afterlight_shader_headers)
-foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fullscreen.vert post.frag sky.frag)
+foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fullscreen.vert post.frag sky.frag gi_denoise.frag)
     string(REPLACE "." "_" shader_name "${shader}")
     set(shader_source "${CMAKE_CURRENT_SOURCE_DIR}/engine/shaders/${shader}")
     set(shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/${shader_name}.h")
@@ -589,7 +589,7 @@ if(APPLE)
     set_source_files_properties(scripts/afterlight.py game/starter_game.c PROPERTIES HEADER_FILE_ONLY TRUE)
     set_property(TARGET afterlight_editor APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/afterlight.py" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_source.py" "${CMAKE_CURRENT_SOURCE_DIR}/game/starter_game.c" "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE" "${afterlight_source_archive}")
     add_custom_command(TARGET afterlight_editor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${afterlight_tool_root}/scripts" "${afterlight_tool_root}/game" "${afterlight_tool_root}/engine/src" "${afterlight_tool_root}/sandbox/scenes"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${afterlight_tool_root}/scripts" "${afterlight_tool_root}/game" "${afterlight_tool_root}/engine/src" "${afterlight_tool_root}/sandbox/scenes" "$<TARGET_BUNDLE_CONTENT_DIR:afterlight_editor>/Resources/extensions"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/scripts/afterlight.py" "${afterlight_tool_root}/scripts/afterlight.py"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_source.py" "${afterlight_tool_root}/scripts/package_source.py"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${afterlight_tool_root}/LICENSE"

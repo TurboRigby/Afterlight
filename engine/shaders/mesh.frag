@@ -18,6 +18,7 @@ layout(location = 2) in vec3 world_normal;
 layout(location = 3) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 layout(location = 1) out vec4 out_motion;
+layout(location = 2) out vec4 out_gi;
 layout(location = 4) in vec4 previous_clip;
 layout(location = 5) in vec4 current_clip;
 layout(location = 6) flat in uint motion_valid;
@@ -241,7 +242,8 @@ vec2 environment_uv(vec3 d) {
 #ifdef AF_RAY_QUERY
 #include "water_reflection.glsl"
 #endif
-vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal) {
+vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, out vec3 gi_contribution) {
+    gi_contribution = vec3(0);
     if (frame.render_params.z <= 0
 #ifdef AF_RAY_QUERY
         && !(water_surface() && frame.sky_params.w > .5) && !(frame.rtgi_params.x > .5)
@@ -254,8 +256,11 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal) 
     has_gi = !water_surface() && trace_gi_bounce(world_position, n, gi_radiance);
 #endif
     vec3 diffuse = has_gi ? gi_radiance : textureLod(irradiance_map, environment_uv(n), 0).rgb * frame.render_params.z;
-    if (draw.params.z < 0.5)
+    if (draw.params.z < 0.5) {
+        if (has_gi)
+            gi_contribution = diffuse * base;
         return diffuse * base;
+    }
     float rough = clamp(roughness, 0.04, 1.0), nv = max(dot(n, v), 0.0);
     vec3 f0 = mix(vec3(water_surface() ? water_f0() : 0.04), base, metal);
     vec3 fresnel = f0 + (max(vec3(1.0 - rough), f0) - f0) * pow(1.0 - nv, 5.0);
@@ -267,10 +272,14 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal) 
         radiance = mix(hit, radiance, smoothstep(.12, .6, rough));
 #endif
     vec2 brdf = texture(brdf_lut, vec2(nv, rough)).rg;
-    return (vec3(1) - fresnel) * (1.0 - metal) * diffuse * base + radiance * (f0 * brdf.x + brdf.y);
+    vec3 diffuse_brdf = (vec3(1) - fresnel) * (1.0 - metal) * base;
+    if (has_gi)
+        gi_contribution = diffuse_brdf * diffuse;
+    return diffuse_brdf * diffuse + radiance * (f0 * brdf.x + brdf.y);
 }
 #include "water_fog.glsl"
 void main() {
+    out_gi = vec4(0);
     bool reactive = (uint(draw.params.x) & (1u << 19u)) != 0u || ((uint(draw.params.x) >> 1u) & 3u) == 2u;
     vec2 velocity = vec2(0);
     bool valid = motion_valid != 0u && previous_clip.w > 0 && current_clip.w > 0 && !reactive;
@@ -371,8 +380,11 @@ void main() {
                              roughness, metal) *
                 visibility;
         }
-    if (((uint(draw.params.x) & 1u) == 0u))
-        output_rgb += environment_light(base.rgb, n, v, roughness, metal);
+    if (((uint(draw.params.x) & 1u) == 0u)) {
+        vec3 gi = vec3(0);
+        output_rgb += environment_light(base.rgb, n, v, roughness, metal, gi);
+        out_gi = vec4(gi, 1.0);
+    }
     if (water && frame.render_params.z > 0)
         output_rgb += draw.tint.rgb * (vec3(1) - water_transmission(n, v)) *
                       textureLod(irradiance_map, environment_uv(n), 0).rgb * frame.render_params.z;

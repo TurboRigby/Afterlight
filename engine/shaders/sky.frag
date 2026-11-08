@@ -4,6 +4,7 @@
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 layout(location = 1) out vec4 out_motion;
+layout(location = 2) out vec4 out_gi;
 struct LocalLight {
     vec4 position_range;
     vec4 color_intensity;
@@ -29,6 +30,7 @@ frame;
 layout(set = 0, binding = 5) uniform sampler2D sky_map;
 #include "water_fog.glsl"
 void main() {
+    out_gi = vec4(0);
     vec4 p = frame.inverse_view_projection * vec4(uv * 2 - 1, 1, 1);
     vec3 direction = normalize(p.xyz / p.w - frame.camera_position.xyz);
     vec4 old = frame.previous_view_projection * vec4(direction, 0),

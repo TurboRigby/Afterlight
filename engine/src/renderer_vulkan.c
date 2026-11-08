@@ -772,9 +772,10 @@ static bool create_pipeline(af_renderer *renderer) {
     VkPipelineColorBlendAttachmentState attachment = {.colorWriteMask =
                                                           VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
-    VkPipelineColorBlendAttachmentState motion_attachment[2] = {attachment, attachment};
+    VkPipelineColorBlendAttachmentState motion_attachment[3] = {attachment, attachment, attachment};
     VkPipelineColorBlendStateCreateInfo blending = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                                                    .attachmentCount = 2,
+                                                    .attachmentCount =
+                                                        (swapchain->resource_config & AF_RESOURCE_RAY_GI) ? 3u : 2u,
                                                     .pAttachments = motion_attachment};
     VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamic = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -899,9 +900,11 @@ static bool create_sky_pipeline(af_renderer *r) {
                                                      .lineWidth = 1};
     VkPipelineMultisampleStateCreateInfo samples = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                                                     .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
-    VkPipelineColorBlendAttachmentState attachment[2] = {{.colorWriteMask = 15}, {.colorWriteMask = 15}};
+    VkPipelineColorBlendAttachmentState attachment[3] = {
+        {.colorWriteMask = 15}, {.colorWriteMask = 15}, {.colorWriteMask = 15}};
     VkPipelineColorBlendStateCreateInfo blend = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                                                 .attachmentCount = 2,
+                                                 .attachmentCount =
+                                                     (r->swapchain.resource_config & AF_RESOURCE_RAY_GI) ? 3u : 2u,
                                                  .pAttachments = attachment};
     VkPipelineDepthStencilStateCreateInfo depth = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
@@ -1572,7 +1575,7 @@ static bool create_swapchain(af_renderer *renderer, af_render_settings settings,
         af_log("error", "No supported depth attachment format.");
         return false;
     }
-    VkAttachmentDescription attachments[3] = {{.format = VK_FORMAT_R16G16B16A16_SFLOAT,
+    VkAttachmentDescription attachments[4] = {{.format = VK_FORMAT_R16G16B16A16_SFLOAT,
                                                .samples = VK_SAMPLE_COUNT_1_BIT,
                                                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                                                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1589,13 +1592,16 @@ static bool create_swapchain(af_renderer *renderer, af_render_settings settings,
                                                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                                                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
     attachments[2] = attachments[0];
+    attachments[3] = attachments[0];
     VkAttachmentReference color_reference[] = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
                                                {.attachment = (config & AF_RESOURCE_MOTION) ? 2u : VK_ATTACHMENT_UNUSED,
+                                                .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                                               {.attachment = (config & AF_RESOURCE_RAY_GI) ? 3u : VK_ATTACHMENT_UNUSED,
                                                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
     VkAttachmentReference depth_reference = {.attachment = 1,
                                              .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     VkSubpassDescription subpass = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    .colorAttachmentCount = 2,
+                                    .colorAttachmentCount = (config & AF_RESOURCE_RAY_GI) ? 3u : 2u,
                                     .pColorAttachments = color_reference,
                                     .pDepthStencilAttachment = &depth_reference};
     VkPipelineStageFlags attachment_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
@@ -1619,7 +1625,9 @@ static bool create_swapchain(af_renderer *renderer, af_render_settings settings,
     if (upscale)
         dependencies[0].srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     VkRenderPassCreateInfo pass_info = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-                                        .attachmentCount = (config & AF_RESOURCE_MOTION) ? 3u : 2u,
+                                        .attachmentCount = (config & AF_RESOURCE_RAY_GI)   ? 4u
+                                                           : (config & AF_RESOURCE_MOTION) ? 3u
+                                                                                           : 2u,
                                         .pAttachments = attachments,
                                         .subpassCount = 1,
                                         .pSubpasses = &subpass,
@@ -1628,7 +1636,9 @@ static bool create_swapchain(af_renderer *renderer, af_render_settings settings,
     if (!vk_ok(vkCreateRenderPass(renderer->device, &pass_info, NULL, &swapchain->render_pass), "vkCreateRenderPass"))
         return false;
     attachments[2].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    attachments[2].loadOp = attachments[0].loadOp = attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    attachments[3].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    attachments[2].loadOp = attachments[3].loadOp = attachments[0].loadOp = attachments[1].loadOp =
+        VK_ATTACHMENT_LOAD_OP_LOAD;
     attachments[0].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     if (!vk_ok(vkCreateRenderPass(renderer->device, &pass_info, NULL, &swapchain->water_pass),
@@ -1655,10 +1665,10 @@ static bool create_swapchain(af_renderer *renderer, af_render_settings settings,
         return false;
     for (uint32_t i = 0; i < swapchain->image_count; ++i)
         depth_views[i] = swapchain->depths[i].view;
-    swapchain->post = af_vk_post_create(renderer->physical_device, renderer->device, renderer->graphics_queue,
-                                        renderer->graphics_family, extent, swapchain->render_extent,
-                                        swapchain->image_count, swapchain->views, format.format, swapchain->render_pass,
-                                        depth_views, settings, (config & AF_RESOURCE_MOTION) != 0, upscale);
+    swapchain->post = af_vk_post_create(
+        renderer->physical_device, renderer->device, renderer->graphics_queue, renderer->graphics_family, extent,
+        swapchain->render_extent, swapchain->image_count, swapchain->views, format.format, swapchain->render_pass,
+        depth_views, settings, (config & AF_RESOURCE_MOTION) != 0, (config & AF_RESOURCE_RAY_GI) != 0, upscale);
     free(depth_views);
     swapchain->refraction =
         af_vk_refraction_create(renderer->physical_device, renderer->device,
@@ -2844,8 +2854,11 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 }
             }
         }
-        if (environment_settings.ray_traced_gi)
+        if (environment_settings.ray_traced_gi) {
             resource_config |= AF_RESOURCE_RAY_GI;
+            /* The GI denoiser reprojects with motion vectors. */
+            resource_config |= AF_RESOURCE_MOTION;
+        }
     }
     if (renderer->resize_pending || !renderer->swapchain.handle ||
         renderer->swapchain.resource_config != resource_config) {
@@ -2977,9 +2990,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         renderer->resize_pending = renderer->swapchain_invalid = true;
     else if (!vk_ok(result, "vkAcquireNextImageKHR"))
         return false;
-    bool temporal = renderer->temporal_supported &&
-                    (upscale || environment_settings.anti_aliasing == AF_AA_TAA || environment_settings.motion_blur ||
-                     (renderer->capture_pending && renderer->capture_motion));
+    bool temporal =
+        renderer->temporal_supported &&
+        (upscale || environment_settings.anti_aliasing == AF_AA_TAA || environment_settings.motion_blur ||
+         (resource_config & AF_RESOURCE_RAY_GI) != 0 || (renderer->capture_pending && renderer->capture_motion));
     bool spatial = upscale && renderer->upscaler->struct_size >= sizeof(*renderer->upscaler) &&
                    (renderer->upscaler->flags & AF_VULKAN_UPSCALER_SPATIAL);
     bool jitter = (upscale && !spatial) || environment_settings.anti_aliasing == AF_AA_TAA;
@@ -3096,12 +3110,15 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         vkCmdWriteTimestamp(frame->command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, frame->timestamps, 1);
     VkClearValue clears[] = {{.color = {.float32 = {color.r, color.g, color.b, color.a}}},
                              {.depthStencil = {.depth = 1.0f}},
-                             {.color = {.float32 = {0, 0, -1, 65504}}}};
+                             {.color = {.float32 = {0, 0, -1, 65504}}},
+                             {.color = {.float32 = {0, 0, 0, 0}}}};
     VkRenderPassBeginInfo pass = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                                   .renderPass = renderer->swapchain.render_pass,
                                   .framebuffer = af_vk_post_scene_framebuffer(renderer->swapchain.post, image_index),
                                   .renderArea = {.extent = renderer->swapchain.render_extent},
-                                  .clearValueCount = 3,
+                                  .clearValueCount = (renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI)   ? 4u
+                                                     : (renderer->swapchain.resource_config & AF_RESOURCE_MOTION) ? 3u
+                                                                                                                  : 2u,
                                   .pClearValues = clears};
     vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
     af_mat4 visibility_projection = uniform.unjittered_view_projection;
@@ -3548,6 +3565,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     post_area.height /= (float)(logical_h ? logical_h : 1);
     if (frame->timestamps)
         vkCmdWriteTimestamp(frame->command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, frame->timestamps, 2);
+    if (renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI)
+        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_area);
     bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
                                                environment_settings.exposure, camera, frame_time_ms);
     float time_sec = (float)renderer->rendered_frames * (1.0f / 60.0f);
