@@ -342,6 +342,71 @@ def create_industrial_lamp(output_path):
     export_obj(output_path)
     print(f"Exported industrial lamp to {output_path}")
 
+def create_player_drone(output_path):
+    clear_scene()
+    
+    # 1. Main chassis (rounded body)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.4, segments=24, ring_count=16, location=(0, 0, 0))
+    body = bpy.context.active_object
+    body.scale = (0.75, 0.9, 0.65)
+    bpy.ops.object.transform_apply(scale=True)
+    body.name = "Drone_Body"
+    
+    # 2. Visor / Optical Eye Band (cyan glowing strip)
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, -0.32, 0.05))
+    visor = bpy.context.active_object
+    visor.scale = (0.35, 0.1, 0.12)
+    bpy.ops.object.transform_apply(scale=True)
+    visor.name = "Drone_Visor"
+    
+    # Visor Material (Glowing cyan)
+    v_mat = bpy.data.materials.new(name="Mat_Drone_Visor")
+    v_mat.use_nodes = True
+    bsdf = v_mat.node_tree.nodes.get("Principled BSDF")
+    if bsdf:
+        bsdf.inputs['Base Color'].default_value = (0.05, 0.85, 1.0, 1.0)
+        bsdf.inputs['Emission Color'].default_value = (0.1, 0.9, 1.0, 1.0)
+        bsdf.inputs['Emission Strength'].default_value = 5.0
+    visor.data.materials.append(v_mat)
+    
+    # 3. Side thrusters (left and right)
+    for sign in [-1, 1]:
+        bpy.ops.mesh.primitive_cylinder_add(radius=0.12, depth=0.5, vertices=16, location=(sign * 0.42, 0.05, 0))
+        thruster = bpy.context.active_object
+        thruster.rotation_euler = (math.pi/2, 0, 0)
+        bpy.ops.object.transform_apply(rotation=True)
+        thruster.name = f"Drone_Thruster_{sign}"
+        
+        # Pylon connecting thruster to body
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(sign * 0.28, 0.05, 0))
+        pylon = bpy.context.active_object
+        pylon.scale = (0.15, 0.08, 0.04)
+        bpy.ops.object.transform_apply(scale=True)
+        pylon.name = f"Drone_Pylon_{sign}"
+        
+    # 4. Top sensor fin
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, 0.1, 0.32))
+    fin = bpy.context.active_object
+    fin.scale = (0.04, 0.22, 0.12)
+    bpy.ops.object.transform_apply(scale=True)
+    fin.name = "Drone_Fin"
+    
+    # 5. Spotlight lens housing under the chin
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.08, depth=0.15, vertices=16, location=(0, -0.28, -0.15))
+    housing = bpy.context.active_object
+    housing.rotation_euler = (math.pi/2, 0, 0)
+    bpy.ops.object.transform_apply(rotation=True)
+    housing.name = "Drone_SpotHousing"
+    
+    # Join all parts
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.context.view_layer.objects.active = body
+    bpy.ops.object.join()
+    body.name = "HazardDrone"
+    
+    export_obj(output_path)
+    print(f"Exported hazard drone to {output_path}")
+
 def main():
     dest_dir = sys.argv[-1] if len(sys.argv) > 1 and not sys.argv[-1].startswith("-") else "assets"
     os.makedirs(dest_dir, exist_ok=True)
@@ -353,6 +418,7 @@ def main():
     create_relay_pedestal(os.path.join(dest_dir, "relay_pedestal.obj"))
     create_barrier_gate(os.path.join(dest_dir, "barrier_gate.obj"))
     create_industrial_lamp(os.path.join(dest_dir, "industrial_lamp.obj"))
+    create_player_drone(os.path.join(dest_dir, "player_drone.obj"))
     print("All models successfully built and exported!")
 
 if __name__ == "__main__":

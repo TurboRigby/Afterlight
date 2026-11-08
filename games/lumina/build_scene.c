@@ -32,6 +32,7 @@ int main(int argc, char **argv) {
     af_scene_set_asset(scene, "relay_pedestal", AF_ASSET_MESH, "../assets/relay_pedestal.obj");
     af_scene_set_asset(scene, "barrier_gate", AF_ASSET_MESH, "../assets/barrier_gate.obj");
     af_scene_set_asset(scene, "industrial_lamp", AF_ASSET_MESH, "../assets/industrial_lamp.obj");
+    af_scene_set_asset(scene, "player_drone", AF_ASSET_MESH, "../assets/player_drone.obj");
 
     // 2. Foundation / Floor Basin
     {
@@ -331,13 +332,15 @@ int main(int argc, char **argv) {
 
     // 10. Player Character Object
     {
-        af_object_id player = af_scene_add_object(scene, "Player", "cube");
-        af_transform t = {.position = {0, 0.8f, 10.0f},
-                          .rotation = {0, AF_PI, 0}, // Face north toward core
-                          .scale = {0.7f, 1.8f, 0.7f}};
+        af_object_id player = af_scene_add_object(scene, "Player", "player_drone");
+        af_transform t = {.position = {0, 1.05f, 10.0f},
+                          .rotation = {0, 0, 0}, // Face north toward core
+                          .scale = {1.0f, 1.0f, 1.0f}};
         af_scene_set_object_transform(scene, player, t);
         af_material mat = af_material_default();
-        mat.base_color = (af_color){0.3f, 0.35f, 0.4f, 1.0f};
+        mat.base_color = (af_color){0.25f, 0.28f, 0.32f, 1.0f};
+        mat.metallic = 0.8f;
+        mat.roughness = 0.35f;
         af_scene_set_object_material(scene, player, mat);
 
         af_collider col = {

@@ -66,7 +66,8 @@ static float vec3_dist(af_vec3 a, af_vec3 b) {
 }
 
 static af_vec3 get_camera_forward(float yaw, float pitch) {
-    return (af_vec3){sinf(yaw) * cosf(pitch), -sinf(pitch), -cosf(yaw) * cosf(pitch)};
+    float horizontal = cosf(pitch);
+    return (af_vec3){cosf(yaw) * horizontal, sinf(pitch), sinf(yaw) * horizontal};
 }
 
 static bool init(void *memory, const af_game_host *h) {
@@ -77,6 +78,8 @@ static bool init(void *memory, const af_game_host *h) {
     s->flashlight_on = true;
     s->held_cell = -1;
     s->third_cfg = h->third_person_config_default();
+    s->third_cfg.camera_distance = 4.0f;
+    s->third_cfg.camera_height = 0.8f;
 
     // Scan scene objects
     size_t count = h->object_count(h->scene);
@@ -116,11 +119,25 @@ static bool init(void *memory, const af_game_host *h) {
     }
 
     if (!s->player_id)
-        s->spawn_pos = (af_vec3){0, 0.8f, 10.0f};
+        s->spawn_pos = (af_vec3){0, 1.05f, 10.0f};
+    else if (s->spawn_pos.y < 1.0f)
+        s->spawn_pos.y = 1.05f;
 
     s->player = h->third_person_default(s->spawn_pos);
-    s->yaw = AF_PI; // Face North toward reactor core
+    s->yaw = -AF_PI * 0.5f; // Face North toward reactor core (-Z)
     s->pitch = 0.0f;
+    s->player.orbit.yaw = s->yaw;
+    s->player.orbit.pitch = s->pitch;
+
+    // In first person, collapse scale so the camera is never inside geometry
+    if (s->player_id) {
+        const af_scene_object *pobj = h->get_object(h->scene, s->player_id);
+        if (pobj) {
+            af_transform t = pobj->transform;
+            t.scale = s->first_person ? (af_vec3){0, 0, 0} : (af_vec3){1.0f, 1.0f, 1.0f};
+            h->set_transform(h->scene, s->player_id, t);
+        }
+    }
 
     h->capture_mouse(h->engine, true);
     h->log("LUMINA: DEEP CORE | Containment blackout detected. Retrieve 3 Quantum Prisms to stabilize the Core.");
@@ -131,23 +148,48 @@ static void update(void *memory, const af_game_host *h, double dt) {
     lumina_state *s = memory;
     s->run_time += dt;
 
-    bool input_ready = h->input_enabled && h->mouse_captured(h->engine);
-
     // Toggle Flashlight (F key)
-    if (input_ready && h->key_pressed(h, AF_KEY_F)) {
+    if (h->input_enabled && h->key_pressed(h, AF_KEY_F)) {
         s->flashlight_on = !s->flashlight_on;
         h->log(s->flashlight_on ? "Scanner Spotlight: ACTIVE" : "Scanner Spotlight: OFF");
     }
 
     // Toggle Camera View (V key)
-    if (input_ready && h->key_pressed(h, AF_KEY_V)) {
+    if (h->input_enabled && h->key_pressed(h, AF_KEY_V)) {
         s->first_person = !s->first_person;
         h->log(s->first_person ? "View: First-Person" : "View: Third-Person");
     }
 
+    // Reset Run (R key)
+    if (h->input_enabled && h->key_pressed(h, AF_KEY_R)) {
+        s->player = h->third_person_default(s->spawn_pos);
+        s->yaw = -AF_PI * 0.5f;
+        s->pitch = 0.0f;
+        s->player.orbit.yaw = s->yaw;
+        s->player.orbit.pitch = s->pitch;
+        s->held_cell = -1;
+        s->core_stabilized = false;
+        s->game_won = false;
+        s->run_time = 0.0;
+        for (int i = 0; i < CELL_COUNT; ++i) {
+            s->relay_active[i] = false;
+            if (s->cells[i])
+                h->set_transform(h->scene, s->cells[i], s->cell_initial[i]);
+            if (s->relays[i]) {
+                const af_scene_object *ro = h->get_object(h->scene, s->relays[i]);
+                if (ro) {
+                    af_material m = ro->material;
+                    m.emission_strength = 0.3f;
+                    h->set_material(h->scene, s->relays[i], m);
+                }
+            }
+        }
+        h->log("LUMINA: Run reset to spawn.");
+    }
+
     // Character Movement Input
     af_third_person_input input = {0};
-    if (input_ready && !s->game_won) {
+    if (h->input_enabled && !s->game_won) {
         float fwd = 0.0f, right = 0.0f;
         if (h->key_down(h, AF_KEY_W))
             fwd += 1.0f;
@@ -167,17 +209,22 @@ static void update(void *memory, const af_game_host *h, double dt) {
         input.jump = h->key_pressed(h, AF_KEY_SPACE) || h->action_pressed(h, "Jump");
     }
 
+    // Synchronize orbit camera yaw with look yaw so character steps in camera forward direction
+    s->player.orbit.yaw = s->yaw;
+    s->player.orbit.pitch = s->pitch;
+
     // Step physics & collision
     af_query_filter filter = {.ignore = s->player_id, .mask = UINT32_MAX};
     h->third_person_step(h->scene, &s->player, s->third_cfg, input, (float)dt, filter);
 
-    // Sync player object position
+    // Sync player object position and scale (collapsed in first-person so geometry never clips view)
     if (s->player_id) {
         const af_scene_object *pobj = h->get_object(h->scene, s->player_id);
         if (pobj) {
             af_transform t = pobj->transform;
             t.position = s->player.body.position;
-            t.rotation.y = s->yaw;
+            t.rotation.y = s->yaw + AF_PI * 0.5f;
+            t.scale = s->first_person ? (af_vec3){0, 0, 0} : (af_vec3){1.0f, 1.0f, 1.0f};
             h->set_transform(h->scene, s->player_id, t);
         }
     }
@@ -187,8 +234,8 @@ static void update(void *memory, const af_game_host *h, double dt) {
         h->disturb_water(h->engine, s->water_id, s->player.body.position, 1.2f, 1.5f);
     }
 
-    // Interaction handling (E key or Left Mouse Click)
-    bool interact = input_ready && (h->key_pressed(h, AF_KEY_E) || h->mouse_pressed(h->engine, AF_MOUSE_LEFT));
+    // Interaction handling (E key or Left Mouse Click when captured)
+    bool interact = h->input_enabled && (h->key_pressed(h, AF_KEY_E) || (h->mouse_captured(h->engine) && h->mouse_pressed(h->engine, AF_MOUSE_LEFT)));
 
     const char *prompt_action = NULL;
 
@@ -285,7 +332,7 @@ static void update(void *memory, const af_game_host *h, double dt) {
     if (s->held_cell >= 0) {
         int cell_idx = s->held_cell;
         af_vec3 fwd = get_camera_forward(s->yaw, 0);
-        af_vec3 right_vec = {fwd.z, 0, -fwd.x};
+        af_vec3 right_vec = {-fwd.z, 0, fwd.x};
         af_vec3 carry_pos = {s->player.body.position.x + fwd.x * 0.7f + right_vec.x * 0.4f,
                              s->player.body.position.y + 0.6f + sinf((float)s->run_time * 4.0f) * 0.05f,
                              s->player.body.position.z + fwd.z * 0.7f + right_vec.z * 0.4f};
@@ -387,22 +434,32 @@ static void update(void *memory, const af_game_host *h, double dt) {
 }
 
 static void frame_update(void *memory, const af_game_host *h, double dt) {
-    (void)dt;
     lumina_state *s = memory;
 
-    // Mouse look
-    if (h->input_enabled && h->mouse_captured(h->engine)) {
-        af_vec2 d = h->mouse_delta(h->engine);
-        float sens = 0.0022f;
-        s->yaw += d.x * sens;
-        s->pitch = fmaxf(-1.45f, fminf(1.45f, s->pitch + d.y * sens));
+    if (h->input_enabled) {
+        // Click to capture mouse, Escape to release
+        if (h->mouse_pressed(h->engine, AF_MOUSE_LEFT) && h->mouse_in_viewport(h->engine))
+            h->capture_mouse(h->engine, true);
+        else if (h->key_pressed(h, AF_KEY_ESCAPE))
+            h->capture_mouse(h->engine, false);
+
+        // Mouse look when captured
+        if (h->mouse_captured(h->engine)) {
+            af_vec2 d = h->mouse_delta(h->engine);
+            float sens = 0.0022f;
+            s->yaw += d.x * sens;
+            s->pitch = fmaxf(-1.45f, fminf(1.45f, s->pitch - d.y * sens));
+        }
     }
 
     // Camera setup
     if (h->camera_enabled) {
+        s->player.orbit.yaw = s->yaw;
+        s->player.orbit.pitch = s->pitch;
+
         if (s->first_person) {
             s->camera.position =
-                (af_vec3){s->player.body.position.x, s->player.body.position.y + 0.85f, s->player.body.position.z};
+                (af_vec3){s->player.body.position.x, s->player.body.position.y + 0.65f, s->player.body.position.z};
             s->camera.yaw = s->yaw;
             s->camera.pitch = s->pitch;
             s->camera.vertical_fov = 1.15f;
@@ -411,9 +468,8 @@ static void frame_update(void *memory, const af_game_host *h, double dt) {
             h->set_camera(h->engine, &s->camera);
         } else {
             af_query_filter filter = {.ignore = s->player_id, .mask = UINT32_MAX};
-            s->player.orbit.yaw = s->yaw;
-            s->player.orbit.pitch = s->pitch;
-            if (h->third_person_camera(h->scene, &s->player, s->third_cfg, 0, filter, &s->camera))
+            if (h->third_person_camera(h->scene, &s->player, s->third_cfg, (float)fmin(0.1, fmax(0.001, dt)), filter,
+                                       &s->camera))
                 h->set_camera(h->engine, &s->camera);
         }
     }
