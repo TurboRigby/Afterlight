@@ -41,7 +41,7 @@ static cJSON *write_vec3(af_vec3 v) {
 bool ls_decode(af_scene *scene, const cJSON *root) {
     if (!scene || !root) return false;
     const cJSON *lj = cJSON_GetObjectItemCaseSensitive(root, "landscape");
-    if (!lj) return true; /* Optional landscape */
+    if (!lj || cJSON_IsNull(lj)) return true; /* Optional or null landscape */
     if (!cJSON_IsObject(lj)) return false;
 
     const cJSON *cx_item = cJSON_GetObjectItemCaseSensitive(lj, "chunks_x");
@@ -245,7 +245,7 @@ bool ls_decode(af_scene *scene, const cJSON *root) {
 bool ls_encode(const af_scene *scene, cJSON *root) {
     if (!scene || !root) return false;
     const af_landscape *ls = af_scene_get_landscape(scene);
-    if (!ls) return true; /* No landscape to encode */
+    if (!ls) return cJSON_AddNullToObject(root, "landscape") != NULL;
 
     cJSON *lj = cJSON_CreateObject();
     if (!lj) return false;

@@ -873,6 +873,71 @@ bool af_renderer_update_water(af_renderer *r,const af_physics *physics,const af_
         r->water_configs[i]=w;r->water_transforms[i]=o->transform;r->water_times[i]=time;r->water_alphas[i]=a;
     }return true;
 }
+
+bool af_renderer_update_landscape(af_renderer *r, const af_scene *s)
+{
+    if (!r) return false;
+    const af_landscape *ls = s ? af_scene_get_landscape(s) : NULL;
+    for (size_t i = r->mesh_count; i > 0; --i) {
+        const char *name = r->meshes[i - 1].name;
+        if (strncmp(name, "__terrain_", 10)) continue;
+        bool keep = false;
+        if (ls && ls->enabled) {
+            for (size_t k = 0; k < ls->chunk_count; ++k) {
+                if (!strcmp(name, ls->chunks[k].mesh_name)) {
+                    keep = true;
+                    break;
+                }
+            }
+        }
+        if (!r->meshes[i - 1].retired && !keep && !af_renderer_remove_mesh(r, name))
+            return false;
+    }
+
+    if (!ls || !ls->enabled || ls->chunk_count == 0)
+        return true;
+
+    size_t v_count = af_landscape_chunk_vertex_count();
+    size_t idx_count = af_landscape_chunk_index_count();
+    af_vertex *v = malloc(v_count * sizeof(*v));
+    uint32_t *ix = malloc(idx_count * sizeof(*ix));
+    if (!v || !ix) {
+        free(v);
+        free(ix);
+        return false;
+    }
+
+    for (size_t i = 0; i < ls->chunk_count; ++i) {
+        af_terrain_chunk *c = (af_terrain_chunk *)&ls->chunks[i];
+        if (c->mesh_name[0] == '\0') {
+            snprintf(c->mesh_name, sizeof(c->mesh_name), "__terrain_%d_%d", c->chunk_x, c->chunk_z);
+            c->dirty_mesh = true;
+        }
+        if (c->dirty_mesh || find_mesh_index(r, c->mesh_name) == r->mesh_count) {
+            if (!af_landscape_build_chunk_mesh(ls, i, v, ix)) {
+                free(v);
+                free(ix);
+                return false;
+            }
+            af_mesh_data md = {
+                .vertices = v,
+                .indices = ix,
+                .vertex_count = (uint32_t)v_count,
+                .index_count = (uint32_t)idx_count
+            };
+            if (!stream_set(r, c->mesh_name, &md)) {
+                free(v);
+                free(ix);
+                return false;
+            }
+            c->dirty_mesh = false;
+        }
+    }
+
+    free(v);
+    free(ix);
+    return true;
+}
 static VkFormat select_depth_format(af_renderer *renderer)
 {
     const VkFormat formats[] = {VK_FORMAT_D32_SFLOAT,VK_FORMAT_D16_UNORM, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT};
@@ -1523,14 +1588,22 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
         renderer->shadow_resolution=settings.resolution;renderer->shadow_layers=layers;
         for(unsigned f=0;f<AF_FRAMES_IN_FLIGHT;++f)memset(renderer->frames[f].shadow_signatures,0,sizeof(renderer->frames[f].shadow_signatures));
     }
+    bool local_cast=false;for(size_t i=0;i<af_scene_local_light_count(scene);++i){const af_local_light *l=af_scene_local_light_at(scene,i);if(l->enabled&&l->cast_shadows&&l->intensity>0)local_cast=true;}
     size_t count=af_scene_object_count(scene);
+    const af_landscape *ls = af_scene_get_landscape(scene);
+    if ((settings.enabled || local_cast) && ls && ls->enabled) {
+        count += ls->chunk_count;
+        for (size_t l = 0; l < ls->foliage_layer_count; ++l) {
+            if (ls->foliage_layers[l].cast_shadows && ls->foliage_layers[l].visible)
+                count += ls->foliage_layers[l].total_instances;
+        }
+    }
     if(count>renderer->shadow_capacity){
         af_shadow_draw *draws=realloc(renderer->shadow_draws,count*sizeof(*draws));if(!draws)return false;renderer->shadow_draws=draws;
         af_shadow_bounds *bounds=realloc(renderer->shadow_bounds,count*sizeof(*bounds));if(!bounds)return false;renderer->shadow_bounds=bounds;renderer->shadow_capacity=count;
     }
     renderer->shadow_count=0;
-    bool local_cast=false;for(size_t i=0;i<af_scene_local_light_count(scene);++i){const af_local_light *l=af_scene_local_light_at(scene,i);if(l->enabled&&l->cast_shadows&&l->intensity>0)local_cast=true;}
-    for(size_t i=0;(settings.enabled||local_cast)&&i<count;++i){const af_scene_object *object=af_scene_object_at(scene,i);
+    for(size_t i=0;(settings.enabled||local_cast)&&i<af_scene_object_count(scene);++i){const af_scene_object *object=af_scene_object_at(scene,i);
         if(!object->material.cast_shadows||object->material.alpha_mode==AF_ALPHA_BLEND||!af_scene_object_visible(scene,object->id))continue;
         size_t mesh=find_mesh_index(renderer,object->mesh);af_mat4 model;
         if(mesh==renderer->mesh_count||!object_world(renderer,scene,i,&model))continue;
@@ -1538,6 +1611,46 @@ static bool prepare_shadows(af_renderer *renderer,const af_scene *scene,const af
         af_vk_texture *texture=renderer->white;for(size_t t=0;t<renderer->texture_count;++t)if(!renderer->textures[t].normal&&!strcmp(renderer->textures[t].name,object->material.texture)){texture=renderer->textures[t].texture;break;}
         renderer->shadow_draws[n]=(af_shadow_draw){model,mesh,skin_base(renderer,object->id,&renderer->meshes[mesh].gpu),texture,object->material.base_color.a,object->material.alpha_cutoff,(uint32_t)object->material.alpha_mode,false,i};
         renderer->shadow_bounds[n]=object_bounds(renderer,object->id,model,&renderer->meshes[mesh].gpu);
+    }
+    if ((settings.enabled || local_cast) && ls && ls->enabled) {
+        for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
+            const af_terrain_chunk *c = &ls->chunks[c_idx];
+            size_t mesh = find_mesh_index(renderer, c->mesh_name);
+            if (mesh == renderer->mesh_count) continue;
+            size_t n = renderer->shadow_count++;
+            renderer->shadow_draws[n] = (af_shadow_draw){
+                af_mat4_identity(), mesh, 0, renderer->white, 1.0f, 0.5f,
+                (uint32_t)AF_ALPHA_OPAQUE, false, SIZE_MAX
+            };
+            renderer->shadow_bounds[n] = af_shadow_transform_bounds(af_mat4_identity(), c->bounds_min, c->bounds_max);
+        }
+        for (size_t l = 0; l < ls->foliage_layer_count; ++l) {
+            const af_foliage_layer *fl = &ls->foliage_layers[l];
+            if (!fl->visible || !fl->cast_shadows || fl->total_instances == 0 || fl->mesh[0] == '\0')
+                continue;
+            size_t mesh = find_mesh_index(renderer, fl->mesh);
+            if (mesh == renderer->mesh_count) continue;
+            const af_gpu_mesh *m = &renderer->meshes[mesh].gpu;
+            af_vk_texture *texture = renderer->white;
+            for (size_t t = 0; t < renderer->texture_count; ++t) {
+                if (!renderer->textures[t].normal && !strcmp(renderer->textures[t].name, fl->material.texture)) {
+                    texture = renderer->textures[t].texture; break;
+                }
+            }
+            for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
+                const af_foliage_chunk *fc = &ls->chunks[c_idx].foliage[l];
+                for (size_t inst_idx = 0; inst_idx < fc->count; ++inst_idx) {
+                    af_mat4 model = af_transform_matrix(fc->instances[inst_idx].transform);
+                    size_t n = renderer->shadow_count++;
+                    renderer->shadow_draws[n] = (af_shadow_draw){
+                        model, mesh, 0, texture,
+                        fl->material.base_color.a, fl->material.alpha_cutoff,
+                        (uint32_t)fl->material.alpha_mode, false, SIZE_MAX
+                    };
+                    renderer->shadow_bounds[n] = af_shadow_transform_bounds(model, m->minimum, m->maximum);
+                }
+            }
+        }
     }
     af_directional_light light=af_scene_get_light(scene);af_vec3 direction=af_vec3_normalize(light.direction),forward=af_camera_forward(camera);
     if(!af_shadow_build(camera,area.width/area.height,direction,settings,renderer->shadow_bounds,renderer->shadow_count,view))return false;
@@ -2126,7 +2239,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         af_vk_shadows_begin(renderer->shadows,frame->command,renderer->frame_index,layer,af_scene_get_shadows(scene),frame->descriptor);
         for(size_t i=0;uniform.shadow_params.x>.5f&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(shadow_view.matrices[layer],&renderer->shadow_bounds[i]))continue;
-            af_shadow_draw draw=renderer->shadow_draws[i];if(ray_shadows&&draw.ray_caster)continue;const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
+            af_shadow_draw draw=renderer->shadow_draws[i];if(ray_shadows&&draw.ray_caster)continue;
+            const af_gpu_mesh *mesh=renderer->meshes[draw.mesh].dynamic?&renderer->meshes[draw.mesh].streams[renderer->frame_index].gpu:&renderer->meshes[draw.mesh].gpu;
             af_mat4 mvp=af_mat4_mul(shadow_view.matrices[layer],draw.model);af_vk_shadows_push(renderer->shadows,frame->command,mvp.elements,draw.skin_base,draw.alpha_mode,draw.alpha,draw.cutoff,af_vk_texture_descriptor(draw.texture));
             VkDeviceSize offset=0;vkCmdBindVertexBuffers(frame->command,0,1,&mesh->vertices.handle,&offset);
             vkCmdBindIndexBuffer(frame->command,mesh->indices.handle,0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++renderer->shadow_draw_calls;
@@ -2140,7 +2254,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         af_vk_shadows_begin(renderer->local_shadows,frame->command,renderer->frame_index,layer,bias,frame->descriptor);
         for(size_t i=0;layer<(uint32_t)uniform.light_count.z&&i<renderer->shadow_count;++i){
             if(!af_shadow_intersects(uniform.local_shadow_matrices[layer],&renderer->shadow_bounds[i]))continue;
-            af_shadow_draw draw=renderer->shadow_draws[i];if(ray_shadows&&draw.ray_caster)continue;const af_gpu_mesh *mesh=&renderer->meshes[draw.mesh].gpu;
+            af_shadow_draw draw=renderer->shadow_draws[i];if(ray_shadows&&draw.ray_caster)continue;
+            const af_gpu_mesh *mesh=renderer->meshes[draw.mesh].dynamic?&renderer->meshes[draw.mesh].streams[renderer->frame_index].gpu:&renderer->meshes[draw.mesh].gpu;
             af_mat4 mvp=af_mat4_mul(uniform.local_shadow_matrices[layer],draw.model);af_vk_shadows_push(renderer->local_shadows,frame->command,mvp.elements,draw.skin_base,draw.alpha_mode,draw.alpha,draw.cutoff,af_vk_texture_descriptor(draw.texture));
             VkDeviceSize offset=0;vkCmdBindVertexBuffers(frame->command,0,1,&mesh->vertices.handle,&offset);vkCmdBindIndexBuffer(frame->command,mesh->indices.handle,0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(frame->command,mesh->index_count,1,0,0,0);++renderer->shadow_draw_calls;
         }vkCmdEndRenderPass(frame->command);
@@ -2164,7 +2279,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     for(unsigned column=0;column<4;++column){visibility_projection.elements[column*4]*=visible_width/(visible_width+4);visibility_projection.elements[column*4+1]*=visible_height/(visible_height+4);}
     size_t draw_calls = 0, missing_meshes = 0;renderer->visible_objects=renderer->culled_objects=0;
     size_t object_count = af_scene_object_count(scene);
-    if (object_count > 0||environment_settings.skybox) {
+    const af_landscape *scene_ls = scene ? af_scene_get_landscape(scene) : NULL;
+    bool has_landscape = scene_ls && scene_ls->enabled && scene_ls->chunk_count > 0;
+    if (object_count > 0||environment_settings.skybox||has_landscape) {
         VkExtent2D extent = renderer->swapchain.render_extent;
         int logical_width = 0, logical_height = 0;
         SDL_GetWindowSize(renderer->window, &logical_width, &logical_height);
@@ -2234,7 +2351,154 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             else vkCmdBindPipeline(frame->command,VK_PIPELINE_BIND_POINT_GRAPHICS,alpha_pass?renderer->swapchain.blend_pipeline:renderer->swapchain.pipeline);
             vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, (uint32_t)i);
             ++draw_calls;
-        }}free(blended);
+        }
+
+        if (alpha_pass == 0 && scene_ls && scene_ls->enabled) {
+            const af_landscape *ls = scene_ls;
+            vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline);
+            for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
+                const af_terrain_chunk *chunk = &ls->chunks[c_idx];
+                size_t index = find_mesh_index(renderer, chunk->mesh_name);
+                if (index == renderer->mesh_count) continue;
+                const af_mesh_asset *asset = &renderer->meshes[index];
+                const af_gpu_mesh *mesh = asset->dynamic ? &asset->streams[renderer->frame_index].gpu : &asset->gpu;
+                if (!mesh->vertices.handle || !mesh->indices.handle) continue;
+
+                if (!renderer->culling_disabled) {
+                    af_shadow_bounds bounds = af_shadow_transform_bounds(af_mat4_identity(), chunk->bounds_min, chunk->bounds_max);
+                    if (!af_shadow_intersects(visibility_projection, &bounds)) {
+                        ++renderer->culled_objects;
+                        continue;
+                    }
+                }
+                ++renderer->visible_objects;
+
+                struct { af_mat4 model; af_color tint; af_vec4 params, surface, emission; } chunk_transform = {
+                    .model = af_mat4_identity(),
+                    .tint = {1.0f, 1.0f, 1.0f, 1.0f},
+                    .params = {(float)((uint32_t)AF_ALPHA_OPAQUE << 1u), 1.0f, 1.0f, 0.0f},
+                    .surface = {0.85f, 0.05f, 1.0f, 0.0f},
+                    .emission = {0.0f, 0.0f, 0.0f, 0.0f}
+                };
+                VkDescriptorSet desc_white = af_vk_texture_descriptor(renderer->white);
+                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 1, 1, &desc_white, 0, NULL);
+                VkDescriptorSet desc_norm = af_vk_texture_descriptor(renderer->flat_normal);
+                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 3, 1, &desc_norm, 0, NULL);
+                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 4, 1, &desc_white, 0, NULL);
+                vkCmdPushConstants(frame->command, renderer->swapchain.pipeline_layout,
+                                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(chunk_transform), &chunk_transform);
+                vkCmdBindVertexBuffers(frame->command, 0, 1, &mesh->vertices.handle, &offset);
+                vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
+                ++draw_calls;
+            }
+        }
+
+        if (scene_ls && scene_ls->enabled) {
+            const af_landscape *ls = scene_ls;
+            for (size_t l = 0; l < ls->foliage_layer_count; ++l) {
+                const af_foliage_layer *fl = &ls->foliage_layers[l];
+                if (!fl->visible || fl->total_instances == 0 || fl->mesh[0] == '\0') continue;
+                bool is_blend = fl->material.alpha_mode == AF_ALPHA_BLEND;
+                if ((alpha_pass == 0 && is_blend) || (alpha_pass == 1 && !is_blend)) continue;
+
+                size_t index = find_mesh_index(renderer, fl->mesh);
+                if (index == renderer->mesh_count) {
+                    ++missing_meshes;
+                    continue;
+                }
+                const af_mesh_asset *asset = &renderer->meshes[index];
+                const af_gpu_mesh *mesh = asset->dynamic ? &asset->streams[renderer->frame_index].gpu : &asset->gpu;
+                if (!mesh->vertices.handle || !mesh->indices.handle) continue;
+
+                vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, alpha_pass ? renderer->swapchain.blend_pipeline : renderer->swapchain.pipeline);
+                vkCmdBindVertexBuffers(frame->command, 0, 1, &mesh->vertices.handle, &offset);
+                vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
+
+                af_vk_texture *tex = renderer->white;
+                if (fl->material.texture[0]) {
+                    for (size_t t = 0; t < renderer->texture_count; ++t) {
+                        if (!renderer->textures[t].normal && !strcmp(renderer->textures[t].name, fl->material.texture)) {
+                            tex = renderer->textures[t].texture; break;
+                        }
+                    }
+                }
+                VkDescriptorSet desc_tex = af_vk_texture_descriptor(tex);
+                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 1, 1, &desc_tex, 0, NULL);
+
+                af_vk_texture *norm = renderer->flat_normal;
+                if (fl->material.normal_map[0]) {
+                    for (size_t t = 0; t < renderer->texture_count; ++t) {
+                        if (renderer->textures[t].normal && !strcmp(renderer->textures[t].name, fl->material.normal_map)) {
+                            norm = renderer->textures[t].texture; break;
+                        }
+                    }
+                }
+                VkDescriptorSet desc_norm = af_vk_texture_descriptor(norm);
+                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 3, 1, &desc_norm, 0, NULL);
+
+                af_vk_texture *mr = renderer->white;
+                if (fl->material.metallic_roughness_map[0]) {
+                    for (size_t t = 0; t < renderer->texture_count; ++t) {
+                        if (!renderer->textures[t].normal && !strcmp(renderer->textures[t].name, fl->material.metallic_roughness_map)) {
+                            mr = renderer->textures[t].texture; break;
+                        }
+                    }
+                }
+                VkDescriptorSet desc_mr = af_vk_texture_descriptor(mr);
+                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->swapchain.pipeline_layout, 4, 1, &desc_mr, 0, NULL);
+
+                float max_dist_sq = fl->max_distance * fl->max_distance;
+
+                for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
+                    const af_terrain_chunk *chunk = &ls->chunks[c_idx];
+                    const af_foliage_chunk *fc = &chunk->foliage[l];
+                    if (fc->count == 0) continue;
+
+                    af_vec3 chunk_center = {
+                        (chunk->bounds_min.x + chunk->bounds_max.x) * 0.5f,
+                        (chunk->bounds_min.y + chunk->bounds_max.y) * 0.5f,
+                        (chunk->bounds_min.z + chunk->bounds_max.z) * 0.5f
+                    };
+                    af_vec3 to_cam = af_vec3_sub(chunk_center, camera->position);
+                    if (af_vec3_dot(to_cam, to_cam) > max_dist_sq) continue;
+
+                    if (!renderer->culling_disabled) {
+                        af_vec3 ext_max = chunk->bounds_max;
+                        ext_max.y += 10.0f;
+                        af_shadow_bounds bounds = af_shadow_transform_bounds(af_mat4_identity(), chunk->bounds_min, ext_max);
+                        if (!af_shadow_intersects(visibility_projection, &bounds)) {
+                            renderer->culled_objects += fc->count;
+                            continue;
+                        }
+                    }
+
+                    for (size_t inst_idx = 0; inst_idx < fc->count; ++inst_idx) {
+                        af_mat4 model = af_transform_matrix(fc->instances[inst_idx].transform);
+                        struct { af_mat4 model; af_color tint; af_vec4 params, surface, emission; } inst_transform = {
+                            .model = model,
+                            .tint = fl->material.base_color,
+                            .params = {
+                                (float)((fl->material.unlit ? 1u : 0u) |
+                                        ((uint32_t)fl->material.alpha_mode << 1u) |
+                                        ((uint32_t)lroundf(fl->material.alpha_cutoff * 65535.0f) << 3u)),
+                                fl->material.receive_shadows ? 1.0f : 0.0f,
+                                fl->material.physically_based ? 1.0f : 0.0f,
+                                fl->material.normal_map[0] ? 1.0f : 0.0f
+                            },
+                            .surface = { fl->material.roughness, fl->material.metallic, fl->material.normal_strength, 0.0f },
+                            .emission = { fl->material.emission.x, fl->material.emission.y, fl->material.emission.z, fl->material.emission_strength }
+                        };
+                        vkCmdPushConstants(frame->command, renderer->swapchain.pipeline_layout,
+                                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(inst_transform), &inst_transform);
+                        vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
+                        ++draw_calls;
+                        ++renderer->visible_objects;
+                    }
+                }
+            }
+        }
+    }free(blended);
     }
     vkCmdEndRenderPass(frame->command);
     int logical_w=0,logical_h=0;SDL_GetWindowSize(renderer->window,&logical_w,&logical_h);

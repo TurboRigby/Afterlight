@@ -873,12 +873,22 @@ bool af_landscape_build_chunk_mesh(const af_landscape *ls, size_t chunk_idx, af_
             v->normal = c->normals[idx];
             v->uv = (af_vec2){wx * uv_scale, wz * uv_scale};
 
-            /* Color encodes splat layer weights (0..3) */
+            /* Multi-layer blended color */
+            float w0 = (float)c->weights[idx * 4 + 0] / 255.0f;
+            float w1 = (float)c->weights[idx * 4 + 1] / 255.0f;
+            float w2 = (float)c->weights[idx * 4 + 2] / 255.0f;
+            float w3 = (float)c->weights[idx * 4 + 3] / 255.0f;
+
+            af_color c0 = ls->layers[0].color;
+            af_color c1 = ls->layers[1].color;
+            af_color c2 = ls->layers[2].color;
+            af_color c3 = ls->layers[3].color;
+
             v->color = (af_color){
-                (float)c->weights[idx * 4 + 0] / 255.0f,
-                (float)c->weights[idx * 4 + 1] / 255.0f,
-                (float)c->weights[idx * 4 + 2] / 255.0f,
-                (float)c->weights[idx * 4 + 3] / 255.0f
+                c0.r * w0 + c1.r * w1 + c2.r * w2 + c3.r * w3,
+                c0.g * w0 + c1.g * w1 + c2.g * w2 + c3.g * w3,
+                c0.b * w0 + c1.b * w1 + c2.b * w2 + c3.b * w3,
+                1.0f
             };
             memset(v->joints, 0, sizeof(v->joints));
             v->weights = (af_vec4){0, 0, 0, 0};

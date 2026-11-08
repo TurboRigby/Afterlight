@@ -206,11 +206,11 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene header, missing, unknown, or duplicate fields.");
         return NULL;
     }
-    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != 13 && version->valuedouble != 14 && version->valuedouble != 15 && version->valuedouble != 16 && version->valuedouble != 17 && version->valuedouble != 18 && version->valuedouble != 19 && version->valuedouble != 20 && version->valuedouble != 21 && version->valuedouble != 22 && version->valuedouble != 23 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+    if (version->valuedouble != 1 && version->valuedouble != 2 && version->valuedouble != 3 && version->valuedouble != 4 && version->valuedouble != 5 && version->valuedouble != 6 && version->valuedouble != 7 && version->valuedouble != 8 && version->valuedouble != 9 && version->valuedouble != 10 && version->valuedouble != 11 && version->valuedouble != 12 && version->valuedouble != 13 && version->valuedouble != 14 && version->valuedouble != 15 && version->valuedouble != 16 && version->valuedouble != 17 && version->valuedouble != 18 && version->valuedouble != 19 && version->valuedouble != 20 && version->valuedouble != 21 && version->valuedouble != 22 && version->valuedouble != 23 && version->valuedouble != 24 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
-    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:version->valuedouble>=24?16:version->valuedouble>=22?15:version->valuedouble>=17?14:version->valuedouble>=16?13:version->valuedouble>=14?11:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
+    if (!exact_fields(root,root_fields,version->valuedouble==1?4:(version->valuedouble==2?6:(version->valuedouble==3?7:version->valuedouble>=25?16:version->valuedouble>=22?15:version->valuedouble>=17?14:version->valuedouble>=16?13:version->valuedouble>=14?11:9))) || !read_id(cJSON_GetObjectItemCaseSensitive(root, "next_id"), &next_id) || !cJSON_IsArray(objects) ||
         cJSON_GetArraySize(objects) > (int)AF_SCENE_FILE_MAX_OBJECTS) {
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid next_id or object array (maximum %u objects).", AF_SCENE_FILE_MAX_OBJECTS);
         return NULL;
@@ -479,7 +479,7 @@ static af_scene *decode_scene(const cJSON *root,const char *scene_path, af_scene
         w.enabled=cJSON_IsTrue(enabled)!=0;if(!af_scene_set_wind(scene,w)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid wind direction or limits.");goto fail;}
     }
     if(version->valuedouble>=17&&!wa_decode(scene,root)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid water fields, owner or limits.");goto fail;}
-    if(!ls_decode(scene,root)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid landscape fields or limits.");goto fail;}
+    if(version->valuedouble>=25&&!ls_decode(scene,root)){set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid landscape fields or limits.");goto fail;}
     free(ids);
     return scene;
 part_fail:set_error(error,AF_SCENE_ERROR_FORMAT,"Invalid collider part fields, owner, budget or ID counter.");goto fail;

@@ -450,6 +450,7 @@ int af_engine_run(af_engine *engine, const af_game *game)
         if(!af_animation_runtime_update(engine->animations,engine->previous_scene,alpha,animation_delta,engine->animation_enabled)){result=1;break;}
         engine->cpu_animation_ms=(double)(SDL_GetPerformanceCounter()-animation_start)*1000/frequency;
         if(!af_renderer_update_water(engine->renderer,engine->physics,engine->scene,engine->previous_scene?alpha:1)){result=1;break;}
+        if(!af_renderer_update_landscape(engine->renderer, engine->scene)){result=1;break;}
         if (!af_renderer_draw(engine->renderer, engine->clear_color, engine->scene, &render_camera, engine->viewport, engine->highlighted, &engine->overlay, (float)(delta * 1000.0), &rendered)) {
             result = 1;
             break;
