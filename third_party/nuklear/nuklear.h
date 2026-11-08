@@ -21000,7 +21000,8 @@ nk_begin_titled(struct nk_context *ctx, const char *name, const char *title,
         inpanel = nk_input_has_mouse_click_down_in_rect(&ctx->input, NK_BUTTON_LEFT, win_bounds, nk_true);
         inpanel = inpanel && ctx->input.mouse.buttons[NK_BUTTON_LEFT].clicked;
         ishovered = nk_input_is_mouse_hovering_rect(&ctx->input, win_bounds);
-        if ((win != ctx->active) && ishovered && !ctx->input.mouse.buttons[NK_BUTTON_LEFT].down) {
+        if ((win != ctx->active) && ishovered && !ctx->input.mouse.buttons[NK_BUTTON_LEFT].down &&
+            !(ctx->active && (ctx->active->edit.active || ctx->active->property.active))) {
             iter = win->next;
             while (iter) {
                 struct nk_rect iter_bounds = (!(iter->flags & NK_WINDOW_MINIMIZED))?

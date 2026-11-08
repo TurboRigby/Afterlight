@@ -405,28 +405,28 @@ void smoke(editor *app) {
         ed_document_end_edit(d);
     }
     if (app->updates == 15)
-        app->failed |= !ed_document_undo(d);
+        SMOKE_CHECK(app, ed_document_undo(d));
     if (app->updates == 20)
-        app->failed |= !ed_document_redo(d);
+        SMOKE_CHECK(app, ed_document_redo(d));
     if (app->updates == 21)
         smoke_click(app, 1020, 195);
     if (app->updates == 23) {
-        app->failed |= !SDL_TextInputActive(af_engine_sdl_window(app->engine));
+        SMOKE_CHECK(app, SDL_TextInputActive(af_engine_sdl_window(app->engine)));
         SDL_Event event;
         SDL_zero(event);
         event.type = SDL_EVENT_TEXT_INPUT;
         event.text.windowID = SDL_GetWindowID(af_engine_sdl_window(app->engine));
         event.text.text = "x";
-        app->failed |= !SDL_PushEvent(&event);
+        SMOKE_CHECK(app, SDL_PushEvent(&event));
     }
     if (app->updates == 25) {
-        app->failed |= strchr(af_scene_get_object(d->scene, 1)->name, 'x') == NULL;
-        app->failed |= !ed_document_name(d, "Editor smoke cube");
+        SMOKE_CHECK(app, strchr(af_scene_get_object(d->scene, 1)->name, 'x') != NULL);
+        SMOKE_CHECK(app, ed_document_name(d, "Editor smoke cube"));
         ed_document_end_edit(d);
     }
     if (app->updates == 26 || app->updates == 28 || app->updates == 29) {
         if (app->updates == 28)
-            app->failed |= strlen(af_scene_get_object(d->scene, 1)->name) != 16;
+            SMOKE_CHECK(app, strlen(af_scene_get_object(d->scene, 1)->name) == 16);
         SDL_Event event;
         SDL_zero(event);
         event.type = app->updates == 29 ? SDL_EVENT_KEY_UP : SDL_EVENT_KEY_DOWN;
@@ -434,23 +434,23 @@ void smoke(editor *app) {
         event.key.scancode = SDL_SCANCODE_BACKSPACE;
         event.key.down = app->updates != 29;
         event.key.repeat = app->updates == 28;
-        app->failed |= !SDL_PushEvent(&event);
+        SMOKE_CHECK(app, SDL_PushEvent(&event));
     }
     if (app->updates == 30) {
-        app->failed |= strlen(af_scene_get_object(d->scene, 1)->name) != 15;
-        app->failed |= !ed_document_duplicate(d);
+        SMOKE_CHECK(app, strlen(af_scene_get_object(d->scene, 1)->name) == 15);
+        SMOKE_CHECK(app, ed_document_duplicate(d));
     }
     if (app->updates == 35)
-        app->failed |= !ed_document_delete(d);
+        SMOKE_CHECK(app, ed_document_delete(d));
     if (app->updates == 40)
-        app->failed |= !ed_document_undo(d);
+        SMOKE_CHECK(app, ed_document_undo(d));
     if (app->updates == 45)
-        app->failed |= !ed_document_save(d, app->smoke_path);
+        SMOKE_CHECK(app, ed_document_save(d, app->smoke_path));
     if (app->updates == 50)
-        app->failed |= !ed_document_load(d, app->smoke_path, false);
+        SMOKE_CHECK(app, ed_document_load(d, app->smoke_path, false));
     if (app->updates == 55) {
         uint64_t revision = d->revision;
-        app->failed |= ed_document_load(d, "missing-smoke-scene.json", false) || d->revision != revision;
+        SMOKE_CHECK(app, !ed_document_load(d, "missing-smoke-scene.json", false) && d->revision == revision);
     }
     if (app->updates == 65)
         app->failed |= !af_engine_set_window_size(app->engine, 1100, 720);
