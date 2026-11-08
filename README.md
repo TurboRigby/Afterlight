@@ -6,7 +6,7 @@ Built for the fun of building an engine.
 Afterlight **0.22** adds optional hardware ray-traced sun shadows and water
 reflections. Try the shadow comparison lab or the water expedition on a capable
 Vulkan GPU. The tested macOS/MoltenVK path uses shadow maps and environment reflections. The engine also has FXAA/SMAA/TAA, player menus, saved
-progress and the playable water expedition. See the [ray-shadow guide](docs/development-022.md)
+progress, the playable water expedition, and a lot, A LOT MORE. See the [ray-shadow guide](docs/development-022.md)
 and [0.21 foundations](docs/development-021.md).
 
 ## Build and run
