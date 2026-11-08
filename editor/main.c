@@ -856,6 +856,15 @@ int main(int argc, char **argv) {
             discover_editor_ext_in_dir(base_ext, &disc);
             snprintf(base_ext, sizeof(base_ext), "%s../extensions", base);
             discover_editor_ext_in_dir(base_ext, &disc);
+            snprintf(base_ext, sizeof(base_ext), "%s../Resources/extensions", base);
+            discover_editor_ext_in_dir(base_ext, &disc);
+            snprintf(base_ext, sizeof(base_ext), "%s../../../extensions", base);
+            discover_editor_ext_in_dir(base_ext, &disc);
+        }
+        char *pref = SDL_GetPrefPath("Afterlight", "Extensions");
+        if (pref) {
+            discover_editor_ext_in_dir(pref, &disc);
+            SDL_free(pref);
         }
         if (app.initial_project) {
             char proj_dir[AF_ASSET_PATH_CAPACITY];

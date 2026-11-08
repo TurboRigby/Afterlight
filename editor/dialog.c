@@ -96,17 +96,61 @@ ed_file_dialog *ed_dialog_begin_module(af_engine *engine) {
     return begin_dialog(engine, false, NULL, &filter);
 }
 
-ed_file_dialog *ed_dialog_begin_extension(af_engine *engine) {
+ed_file_dialog *ed_dialog_begin_extension(af_engine *engine, const char *project_path) {
     static const SDL_DialogFileFilter filter = {"Afterlight extension libraries", "so;dylib;dll"};
-    const char *base = af_engine_get_base_path(engine);
     char directory[AF_ASSET_PATH_CAPACITY];
     SDL_PathInfo info;
+
+    /* 1. Project-local extensions folder */
+    if (project_path && project_path[0]) {
+        char proj_dir[AF_ASSET_PATH_CAPACITY];
+        if (af_asset_resolve_path(project_path, "extensions", proj_dir, sizeof(proj_dir)) &&
+            SDL_GetPathInfo(proj_dir, &info) && info.type == SDL_PATHTYPE_DIRECTORY) {
+            return begin_dialog(engine, false, proj_dir, &filter);
+        }
+    }
+
+    const char *base = af_engine_get_base_path(engine);
     if (base) {
-        int length = snprintf(directory, sizeof(directory), "%s../extensions/", base);
+        /* 2. macOS app bundle Resources/extensions/ */
+        int length = snprintf(directory, sizeof(directory), "%s../Resources/extensions/", base);
+        if (length > 0 && (size_t)length < sizeof(directory) && SDL_GetPathInfo(directory, &info) &&
+            info.type == SDL_PATHTYPE_DIRECTORY)
+            return begin_dialog(engine, false, directory, &filter);
+
+        /* 3. Beside macOS .app bundle: ../../../extensions/ */
+        length = snprintf(directory, sizeof(directory), "%s../../../extensions/", base);
+        if (length > 0 && (size_t)length < sizeof(directory) && SDL_GetPathInfo(directory, &info) &&
+            info.type == SDL_PATHTYPE_DIRECTORY)
+            return begin_dialog(engine, false, directory, &filter);
+
+        /* 4. Linux/Windows installation base/../extensions/ */
+        length = snprintf(directory, sizeof(directory), "%s../extensions/", base);
+        if (length > 0 && (size_t)length < sizeof(directory) && SDL_GetPathInfo(directory, &info) &&
+            info.type == SDL_PATHTYPE_DIRECTORY)
+            return begin_dialog(engine, false, directory, &filter);
+
+        /* 5. base/extensions/ */
+        length = snprintf(directory, sizeof(directory), "%sextensions/", base);
         if (length > 0 && (size_t)length < sizeof(directory) && SDL_GetPathInfo(directory, &info) &&
             info.type == SDL_PATHTYPE_DIRECTORY)
             return begin_dialog(engine, false, directory, &filter);
     }
+
+    /* 6. Workspace development directories */
+    if (SDL_GetPathInfo("extensions", &info) && info.type == SDL_PATHTYPE_DIRECTORY)
+        return begin_dialog(engine, false, "extensions", &filter);
+    if (SDL_GetPathInfo("engine/extensions", &info) && info.type == SDL_PATHTYPE_DIRECTORY)
+        return begin_dialog(engine, false, "engine/extensions", &filter);
+
+    /* 7. Dedicated persistent user Extensions folder (~/Library/Application Support/Afterlight/Extensions on macOS) */
+    char *pref = SDL_GetPrefPath("Afterlight", "Extensions");
+    if (pref) {
+        ed_file_dialog *dialog = begin_dialog(engine, false, pref, &filter);
+        SDL_free(pref);
+        return dialog;
+    }
+
     return begin_dialog(engine, false, NULL, &filter);
 }
 

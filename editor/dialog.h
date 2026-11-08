@@ -13,7 +13,7 @@ typedef struct ed_file_dialog ed_file_dialog;
 ed_file_dialog *ed_dialog_begin(af_engine *engine, bool save, const char *suggested_path);
 ed_file_dialog *ed_dialog_begin_asset(af_engine *engine, af_asset_kind kind);
 ed_file_dialog *ed_dialog_begin_module(af_engine *engine);
-ed_file_dialog *ed_dialog_begin_extension(af_engine *engine);
+ed_file_dialog *ed_dialog_begin_extension(af_engine *engine, const char *project_path);
 ed_file_dialog *ed_dialog_begin_project(af_engine *engine, bool save, const char *path);
 /* 0 pending, 1 selected, 2 canceled, -1 error. Result strings are copied. */
 int ed_dialog_poll(ed_file_dialog *dialog, char *path, size_t path_capacity, char *error, size_t error_capacity);

@@ -407,7 +407,8 @@ void extensions_panel(editor *app, float width, float height) {
         nk_layout_row_dynamic(ctx, 34, 2);
         if (nk_button_label(ctx, "Load extension") && !app->dialog) {
             (void)af_engine_set_mouse_capture(app->engine, false);
-            app->dialog = ed_dialog_begin_extension(app->engine);
+            app->dialog =
+                ed_dialog_begin_extension(app->engine, app->project_path[0] ? app->project_path : app->initial_project);
             app->dialog_asset = ED_DIALOG_EXTENSION;
             app->dialog_save = false;
             if (!app->dialog)
