@@ -3128,6 +3128,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     }
     size_t draw_calls = 0, missing_meshes = 0;
     renderer->visible_objects = renderer->culled_objects = 0;
+    bool gi_denoised = false;
     size_t object_count = af_scene_object_count(scene);
     const af_landscape *scene_ls = scene ? af_scene_get_landscape(scene) : NULL;
     bool has_landscape = scene_ls && scene_ls->enabled && scene_ls->chunk_count > 0;
@@ -3178,14 +3179,33 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             qsort(blended, blend_count, sizeof(*blended), blend_compare);
         bool refract = environment_settings.refraction && environment_settings.refraction_strength > 0 &&
                        af_scene_water_count(scene) > 0;
+        af_rect post_norm_area = area;
+        post_norm_area.x /= (float)(logical_width ? logical_width : 1);
+        post_norm_area.y /= (float)(logical_height ? logical_height : 1);
+        post_norm_area.width /= (float)(logical_width ? logical_width : 1);
+        post_norm_area.height /= (float)(logical_height ? logical_height : 1);
         for (unsigned alpha_pass = 0; alpha_pass < 2; ++alpha_pass) {
-            if (alpha_pass && refract) {
-                vkCmdEndRenderPass(frame->command);
-                af_vk_refraction_copy(renderer->swapchain.refraction, frame->command, image_index,
-                                      af_vk_post_scene_image(renderer->swapchain.post, image_index),
-                                      renderer->swapchain.depths[image_index].image);
-                pass.renderPass = renderer->swapchain.water_pass;
-                vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
+            if (alpha_pass) {
+                if (blend_count == 0)
+                    break;
+                if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) {
+                    vkCmdEndRenderPass(frame->command);
+                    af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_norm_area);
+                    gi_denoised = true;
+                    if (refract)
+                        af_vk_refraction_copy(renderer->swapchain.refraction, frame->command, image_index,
+                                              af_vk_post_scene_image(renderer->swapchain.post, image_index),
+                                              renderer->swapchain.depths[image_index].image);
+                    pass.renderPass = renderer->swapchain.water_pass;
+                    vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
+                } else if (refract) {
+                    vkCmdEndRenderPass(frame->command);
+                    af_vk_refraction_copy(renderer->swapchain.refraction, frame->command, image_index,
+                                          af_vk_post_scene_image(renderer->swapchain.post, image_index),
+                                          renderer->swapchain.depths[image_index].image);
+                    pass.renderPass = renderer->swapchain.water_pass;
+                    vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
+                }
             }
             vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               alpha_pass ? renderer->swapchain.blend_pipeline : renderer->swapchain.pipeline);
@@ -3563,7 +3583,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     post_area.height /= (float)(logical_h ? logical_h : 1);
     if (frame->timestamps)
         vkCmdWriteTimestamp(frame->command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, frame->timestamps, 2);
-    if (renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI)
+    if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised)
         af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_area);
     bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
                                                environment_settings.exposure, camera, frame_time_ms);

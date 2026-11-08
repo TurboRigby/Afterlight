@@ -7,6 +7,23 @@ bool water_clip(float origin, float direction, float low, float high, inout floa
     last = min(last, max(a, b));
     return first <= last;
 }
+vec3 underwater_transmittance(vec3 position) {
+    if (frame.water_absorption.w <= 0)
+        return vec3(1.0);
+    vec3 delta = position - frame.camera_position.xyz;
+    float c = frame.water_axes.x, s = frame.water_axes.y;
+    vec2 o = frame.camera_position.xz - frame.water_bounds.xy;
+    vec3 origin = vec3(c * o.x - s * o.y, frame.camera_position.y, s * o.x + c * o.y),
+         direction = vec3(c * delta.x - s * delta.z, delta.y, s * delta.x + c * delta.z);
+    float first = 0, last = 1;
+    if (!water_clip(origin.x, direction.x, -frame.water_bounds.z, frame.water_bounds.z, first, last) ||
+        !water_clip(origin.z, direction.z, -frame.water_bounds.w, frame.water_bounds.w, first, last) ||
+        !water_clip(origin.y, direction.y, frame.water_axes.z, frame.water_scattering.w + .1, first, last))
+        return vec3(1.0);
+    float distance = min(100.0, length(delta) * max(0, last - first));
+    vec3 transmittance = exp(-frame.water_absorption.rgb * distance);
+    return mix(vec3(1.0), transmittance, frame.water_absorption.w);
+}
 vec3 underwater_color(vec3 color, vec3 position) {
     if (frame.water_absorption.w <= 0)
         return color;

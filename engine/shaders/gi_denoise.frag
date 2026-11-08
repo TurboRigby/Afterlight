@@ -52,21 +52,26 @@ void main() {
     vec4 raw_sample = texelFetch(gi_image, pixel, 0);
     vec3 raw = raw_sample.rgb;
 
-    if (center_depth >= 65000.0 || center_depth <= 0.0) {
+    if (center_depth >= 65000.0 || center_depth <= 0.0 || raw_sample.w < 0.5) {
         out_history = vec4(0);
         out_color = vec4(0);
         return;
     }
 
-    /* Screen-space depth derivative for tangent plane estimation.
-     * On planar surfaces (floors, walls, ramps), neighboring depth follows this
-     * gradient. Guard against quad-derivative spikes at silhouette edges. */
-    vec2 depth_grad = vec2(dFdx(center_depth), dFdy(center_depth));
-    float max_grad = max(0.25, abs(center_depth) * 0.12);
-    if (abs(depth_grad.x) > max_grad)
-        depth_grad.x = 0.0;
-    if (abs(depth_grad.y) > max_grad)
-        depth_grad.y = 0.0;
+    /* In perspective projection, reciprocal eye depth (1/Z) is strictly affine
+     * in screen space coordinates across any planar polygon.
+     * Using 1/Z derivatives eliminates the non-linear hyperbolic curvature that
+     * corrupts linear depth gradients at grazing angles. */
+    float inv_z = 1.0 / max(center_depth, 0.001);
+    vec2 d_inv_z = vec2(dFdx(inv_z), dFdy(inv_z));
+
+    /* Guard against derivative quad spikes across geometry silhouettes:
+     * On continuous surfaces, change in 1/Z per pixel is at most ~5% of 1/Z. */
+    float max_d_inv_z = 0.08 * inv_z;
+    if (abs(d_inv_z.x) > max_d_inv_z)
+        d_inv_z.x = 0.0;
+    if (abs(d_inv_z.y) > max_d_inv_z)
+        d_inv_z.y = 0.0;
 
     float sigma = max(push.params.y, 0.25);
     int radius = int(clamp(push.params.x, 1.0, 4.0));
@@ -77,17 +82,23 @@ void main() {
 
     for (int y = -radius; y <= radius; ++y) {
         for (int x = -radius; x <= radius; ++x) {
-            ivec2 p = clamp(pixel + ivec2(x, y), lo, hi);
+            ivec2 p = pixel + ivec2(x, y);
+            /* Skip taps outside the active 3D viewport without border clamping distortion. */
+            if (any(lessThan(p, lo)) || any(greaterThan(p, hi)))
+                continue;
+
             vec4 movement = texelFetch(motion_image, p, 0);
             vec4 c_sample = texelFetch(gi_image, p, 0);
+            if (c_sample.w < 0.5)
+                continue;
             vec3 c = c_sample.rgb;
 
-            /* Plane-aware depth difference: compare actual neighbor depth to the
-             * depth predicted by the local surface tangent plane. */
-            float expected_depth = center_depth + float(x) * depth_grad.x + float(y) * depth_grad.y;
-            float depth_diff = abs(movement.w - expected_depth);
-            float depth_scale = max(0.04, abs(center_depth) * 0.02 + (abs(float(x)) + abs(float(y))) * 0.005);
-            float depth_weight = exp(-depth_diff / depth_scale);
+            /* Exact plane prediction via reciprocal depth. */
+            float neighbor_inv_z = 1.0 / max(movement.w, 0.001);
+            float expected_inv_z = inv_z + float(x) * d_inv_z.x + float(y) * d_inv_z.y;
+            float inv_z_diff = abs(neighbor_inv_z - expected_inv_z);
+            float inv_z_scale = max(0.04 * inv_z, 0.001);
+            float depth_weight = exp(-inv_z_diff / inv_z_scale);
 
             float spatial_weight = exp(-float(x * x + y * y) / (2.0 * sigma * sigma));
             float weight = spatial_weight * depth_weight;

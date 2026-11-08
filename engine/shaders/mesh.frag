@@ -242,8 +242,10 @@ vec2 environment_uv(vec3 d) {
 #ifdef AF_RAY_QUERY
 #include "water_reflection.glsl"
 #endif
-vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, out vec3 gi_contribution) {
+vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, out vec3 gi_contribution,
+                       out bool has_gi) {
     gi_contribution = vec3(0);
+    has_gi = false;
     if (frame.render_params.z <= 0
 #ifdef AF_RAY_QUERY
         && !(water_surface() && frame.sky_params.w > .5) && !(frame.rtgi_params.x > .5)
@@ -251,7 +253,6 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, 
     )
         return vec3(0);
     vec3 gi_radiance = vec3(0);
-    bool has_gi = false;
 #ifdef AF_RAY_QUERY
     has_gi = !water_surface() && trace_gi_bounce(world_position, n, gi_radiance);
 #endif
@@ -382,8 +383,10 @@ void main() {
         }
     if (((uint(draw.params.x) & 1u) == 0u)) {
         vec3 gi = vec3(0);
-        output_rgb += environment_light(base.rgb, n, v, roughness, metal, gi);
-        out_gi = vec4(gi, 1.0);
+        bool has_gi = false;
+        output_rgb += environment_light(base.rgb, n, v, roughness, metal, gi, has_gi);
+        vec3 gi_transmittance = underwater_transmittance(world_position);
+        out_gi = vec4(gi * gi_transmittance, has_gi ? 1.0 : 0.0);
     }
     if (water && frame.render_params.z > 0)
         output_rgb += draw.tint.rgb * (vec3(1) - water_transmission(n, v)) *
