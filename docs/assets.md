@@ -16,8 +16,8 @@ triangulated before export. FBX is not supported. glTF node and skeletal animati
 Scroll down in the inspector to **Material**. Edit linear base RGB, choose Unlit,
 or use **Import texture** to load and assign a PNG, JPEG, BMP or TGA image. The
 Texture asset field can reuse an existing texture name; clear it for white.
-Materials multiply texture, vertex color and base color. The renderer is opaque;
-transparent materials are future work. Color images decode to RGBA and upload
+Materials multiply texture, vertex color and base color. The inspector offers
+opaque, cutout and blended alpha modes. Color images decode to RGBA and upload
 as sRGB. Scene textures have a full sRGB-aware mip chain, trilinear repeat sampling
 and up to 8x anisotropy, limited by device support. The UI atlas stays single-level.
 Normal-map imports upload linear RGB, use their own material reference/strength
@@ -54,6 +54,11 @@ packed surface texture's G/B channels multiply the material roughness/metallic
 factors, following [the glTF material specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#metallic-roughness-material).
 The Inspector accepts `metallic_roughness_map`; the Assets panel imports/assigns
 these maps. Existing files get an empty reference, meaning constant factors.
+
+Imported primitives use the source material's `doubleSided` setting. Single-sided
+primitives cull back faces, and double-sided materials reverse the shading normal
+on back faces. Fully opaque samples in a glTF blended material write depth.
+Partially transparent samples are blended in object order from far to near.
 
 The Assets panel's **Reload changed assets** follows source model files and their
 external images/buffers. A rejected rebuild keeps previous GPU resources; a

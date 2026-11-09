@@ -11,6 +11,7 @@ typedef struct af_ray_instance {
     uint32_t vertex_count, index_count;
     af_mat4 world;
     uint8_t mask;
+    bool single_sided;
     af_color color;
     af_vec4 emission_unlit;
 } af_ray_instance;

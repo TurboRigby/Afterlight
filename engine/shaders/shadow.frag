@@ -9,7 +9,11 @@ layout(push_constant) uniform Shadow {
 }
 shadow;
 void main() {
-    if (shadow.skin_params.y == 1u &&
+    uint material = shadow.skin_params.y;
+    bool front = gl_FrontFacing != ((material & (1u << 11u)) != 0u);
+    if (!front && (material & (1u << 9u)) != 0u)
+        discard;
+    if ((material & 0xffu) == 1u &&
         uint(round(clamp(texture(base_texture, uv).a * alpha, 0, 1) * 65535.0)) < shadow.skin_params.w)
         discard;
 }

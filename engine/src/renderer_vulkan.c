@@ -97,10 +97,30 @@ typedef struct af_shadow_draw {
     uint32_t skin_base;
     af_vk_texture *texture;
     float alpha, cutoff;
-    uint32_t alpha_mode;
+    uint32_t material_flags;
     bool ray_caster;
     size_t object_index;
 } af_shadow_draw;
+/* Mesh Draw.params.y flags. Shadow draws put the face flags above their alpha mode. */
+enum {
+    AF_DRAW_RECEIVE_SHADOWS = 1u << 0,
+    AF_DRAW_CULL_BACK = 1u << 1,
+    AF_DRAW_FLIP_BACK_NORMAL = 1u << 2,
+    AF_DRAW_MIRRORED = 1u << 3,
+    AF_DRAW_BLEND_OPAQUE = 1u << 4,
+    AF_DRAW_BLEND_PARTIAL = 1u << 5
+};
+static uint32_t mesh_face_flags(af_mesh_sidedness sidedness, af_mat4 model) {
+    if (sidedness == AF_MESH_SIDES_DEFAULT)
+        return 0;
+    const float *m = model.elements;
+    af_vec3 a = {m[0], m[1], m[2]}, b = {m[4], m[5], m[6]}, c = {m[8], m[9], m[10]};
+    uint32_t face = sidedness == AF_MESH_SIDES_FRONT ? AF_DRAW_CULL_BACK : AF_DRAW_FLIP_BACK_NORMAL;
+    return face | (af_vec3_dot(a, af_vec3_cross(b, c)) < 0 ? AF_DRAW_MIRRORED : 0);
+}
+static uint32_t shadow_material_flags(af_alpha_mode alpha_mode, af_mesh_sidedness sidedness, af_mat4 model) {
+    return (uint32_t)alpha_mode | (mesh_face_flags(sidedness, model) << 8);
+}
 #define AF_SKIN_INSTANCES 128u
 #define AF_SKIN_MATRICES (AF_SKIN_INSTANCES * AF_ANIMATION_MAX_JOINTS + 1u)
 typedef struct af_skin_instance {
@@ -174,6 +194,7 @@ typedef struct af_gpu_mesh {
     af_gpu_buffer indices;
     uint32_t vertex_count, index_count, max_joint;
     bool skinned;
+    af_mesh_sidedness sidedness;
     af_vec3 minimum, maximum;
     af_mesh_morph *morph;
     af_vertex *morph_base;
@@ -1041,7 +1062,8 @@ static size_t morph_bytes(const af_mesh_morph *morph, uint32_t expanded_vertices
                  : 0;
 }
 
-static bool upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh, af_mesh_morph *morph) {
+static bool upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh, af_mesh_morph *morph,
+                        af_mesh_sidedness sidedness) {
     if (!name || !name[0] || strlen(name) >= AF_MESH_NAME_CAPACITY || !mesh || !mesh->vertices || !mesh->indices ||
         mesh->vertex_count == 0 || mesh->index_count == 0 || mesh->index_count % 3 != 0 ||
         (uint64_t)mesh->vertex_count * sizeof(af_vertex) > SIZE_MAX ||
@@ -1058,7 +1080,7 @@ static bool upload_mesh(af_renderer *renderer, const char *name, const af_mesh_d
     char asset_name[AF_MESH_NAME_CAPACITY];
     memcpy(asset_name, name, strlen(name) + 1);
     size_t index = find_mesh_index(renderer, asset_name);
-    af_gpu_mesh uploaded = {0};
+    af_gpu_mesh uploaded = {.sidedness = sidedness};
     if (morph) {
         size_t resident = morph_bytes(morph, mesh->vertex_count);
         for (size_t i = 0; i < renderer->mesh_count; ++i)
@@ -1135,10 +1157,11 @@ fail:
     return false;
 }
 bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh) {
-    return upload_mesh(renderer, name, mesh, NULL);
+    return upload_mesh(renderer, name, mesh, NULL, AF_MESH_SIDES_DEFAULT);
 }
-bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_mesh_file *mesh) {
-    if (!upload_mesh(renderer, name, &mesh->data, mesh->morph))
+bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_mesh_file *mesh,
+                                  af_mesh_sidedness sidedness) {
+    if (!upload_mesh(renderer, name, &mesh->data, mesh->morph, sidedness))
         return false;
     mesh->morph = NULL;
     return true;
@@ -2284,7 +2307,8 @@ static bool prepare_shadows(af_renderer *renderer, const af_scene *scene, const 
                                                      texture,
                                                      object->material.base_color.a,
                                                      object->material.alpha_cutoff,
-                                                     (uint32_t)object->material.alpha_mode,
+                                                     shadow_material_flags(object->material.alpha_mode,
+                                                                           renderer->meshes[mesh].gpu.sidedness, model),
                                                      false,
                                                      i};
         renderer->shadow_bounds[n] =
@@ -2327,7 +2351,8 @@ static bool prepare_shadows(af_renderer *renderer, const af_scene *scene, const 
                                                                  texture,
                                                                  fl->material.base_color.a,
                                                                  fl->material.alpha_cutoff,
-                                                                 (uint32_t)fl->material.alpha_mode,
+                                                                 shadow_material_flags(fl->material.alpha_mode,
+                                                                                       m->sidedness, model),
                                                                  false,
                                                                  SIZE_MAX};
                     renderer->shadow_bounds[n] = af_shadow_transform_bounds(model, m->minimum, m->maximum);
@@ -2640,6 +2665,7 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
             .index_count = asset->gpu.index_count,
             .world = world,
             .mask = mask,
+            .single_sided = asset->gpu.sidedness == AF_MESH_SIDES_FRONT,
             .color = material->base_color,
             .emission_unlit = {material->emission.x * material->emission_strength,
                                material->emission.y * material->emission_strength,
@@ -2676,7 +2702,7 @@ static uint64_t shadow_signature(af_renderer *r, af_mat4 matrix, af_shadow_setti
             h = shadow_hash(h, &r->shadow_draws[i].mesh, sizeof(size_t));
             h = shadow_hash(h, &r->shadow_draws[i].alpha, sizeof(float));
             h = shadow_hash(h, &r->shadow_draws[i].cutoff, sizeof(float));
-            h = shadow_hash(h, &r->shadow_draws[i].alpha_mode, sizeof(uint32_t));
+            h = shadow_hash(h, &r->shadow_draws[i].material_flags, sizeof(uint32_t));
             h = shadow_hash(h, &r->shadow_draws[i].ray_caster, sizeof(bool));
             h = shadow_hash(h, &r->shadow_draws[i].texture, sizeof(void *));
             const af_morph_draw *morph = morph_draw_for(r, r->morph_scene, r->shadow_draws[i].object_index);
@@ -3281,7 +3307,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                                           ? &renderer->meshes[draw.mesh].streams[renderer->frame_index].gpu
                                           : &renderer->meshes[draw.mesh].gpu;
             af_mat4 mvp = af_mat4_mul(shadow_view.matrices[layer], draw.model);
-            af_vk_shadows_push(renderer->shadows, frame->command, mvp.elements, draw.skin_base, draw.alpha_mode,
+            af_vk_shadows_push(renderer->shadows, frame->command, mvp.elements, draw.skin_base, draw.material_flags,
                                draw.alpha, draw.cutoff, af_vk_texture_descriptor(draw.texture));
             bind_object_mesh(frame, mesh, morph_draw_for(renderer, scene, draw.object_index));
             vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
@@ -3313,7 +3339,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                                           ? &renderer->meshes[draw.mesh].streams[renderer->frame_index].gpu
                                           : &renderer->meshes[draw.mesh].gpu;
             af_mat4 mvp = af_mat4_mul(uniform.local_shadow_matrices[layer], draw.model);
-            af_vk_shadows_push(renderer->local_shadows, frame->command, mvp.elements, draw.skin_base, draw.alpha_mode,
+            af_vk_shadows_push(renderer->local_shadows, frame->command, mvp.elements, draw.skin_base, draw.material_flags,
                                draw.alpha, draw.cutoff, af_vk_texture_descriptor(draw.texture));
             bind_object_mesh(frame, mesh, morph_draw_for(renderer, scene, draw.object_index));
             vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
@@ -3435,7 +3461,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 const af_water *water = af_scene_get_water(scene, object->id);
                 if (water && !water->enabled)
                     continue;
-                if (!alpha_pass && (object->material.alpha_mode == AF_ALPHA_BLEND || water))
+                if (!alpha_pass && water)
                     continue;
                 if (!af_scene_object_visible(scene, object->id) || (!water && !strcmp(object->mesh, "__node")))
                     continue;
@@ -3444,11 +3470,17 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                     water_name(object->id, water_mesh);
                 size_t index = find_mesh_index(renderer, water ? water_mesh : object->mesh);
                 if (index == renderer->mesh_count) {
-                    ++missing_meshes;
+                    if (alpha_pass || object->material.alpha_mode != AF_ALPHA_BLEND)
+                        ++missing_meshes;
                     continue;
                 }
                 const af_mesh_asset *asset = &renderer->meshes[index];
                 const af_gpu_mesh *mesh = asset->dynamic ? &asset->streams[renderer->frame_index].gpu : &asset->gpu;
+                bool blend = object->material.alpha_mode == AF_ALPHA_BLEND;
+                bool split_blend = blend && mesh->sidedness != AF_MESH_SIDES_DEFAULT;
+                if (!alpha_pass && blend && !split_blend)
+                    continue;
+                bool count_object = alpha_pass || !split_blend;
                 const af_morph_draw *morph = morph_draw_for(renderer, scene, i);
                 af_mat4 world;
                 if (!object_world(renderer, scene, i, &world))
@@ -3456,11 +3488,18 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 if (!renderer->culling_disabled) {
                     af_shadow_bounds bounds = object_bounds(renderer, object->id, world, mesh, morph);
                     if (!af_shadow_intersects(visibility_projection, &bounds)) {
-                        ++renderer->culled_objects;
+                        if (count_object)
+                            ++renderer->culled_objects;
                         continue;
                     }
                 }
-                ++renderer->visible_objects;
+                if (count_object)
+                    ++renderer->visible_objects;
+                uint32_t draw_flags = mesh_face_flags(mesh->sidedness, world);
+                if (object->material.receive_shadows)
+                    draw_flags |= AF_DRAW_RECEIVE_SHADOWS;
+                if (split_blend)
+                    draw_flags |= alpha_pass ? AF_DRAW_BLEND_PARTIAL : AF_DRAW_BLEND_OPAQUE;
                 af_color base = object->material.base_color;
                 if (object->id == highlighted) {
                     base.r *= 1.25f;
@@ -3477,8 +3516,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                     {(float)((object->material.unlit ? 1u : 0u) | ((uint32_t)object->material.alpha_mode << 1u) |
                              ((uint32_t)lroundf(object->material.alpha_cutoff * 65535) << 3u) |
                              (object->material.normal_map[0] ? (1u << 23u) : 0u)),
-                     object->material.receive_shadows ? 1.0f : 0.0f, object->material.physically_based ? 1.0f : 0.0f,
-                     object->material.ior},
+                     (float)draw_flags, object->material.physically_based ? 1.0f : 0.0f, object->material.ior},
                     {object->material.roughness, object->material.metallic, object->material.normal_strength,
                      (float)skin_base(renderer, object->id, mesh)},
                     {object->material.emission.x, object->material.emission.y, object->material.emission.z,
@@ -3511,7 +3549,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                             found = true;
                             break;
                         }
-                    if (!found)
+                    if (!found && count_object)
                         ++renderer->missing_textures;
                 }
                 VkDescriptorSet descriptor = af_vk_texture_descriptor(texture);
@@ -3527,7 +3565,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                             found = true;
                             break;
                         }
-                    if (!found)
+                    if (!found && count_object)
                         ++renderer->missing_textures;
                 }
                 VkDescriptorSet normal_descriptor = af_vk_texture_descriptor(normal);
@@ -3543,7 +3581,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                             found = true;
                             break;
                         }
-                    if (!found)
+                    if (!found && count_object)
                         ++renderer->missing_textures;
                 }
                 VkDescriptorSet mr_descriptor = af_vk_texture_descriptor(mr);
@@ -3764,6 +3802,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
 
                         for (size_t inst_idx = 0; inst_idx < fc->count; ++inst_idx) {
                             af_mat4 model = af_transform_matrix(fc->instances[inst_idx].transform);
+                            uint32_t draw_flags = mesh_face_flags(mesh->sidedness, model);
+                            if (fl->material.receive_shadows)
+                                draw_flags |= AF_DRAW_RECEIVE_SHADOWS;
                             struct {
                                 af_mat4 model;
                                 af_color tint;
@@ -3775,7 +3816,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                                                    ((uint32_t)fl->material.alpha_mode << 1u) |
                                                    ((uint32_t)lroundf(fl->material.alpha_cutoff * 65535.0f) << 3u) |
                                                    (fl->material.normal_map[0] ? (1u << 23u) : 0u)),
-                                           fl->material.receive_shadows ? 1.0f : 0.0f,
+                                           (float)draw_flags,
                                            fl->material.physically_based ? 1.0f : 0.0f, fl->material.ior},
                                 .surface = {fl->material.roughness, fl->material.metallic, fl->material.normal_strength,
                                             0.0f},

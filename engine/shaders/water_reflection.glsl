@@ -78,7 +78,7 @@ bool trace_water_reflection(vec3 n, vec3 direction, float roughness, out vec3 ra
         return false;
     rayQueryEXT query;
     vec3 origin = world_position + vec3(0, .003, 0);
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, .002,
+    rayQueryInitializeEXT(query, scene_acceleration, RAY_OPAQUE_FLAGS, 2, origin, .002,
                           direction, 150.0);
     while (rayQueryProceedEXT(query)) {
     }
@@ -157,7 +157,7 @@ bool trace_glossy_reflection(vec3 pos, vec3 n, vec3 v, float roughness, out vec3
     float bias = max(0.005, frame.shadow_params.w * 0.15);
     vec3 origin = pos + n * bias;
     rayQueryEXT query;
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, direction, 150.0);
+    rayQueryInitializeEXT(query, scene_acceleration, RAY_OPAQUE_FLAGS, 2, origin, 0.003, direction, 150.0);
     while (rayQueryProceedEXT(query)) {
     }
     if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
@@ -213,7 +213,7 @@ bool trace_refraction(vec3 pos, vec3 n, vec3 v, float roughness, float ior,
     direction = normalize(direction);
     vec3 origin = pos - interface_normal * 0.005;
     rayQueryEXT query;
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 2, origin, 0.003, direction, 150.0);
+    rayQueryInitializeEXT(query, scene_acceleration, RAY_OPAQUE_FLAGS, 2, origin, 0.003, direction, 150.0);
     while (rayQueryProceedEXT(query)) {
     }
     if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
@@ -258,7 +258,7 @@ bool trace_rtao(vec3 pos, vec3 geometric_normal, out float ao) {
         vec3 direction = sample_cosine_hemisphere(u, geometric, b1, b2);
         rayQueryEXT query;
         rayQueryInitializeEXT(query, scene_acceleration,
-                              gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
+                              gl_RayFlagsTerminateOnFirstHitEXT | RAY_OPAQUE_FLAGS,
                               2, origin, 0.005, direction, radius);
         while (rayQueryProceedEXT(query)) {
         }
@@ -373,7 +373,7 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
         vec3 throughput = vec3(1.0);
         for (uint bounce = 0u; bounce < max_bounces; ++bounce) {
             rayQueryEXT query;
-            rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsOpaqueEXT, 4, ray_origin, 0.003, dir, max_dist);
+            rayQueryInitializeEXT(query, scene_acceleration, RAY_OPAQUE_FLAGS, 4, ray_origin, 0.003, dir, max_dist);
             while (rayQueryProceedEXT(query)) {
             }
             if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) {

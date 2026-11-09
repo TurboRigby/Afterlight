@@ -20,6 +20,6 @@ VkDescriptorSet af_vk_shadows_descriptor(const af_vk_shadows *shadows, uint32_t 
 void af_vk_shadows_begin(af_vk_shadows *shadows, VkCommandBuffer command, uint32_t frame, uint32_t layer,
                          af_shadow_settings settings, VkDescriptorSet frame_descriptor);
 void af_vk_shadows_push(af_vk_shadows *shadows, VkCommandBuffer command, const float *mvp, uint32_t skin_base,
-                        uint32_t alpha_mode, float alpha, float cutoff, VkDescriptorSet texture);
+                        uint32_t material_flags, float alpha, float cutoff, VkDescriptorSet texture);
 VkDescriptorImageInfo af_vk_shadows_image(const af_vk_shadows *shadows, uint32_t frame);
 #endif

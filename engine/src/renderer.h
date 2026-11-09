@@ -8,6 +8,7 @@
 #define AF_RENDERER_H
 #include <afterlight/afterlight.h>
 #include <SDL3/SDL.h>
+#include "gltf.h"
 #include "ibl.h"
 #include "render_test.h"
 
@@ -29,7 +30,8 @@ af_temporal_test_stats af_renderer_test_temporal(const af_renderer *);
 void af_renderer_reset_temporal(af_renderer *);
 void af_renderer_resize(af_renderer *renderer);
 bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh);
-bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_mesh_file *mesh);
+bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_mesh_file *mesh,
+                                  af_mesh_sidedness sidedness);
 bool af_renderer_set_skin_palette(af_renderer *renderer, af_object_id object, const af_mat4 *matrices, size_t count);
 void af_renderer_clear_skin_palettes(af_renderer *renderer);
 /* Borrowed through the next draw, in current scene object order. */

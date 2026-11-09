@@ -127,6 +127,7 @@ static bool pipeline(af_vk_shadows *s) {
                                                          VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                                                      .polygonMode = VK_POLYGON_MODE_FILL,
                                                      .cullMode = VK_CULL_MODE_NONE,
+                                                     .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
                                                      .lineWidth = 1,
                                                      .depthBiasEnable = VK_TRUE};
     VkPipelineMultisampleStateCreateInfo samples = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
@@ -354,11 +355,11 @@ void af_vk_shadows_begin(af_vk_shadows *s, VkCommandBuffer command, uint32_t fra
     vkCmdSetDepthBias(command, settings.constant_bias, 0, settings.slope_bias);
 }
 void af_vk_shadows_push(af_vk_shadows *s, VkCommandBuffer command, const float *mvp, uint32_t skin_base,
-                        uint32_t alpha_mode, float alpha, float cutoff, VkDescriptorSet texture) {
+                        uint32_t material_flags, float alpha, float cutoff, VkDescriptorSet texture) {
     struct {
         float mvp[16];
         uint32_t skin[4];
-    } push = {.skin = {skin_base, alpha_mode, 0, 0}};
+    } push = {.skin = {skin_base, material_flags, 0, 0}};
     memcpy(&push.skin[2], &alpha, 4);
     push.skin[3] = (uint32_t)(cutoff * 65535.f + .5f);
     memcpy(push.mvp, mvp, 64);

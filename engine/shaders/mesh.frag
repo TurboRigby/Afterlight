@@ -66,6 +66,16 @@ layout(push_constant) uniform Draw {
     vec4 emission;
 }
 draw;
+
+const uint DRAW_RECEIVE_SHADOWS = 1u << 0;
+const uint DRAW_CULL_BACK = 1u << 1;
+const uint DRAW_FLIP_BACK_NORMAL = 1u << 2;
+const uint DRAW_MIRRORED = 1u << 3;
+const uint DRAW_BLEND_OPAQUE = 1u << 4;
+const uint DRAW_BLEND_PARTIAL = 1u << 5;
+bool draw_flag(uint flag) {
+    return (uint(draw.params.y) & flag) != 0u;
+}
 layout(set = 2, binding = 0) uniform sampler2DArray shadow_map;
 layout(set = 3, binding = 0) uniform sampler2D normal_texture;
 layout(set = 4, binding = 0) uniform sampler2D metallic_roughness_texture;
@@ -95,7 +105,7 @@ int cascade_index(float depth) {
     return layer;
 }
 float raster_shadow_visibility(vec3 n) {
-    if (frame.shadow_params.x < 0.5 || draw.params.y < 0.5 || ((uint(draw.params.x) & 1u) != 0u))
+    if (frame.shadow_params.x < 0.5 || !draw_flag(DRAW_RECEIVE_SHADOWS) || ((uint(draw.params.x) & 1u) != 0u))
         return 1;
     float depth = dot(world_position - frame.camera_position.xyz, frame.camera_forward.xyz);
     int count = int(frame.cascade_params.x);
@@ -113,6 +123,7 @@ float raster_shadow_visibility(vec3 n) {
     return visibility;
 }
 #ifdef AF_RAY_QUERY
+const uint RAY_OPAQUE_FLAGS = gl_RayFlagsOpaqueEXT | gl_RayFlagsCullBackFacingTrianglesEXT;
 float trace_sun_visibility(vec3 position, vec3 geometric_normal, vec3 light_direction, float bias, uint mask) {
     vec3 helper = abs(light_direction.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     vec3 tangent = normalize(cross(helper, light_direction));
@@ -133,7 +144,7 @@ float trace_sun_visibility(vec3 position, vec3 geometric_normal, vec3 light_dire
                                    (tangent * disk.x + bitangent * disk.y) * tan(angular_radius));
         rayQueryEXT query;
         rayQueryInitializeEXT(query, scene_acceleration,
-                              gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, mask, origin, 0.001,
+                              gl_RayFlagsTerminateOnFirstHitEXT | RAY_OPAQUE_FLAGS, mask, origin, 0.001,
                               direction, 10000.0);
         while (rayQueryProceedEXT(query)) {
         }
@@ -148,7 +159,7 @@ float shadow_visibility(vec3 n) {
 #ifdef AF_RAY_QUERY
     if (frame.sky_params.z < .5)
         return raster;
-    if (frame.shadow_params.x < .5 || draw.params.y < .5 || ((uint(draw.params.x) & 1u) != 0u))
+    if (frame.shadow_params.x < .5 || !draw_flag(DRAW_RECEIVE_SHADOWS) || ((uint(draw.params.x) & 1u) != 0u))
         return 1;
     vec3 l = -frame.direction_intensity.xyz;
     if (dot(n, l) <= 0)
@@ -218,7 +229,7 @@ float local_depth_test(int layer, vec3 receiver, vec2 offset, float bias) {
     return p.z - bias <= textureLod(local_shadow_map, vec3(texcoord, layer), 0).r ? 1.0 : 0.0;
 }
 float raster_local_visibility(LocalLight light, vec3 n) {
-    if (draw.params.y < .5 || light.params.z < .5)
+    if (!draw_flag(DRAW_RECEIVE_SHADOWS) || light.params.z < .5)
         return 1;
     int base = int(light.params.z) - 1;
     vec3 receiver = world_position + n * min(.01, light.position_range.w * .0005);
@@ -243,7 +254,7 @@ float local_visibility(LocalLight light, vec3 n, vec3 l, float distance_to_light
 #ifdef AF_RAY_QUERY
     if (frame.sky_params.z < .5)
         return raster;
-    if (draw.params.y < .5 || light.params.z < .5 || ((uint(draw.params.x) & 1u) != 0u))
+    if (!draw_flag(DRAW_RECEIVE_SHADOWS) || light.params.z < .5 || ((uint(draw.params.x) & 1u) != 0u))
         return 1;
     if (dot(n, l) <= 0)
         return raster;
@@ -254,7 +265,7 @@ float local_visibility(LocalLight light, vec3 n, vec3 l, float distance_to_light
     if (distance_to_light <= bias)
         return raster;
     rayQueryEXT query;
-    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, 1,
+    rayQueryInitializeEXT(query, scene_acceleration, gl_RayFlagsTerminateOnFirstHitEXT | RAY_OPAQUE_FLAGS, 1,
                           world_position + geometric * bias, .001, l, distance_to_light - bias);
     while (rayQueryProceedEXT(query)) {
     }
@@ -321,7 +332,10 @@ vec3 environment_light(vec3 base, vec3 n, vec3 v, float roughness, float metal, 
 #include "water_fog.glsl"
 void main() {
     out_gi = vec4(0);
-    bool reactive = (uint(draw.params.x) & (1u << 19u)) != 0u || ((uint(draw.params.x) >> 1u) & 3u) == 2u;
+    uint mode = (uint(draw.params.x) >> 1u) & 3u;
+    if (draw_flag(DRAW_BLEND_OPAQUE))
+        mode = 0u;
+    bool reactive = water_surface() || mode == 2u;
     vec2 velocity = vec2(0);
     bool valid = motion_valid != 0u && previous_clip.w > 0 && current_clip.w > 0 && !reactive;
     if (valid)
@@ -349,7 +363,17 @@ void main() {
         }
     }
     vec4 base = texture(base_texture, uv) * vertex_color;
-    uint mode = (uint(draw.params.x) >> 1u) & 3u;
+    bool front = gl_FrontFacing != draw_flag(DRAW_MIRRORED);
+    if (!front && draw_flag(DRAW_CULL_BACK))
+        discard;
+    if (!front && draw_flag(DRAW_FLIP_BACK_NORMAL))
+        n = -n;
+    // Alpha-one samples can use the depth buffer even in a blended material.
+    // Keep all fractional coverage in the sorted pass.
+    bool solid = base.a >= 1.0 - 1e-6;
+    if ((draw_flag(DRAW_BLEND_OPAQUE) && !solid) ||
+        (draw_flag(DRAW_BLEND_PARTIAL) && (solid || base.a <= 0.0)))
+        discard;
     uint cutoff = (uint(draw.params.x) >> 3u) & 65535u;
     if (mode == 1u && uint(round(clamp(base.a, 0, 1) * 65535.0)) < cutoff)
         discard;

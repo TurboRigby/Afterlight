@@ -8,6 +8,7 @@
 #include <afterlight/model.h>
 #include <afterlight/animation.h>
 #include "cgltf.h"
+#include "gltf.h"
 #include "morph.h"
 #include <ctype.h>
 #include "cJSON.h"
@@ -496,9 +497,14 @@ bool af_asset_is_model_path(const char *path) {
         lower[i] = (char)tolower((unsigned char)extension[i]);
     return !strcmp(lower, ".gltf") || !strcmp(lower, ".glb");
 }
-bool af_mesh_file_load(const char *path, af_mesh_file *out, af_asset_error *error) {
+static bool model_mesh_load(const char *reference, af_mesh_file *out, af_mesh_sidedness *sidedness,
+                            af_asset_error *error);
+bool af_mesh_file_load_with_sidedness(const char *path, af_mesh_file *out, af_mesh_sidedness *sidedness,
+                                     af_asset_error *error) {
+    if (sidedness)
+        *sidedness = AF_MESH_SIDES_DEFAULT;
     if (path && strstr(path, "#mesh="))
-        return af_model_mesh_load(path, out, error);
+        return model_mesh_load(path, out, sidedness, error);
     const char *extension = path ? strrchr(path, '.') : NULL;
     char lower[6] = {0};
     if (extension && strlen(extension) < sizeof(lower))
@@ -506,6 +512,9 @@ bool af_mesh_file_load(const char *path, af_mesh_file *out, af_asset_error *erro
             lower[i] = (char)tolower((unsigned char)extension[i]);
     return !strcmp(lower, ".gltf") || !strcmp(lower, ".glb") ? af_mesh_file_load_gltf(path, out, error)
                                                              : af_mesh_file_load_obj(path, out, error);
+}
+bool af_mesh_file_load(const char *path, af_mesh_file *out, af_asset_error *error) {
+    return af_mesh_file_load_with_sidedness(path, out, NULL, error);
 }
 
 /* Hierarchical model import shares the bounded parser and geometry reader above. */
@@ -685,8 +694,8 @@ void af_model_file_free(af_model_file *model) {
     *model = (af_model_file){0};
 }
 /* A selector reload only retains deltas for the requested primitive. */
-static bool model_load(const char *path, af_model_file *out, af_asset_error *error, unsigned morph_mesh,
-                       unsigned morph_primitive_index) {
+static bool model_load(const char *path, af_model_file *out, af_asset_error *error, unsigned selected_mesh,
+                       unsigned selected_primitive, af_mesh_sidedness *sidedness) {
     if (error)
         *error = (af_asset_error){0};
     if (out)
@@ -755,7 +764,10 @@ static bool model_load(const char *path, af_model_file *out, af_asset_error *err
             source.material = NULL;
             builder b = {0};
             af_mesh_morph *morph = NULL;
-            bool retain_morph = morph_mesh == UINT_MAX || (morph_mesh == mi && morph_primitive_index == pi);
+            bool selected = selected_mesh == mi && selected_primitive == pi;
+            if (selected && sidedness)
+                *sidedness = material && material->double_sided ? AF_MESH_SIDES_BOTH : AF_MESH_SIDES_FRONT;
+            bool retain_morph = selected_mesh == UINT_MAX || selected;
             bool decoded = retain_morph ? morph_primitive(&b, &source, af_mat4_identity(), joint_limits[mi],
                                                           data->meshes[mi].weights, &morph_budget, &morph)
                                         : primitive(&b, &source, af_mat4_identity(), joint_limits[mi], NULL, NULL);
@@ -876,7 +888,7 @@ done:
     return ok;
 }
 bool af_model_file_load(const char *path, af_model_file *out, af_asset_error *error) {
-    return model_load(path, out, error, UINT_MAX, 0);
+    return model_load(path, out, error, UINT_MAX, 0, NULL);
 }
 static bool selector(const char *reference, char *path, size_t capacity, const char **fragment) {
     const char *hash = strrchr(reference, '#');
@@ -887,7 +899,8 @@ static bool selector(const char *reference, char *path, size_t capacity, const c
     *fragment = hash + 1;
     return true;
 }
-bool af_model_mesh_load(const char *reference, af_mesh_file *out, af_asset_error *error) {
+static bool model_mesh_load(const char *reference, af_mesh_file *out, af_mesh_sidedness *sidedness,
+                            af_asset_error *error) {
     if (out)
         *out = (af_mesh_file){0};
     char path[AF_ASSET_PATH_CAPACITY];
@@ -900,7 +913,7 @@ bool af_model_mesh_load(const char *reference, af_mesh_file *out, af_asset_error
     af_model_file model;
     if (mesh >= MODEL_MESH_LIMIT || primitive >= MODEL_MESH_LIMIT)
         return error_message(error, "glTF primitive no longer exists.");
-    if (!model_load(path, &model, error, mesh, primitive))
+    if (!model_load(path, &model, error, mesh, primitive, sidedness))
         return false;
     bool ok = false;
     for (size_t i = 0; i < model.primitive_count; ++i)
@@ -913,6 +926,9 @@ bool af_model_mesh_load(const char *reference, af_mesh_file *out, af_asset_error
     af_model_file_free(&model);
     return ok || error_message(error, "glTF primitive no longer exists.");
 }
+bool af_model_mesh_load(const char *reference, af_mesh_file *out, af_asset_error *error) {
+    return model_mesh_load(reference, out, NULL, error);
+}
 bool af_model_image_load(const char *reference, af_image_file *out, af_asset_error *error) {
     if (out)
         *out = (af_image_file){0};
@@ -924,7 +940,7 @@ bool af_model_image_load(const char *reference, af_image_file *out, af_asset_err
         sscanf(fragment, "image=%u%n", &image, &length) != 1 || fragment[length])
         return error_message(error, "Invalid glTF image selector.");
     af_model_file model;
-    if (!model_load(path, &model, error, UINT_MAX - 1u, 0))
+    if (!model_load(path, &model, error, UINT_MAX - 1u, 0, NULL))
         return false;
     bool ok = image < model.image_count;
     if (ok) {

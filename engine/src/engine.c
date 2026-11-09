@@ -832,9 +832,10 @@ void af_engine_highlight_object(af_engine *engine, af_object_id id) {
 
 bool af_engine_load_mesh(af_engine *engine, const char *name, const char *path, af_asset_error *error) {
     af_mesh_file mesh;
-    if (!af_mesh_file_load(path, &mesh, error))
+    af_mesh_sidedness sidedness;
+    if (!af_mesh_file_load_with_sidedness(path, &mesh, &sidedness, error))
         return false;
-    bool result = engine && af_renderer_upload_mesh_file(engine->renderer, name, &mesh);
+    bool result = engine && af_renderer_upload_mesh_file(engine->renderer, name, &mesh, sidedness);
     af_mesh_file_free(&mesh);
     if (!result && error)
         snprintf(error->message, sizeof(error->message), "GPU mesh upload failed.");

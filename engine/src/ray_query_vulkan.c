@@ -316,7 +316,8 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_in
                                         .addresses = {(uint32_t)m->vertices, (uint32_t)(m->vertices >> 32),
                                                       (uint32_t)m->indices, (uint32_t)(m->indices >> 32)}};
         }
-        instances[i].flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+        instances[i].flags = in[i].single_sided ? VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR
+                                              : VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         instances[i].accelerationStructureReference = m->as.address;
         hash = hash_bytes(hash, &instances[i], sizeof(instances[i]));
     }
