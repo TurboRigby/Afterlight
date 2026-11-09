@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <afterlight/animation.h>
+#include "morph.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,6 +59,7 @@ void af_animation_file_free(af_animation_file *file) {
         for (size_t j = 0; clip->channels && j < clip->channel_count; ++j) {
             free(clip->channels[j].times);
             free(clip->channels[j].values);
+            free(clip->channels[j].morph_values);
         }
         free(clip->channels);
     }
@@ -67,8 +69,12 @@ void af_animation_file_free(af_animation_file *file) {
     free(file->skins);
     *file = (af_animation_file){0};
 }
-static af_vec4 channel_value(const af_animation_channel *c, double time) {
+static void channel_keys(const af_animation_channel *c, double time, size_t *left, size_t *right) {
     size_t lo = 0, hi = c->key_count - 1;
+    if (time <= c->times[0])
+        hi = 0;
+    else if (time >= c->times[hi])
+        lo = hi;
     while (lo + 1 < hi) {
         size_t mid = lo + (hi - lo) / 2;
         if (time < c->times[mid])
@@ -76,13 +82,15 @@ static af_vec4 channel_value(const af_animation_channel *c, double time) {
         else
             lo = mid;
     }
+    *left = lo;
+    *right = c->interpolation == AF_ANIM_STEP ? lo : hi;
+}
+static af_vec4 channel_value(const af_animation_channel *c, double time) {
+    size_t lo, hi;
+    channel_keys(c, time, &lo, &hi);
     size_t stride = c->interpolation == AF_ANIM_CUBIC ? 3u : 1u, offset = stride == 3 ? 1u : 0u;
-    if (time <= c->times[0])
-        return c->values[offset];
-    if (time >= c->times[c->key_count - 1])
-        return c->values[(c->key_count - 1) * stride + offset];
-    if (c->interpolation == AF_ANIM_STEP)
-        return c->values[lo];
+    if (lo == hi)
+        return c->values[lo * stride + offset];
     float dt = c->times[hi] - c->times[lo], t = (float)((time - c->times[lo]) / dt);
     af_vec4 a = c->values[lo * stride + offset], b = c->values[hi * stride + offset];
     if (c->interpolation == AF_ANIM_LINEAR)
@@ -90,6 +98,36 @@ static af_vec4 channel_value(const af_animation_channel *c, double time) {
     float t2 = t * t, t3 = t2 * t;
     return add(add(scale(a, 2 * t3 - 3 * t2 + 1), scale(c->values[lo * 3 + 2], dt * (t3 - 2 * t2 + t))),
                add(scale(b, -2 * t3 + 3 * t2), scale(c->values[hi * 3], dt * (t3 - t2))));
+}
+static bool sample_morph_weights(const af_animation_channel *c, double time, af_animation_pose *pose) {
+    if (!c->morph_values || !pose->morph_count || pose->morph_count > AF_ANIMATION_MAX_MORPHS)
+        return false;
+    size_t lo, hi;
+    channel_keys(c, time, &lo, &hi);
+    size_t count = pose->morph_count;
+    bool cubic = c->interpolation == AF_ANIM_CUBIC;
+    size_t stride = cubic ? 3 * count : count, offset = cubic ? count : 0;
+    const float *a = c->morph_values + lo * stride + offset, *b = c->morph_values + hi * stride + offset;
+    float dt = c->times[hi] - c->times[lo], t = lo == hi ? 0 : (float)((time - c->times[lo]) / dt);
+    float t2 = t * t, t3 = t2 * t;
+    for (size_t i = 0; i < count; ++i) {
+        float v = a[i];
+        if (lo != hi)
+            v = cubic ? (2 * t3 - 3 * t2 + 1) * a[i] + (t3 - 2 * t2 + t) * dt * a[count + i] +
+                            (-2 * t3 + 3 * t2) * b[i] + (t3 - t2) * dt * c->morph_values[hi * stride + i]
+                      : (1 - t) * a[i] + t * b[i];
+        if (!isfinite(v))
+            return false;
+        pose->morph_weights[i] = v;
+    }
+    return true;
+}
+void af_animation_blend_pose(af_animation_pose *to, const af_animation_pose *from, float t) {
+    to->translation = af_vec3_add(af_vec3_scale(from->translation, 1 - t), af_vec3_scale(to->translation, t));
+    to->scale = af_vec3_add(af_vec3_scale(from->scale, 1 - t), af_vec3_scale(to->scale, t));
+    to->rotation = af_quaternion_slerp(from->rotation, to->rotation, t);
+    for (uint32_t i = 0; i < to->morph_count; ++i)
+        to->morph_weights[i] = (1 - t) * from->morph_weights[i] + t * to->morph_weights[i];
 }
 bool af_animation_sample(const af_animation_file *file, size_t clip_index, double time, af_animation_pose *out,
                          size_t capacity) {
@@ -99,8 +137,13 @@ bool af_animation_sample(const af_animation_file *file, size_t clip_index, doubl
     const af_animation_clip *clip = &file->clips[clip_index];
     for (size_t i = 0; i < clip->channel_count; ++i) {
         const af_animation_channel *c = &clip->channels[i];
-        af_vec4 v = channel_value(c, time);
         af_animation_pose *p = &out[c->node];
+        if (c->path == AF_ANIM_WEIGHTS) {
+            if (!sample_morph_weights(c, time, p))
+                return false;
+            continue;
+        }
+        af_vec4 v = channel_value(c, time);
         if (c->path == AF_ANIM_TRANSLATION)
             p->translation = (af_vec3){v.x, v.y, v.z};
         else if (c->path == AF_ANIM_SCALE)

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <afterlight/animation.h>
+#include "morph.h"
 #include <math.h>
 #include <stdlib.h>
 
@@ -129,12 +130,8 @@ bool af_animation_player_sample(af_animation_player *p, const af_animation_file 
             from = p->blend_pose;
         }
         float t = fminf(1, p->fade_elapsed / p->fade_duration);
-        for (size_t i = 0; i < file->node_count; ++i) {
-            out[i].translation =
-                af_vec3_add(af_vec3_scale(from[i].translation, 1 - t), af_vec3_scale(out[i].translation, t));
-            out[i].scale = af_vec3_add(af_vec3_scale(from[i].scale, 1 - t), af_vec3_scale(out[i].scale, t));
-            out[i].rotation = af_quaternion_slerp(from[i].rotation, out[i].rotation, t);
-        }
+        for (size_t i = 0; i < file->node_count; ++i)
+            af_animation_blend_pose(&out[i], &from[i], t);
     }
     return true;
 }

@@ -86,10 +86,11 @@ that data. The older `af_mesh_file_load_gltf` remains a flattened geometry API f
 existing callers; the editor uses the richer path.
 
 Current limits: triangle meshes, one UV set (UV0), repeat wrapping and no
-texture transforms. Core TRS animation and skins with up to 256 joints are
-supported. Import reads up to eight joint/weight sets and retains the four
-strongest influences per vertex. See [animation budgets](development-010.md). Morphs,
-mesh compression, material texture extensions, emissive textures and imported
+texture transforms. Core TRS and morph-weight animation and skins with up to
+256 joints are supported. Import reads up to eight joint/weight sets and retains
+the four strongest influences per vertex. See [animation budgets](development-010.md)
+and [morph targets](assets.md#animation-resources-010). Mesh compression,
+material texture extensions, emissive textures and imported
 cameras/lights are not implemented. Unsupported required features are rejected. Sampler
 filtering uses the engine's trilinear/anisotropic policy. Node-local shear and
 singular transforms are rejected because editable objects use TRS. Nonuniform

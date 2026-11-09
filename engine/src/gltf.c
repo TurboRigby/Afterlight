@@ -8,6 +8,7 @@
 #include <afterlight/model.h>
 #include <afterlight/animation.h>
 #include "cgltf.h"
+#include "morph.h"
 #include <ctype.h>
 #include "cJSON.h"
 #include <math.h>
@@ -192,9 +193,71 @@ static bool skin_vertex(af_vertex *vertex, const skin_set *sets, size_t count, s
     return true;
 }
 
-static bool primitive(builder *b, const cgltf_primitive *p, af_mat4 world, size_t joint_limit) {
-    if (p->type != cgltf_primitive_type_triangles || p->targets_count || p->has_draco_mesh_compression)
-        return reject(b, "glTF import requires triangle meshes without morph targets or Draco compression.");
+static bool morph_weights(const float *source, size_t count, float *out) {
+    if (count > AF_ANIMATION_MAX_MORPHS)
+        return false;
+    for (size_t i = 0; i < count; ++i) {
+        if (source && !isfinite(source[i]))
+            return false;
+        out[i] = source ? source[i] : 0;
+    }
+    return true;
+}
+
+static af_mesh_morph *decode_morph(const cgltf_primitive *p, const float *weights, size_t *budget) {
+    const cgltf_accessor *position = attribute(p, cgltf_attribute_type_position);
+    size_t count = position ? position->count : 0, targets = p->targets_count;
+    if (!count || count > VERTEX_LIMIT || !targets || targets > AF_ANIMATION_MAX_MORPHS ||
+        count * targets > *budget / sizeof(af_morph_delta))
+        return NULL;
+    af_mesh_morph *morph = calloc(1, sizeof(*morph));
+    if (!morph)
+        return NULL;
+    morph->target_count = (uint32_t)targets;
+    morph->source_count = (uint32_t)count;
+    morph->has_normals = attribute(p, cgltf_attribute_type_normal) != NULL;
+    morph->targets = calloc(count * targets, sizeof(*morph->targets));
+    if (!morph->targets || !morph_weights(weights, targets, morph->defaults))
+        goto fail;
+    for (size_t i = 0; i < targets; ++i) {
+        const cgltf_morph_target *target = &p->targets[i];
+        unsigned seen = 0;
+        for (size_t a = 0; a < target->attributes_count; ++a) {
+            const cgltf_attribute *attr = &target->attributes[a];
+            const cgltf_accessor *acc = attr->data;
+            unsigned bit = attr->type == cgltf_attribute_type_position  ? 1u
+                           : attr->type == cgltf_attribute_type_normal  ? 2u
+                           : attr->type == cgltf_attribute_type_tangent ? 4u
+                                                                        : 0u;
+            if (!bit || attr->index || (seen & bit) || !acc || acc->type != cgltf_type_vec3 || acc->count != count ||
+                !attribute(p, attr->type))
+                goto fail;
+            seen |= bit;
+            for (size_t v = 0; v < count; ++v) {
+                float xyz[3];
+                if (!values(acc, v, xyz, 3))
+                    goto fail;
+                af_morph_delta *out = &morph->targets[i * count + v];
+                if (bit == 1)
+                    out->position = (af_vec3){xyz[0], xyz[1], xyz[2]};
+                else if (bit == 2)
+                    out->normal = (af_vec3){xyz[0], xyz[1], xyz[2]};
+                if (bit != 4 && (xyz[0] != 0 || xyz[1] != 0 || xyz[2] != 0))
+                    morph->used_targets |= UINT64_C(1) << i;
+            }
+        }
+    }
+    *budget -= count * targets * sizeof(*morph->targets);
+    return morph;
+fail:
+    af_mesh_morph_free(morph);
+    return NULL;
+}
+
+static bool primitive(builder *b, const cgltf_primitive *p, af_mat4 world, size_t joint_limit,
+                      const af_morph_delta *shape, uint32_t *source_vertices) {
+    if (p->type != cgltf_primitive_type_triangles || p->has_draco_mesh_compression)
+        return reject(b, "glTF import requires triangle meshes without Draco compression.");
     const cgltf_accessor *position = attribute(p, cgltf_attribute_type_position),
                          *normal = attribute(p, cgltf_attribute_type_normal),
                          *uv = attribute(p, cgltf_attribute_type_texcoord),
@@ -226,6 +289,14 @@ static bool primitive(builder *b, const cgltf_primitive *p, af_mat4 world, size_
             float data[4] = {0};
             if (!values(position, index, data, 3))
                 return reject(b, "glTF contains invalid/out-of-range positions.");
+            if (source_vertices)
+                source_vertices[triangle + corner] = (uint32_t)index;
+            if (shape) {
+                af_vec3 delta = shape[index].position;
+                data[0] += delta.x;
+                data[1] += delta.y;
+                data[2] += delta.z;
+            }
             af_vec4 transformed = af_mat4_transform(world, (af_vec4){data[0], data[1], data[2], 1});
             v->position = (af_vec3){transformed.x, transformed.y, transformed.z};
             if (!isfinite(transformed.x) || !isfinite(transformed.y) || !isfinite(transformed.z))
@@ -233,10 +304,20 @@ static bool primitive(builder *b, const cgltf_primitive *p, af_mat4 world, size_
             if (normal) {
                 if (!values(normal, index, data, 3))
                     return reject(b, "Invalid glTF normal.");
+                if (shape) {
+                    af_vec3 delta = shape[index].normal;
+                    data[0] += delta.x;
+                    data[1] += delta.y;
+                    data[2] += delta.z;
+                }
                 float *n = inverse.elements;
-                v->normal = af_vec3_normalize((af_vec3){n[0] * data[0] + n[1] * data[1] + n[2] * data[2],
-                                                        n[4] * data[0] + n[5] * data[1] + n[6] * data[2],
-                                                        n[8] * data[0] + n[9] * data[1] + n[10] * data[2]});
+                v->normal = (af_vec3){n[0] * data[0] + n[1] * data[1] + n[2] * data[2],
+                                      n[4] * data[0] + n[5] * data[1] + n[6] * data[2],
+                                      n[8] * data[0] + n[9] * data[1] + n[10] * data[2]};
+                if (!isfinite(v->normal.x) || !isfinite(v->normal.y) || !isfinite(v->normal.z))
+                    return reject(b, "glTF normal transform overflows.");
+                if (!source_vertices)
+                    v->normal = af_vec3_normalize(v->normal);
             }
             if (uv) {
                 if (!values(uv, index, data, 2))
@@ -267,13 +348,45 @@ static bool primitive(builder *b, const cgltf_primitive *p, af_mat4 world, size_
         af_vec3 face = af_vec3_normalize(af_vec3_cross(af_vec3_sub(vertices[1].position, vertices[0].position),
                                                        af_vec3_sub(vertices[2].position, vertices[0].position)));
         for (unsigned i = 0; i < 3; ++i) {
-            if (af_vec3_length(vertices[i].normal) < .5f)
+            if (!normal || (!source_vertices && af_vec3_length(vertices[i].normal) < .5f))
                 vertices[i].normal = face;
             b->vertices[b->count++] = vertices[i];
         }
     }
     return true;
 }
+static bool morph_primitive(builder *b, const cgltf_primitive *p, af_mat4 world, size_t joint_limit,
+                            const float *weights, size_t *budget, af_mesh_morph **keep) {
+    if (!p->targets_count)
+        return primitive(b, p, world, joint_limit, NULL, NULL);
+    af_mesh_morph *morph = decode_morph(p, weights, budget);
+    if (!morph)
+        return reject(b, "Invalid glTF morph target or morph data limit exceeded (64 targets, 128 MiB).");
+    af_morph_delta *shape = NULL;
+    bool nonzero = false, ok = false;
+    for (uint32_t i = 0; i < morph->target_count; ++i)
+        nonzero |= morph->defaults[i] != 0;
+    if (nonzero) {
+        shape = malloc(morph->source_count * sizeof(*shape));
+        if (!shape)
+            goto done;
+        af_mesh_morph_blend(morph, morph->defaults, false, shape);
+    }
+    if (keep) {
+        size_t count = p->indices ? p->indices->count : morph->source_count;
+        if (count > VERTEX_LIMIT || !(morph->source_vertices = malloc(count * sizeof(*morph->source_vertices))))
+            goto done;
+    }
+    ok = primitive(b, p, world, joint_limit, shape, morph->source_vertices);
+done:
+    free(shape);
+    if (ok && keep)
+        *keep = morph;
+    else
+        af_mesh_morph_free(morph);
+    return ok || reject(b, b->error ? b->error : "Allocating glTF morph geometry failed.");
+}
+
 static bool node(builder *b, const cgltf_node *n, af_mat4 parent, unsigned depth) {
     if (depth > 128 || ++b->visits > 65536)
         return reject(b, "glTF node hierarchy too deep or large.");
@@ -285,9 +398,12 @@ static bool node(builder *b, const cgltf_node *n, af_mat4 parent, unsigned depth
     cgltf_node_transform_local(n, local.elements);
     af_mat4 world = af_mat4_mul(parent, local);
     if (n->mesh)
-        for (size_t i = 0; i < n->mesh->primitives_count; ++i)
-            if (!primitive(b, &n->mesh->primitives[i], world, AF_ANIMATION_MAX_JOINTS))
+        for (size_t i = 0; i < n->mesh->primitives_count; ++i) {
+            size_t budget = MEMORY_LIMIT;
+            if (!morph_primitive(b, &n->mesh->primitives[i], world, AF_ANIMATION_MAX_JOINTS,
+                                 n->weights ? n->weights : n->mesh->weights, &budget, NULL))
                 return false;
+        }
     for (size_t i = 0; i < n->children_count; ++i)
         if (!node(b, n->children[i], world, depth + 1))
             return false;
@@ -568,7 +684,9 @@ void af_model_file_free(af_model_file *model) {
     free(model->dependencies);
     *model = (af_model_file){0};
 }
-bool af_model_file_load(const char *path, af_model_file *out, af_asset_error *error) {
+/* A selector reload only retains deltas for the requested primitive. */
+static bool model_load(const char *path, af_model_file *out, af_asset_error *error, unsigned morph_mesh,
+                       unsigned morph_primitive_index) {
     if (error)
         *error = (af_asset_error){0};
     if (out)
@@ -627,7 +745,7 @@ bool af_model_file_load(const char *path, af_model_file *out, af_asset_error *er
             goto done;
         image_bytes += bytes;
     }
-    size_t vertices = 0;
+    size_t vertices = 0, morph_budget = MEMORY_LIMIT;
     for (size_t mi = 0; mi < data->meshes_count; ++mi)
         for (size_t pi = 0; pi < data->meshes[mi].primitives_count; ++pi) {
             if (result.primitive_count >= 1024)
@@ -636,7 +754,12 @@ bool af_model_file_load(const char *path, af_model_file *out, af_asset_error *er
             cgltf_material *material = source.material;
             source.material = NULL;
             builder b = {0};
-            if (!primitive(&b, &source, af_mat4_identity(), joint_limits[mi])) {
+            af_mesh_morph *morph = NULL;
+            bool retain_morph = morph_mesh == UINT_MAX || (morph_mesh == mi && morph_primitive_index == pi);
+            bool decoded = retain_morph ? morph_primitive(&b, &source, af_mat4_identity(), joint_limits[mi],
+                                                          data->meshes[mi].weights, &morph_budget, &morph)
+                                        : primitive(&b, &source, af_mat4_identity(), joint_limits[mi], NULL, NULL);
+            if (!decoded) {
                 message = b.error;
                 free(b.vertices);
                 goto done;
@@ -644,22 +767,25 @@ bool af_model_file_load(const char *path, af_model_file *out, af_asset_error *er
             vertices += b.count;
             if (vertices > VERTEX_LIMIT) {
                 free(b.vertices);
+                af_mesh_morph_free(morph);
                 goto done;
             }
             uint32_t *indices = malloc(b.count * sizeof(*indices));
             if (!indices) {
                 free(b.vertices);
+                af_mesh_morph_free(morph);
                 goto done;
             }
             for (size_t i = 0; i < b.count; ++i)
                 indices[i] = (uint32_t)i;
-            af_model_primitive value = {.mesh = {{b.vertices, (uint32_t)b.count, indices, (uint32_t)b.count}},
-                                        .material = af_material_default(),
-                                        .base_image = -1,
-                                        .normal_image = -1,
-                                        .surface_image = -1,
-                                        .source_mesh = (unsigned)mi,
-                                        .source_primitive = (unsigned)pi};
+            af_model_primitive value = {
+                .mesh = {.data = {b.vertices, (uint32_t)b.count, indices, (uint32_t)b.count}, .morph = morph},
+                .material = af_material_default(),
+                .base_image = -1,
+                .normal_image = -1,
+                .surface_image = -1,
+                .source_mesh = (unsigned)mi,
+                .source_primitive = (unsigned)pi};
             value.material.physically_based = true;
             value.material.roughness = 1;
             value.material.metallic = 1;
@@ -749,6 +875,9 @@ done:
         error_message(error, message);
     return ok;
 }
+bool af_model_file_load(const char *path, af_model_file *out, af_asset_error *error) {
+    return model_load(path, out, error, UINT_MAX, 0);
+}
 static bool selector(const char *reference, char *path, size_t capacity, const char **fragment) {
     const char *hash = strrchr(reference, '#');
     if (!hash || hash == reference || (size_t)(hash - reference) >= capacity)
@@ -769,7 +898,9 @@ bool af_model_mesh_load(const char *reference, af_mesh_file *out, af_asset_error
         sscanf(fragment, "mesh=%u,primitive=%u%n", &mesh, &primitive, &length) != 2 || fragment[length])
         return error_message(error, "Invalid glTF primitive selector.");
     af_model_file model;
-    if (!af_model_file_load(path, &model, error))
+    if (mesh >= MODEL_MESH_LIMIT || primitive >= MODEL_MESH_LIMIT)
+        return error_message(error, "glTF primitive no longer exists.");
+    if (!model_load(path, &model, error, mesh, primitive))
         return false;
     bool ok = false;
     for (size_t i = 0; i < model.primitive_count; ++i)
@@ -793,7 +924,7 @@ bool af_model_image_load(const char *reference, af_image_file *out, af_asset_err
         sscanf(fragment, "image=%u%n", &image, &length) != 1 || fragment[length])
         return error_message(error, "Invalid glTF image selector.");
     af_model_file model;
-    if (!af_model_file_load(path, &model, error))
+    if (!model_load(path, &model, error, UINT_MAX - 1u, 0))
         return false;
     bool ok = image < model.image_count;
     if (ok) {
@@ -820,6 +951,8 @@ bool af_scene_import_model(af_scene *scene, const char *prefix, const char *path
         return false;
     }
     bool animated = animation.clip_count || animation.skin_count;
+    for (size_t i = 0; i < animation.node_count && !animated; ++i)
+        animated = animation.bind_pose[i].morph_count != 0;
     af_scene *next = af_scene_clone(scene);
     af_object_id *nodes = calloc(model.node_count, sizeof(*nodes));
     bool ok = false;
@@ -964,6 +1097,12 @@ bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_e
             .scale = n->has_matrix ? t.scale : (af_vec3){n->scale[0], n->scale[1], n->scale[2]},
             .rotation = n->has_matrix ? af_quaternion_from_euler(t.rotation)
                                       : (af_vec4){n->rotation[0], n->rotation[1], n->rotation[2], n->rotation[3]}};
+        if (n->mesh && n->mesh->primitives_count) {
+            size_t count = n->mesh->primitives[0].targets_count;
+            if (!morph_weights(n->weights ? n->weights : n->mesh->weights, count, result.bind_pose[i].morph_weights))
+                goto done;
+            result.bind_pose[i].morph_count = (uint32_t)count;
+        }
         result.parents[i] = n->parent ? (int32_t)(n->parent - data->nodes) : -1;
     }
     if (data->skins_count > 128)
@@ -1011,8 +1150,9 @@ bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_e
             cgltf_animation_channel *source = &a->channels[j];
             cgltf_animation_sampler *sampler = source->sampler;
             af_animation_channel *c = &clip->channels[j];
-            if (!source->target_node || source->target_node->has_matrix || !sampler || !sampler->input ||
-                !sampler->output)
+            if (!source->target_node ||
+                (source->target_node->has_matrix && source->target_path != cgltf_animation_path_type_weights) ||
+                !sampler || !sampler->input || !sampler->output)
                 goto done;
             c->node = (uint32_t)(source->target_node - data->nodes);
             if (source->target_path == cgltf_animation_path_type_translation)
@@ -1021,6 +1161,8 @@ bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_e
                 c->path = AF_ANIM_ROTATION;
             else if (source->target_path == cgltf_animation_path_type_scale)
                 c->path = AF_ANIM_SCALE;
+            else if (source->target_path == cgltf_animation_path_type_weights)
+                c->path = AF_ANIM_WEIGHTS;
             else
                 goto done;
             for (size_t k = 0; k < j; ++k)
@@ -1034,22 +1176,35 @@ bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_e
                                : sampler->interpolation == cgltf_interpolation_type_cubic_spline ? AF_ANIM_CUBIC
                                                                                                  : AF_ANIM_LINEAR;
             c->key_count = sampler->input->count;
+            bool weights = c->path == AF_ANIM_WEIGHTS;
             size_t stride = c->interpolation == AF_ANIM_CUBIC ? 3u : 1u,
-                   components = c->path == AF_ANIM_ROTATION ? 4u : 3u;
-            if (!c->key_count || c->key_count > 65536 || (stride == 3 && c->key_count < 2) ||
+                   components = weights                       ? result.bind_pose[c->node].morph_count
+                                : c->path == AF_ANIM_ROTATION ? 4u
+                                                              : 3u;
+            cgltf_type type = weights ? cgltf_type_scalar : components == 4 ? cgltf_type_vec4 : cgltf_type_vec3;
+            cgltf_component_type output_component = sampler->output->component_type;
+            bool valid_component =
+                output_component == cgltf_component_type_r_32f ||
+                (weights && sampler->output->normalized &&
+                 (output_component == cgltf_component_type_r_8 || output_component == cgltf_component_type_r_8u ||
+                  output_component == cgltf_component_type_r_16 || output_component == cgltf_component_type_r_16u));
+            if (!c->key_count || c->key_count > 65536 || (stride == 3 && c->key_count < 2) || !components ||
                 sampler->input->type != cgltf_type_scalar ||
-                sampler->input->component_type != cgltf_component_type_r_32f ||
-                sampler->output->component_type != cgltf_component_type_r_32f ||
-                sampler->output->type != (components == 4 ? cgltf_type_vec4 : cgltf_type_vec3) ||
-                sampler->output->count != c->key_count * stride)
+                sampler->input->component_type != cgltf_component_type_r_32f || !valid_component ||
+                sampler->output->type != type ||
+                sampler->output->count != c->key_count * stride * (weights ? components : 1))
                 goto done;
-            size_t allocation_bytes = c->key_count * (sizeof(float) + stride * sizeof(af_vec4));
+            size_t allocation_bytes =
+                c->key_count * (sizeof(float) + stride * (weights ? components * sizeof(float) : sizeof(af_vec4)));
             if (allocation_bytes > AF_ASSET_FILE_MAX_BYTES - bytes)
                 goto done;
             bytes += allocation_bytes;
             c->times = calloc(c->key_count, sizeof(*c->times));
-            c->values = calloc(c->key_count * stride, sizeof(*c->values));
-            if (!c->times || !c->values)
+            if (weights)
+                c->morph_values = calloc(sampler->output->count, sizeof(*c->morph_values));
+            else
+                c->values = calloc(c->key_count * stride, sizeof(*c->values));
+            if (!c->times || (!c->values && !c->morph_values))
                 goto done;
             for (size_t k = 0; k < c->key_count; ++k) {
                 if (!values(sampler->input, k, &c->times[k], 1) || c->times[k] < 0 ||
@@ -1057,6 +1212,12 @@ bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_e
                     goto done;
             }
             clip->duration = fmax(clip->duration, c->times[c->key_count - 1]);
+            if (weights) {
+                for (size_t k = 0; k < sampler->output->count; ++k)
+                    if (!values(sampler->output, k, &c->morph_values[k], 1))
+                        goto done;
+                continue;
+            }
             for (size_t k = 0; k < c->key_count * stride; ++k) {
                 float v[4] = {0};
                 if (!values(sampler->output, k, v, components))
@@ -1078,6 +1239,6 @@ bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_e
 done:
     cgltf_free(data);
     af_animation_file_free(&result);
-    return ok || error_message(error, "Invalid/unsupported glTF animation: TRS channels, finite increasing times and "
-                                      "bounded data required (no morph tracks).");
+    return ok || error_message(error, "Invalid/unsupported glTF animation: TRS or morph-weight channels, finite "
+                                      "increasing times and bounded data required.");
 }

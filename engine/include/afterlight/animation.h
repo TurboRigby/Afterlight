@@ -6,12 +6,20 @@
 #define AF_ANIMATION_MAX_NODES 16384u
 #define AF_ANIMATION_MAX_CLIPS 128u
 #define AF_ANIMATION_MAX_JOINTS 256u
+#define AF_ANIMATION_MAX_MORPHS 64u
 /* Quaternion is xyzw. Pose composition is T * quaternion rotation * S. */
 typedef struct af_animation_pose {
     af_vec3 translation, scale;
     af_vec4 rotation;
+    float morph_weights[AF_ANIMATION_MAX_MORPHS];
+    uint32_t morph_count;
 } af_animation_pose;
-typedef enum af_animation_path { AF_ANIM_TRANSLATION, AF_ANIM_ROTATION, AF_ANIM_SCALE } af_animation_path;
+typedef enum af_animation_path {
+    AF_ANIM_TRANSLATION,
+    AF_ANIM_ROTATION,
+    AF_ANIM_SCALE,
+    AF_ANIM_WEIGHTS
+} af_animation_path;
 typedef enum af_animation_interpolation { AF_ANIM_LINEAR, AF_ANIM_STEP, AF_ANIM_CUBIC } af_animation_interpolation;
 typedef struct af_animation_channel {
     uint32_t node;
@@ -20,6 +28,7 @@ typedef struct af_animation_channel {
     size_t key_count;
     float *times;
     af_vec4 *values; /* CUBIC: in tangent, value, out tangent for each key. */
+    float *morph_values; /* One scalar per target in each value or tangent. */
 } af_animation_channel;
 #define AF_ANIMATION_MAX_EVENTS 64u
 #define AF_ANIMATION_EVENT_BATCH 16u

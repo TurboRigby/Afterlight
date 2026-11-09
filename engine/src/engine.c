@@ -834,7 +834,7 @@ bool af_engine_load_mesh(af_engine *engine, const char *name, const char *path, 
     af_mesh_file mesh;
     if (!af_mesh_file_load(path, &mesh, error))
         return false;
-    bool result = af_engine_upload_mesh(engine, name, &mesh.data);
+    bool result = engine && af_renderer_upload_mesh_file(engine->renderer, name, &mesh);
     af_mesh_file_free(&mesh);
     if (!result && error)
         snprintf(error->message, sizeof(error->message), "GPU mesh upload failed.");

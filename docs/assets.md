@@ -126,12 +126,16 @@ See [0.9 asset workflow and limits](assets-09.md).
 
 ## Animation resources (0.10)
 
-Animated/skinned glTF imports also register an `animation` asset and source-node
+Animated, skinned, or morphable glTF imports also register an `animation` asset and source-node
 bindings. The animation panel and C host functions drive independent runtime
 players without changing authored transforms. Import a rigged GLB using
 **Import model**, then open **Animation clips** in the Inspector to preview an
 exported clip or show its posed skeleton. Each skin can have up to 256 joints.
 For a vertex with more than four influences, the importer keeps and renormalizes
 the four strongest across up to eight joint/weight sets. Export the armature and
-animations from Blender as GLB. Morph targets and compressed meshes remain
-outside the skeletal import path. See [the animation workflow](development-010.md).
+animations from Blender as GLB. Enable **Shape Keys** and **Shape Keys Animations**
+to export facial poses and their weight tracks. The engine supports up to 64
+position/normal targets per mesh, including sparse targets and per-node default
+weights. Morphing runs before skinning. Tangent space is derived from the deformed
+geometry and UVs. Morph meshes cast raster shadows. Compressed meshes require
+an uncompressed export. See [the animation workflow](development-010.md).

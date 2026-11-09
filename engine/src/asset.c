@@ -6,6 +6,7 @@
 
 #include <afterlight/asset.h>
 #include <afterlight/model.h>
+#include "morph.h"
 #include "stb_image.h"
 #include <ctype.h>
 #include <errno.h>
@@ -207,10 +208,31 @@ bool af_hdr_file_load(const char *path, af_hdr_file *out, af_asset_error *error)
     *out = (af_hdr_file){rgba, (uint32_t)width, (uint32_t)height};
     return true;
 }
+void af_mesh_morph_free(af_mesh_morph *morph) {
+    if (morph) {
+        free(morph->source_vertices);
+        free(morph->targets);
+        free(morph);
+    }
+}
+void af_mesh_morph_blend(const af_mesh_morph *morph, const float *weights, bool relative, af_morph_delta *out) {
+    memset(out, 0, morph->source_count * sizeof(*out));
+    for (uint32_t i = 0; i < morph->target_count; ++i) {
+        float weight = weights[i] - (relative ? morph->defaults[i] : 0.0f);
+        if (weight == 0.0f || !(morph->used_targets & (UINT64_C(1) << i)))
+            continue;
+        const af_morph_delta *target = morph->targets + (size_t)i * morph->source_count;
+        for (uint32_t j = 0; j < morph->source_count; ++j) {
+            out[j].position = af_vec3_add(out[j].position, af_vec3_scale(target[j].position, weight));
+            out[j].normal = af_vec3_add(out[j].normal, af_vec3_scale(target[j].normal, weight));
+        }
+    }
+}
 void af_mesh_file_free(af_mesh_file *mesh) {
     if (mesh) {
         free((void *)mesh->data.vertices);
         free((void *)mesh->data.indices);
+        af_mesh_morph_free(mesh->morph);
         *mesh = (af_mesh_file){0};
     }
 }

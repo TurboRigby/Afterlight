@@ -5,6 +5,7 @@
  */
 
 #include "renderer.h"
+#include "morph.h"
 #include "extension_runtime.h"
 #include "water_internal.h"
 #include "water_particles_internal.h"
@@ -132,7 +133,7 @@ typedef struct af_frame {
     VkCommandBuffer command;
     VkSemaphore acquired;
     VkFence fence;
-    af_gpu_buffer uniform, skin_buffer, motion_buffer;
+    af_gpu_buffer uniform, skin_buffer, motion_buffer, morph_buffer;
     VkDescriptorSet descriptor;
     VkQueryPool timestamps;
     bool timestamp_submitted;
@@ -174,7 +175,15 @@ typedef struct af_gpu_mesh {
     uint32_t vertex_count, index_count, max_joint;
     bool skinned;
     af_vec3 minimum, maximum;
+    af_mesh_morph *morph;
+    af_vertex *morph_base;
 } af_gpu_mesh;
+typedef struct af_morph_draw {
+    VkDeviceSize offset;
+    af_vec3 minimum, maximum;
+    af_object_id object;
+    uint64_t signature;
+} af_morph_draw;
 
 typedef struct af_stream_frame {
     af_gpu_mesh gpu;
@@ -213,7 +222,13 @@ struct af_renderer {
     size_t shadow_capacity, shadow_count, shadow_draw_calls;
     const af_scene *posed_scene;
     const af_mat4 *posed_worlds;
+    const af_animation_pose *const *posed_morphs;
     size_t posed_count;
+    const af_scene *morph_scene;
+    af_morph_draw *morph_draws;
+    af_vertex *morph_vertices;
+    af_morph_delta *morph_deltas;
+    size_t morph_draw_count, morph_draw_capacity, morph_vertex_count, morph_vertex_capacity, morph_delta_capacity;
     af_skin_instance skins[AF_SKIN_INSTANCES];
     size_t skin_count;
     uint64_t skin_revision;
@@ -948,6 +963,10 @@ static void destroy_buffer(af_renderer *renderer, af_gpu_buffer *buffer) {
 static void destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh) {
     destroy_buffer(renderer, &mesh->vertices);
     destroy_buffer(renderer, &mesh->indices);
+    af_mesh_morph_free(mesh->morph);
+    free(mesh->morph_base);
+    mesh->morph = NULL;
+    mesh->morph_base = NULL;
     mesh->index_count = 0;
 }
 
@@ -1016,7 +1035,13 @@ static size_t find_mesh_index(const af_renderer *renderer, const char *name) {
 
 #include "mesh_stream_vulkan.h"
 
-bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh) {
+static size_t morph_bytes(const af_mesh_morph *morph, uint32_t expanded_vertices) {
+    return morph ? sizeof(*morph) + (size_t)morph->target_count * morph->source_count * sizeof(af_morph_delta) +
+                       (size_t)expanded_vertices * (sizeof(af_vertex) + sizeof(uint32_t))
+                 : 0;
+}
+
+static bool upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh, af_mesh_morph *morph) {
     if (!name || !name[0] || strlen(name) >= AF_MESH_NAME_CAPACITY || !mesh || !mesh->vertices || !mesh->indices ||
         mesh->vertex_count == 0 || mesh->index_count == 0 || mesh->index_count % 3 != 0 ||
         (uint64_t)mesh->vertex_count * sizeof(af_vertex) > SIZE_MAX ||
@@ -1032,7 +1057,23 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
     }
     char asset_name[AF_MESH_NAME_CAPACITY];
     memcpy(asset_name, name, strlen(name) + 1);
+    size_t index = find_mesh_index(renderer, asset_name);
     af_gpu_mesh uploaded = {0};
+    if (morph) {
+        size_t resident = morph_bytes(morph, mesh->vertex_count);
+        for (size_t i = 0; i < renderer->mesh_count; ++i)
+            if (i != index)
+                resident += morph_bytes(renderer->meshes[i].gpu.morph, renderer->meshes[i].gpu.vertex_count);
+        if (resident > 256u * 1024u * 1024u) {
+            af_log("error", "Resident morph geometry exceeds 256 MiB.");
+            return false;
+        }
+        size_t bytes = mesh->vertex_count * sizeof(*mesh->vertices);
+        uploaded.morph_base = malloc(bytes);
+        if (!uploaded.morph_base)
+            return false;
+        memcpy(uploaded.morph_base, mesh->vertices, bytes);
+    }
     if (!upload_buffer(renderer, mesh->vertices, (VkDeviceSize)mesh->vertex_count * sizeof(af_vertex),
                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &uploaded.vertices) ||
         !upload_buffer(renderer, mesh->indices, (VkDeviceSize)mesh->index_count * sizeof(uint32_t),
@@ -1067,7 +1108,6 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
         uploaded.minimum.z = fminf(uploaded.minimum.z, p.z);
         uploaded.maximum.z = fmaxf(uploaded.maximum.z, p.z);
     }
-    size_t index = find_mesh_index(renderer, asset_name);
     if (index == renderer->mesh_count && renderer->mesh_count == renderer->mesh_capacity) {
         if (renderer->mesh_capacity > SIZE_MAX / 2 / sizeof(*renderer->meshes))
             goto fail;
@@ -1085,6 +1125,7 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
         stream_destroy(renderer, &renderer->meshes[index]);
     else
         ++renderer->mesh_count;
+    uploaded.morph = morph;
     renderer->meshes[index] = (af_mesh_asset){.gpu = uploaded};
     memcpy(renderer->meshes[index].name, asset_name, strlen(asset_name) + 1);
     ++renderer->mesh_revision;
@@ -1092,6 +1133,15 @@ bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_m
 fail:
     destroy_mesh(renderer, &uploaded);
     return false;
+}
+bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh) {
+    return upload_mesh(renderer, name, mesh, NULL);
+}
+bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_mesh_file *mesh) {
+    if (!upload_mesh(renderer, name, &mesh->data, mesh->morph))
+        return false;
+    mesh->morph = NULL;
+    return true;
 }
 
 bool af_renderer_remove_mesh(af_renderer *renderer, const char *name) {
@@ -1974,6 +2024,7 @@ void af_renderer_destroy(af_renderer *renderer) {
             destroy_buffer(renderer, &renderer->frames[i].uniform);
             destroy_buffer(renderer, &renderer->frames[i].skin_buffer);
             destroy_buffer(renderer, &renderer->frames[i].motion_buffer);
+            destroy_buffer(renderer, &renderer->frames[i].morph_buffer);
             if (renderer->frames[i].acquired)
                 vkDestroySemaphore(renderer->device, renderer->frames[i].acquired, NULL);
             if (renderer->frames[i].timestamps)
@@ -1999,6 +2050,9 @@ void af_renderer_destroy(af_renderer *renderer) {
     free(renderer->motion_previous);
     free(renderer->motion_next);
     free(renderer->motion_records);
+    free(renderer->morph_draws);
+    free(renderer->morph_vertices);
+    free(renderer->morph_deltas);
     free(renderer);
 }
 
@@ -2053,8 +2107,13 @@ static bool object_world(af_renderer *renderer, const af_scene *scene, size_t in
                                                    renderer->interpolation_alpha, out);
 }
 static uint32_t skin_base(const af_renderer *renderer, af_object_id object, const af_gpu_mesh *mesh);
+static const af_morph_draw *morph_draw_for(const af_renderer *r, const af_scene *scene, size_t index) {
+    return r->morph_scene == scene && index < r->morph_draw_count && r->morph_draws[index].signature
+               ? &r->morph_draws[index]
+               : NULL;
+}
 static af_shadow_bounds object_bounds(af_renderer *renderer, af_object_id object, af_mat4 world,
-                                      const af_gpu_mesh *mesh);
+                                      const af_gpu_mesh *mesh, const af_morph_draw *morph);
 af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scene, const af_camera *camera,
                                      af_rect viewport, af_vec2 point) {
     viewport = resolve_viewport(renderer, viewport);
@@ -2091,9 +2150,12 @@ af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scen
             af_mat4_transform(inverse, (af_vec4){camera->position.x, camera->position.y, camera->position.z, 1});
         af_vec4 direction = af_mat4_transform(inverse, (af_vec4){ray.x, ray.y, ray.z, 0});
         af_gpu_mesh *mesh = &renderer->meshes[index].gpu;
-        af_vec3 minimum = mesh->minimum, maximum = mesh->maximum;
+        const af_morph_draw *morph = morph_draw_for(renderer, scene, i);
+        if (morph && morph->object != object->id)
+            morph = NULL;
+        af_vec3 minimum = morph ? morph->minimum : mesh->minimum, maximum = morph ? morph->maximum : mesh->maximum;
         if (skin_base(renderer, object->id, mesh)) {
-            af_shadow_bounds bounds = object_bounds(renderer, object->id, world, mesh);
+            af_shadow_bounds bounds = object_bounds(renderer, object->id, world, mesh, morph);
             minimum = (af_vec3){INFINITY, INFINITY, INFINITY};
             maximum = (af_vec3){-INFINITY, -INFINITY, -INFINITY};
             for (unsigned j = 0; j < 8; ++j) {
@@ -2137,15 +2199,15 @@ static uint32_t skin_base(const af_renderer *renderer, af_object_id object, cons
     return 0;
 }
 static af_shadow_bounds object_bounds(af_renderer *renderer, af_object_id object, af_mat4 world,
-                                      const af_gpu_mesh *mesh) {
+                                      const af_gpu_mesh *mesh, const af_morph_draw *morph) {
+    af_vec3 minimum = morph ? morph->minimum : mesh->minimum, maximum = morph ? morph->maximum : mesh->maximum;
     uint32_t base = skin_base(renderer, object, mesh);
     if (!base)
-        return af_shadow_transform_bounds(world, mesh->minimum, mesh->maximum);
+        return af_shadow_transform_bounds(world, minimum, maximum);
     const af_skin_instance *skin = &renderer->skins[(base - 1) / AF_ANIMATION_MAX_JOINTS];
     af_vec3 lo = {INFINITY, INFINITY, INFINITY}, hi = {-INFINITY, -INFINITY, -INFINITY};
     for (size_t i = 0; i < skin->count; ++i) {
-        af_shadow_bounds b =
-            af_shadow_transform_bounds(af_mat4_mul(world, skin->matrices[i]), mesh->minimum, mesh->maximum);
+        af_shadow_bounds b = af_shadow_transform_bounds(af_mat4_mul(world, skin->matrices[i]), minimum, maximum);
         for (unsigned j = 0; j < 8; ++j) {
             af_vec3 v = b.corners[j];
             lo = (af_vec3){fminf(lo.x, v.x), fminf(lo.y, v.y), fminf(lo.z, v.z)};
@@ -2225,7 +2287,8 @@ static bool prepare_shadows(af_renderer *renderer, const af_scene *scene, const 
                                                      (uint32_t)object->material.alpha_mode,
                                                      false,
                                                      i};
-        renderer->shadow_bounds[n] = object_bounds(renderer, object->id, model, &renderer->meshes[mesh].gpu);
+        renderer->shadow_bounds[n] =
+            object_bounds(renderer, object->id, model, &renderer->meshes[mesh].gpu, morph_draw_for(renderer, scene, i));
     }
     if ((settings.enabled || local_cast) && ls && ls->enabled) {
         for (size_t c_idx = 0; c_idx < ls->chunk_count; ++c_idx) {
@@ -2408,6 +2471,110 @@ static uint64_t shadow_hash(uint64_t h, const void *data, size_t size) {
     }
     return h;
 }
+static bool prepare_morphs(af_renderer *r, const af_scene *scene) {
+    r->morph_scene = scene;
+    r->morph_draw_count = r->morph_vertex_count = 0;
+    if (scene != r->posed_scene || !r->posed_morphs)
+        return true;
+    size_t count = af_scene_object_count(scene);
+    if (count != r->posed_count)
+        return false;
+    if (r->morph_draw_capacity < count) {
+        af_morph_draw *draws = realloc(r->morph_draws, count * sizeof(*draws));
+        if (!draws)
+            return false;
+        r->morph_draws = draws;
+        r->morph_draw_capacity = count;
+    }
+    if (count)
+        memset(r->morph_draws, 0, count * sizeof(*r->morph_draws));
+    r->morph_draw_count = count;
+    for (size_t i = 0; i < count; ++i) {
+        const af_animation_pose *pose = r->posed_morphs[i];
+        if (!pose)
+            continue;
+        const af_scene_object *object = af_scene_object_at(scene, i);
+        size_t index = find_mesh_index(r, object->mesh);
+        if (index == r->mesh_count || !af_scene_object_visible(scene, object->id))
+            continue;
+        const af_gpu_mesh *mesh = &r->meshes[index].gpu;
+        const af_mesh_morph *morph = mesh->morph;
+        if (!morph || morph->target_count != pose->morph_count)
+            continue;
+        uint64_t signature = UINT64_C(14695981039346656037);
+        bool active = false;
+        for (uint32_t j = 0; j < morph->target_count; ++j) {
+            if (!(morph->used_targets & (UINT64_C(1) << j)))
+                continue;
+            float weight = pose->morph_weights[j];
+            active |= weight != morph->defaults[j];
+            signature = shadow_hash(signature, &weight, sizeof(weight));
+        }
+        if (!active)
+            continue;
+        size_t needed = r->morph_vertex_count + mesh->vertex_count;
+        if (needed > 1048576u) {
+            af_log("error", "Active morph geometry exceeds one million triangle vertices.");
+            return false;
+        }
+        if (r->morph_vertex_capacity < needed) {
+            size_t capacity = r->morph_vertex_capacity ? r->morph_vertex_capacity : 1024;
+            while (capacity < needed)
+                capacity *= 2;
+            af_vertex *vertices = realloc(r->morph_vertices, capacity * sizeof(*vertices));
+            if (!vertices)
+                return false;
+            r->morph_vertices = vertices;
+            r->morph_vertex_capacity = capacity;
+        }
+        if (r->morph_delta_capacity < morph->source_count) {
+            af_morph_delta *deltas = realloc(r->morph_deltas, morph->source_count * sizeof(*deltas));
+            if (!deltas)
+                return false;
+            r->morph_deltas = deltas;
+            r->morph_delta_capacity = morph->source_count;
+        }
+        af_mesh_morph_blend(morph, pose->morph_weights, true, r->morph_deltas);
+        af_morph_draw *draw = &r->morph_draws[i];
+        draw->offset = r->morph_vertex_count * sizeof(af_vertex);
+        draw->object = object->id;
+        draw->signature = signature ? signature : 1;
+        af_vertex *vertices = r->morph_vertices + r->morph_vertex_count;
+        draw->minimum = (af_vec3){INFINITY, INFINITY, INFINITY};
+        draw->maximum = (af_vec3){-INFINITY, -INFINITY, -INFINITY};
+        for (uint32_t j = 0; j < mesh->vertex_count; ++j) {
+            const af_morph_delta *delta = &r->morph_deltas[morph->source_vertices[j]];
+            af_vertex v = mesh->morph_base[j];
+            v.position = af_vec3_add(v.position, delta->position);
+            v.normal = af_vec3_add(v.normal, delta->normal);
+            af_vec3 p = v.position;
+            if (!isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z) || !isfinite(v.normal.x) || !isfinite(v.normal.y) ||
+                !isfinite(v.normal.z))
+                return false;
+            vertices[j] = v;
+            draw->minimum =
+                (af_vec3){fminf(draw->minimum.x, p.x), fminf(draw->minimum.y, p.y), fminf(draw->minimum.z, p.z)};
+            draw->maximum =
+                (af_vec3){fmaxf(draw->maximum.x, p.x), fmaxf(draw->maximum.y, p.y), fmaxf(draw->maximum.z, p.z)};
+        }
+        if (!morph->has_normals)
+            for (uint32_t j = 0; j < mesh->vertex_count; j += 3) {
+                af_vertex *triangle = vertices + j;
+                af_vec3 normal =
+                    af_vec3_normalize(af_vec3_cross(af_vec3_sub(triangle[1].position, triangle[0].position),
+                                                    af_vec3_sub(triangle[2].position, triangle[0].position)));
+                triangle[0].normal = triangle[1].normal = triangle[2].normal = normal;
+            }
+        r->morph_vertex_count = needed;
+    }
+    return true;
+}
+static void bind_object_mesh(af_frame *frame, const af_gpu_mesh *mesh, const af_morph_draw *morph) {
+    VkDeviceSize offset = morph ? morph->offset : 0;
+    VkBuffer vertices = morph ? frame->morph_buffer.handle : mesh->vertices.handle;
+    vkCmdBindVertexBuffers(frame->command, 0, 1, &vertices, &offset);
+    vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
+}
 static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *scene, bool shadows, bool reflections,
                               bool gi, bool material_effects, uint64_t *emitter_signature) {
     if (r->rays && r->ray_revision != r->mesh_revision) {
@@ -2452,7 +2619,7 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
         if (mesh == r->mesh_count)
             continue;
         const af_mesh_asset *asset = &r->meshes[mesh];
-        if (asset->dynamic || asset->gpu.skinned)
+        if (asset->dynamic || asset->gpu.skinned || asset->gpu.morph)
             continue;
         af_mat4 world, inverse;
         if (caster)
@@ -2512,6 +2679,9 @@ static uint64_t shadow_signature(af_renderer *r, af_mat4 matrix, af_shadow_setti
             h = shadow_hash(h, &r->shadow_draws[i].alpha_mode, sizeof(uint32_t));
             h = shadow_hash(h, &r->shadow_draws[i].ray_caster, sizeof(bool));
             h = shadow_hash(h, &r->shadow_draws[i].texture, sizeof(void *));
+            const af_morph_draw *morph = morph_draw_for(r, r->morph_scene, r->shadow_draws[i].object_index);
+            if (morph)
+                h = shadow_hash(h, &morph->signature, sizeof(morph->signature));
         }
     return h ? h : 1;
 }
@@ -2694,6 +2864,9 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame, const af_scene *sc
         bool visible = object_world(r, scene, i, &model) && af_scene_object_visible(scene, o->id);
         uint64_t hash = shadow_hash(UINT64_C(14695981039346656037), o->mesh, strlen(o->mesh));
         hash = temporal_material_hash(hash, o->material);
+        const af_morph_draw *morph = morph_draw_for(r, scene, i);
+        if (morph)
+            hash = shadow_hash(hash, &morph->signature, sizeof(morph->signature));
         r->motion_next[i] = (af_motion_snapshot){o->id, model, hash, visible};
         af_motion_snapshot key = {.id = o->id};
         const af_motion_snapshot *old =
@@ -2932,7 +3105,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         environment_settings.motion_blur = false;
     af_frame_uniform uniform;
     af_shadow_view shadow_view;
-    if (!prepare_shadows(renderer, scene, camera, resolve_viewport(renderer, viewport_rect), &uniform, &shadow_view))
+    if (!prepare_morphs(renderer, scene) ||
+        !prepare_shadows(renderer, scene, camera, resolve_viewport(renderer, viewport_rect), &uniform, &shadow_view))
         return false;
     af_frame *frame = &renderer->frames[renderer->frame_index];
     Uint64 wait_start = SDL_GetPerformanceCounter();
@@ -2941,6 +3115,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     renderer->cpu_fence_ms =
         (double)(SDL_GetPerformanceCounter() - wait_start) * 1000 / (double)SDL_GetPerformanceFrequency();
     if (!stream_prepare(renderer))
+        return false;
+    if (renderer->morph_vertex_count &&
+        !stream_buffer(renderer, &frame->morph_buffer, renderer->morph_vertices,
+                       renderer->morph_vertex_count * sizeof(af_vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))
         return false;
     bool ray_shadows = (resource_config & AF_RESOURCE_RAY_SHADOWS) != 0;
     bool ray_reflections = (resource_config & AF_RESOURCE_RAY_REFLECTIONS) != 0;
@@ -3105,9 +3283,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             af_mat4 mvp = af_mat4_mul(shadow_view.matrices[layer], draw.model);
             af_vk_shadows_push(renderer->shadows, frame->command, mvp.elements, draw.skin_base, draw.alpha_mode,
                                draw.alpha, draw.cutoff, af_vk_texture_descriptor(draw.texture));
-            VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(frame->command, 0, 1, &mesh->vertices.handle, &offset);
-            vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
+            bind_object_mesh(frame, mesh, morph_draw_for(renderer, scene, draw.object_index));
             vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
             ++renderer->shadow_draw_calls;
         }
@@ -3139,9 +3315,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             af_mat4 mvp = af_mat4_mul(uniform.local_shadow_matrices[layer], draw.model);
             af_vk_shadows_push(renderer->local_shadows, frame->command, mvp.elements, draw.skin_base, draw.alpha_mode,
                                draw.alpha, draw.cutoff, af_vk_texture_descriptor(draw.texture));
-            VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(frame->command, 0, 1, &mesh->vertices.handle, &offset);
-            vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
+            bind_object_mesh(frame, mesh, morph_draw_for(renderer, scene, draw.object_index));
             vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
             ++renderer->shadow_draw_calls;
         }
@@ -3275,11 +3449,12 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 }
                 const af_mesh_asset *asset = &renderer->meshes[index];
                 const af_gpu_mesh *mesh = asset->dynamic ? &asset->streams[renderer->frame_index].gpu : &asset->gpu;
+                const af_morph_draw *morph = morph_draw_for(renderer, scene, i);
                 af_mat4 world;
                 if (!object_world(renderer, scene, i, &world))
                     continue;
                 if (!renderer->culling_disabled) {
-                    af_shadow_bounds bounds = object_bounds(renderer, object->id, world, mesh);
+                    af_shadow_bounds bounds = object_bounds(renderer, object->id, world, mesh, morph);
                     if (!af_shadow_intersects(visibility_projection, &bounds)) {
                         ++renderer->culled_objects;
                         continue;
@@ -3377,8 +3552,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 vkCmdPushConstants(frame->command, renderer->swapchain.pipeline_layout,
                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(transform),
                                    &transform);
-                vkCmdBindVertexBuffers(frame->command, 0, 1, &mesh->vertices.handle, &offset);
-                vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
+                bind_object_mesh(frame, mesh, morph);
                 if (water) {
                     vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                       renderer->swapchain.water_attenuation);
@@ -3806,7 +3980,7 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer) {
     }
     for (unsigned f = 0; f < AF_FRAMES_IN_FLIGHT; ++f)
         other += renderer->frames[f].uniform.allocation_bytes + renderer->frames[f].skin_buffer.allocation_bytes +
-                 renderer->frames[f].motion_buffer.allocation_bytes;
+                 renderer->frames[f].motion_buffer.allocation_bytes + renderer->frames[f].morph_buffer.allocation_bytes;
     for (uint32_t i = 0; i < renderer->swapchain.image_count; ++i)
         other += renderer->swapchain.depths[i].allocation_bytes;
     af_vk_texture *fixed[] = {renderer->white, renderer->flat_normal, renderer->environment, renderer->irradiance,
@@ -4247,10 +4421,12 @@ void af_renderer_clear_skin_palettes(af_renderer *r) {
     }
 }
 
-void af_renderer_set_object_worlds(af_renderer *r, const af_scene *scene, const af_mat4 *world, size_t count) {
+void af_renderer_set_object_worlds(af_renderer *r, const af_scene *scene, const af_mat4 *world,
+                                   const af_animation_pose *const *morph_poses, size_t count) {
     if (r) {
         r->posed_scene = scene;
         r->posed_worlds = world;
+        r->posed_morphs = morph_poses;
         r->posed_count = count;
     }
 }

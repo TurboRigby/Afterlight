@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <afterlight/locomotion.h>
+#include "morph.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,11 +63,8 @@ void af_locomotion_player_destroy(af_locomotion_player *p) {
     }
 }
 static void mix(af_animation_pose *to, const af_animation_pose *from, size_t count, float t) {
-    for (size_t j = 0; j < count; ++j) {
-        to[j].translation = af_vec3_add(af_vec3_scale(from[j].translation, 1 - t), af_vec3_scale(to[j].translation, t));
-        to[j].scale = af_vec3_add(af_vec3_scale(from[j].scale, 1 - t), af_vec3_scale(to[j].scale, t));
-        to[j].rotation = af_quaternion_slerp(from[j].rotation, to[j].rotation, t);
-    }
+    for (size_t j = 0; j < count; ++j)
+        af_animation_blend_pose(&to[j], &from[j], t);
 }
 bool af_locomotion_player_sample(af_locomotion_player *p, const af_animation_file *f, af_animation_pose *out,
                                  size_t capacity) {

@@ -45,6 +45,7 @@ struct af_animation_runtime {
     object_slot *index;
     size_t index_capacity;
     af_mat4 *local, *world;
+    const af_animation_pose **morph_poses;
     unsigned char *ready;
     size_t capacity, world_count;
     af_object_id palette_objects[RUNTIME_INSTANCES];
@@ -84,6 +85,7 @@ void af_animation_runtime_destroy(af_animation_runtime *r) {
     free(r->index);
     free(r->local);
     free(r->world);
+    free(r->morph_poses);
     free(r->ready);
     free(r);
 }
@@ -92,7 +94,7 @@ void af_animation_runtime_scene(af_animation_runtime *r, const af_scene *scene) 
         clear_instances(r);
         r->scene = scene;
         r->palette_count = 0;
-        af_renderer_set_object_worlds(r->renderer, NULL, NULL, 0);
+        af_renderer_set_object_worlds(r->renderer, NULL, NULL, NULL, 0);
     }
 }
 static size_t file_bytes(const af_animation_file *f) {
@@ -102,7 +104,9 @@ static size_t file_bytes(const af_animation_file *f) {
         bytes += sizeof(af_animation_clip) + f->clips[i].channel_count * sizeof(af_animation_channel);
         for (size_t j = 0; j < f->clips[i].channel_count; ++j) {
             const af_animation_channel *c = &f->clips[i].channels[j];
-            bytes += c->key_count * (sizeof(float) + (c->interpolation == AF_ANIM_CUBIC ? 3u : 1u) * sizeof(af_vec4));
+            size_t value_bytes =
+                c->path == AF_ANIM_WEIGHTS ? f->bind_pose[c->node].morph_count * sizeof(float) : sizeof(af_vec4);
+            bytes += c->key_count * (sizeof(float) + (c->interpolation == AF_ANIM_CUBIC ? 3u : 1u) * value_bytes);
         }
     }
     return bytes;
@@ -464,7 +468,7 @@ bool af_animation_runtime_update(af_animation_runtime *r, const af_scene *previo
         for (size_t j = 0; j < r->palette_count; ++j)
             af_renderer_set_skin_palette(r->renderer, r->palette_objects[j], NULL, 0);
         r->palette_count = r->world_count = 0;
-        af_renderer_set_object_worlds(r->renderer, NULL, NULL, 0);
+        af_renderer_set_object_worlds(r->renderer, NULL, NULL, NULL, 0);
         return true;
     }
     size_t count = r->scene->count;
@@ -472,19 +476,23 @@ bool af_animation_runtime_update(af_animation_runtime *r, const af_scene *previo
         return false;
     if (count > r->capacity) {
         af_mat4 *local = calloc(count, sizeof(*local)), *worlds = calloc(count, sizeof(*worlds));
+        const af_animation_pose **morph_poses = calloc(count, sizeof(*morph_poses));
         unsigned char *ready = calloc(count, 1);
-        if (!local || !worlds || !ready) {
+        if (!local || !worlds || !ready || !morph_poses) {
             free(local);
             free(worlds);
             free(ready);
+            free(morph_poses);
             return false;
         }
         free(r->local);
         free(r->world);
         free(r->ready);
+        free(r->morph_poses);
         r->local = local;
         r->world = worlds;
         r->ready = ready;
+        r->morph_poses = morph_poses;
         r->capacity = count;
     }
     memset(r->ready, 0, count);
@@ -529,9 +537,16 @@ bool af_animation_runtime_update(af_animation_runtime *r, const af_scene *previo
                 .scale = t.scale,
                 .rotation = af_quaternion_slerp(af_quaternion_from_euler(old->transform.rotation),
                                                 af_quaternion_from_euler(o->transform.rotation), alpha)});
-        if (o->model.root && !o->model.primitive) {
+        r->morph_poses[j] = NULL;
+        if (o->model.root) {
             animation_instance *i = existing_instance(r, o->model.root);
             if (i && o->model.node < i->node_count) {
+                if (o->model.primitive) {
+                    const af_animation_pose *pose = &i->poses[o->model.node];
+                    if (pose->morph_count)
+                        r->morph_poses[j] = pose;
+                    continue;
+                }
                 i->nodes[o->model.node] = o->id;
                 af_mat4 inverse;
                 animation_asset *a = asset(r, i->configuration.asset);
@@ -545,7 +560,7 @@ bool af_animation_runtime_update(af_animation_runtime *r, const af_scene *previo
         if (!world(r, j, 0))
             return false;
     r->world_count = count;
-    af_renderer_set_object_worlds(r->renderer, r->scene, r->world, count);
+    af_renderer_set_object_worlds(r->renderer, r->scene, r->world, r->morph_poses, count);
     af_object_id palettes[RUNTIME_INSTANCES];
     size_t palette_count = 0;
     for (size_t j = 0; j < count && palette_count < RUNTIME_INSTANCES; ++j) {
