@@ -328,6 +328,12 @@ void environment_panel(editor *app, float width, float height) {
                 render.rtgi_bounces = (uint32_t)bounces;
                 changed = true;
             }
+            nk_bool emissive_gi = render.rtgi_emissive;
+            nk_layout_row_dynamic(ctx, 28, 1);
+            if (nk_checkbox_label(ctx, "Include emissive surfaces in RTGI", &emissive_gi)) {
+                render.rtgi_emissive = emissive_gi != 0;
+                changed = true;
+            }
         }
         af_engine_stats ray_stats = af_engine_get_stats(app->engine);
         label(ctx,

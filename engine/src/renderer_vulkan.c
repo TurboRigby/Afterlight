@@ -77,9 +77,9 @@ typedef struct af_frame_uniform {
     af_vec4 water_absorption, water_scattering, water_bounds, water_axes, water_screen, water_viewport, wind_time;
     af_vec4 rtgi_params;
     af_mat4 unjittered_view_projection, previous_view_projection;
-    af_vec4 ray_params;
+    af_vec4 ray_params, rtgi_flags;
 } af_frame_uniform;
-_Static_assert(sizeof(af_frame_uniform) == 3376, "Shader frame layout");
+_Static_assert(sizeof(af_frame_uniform) == 3392, "Shader frame layout");
 typedef struct af_blend_draw {
     size_t index;
     float depth;
@@ -2536,6 +2536,7 @@ static uint64_t temporal_settings_hash(uint64_t h, af_render_settings value) {
     h = shadow_hash(h, &value.rtgi_ray_distance, sizeof(value.rtgi_ray_distance));
     h = shadow_hash(h, &value.rtgi_samples, sizeof(value.rtgi_samples));
     h = shadow_hash(h, &value.rtgi_bounces, sizeof(value.rtgi_bounces));
+    h = shadow_hash(h, &value.rtgi_emissive, sizeof(value.rtgi_emissive));
     h = shadow_hash(h, &value.anti_aliasing, sizeof(value.anti_aliasing));
     h = shadow_hash(h, &value.aa_sharpness, sizeof(value.aa_sharpness));
     h = shadow_hash(h, &value.taa_history_weight, sizeof(value.taa_history_weight));
@@ -2942,6 +2943,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         environment_settings.rtgi_ray_distance,
         (float)environment_settings.rtgi_samples,
     };
+    uniform.rtgi_flags = (af_vec4){environment_settings.rtgi_emissive ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
     if ((ray_shadows || ray_reflections || ray_gi || ray_material_effects) &&
         !prepare_ray_scene(renderer, frame, scene, ray_shadows, ray_reflections, ray_gi, ray_material_effects)) {
         af_log("warning", "Ray-query initialization/build preparation failed; using raster and environment fallbacks.");
@@ -3210,8 +3212,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 if (((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) || refract) {
                     vkCmdEndRenderPass(frame->command);
                     if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised) {
-                        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_norm_area,
-                                              gi_jitter_delta);
+                        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, environment_settings,
+                                              post_norm_area, gi_jitter_delta);
                         gi_denoised = true;
                     }
                     if (refract)
@@ -3607,7 +3609,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (frame->timestamps)
         vkCmdWriteTimestamp(frame->command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, frame->timestamps, 2);
     if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised)
-        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, post_area,
+        af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, environment_settings, post_area,
                               gi_jitter_delta);
     bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
                                                environment_settings.exposure, camera, frame_time_ms);

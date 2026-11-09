@@ -330,6 +330,25 @@ static void update(af_engine *engine, double delta, void *data) {
         CHECK(stats.ray_traced_gi_active == hardware);
         if (hardware)
             CHECK(p[0] < 5 && p[1] < 5 && p[2] < 5);
+        settings.rtgi_bounces = 2;
+        settings.rtgi_emissive = false;
+        CHECK(af_scene_set_render_settings(f->scene, settings));
+        break;
+
+    case 8:
+        /* The second-bounce emitter contributes nothing while emissive GI is disabled. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        if (hardware)
+            CHECK(p[0] < 5 && p[1] < 5 && p[2] < 5);
+        settings.rtgi_emissive = true;
+        CHECK(af_scene_set_render_settings(f->scene, settings));
+        break;
+
+    case 9:
+        /* Re-enabling emissive GI restores the red indirect contribution. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        if (hardware)
+            CHECK(p[0] > 10 && p[0] > p[1] + 8 && p[0] > p[2] + 8);
         af_engine_request_quit(engine);
         break;
     }
@@ -358,5 +377,5 @@ int main(void) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || f.failed || f.phase != 8 || stats.validation_errors;
+    return result || f.failed || f.phase != 10 || stats.validation_errors;
 }

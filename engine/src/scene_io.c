@@ -373,7 +373,7 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
         version->valuedouble != 19 && version->valuedouble != 20 && version->valuedouble != 21 &&
         version->valuedouble != 22 && version->valuedouble != 23 && version->valuedouble != 24 &&
         version->valuedouble != 25 && version->valuedouble != 26 && version->valuedouble != 27 &&
-        version->valuedouble != AF_SCENE_FILE_VERSION) {
+        version->valuedouble != 28 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -1014,15 +1014,23 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                                                                 "rtgi_ray_distance",
                                                                 "rtgi_samples",
                                                                 "rtgi_bounces"};
+        const char *render_fields_v29[50];
+        const char *render_fields_no_post_v29[29];
+        memcpy(render_fields_v29, render_fields_v28, sizeof(render_fields_v28));
+        render_fields_v29[49] = "rtgi_emissive";
+        memcpy(render_fields_no_post_v29, render_fields_no_post_v28, sizeof(render_fields_no_post_v28));
+        render_fields_no_post_v29[28] = "rtgi_emissive";
         const cJSON *render = cJSON_GetObjectItemCaseSensitive(root, "render"),
                     *tone = cJSON_GetObjectItemCaseSensitive(render, "tone_mapping");
         af_render_settings settings = af_render_settings_default();
         const cJSON *ray_reflections = cJSON_GetObjectItemCaseSensitive(render, "ray_traced_water_reflections");
         const cJSON *post_check = cJSON_GetObjectItemCaseSensitive(render, "tone_mapper");
         const cJSON *rtgi_check = cJSON_GetObjectItemCaseSensitive(render, "ray_traced_gi");
-        size_t expected_render_fields = version->valuedouble >= 28
-            ? (post_check ? (rtgi_check ? 49 : 44) : (rtgi_check ? 28 : (ray_reflections ? 23 : 22)))
-            : version->valuedouble >= 26
+        size_t expected_render_fields = version->valuedouble >= 29
+            ? (post_check ? (rtgi_check ? 50 : 44) : (rtgi_check ? 29 : (ray_reflections ? 23 : 22)))
+            : version->valuedouble >= 28
+                ? (post_check ? (rtgi_check ? 49 : 44) : (rtgi_check ? 28 : (ray_reflections ? 23 : 22)))
+                : version->valuedouble >= 26
             ? (post_check ? (rtgi_check ? 48 : 44) : (rtgi_check ? 27 : (ray_reflections ? 23 : 22)))
             : version->valuedouble >= 24
                 ? (post_check ? (rtgi_check ? 47 : 43) : (rtgi_check ? 26 : (ray_reflections ? 22 : 21)))
@@ -1032,9 +1040,11 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
             : version->valuedouble >= 9  ? 14
             : version->valuedouble >= 8  ? 11
                                          : 2;
-        const char *const *active_render_fields = version->valuedouble >= 28 && rtgi_check
-            ? (post_check ? render_fields_v28 : render_fields_no_post_v28)
-            : (version->valuedouble >= 26
+        const char *const *active_render_fields = version->valuedouble >= 29 && rtgi_check
+            ? (post_check ? render_fields_v29 : render_fields_no_post_v29)
+            : version->valuedouble >= 28 && rtgi_check
+                ? (post_check ? render_fields_v28 : render_fields_no_post_v28)
+                : (version->valuedouble >= 26
                    ? ((!post_check && rtgi_check) ? render_fields_no_post_v26 : render_fields_v26)
                    : ((!post_check && rtgi_check) ? render_fields_no_post : render_fields));
         if (!exact_fields(render, active_render_fields, expected_render_fields) ||
@@ -1202,18 +1212,22 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
             }
             settings.ray_traced_gi = cJSON_IsTrue(rtgi_check) != 0;
             float samples = 1.0f, bounces = 1.0f;
+            const cJSON *emissive_check = cJSON_GetObjectItemCaseSensitive(render, "rtgi_emissive");
             /* Older files accepted up to 16; the setter clamps the stored value to 1..4. */
             if (!read_float_field(render, "rtgi_intensity", &settings.rtgi_intensity) ||
                 !read_float_field(render, "rtgi_ray_distance", &settings.rtgi_ray_distance) ||
                 !read_float_field(render, "rtgi_samples", &samples) || samples < 1.0f || samples > 16.0f ||
                 (version->valuedouble >= 28 &&
                  (!read_float_field(render, "rtgi_bounces", &bounces) || bounces < 1.0f || bounces > 4.0f ||
-                  floorf(bounces) != bounces))) {
+                  floorf(bounces) != bounces)) ||
+                (version->valuedouble >= 29 && !cJSON_IsBool(emissive_check))) {
                 set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid ray-traced GI settings.");
                 goto fail;
             }
             settings.rtgi_samples = (uint32_t)samples;
             settings.rtgi_bounces = (uint32_t)bounces;
+            if (version->valuedouble >= 29)
+                settings.rtgi_emissive = cJSON_IsTrue(emissive_check) != 0;
         }
         settings.tone_mapping = cJSON_IsTrue(tone) != 0;
         if (!af_scene_set_render_settings(scene, settings)) {
@@ -1674,12 +1688,13 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
             goto fail;
     }
     if (rs->ray_traced_gi || rs->rtgi_intensity != 1.0f || rs->rtgi_ray_distance != 25.0f || rs->rtgi_samples != 1 ||
-        rs->rtgi_bounces != 1) {
+        rs->rtgi_bounces != 1 || !rs->rtgi_emissive) {
         if (!cJSON_AddBoolToObject(render, "ray_traced_gi", rs->ray_traced_gi) ||
             !cJSON_AddNumberToObject(render, "rtgi_intensity", rs->rtgi_intensity) ||
             !cJSON_AddNumberToObject(render, "rtgi_ray_distance", rs->rtgi_ray_distance) ||
             !cJSON_AddNumberToObject(render, "rtgi_samples", (double)rs->rtgi_samples) ||
-            !cJSON_AddNumberToObject(render, "rtgi_bounces", (double)rs->rtgi_bounces))
+            !cJSON_AddNumberToObject(render, "rtgi_bounces", (double)rs->rtgi_bounces) ||
+            !cJSON_AddBoolToObject(render, "rtgi_emissive", rs->rtgi_emissive))
             goto fail;
     }
     cJSON *locals = cJSON_AddArrayToObject(root, "local_lights");

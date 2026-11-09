@@ -295,7 +295,7 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     hit_normal = -direction;
     can_bounce = false;
     if (surface.emission_unlit.w > .5)
-        return base + surface.emission_unlit.rgb;
+        return frame.rtgi_flags.x > .5 ? base + surface.emission_unlit.rgb : vec3(0.0);
 
     vec3 normal = vertex_attribute(vertices, index.x, 7) * weights.x +
                   vertex_attribute(vertices, index.y, 7) * weights.y +
@@ -315,7 +315,7 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
     can_bounce = true;
 
     float falloff = compute_gi_falloff(hit_t, max_dist);
-    vec3 emissive = surface.emission_unlit.rgb;
+    vec3 emissive = frame.rtgi_flags.x > .5 ? surface.emission_unlit.rgb : vec3(0.0);
 
     vec3 sun_dir = -frame.direction_intensity.xyz;
     float n_dot_l = max(dot(normal, sun_dir), 0.0);

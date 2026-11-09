@@ -129,7 +129,11 @@ void main() {
 
     vec2 pixel_step = 1.0 / vec2(size);
     float speed = length(center_motion.xy / pixel_step);
-    float alpha = mix(push.texel.z, 0.45, clamp(speed / 16.0, 0.0, 1.0));
+    /* Reprojection already tracks camera and object motion. Do not throw away
+     * most of the GI history merely because a stable surface moves across the
+     * screen: that makes emissive sampling noise visible while walking. Raise
+     * the update rate gradually, and only for large per-frame displacements. */
+    float alpha = mix(push.texel.z, 0.15, clamp(speed / 64.0, 0.0, 1.0));
     if (!valid)
         alpha = 1.0;
     vec3 result = mix(history, spatial_result, clamp(alpha, 0.0, 1.0));

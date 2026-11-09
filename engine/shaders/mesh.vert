@@ -56,6 +56,7 @@ layout(set = 0, binding = 0) uniform Frame {
     vec4 rtgi_params;
     mat4 unjittered_view_projection, previous_view_projection;
     vec4 ray_params;
+    vec4 rtgi_flags;
 }
 frame;
 layout(push_constant) uniform Draw {

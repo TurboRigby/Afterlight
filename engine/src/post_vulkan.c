@@ -651,8 +651,8 @@ void af_vk_post_reset_temporal(af_vk_post *p) {
         p->adapted_exposure = 1.0f;
     }
 }
-void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t index, af_rect area,
-                           af_vec2 previous_minus_current_jitter) {
+void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t index, af_render_settings settings,
+                           af_rect area, af_vec2 previous_minus_current_jitter) {
     if (!p || !p->gi)
         return;
     post_frame *f = &p->frames[index];
@@ -688,10 +688,14 @@ void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t inde
     }
     VkExtent2D size = p->render_extent;
     unsigned parity = p->gi_history_index % 2;
+    float path_complexity = fmaxf(1.0f, (float)settings.rtgi_samples) *
+                            fmaxf(1.0f, (float)settings.rtgi_bounces);
+    float temporal_blend = fmaxf(0.025f, 0.08f / sqrtf(path_complexity));
     struct {
         af_vec4 viewport, texel, params;
     } push = {.viewport = {area.x, area.y, area.x + area.width, area.y + area.height},
-              .texel = {1.0f / (float)size.width, 1.0f / (float)size.height, 0.08f, p->gi_history_valid ? 1.0f : 0.0f},
+              .texel = {1.0f / (float)size.width, 1.0f / (float)size.height, temporal_blend,
+                        p->gi_history_valid ? 1.0f : 0.0f},
               .params = {4.0f, 2.5f, previous_minus_current_jitter.x, previous_minus_current_jitter.y}};
     VkClearValue clear = {0};
     VkRenderPassBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,

@@ -501,7 +501,8 @@ af_render_settings af_render_settings_default(void) {
                                 .rtgi_intensity = 1.0f,
                                 .rtgi_ray_distance = 25.0f,
                                 .rtgi_samples = 1,
-                                .rtgi_bounces = 1};
+                                .rtgi_bounces = 1,
+                                .rtgi_emissive = true};
 }
 af_render_settings af_scene_get_render_settings(const af_scene *scene) {
     return scene ? scene->render_settings : af_render_settings_default();
