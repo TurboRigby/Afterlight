@@ -26,4 +26,7 @@ void af_vk_post_draw(af_vk_post *post, VkCommandBuffer command, uint32_t image, 
                      af_rect normalized_viewport, af_vec2 normalized_jitter, af_debug_view debug_view, bool upscaled,
                      float time_seconds, float delta_time);
 void af_vk_post_reset_temporal(af_vk_post *);
+/* Drop color accumulated under the previous lighting while retaining exposure.
+   Include GI when the indirect light itself changed. */
+void af_vk_post_invalidate_lighting_history(af_vk_post *, bool gi);
 #endif

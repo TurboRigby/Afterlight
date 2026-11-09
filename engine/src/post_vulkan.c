@@ -644,11 +644,17 @@ VkRenderPass af_vk_post_output_pass(const af_vk_post *p) {
 }
 void af_vk_post_reset_temporal(af_vk_post *p) {
     if (p) {
-        p->history_valid = false;
+        af_vk_post_invalidate_lighting_history(p, true);
         p->history_index = 0;
-        p->gi_history_valid = false;
         p->gi_history_index = 0;
         p->adapted_exposure = 1.0f;
+    }
+}
+void af_vk_post_invalidate_lighting_history(af_vk_post *p, bool gi) {
+    if (p) {
+        p->history_valid = false;
+        if (gi)
+            p->gi_history_valid = false;
     }
 }
 void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t index, af_render_settings settings,
@@ -690,13 +696,15 @@ void af_vk_post_denoise_gi(af_vk_post *p, VkCommandBuffer command, uint32_t inde
     unsigned parity = p->gi_history_index % 2;
     float path_complexity = fmaxf(1.0f, (float)settings.rtgi_samples) *
                             fmaxf(1.0f, (float)settings.rtgi_bounces);
-    float temporal_blend = fmaxf(0.025f, 0.08f / sqrtf(path_complexity));
+    /* Give sparse GI samples more history and spread the same taps more evenly. */
+    float temporal_blend = fminf(0.045f, fmaxf(0.025f, 0.08f / sqrtf(path_complexity)));
+    float spatial_sigma = settings.rtgi_samples <= 1 ? 3.5f : 2.5f;
     struct {
         af_vec4 viewport, texel, params;
     } push = {.viewport = {area.x, area.y, area.x + area.width, area.y + area.height},
               .texel = {1.0f / (float)size.width, 1.0f / (float)size.height, temporal_blend,
                         p->gi_history_valid ? 1.0f : 0.0f},
-              .params = {4.0f, 2.5f, previous_minus_current_jitter.x, previous_minus_current_jitter.y}};
+              .params = {4.0f, spatial_sigma, previous_minus_current_jitter.x, previous_minus_current_jitter.y}};
     VkClearValue clear = {0};
     VkRenderPassBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                                    .renderPass = p->gi_pass,

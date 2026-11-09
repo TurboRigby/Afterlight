@@ -203,7 +203,7 @@ struct af_renderer {
     af_vk_shadows *shadows, *local_shadows;
     af_vk_ray_query *rays;
     bool ray_supported, ray_failed;
-    uint64_t ray_revision;
+    uint64_t ray_revision, gi_emitter_signature;
     af_ray_instance *ray_inputs;
     size_t ray_input_capacity, ray_raster_casters;
     uint32_t local_shadow_layers, local_shadow_resolution, local_shadow_lights, local_shadow_overflow;
@@ -231,7 +231,7 @@ struct af_renderer {
     af_camera temporal_camera;
     af_rect temporal_viewport;
     const af_scene *temporal_scene;
-    uint64_t temporal_signature, temporal_frame, temporal_resets;
+    uint64_t temporal_signature, temporal_local_light_signature, temporal_frame, temporal_resets;
     uint32_t temporal_objects, temporal_skins;
     bool temporal_valid, temporal_supported;
     af_vec2 temporal_jitter, previous_temporal_jitter;
@@ -2409,7 +2409,7 @@ static uint64_t shadow_hash(uint64_t h, const void *data, size_t size) {
     return h;
 }
 static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *scene, bool shadows, bool reflections,
-                              bool gi, bool material_effects) {
+                              bool gi, bool material_effects, uint64_t *emitter_signature) {
     if (r->rays && r->ray_revision != r->mesh_revision) {
         if (!af_renderer_wait_idle(r))
             return false;
@@ -2464,7 +2464,8 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
         if (caster && shadows)
             caster->ray_caster = true;
 
-        r->ray_inputs[count++] = (af_ray_instance){
+        af_ray_instance *input = &r->ray_inputs[count++];
+        *input = (af_ray_instance){
             .mesh_key = mesh + 1,
             .vertices = asset->gpu.vertices.handle,
             .indices = asset->gpu.indices.handle,
@@ -2476,6 +2477,16 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
             .emission_unlit = {material->emission.x * material->emission_strength,
                                material->emission.y * material->emission_strength,
                                material->emission.z * material->emission_strength, material->unlit ? 1.f : 0.f}};
+        af_vec4 emission = input->emission_unlit;
+        if (emitter_signature && (emission.x > 0 || emission.y > 0 || emission.z > 0 || material->unlit)) {
+            /* Track which emitters contribute and their output. Motion of a
+               visible emitter is continuous and should keep temporal history. */
+            *emitter_signature = shadow_hash(*emitter_signature, &object->id, sizeof(object->id));
+            *emitter_signature = shadow_hash(*emitter_signature, &input->mesh_key, sizeof(input->mesh_key));
+            *emitter_signature = shadow_hash(*emitter_signature, &emission, sizeof(emission));
+            if (material->unlit)
+                *emitter_signature = shadow_hash(*emitter_signature, &input->color, sizeof(input->color));
+        }
     }
     if (shadows)
         for (size_t i = 0; i < r->shadow_count; ++i)
@@ -2595,7 +2606,7 @@ static uint64_t temporal_light_hash(uint64_t h, af_local_light value) {
 }
 static bool prepare_temporal(af_renderer *r, af_frame *frame, const af_scene *scene, const af_camera *camera,
                              af_rect area, af_color clear, af_render_settings settings, bool temporal, bool jitter,
-                             af_frame_uniform *uniform) {
+                             af_frame_uniform *uniform, uint64_t *local_light_signature) {
     uniform->unjittered_view_projection = uniform->view_projection;
     uniform->previous_view_projection = uniform->view_projection;
     r->temporal_jitter = (af_vec2){0};
@@ -2609,8 +2620,11 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame, const af_scene *sc
     signature = shadow_hash(signature, &clear, sizeof(clear));
     signature = shadow_hash(signature, &r->texture_revision, sizeof(r->texture_revision));
     signature = shadow_hash(signature, &r->mesh_revision, sizeof(r->mesh_revision));
+    /* The GI shader doesn't sample local lights. Keep their changes out of
+       the signature used to reset GI and its motion vectors when GI is active. */
+    uint64_t *light_hash = local_light_signature ? local_light_signature : &signature;
     for (size_t i = 0; i < af_scene_local_light_count(scene); ++i)
-        signature = temporal_light_hash(signature, *af_scene_local_light_at(scene, i));
+        *light_hash = temporal_light_hash(*light_hash, *af_scene_local_light_at(scene, i));
     bool cut = af_vec3_length(af_vec3_sub(camera->position, r->temporal_camera.position)) > 5 ||
                af_vec3_dot(af_camera_forward(camera), af_camera_forward(&r->temporal_camera)) < .7071f ||
                camera->vertical_fov != r->temporal_camera.vertical_fov ||
@@ -2758,13 +2772,13 @@ static VkImageMemoryBarrier upscaler_barrier(VkImage image, VkImageAspectFlags a
 }
 
 static bool record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t image, af_rect area, float exposure,
-                            const af_camera *camera, float frame_time_ms) {
+                            const af_camera *camera, float frame_time_ms, bool reset_history) {
     af_swapchain *swapchain = &r->swapchain;
     af_depth_attachment depth = swapchain->depths[image];
     af_vulkan_upscaler_frame frame = {
         .struct_size = sizeof(af_vulkan_upscaler_frame),
         .frame_slot = r->frame_index,
-        .reset_history = !r->temporal_valid,
+        .reset_history = reset_history,
         .command_buffer = command,
         .depth = {depth.image, depth.view},
         .viewport_uv = {area.x, area.y, area.width, area.height},
@@ -2944,8 +2958,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         (float)environment_settings.rtgi_samples,
     };
     uniform.rtgi_flags = (af_vec4){environment_settings.rtgi_emissive ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
+    uint64_t emitter_signature = UINT64_C(14695981039346656037);
     if ((ray_shadows || ray_reflections || ray_gi || ray_material_effects) &&
-        !prepare_ray_scene(renderer, frame, scene, ray_shadows, ray_reflections, ray_gi, ray_material_effects)) {
+        !prepare_ray_scene(renderer, frame, scene, ray_shadows, ray_reflections, ray_gi, ray_material_effects,
+                           ray_gi && environment_settings.rtgi_emissive ? &emitter_signature : NULL)) {
         af_log("warning", "Ray-query initialization/build preparation failed; using raster and environment fallbacks.");
         renderer->ray_failed = true;
         renderer->resize_pending = true;
@@ -3008,9 +3024,15 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     bool spatial = upscale && renderer->upscaler->struct_size >= sizeof(*renderer->upscaler) &&
                    (renderer->upscaler->flags & AF_VULKAN_UPSCALER_SPATIAL);
     bool jitter = (upscale && !spatial) || environment_settings.anti_aliasing == AF_AA_TAA;
+    uint64_t local_light_signature = UINT64_C(14695981039346656037);
     if (!prepare_temporal(renderer, frame, scene, camera, resolve_viewport(renderer, viewport_rect), color,
-                          environment_settings, temporal, jitter, &uniform))
+                          environment_settings, temporal, jitter, &uniform, ray_gi ? &local_light_signature : NULL))
         return false;
+    bool gi_lighting_changed = ray_gi && emitter_signature != renderer->gi_emitter_signature;
+    bool color_history_changed =
+        gi_lighting_changed || (ray_gi && local_light_signature != renderer->temporal_local_light_signature);
+    if (color_history_changed)
+        af_vk_post_invalidate_lighting_history(renderer->swapchain.post, gi_lighting_changed);
     /* Motion vectors are generated from unjittered clip coordinates, while GI
        history is stored in the jittered render-target pixel grid. Convert the
        current pixel to the previous frame's grid during history reprojection. */
@@ -3611,8 +3633,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if ((renderer->swapchain.resource_config & AF_RESOURCE_RAY_GI) && !gi_denoised)
         af_vk_post_denoise_gi(renderer->swapchain.post, frame->command, image_index, environment_settings, post_area,
                               gi_jitter_delta);
-    bool upscaled = upscale && record_upscaler(renderer, frame->command, image_index, post_area,
-                                               environment_settings.exposure, camera, frame_time_ms);
+    bool upscaled =
+        upscale && record_upscaler(renderer, frame->command, image_index, post_area, environment_settings.exposure,
+                                   camera, frame_time_ms, !renderer->temporal_valid || color_history_changed);
     float time_sec = (float)renderer->rendered_frames * (1.0f / 60.0f);
     float delta_sec = frame_time_ms * 0.001f;
     af_vk_post_draw(renderer->swapchain.post, frame->command, image_index, environment_settings, post_area,
@@ -3702,6 +3725,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (!vk_ok(vkResetFences(renderer->device, 1, &frame->fence), "vkResetFences") ||
         !vk_ok(vkQueueSubmit(renderer->graphics_queue, 1, &submit, frame->fence), "vkQueueSubmit"))
         return false;
+    renderer->gi_emitter_signature = emitter_signature;
+    renderer->temporal_local_light_signature = local_light_signature;
     if (temporal) {
         af_motion_snapshot *spare = renderer->motion_previous;
         size_t spare_capacity = renderer->motion_previous_capacity;

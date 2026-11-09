@@ -12,10 +12,8 @@
  * This pass performs a plane-aware edge-stopping spatial filter, then accumulates
  * the filtered result against a reprojected history buffer (motion vectors carry
  * UV-space displacement plus previous/current clip depth). The accumulated
- * result is written to the ping-pong history image for the next frame and the
- * difference against the raw sample is additively blended into the HDR scene.
- * Adding only the difference keeps the raw GI's underwater/fog treatment while
- * replacing its noise with the filtered signal. */
+ * result is written to the ping-pong history image for the next frame and
+ * additively blended into the HDR scene. */
 
 layout(set = 0, binding = 0) uniform sampler2D gi_image;
 layout(set = 0, binding = 1) uniform sampler2D motion_image;
@@ -29,6 +27,38 @@ layout(push_constant) uniform Push {
 
 layout(location = 0) out vec4 out_history;
 layout(location = 1) out vec4 out_color;
+
+bool reproject_history(vec2 old_uv, float depth, ivec2 size, ivec2 lo, ivec2 hi, out vec3 history) {
+    history = vec3(0.0);
+    if (push.texel.w < 0.5 || depth <= 0.0 || !all(greaterThanEqual(old_uv, push.viewport.xy)) ||
+        !all(lessThan(old_uv, push.viewport.zw)))
+        return false;
+
+    vec2 position = old_uv * vec2(size) - 0.5;
+    ivec2 base = ivec2(floor(position));
+    vec2 fraction = fract(position);
+    float tolerance = max(0.08, depth * 0.05);
+    float weight_sum = 0.0;
+    for (int y = 0; y < 2; ++y) {
+        for (int x = 0; x < 2; ++x) {
+            ivec2 p = base + ivec2(x, y);
+            if (any(lessThan(p, lo)) || any(greaterThan(p, hi)))
+                continue;
+            vec4 tap = texelFetch(history_image, p, 0);
+            // Validate each depth before blending colors across a silhouette.
+            if (tap.w <= 0.0 || abs(depth - tap.w) > tolerance)
+                continue;
+            float weight = (x == 0 ? 1.0 - fraction.x : fraction.x) *
+                           (y == 0 ? 1.0 - fraction.y : fraction.y);
+            history += tap.rgb * weight;
+            weight_sum += weight;
+        }
+    }
+    if (weight_sum <= 1e-6)
+        return false;
+    history /= weight_sum;
+    return true;
+}
 
 void main() {
     ivec2 size = textureSize(gi_image, 0);
@@ -108,16 +138,8 @@ void main() {
 
     /* Motion is unjittered; history coordinates include each frame's TAA jitter. */
     vec2 old_uv = uv + center_motion.xy + push.params.zw;
-    bool valid = push.texel.w > 0.5 && center_motion.z > 0.0 &&
-                 all(greaterThanEqual(old_uv, push.viewport.xy)) && all(lessThanEqual(old_uv, push.viewport.zw));
-    vec4 history_sample = texture(history_image, clamp(old_uv, push.viewport.xy, push.viewport.zw));
-    vec3 history = history_sample.rgb;
-    float history_depth = history_sample.w;
-
-    /* Reject disoccluded surfaces using the depth stored with the history.
-     * Allow 5% relative depth difference (or 0.08m) to avoid false rejections
-     * on grazing surfaces while decisively rejecting separate geometry. */
-    valid = valid && abs(center_motion.z - history_depth) <= max(0.08, abs(center_motion.z) * 0.05);
+    vec3 history;
+    bool valid = reproject_history(old_uv, center_motion.z, size, lo, hi, history);
 
     /* Generous variance bounding around the spatially filtered signal:
      * protects against temporal ghosting on dynamic lighting changes without
@@ -127,8 +149,7 @@ void main() {
     vec3 upper = spatial_result + color_box;
     history = clamp(history, lower, upper);
 
-    vec2 pixel_step = 1.0 / vec2(size);
-    float speed = length(center_motion.xy / pixel_step);
+    float speed = length(center_motion.xy * vec2(size));
     /* Reprojection already tracks camera and object motion. Do not throw away
      * most of the GI history merely because a stable surface moves across the
      * screen: that makes emissive sampling noise visible while walking. Raise

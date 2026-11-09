@@ -15,6 +15,7 @@ typedef struct fixture {
     af_object_id bounce_wall, bounce_emitter, bounce_blocker;
     unsigned char blocked[4];
     unsigned phase, frames;
+    uint64_t temporal_frames;
     bool failed;
 } fixture;
 
@@ -109,6 +110,13 @@ static bool init(af_engine *engine, void *data) {
     af_mesh_data bounce_wall_mesh = {bounce_wall_vertices, 4, indices, 6};
     if (!af_engine_upload_mesh(engine, "gi_bounce_wall", &bounce_wall_mesh))
         return false;
+    af_vertex tilted_wall_vertices[4];
+    memcpy(tilted_wall_vertices, bounce_wall_vertices, sizeof(tilted_wall_vertices));
+    for (size_t i = 0; i < 4; ++i)
+        tilted_wall_vertices[i].normal = (af_vec3){0, -0.9396926f, 0.3420201f};
+    af_mesh_data tilted_wall_mesh = {tilted_wall_vertices, 4, indices, 6};
+    if (!af_engine_upload_mesh(engine, "gi_tilted_wall", &tilted_wall_mesh))
+        return false;
     f->bounce_wall = af_scene_add_object(f->scene, "GI bounce wall", "gi_bounce_wall");
     if (!af_scene_set_object_material(f->scene, f->bounce_wall, wall_mat) ||
         !af_scene_set_object_visible(f->scene, f->bounce_wall, false))
@@ -191,9 +199,15 @@ static void update(af_engine *engine, double delta, void *data) {
     (void)delta;
     fixture *f = data;
     unsigned char p[4] = {0};
-    if (++f->frames < 5)
+    if (f->phase == 13) {
+        af_local_light local = *af_scene_local_light_at(f->scene, 0);
+        local.intensity += 1.0f;
+        CHECK(af_scene_set_local_light(f->scene, 0, local));
+    }
+    unsigned capture_frame = f->phase == 11 ? 1 : 5;
+    if (++f->frames < capture_frame)
         return;
-    if (f->frames == 5) {
+    if (f->frames == capture_frame) {
         int w, h;
         af_engine_get_window_size(engine, &w, &h);
         bool wall_sample = f->phase == 4 || f->phase == 5;
@@ -205,6 +219,8 @@ static void update(af_engine *engine, double delta, void *data) {
     CHECK(af_engine_test_read_pixel(engine, p));
     af_engine_stats stats = af_engine_get_stats(engine);
     bool hardware = stats.ray_query_supported;
+    if (getenv("AFTERLIGHT_REQUIRE_RAY_QUERY"))
+        CHECK(hardware);
     printf("RTGI phase %u: %u/%u/%u, hardware %d, active %d, instances %zu\n", f->phase, p[0], p[1], p[2], hardware,
            stats.ray_traced_gi_active, stats.ray_instances);
 
@@ -247,7 +263,7 @@ static void update(af_engine *engine, double delta, void *data) {
         CHECK(stats.ray_traced_gi_active == hardware);
         if (hardware) {
             /* Green diffuse indirect bounce onto floor */
-            CHECK(p[1] > 10 && p[1] > p[0] + 8 && p[1] > p[2] + 8);
+            CHECK(p[1] > 10 && p[0] < 5 && p[2] < 5);
         }
         /* Turn off RTGI */
         settings.ray_traced_gi = false;
@@ -349,6 +365,50 @@ static void update(af_engine *engine, double delta, void *data) {
         CHECK(stats.ray_traced_gi_active == hardware);
         if (hardware)
             CHECK(p[0] > 10 && p[0] > p[1] + 8 && p[0] > p[2] + 8);
+        settings.rtgi_bounces = 4;
+        settings.anti_aliasing = AF_AA_TAA;
+        CHECK(af_scene_set_render_settings(f->scene, settings));
+        break;
+
+    case 10:
+        CHECK(stats.ray_traced_gi_active == hardware);
+        if (hardware)
+            CHECK(p[0] > 10);
+        CHECK(af_scene_set_object_visible(f->scene, f->bounce_emitter, false));
+        break;
+
+    case 11: {
+        /* Hiding the emitter clears the light in the first frame, including with TAA. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        CHECK(p[0] < 5 && p[1] < 5 && p[2] < 5);
+        /* Put the emitter entirely behind the same wall used for the bounce. */
+        CHECK(af_scene_set_object_mesh(f->scene, f->bounce_wall, "gi_tilted_wall"));
+        af_transform behind_wall = af_transform_identity();
+        behind_wall.scale = (af_vec3){1, 1.79f, -1};
+        behind_wall.position = (af_vec3){0, 0.01f - 1.5f * behind_wall.scale.y, -3.0f};
+        CHECK(af_scene_set_object_transform(f->scene, f->bounce_emitter, behind_wall));
+        CHECK(af_scene_set_object_visible(f->scene, f->bounce_emitter, true));
+        settings.rtgi_bounces = 2;
+        settings.anti_aliasing = AF_AA_OFF;
+        CHECK(af_scene_set_render_settings(f->scene, settings));
+        break;
+    }
+
+    case 12: {
+        /* The wall blocks both rays even with normals tilted 70 degrees from the face. */
+        CHECK(stats.ray_traced_gi_active == hardware);
+        CHECK(p[0] < 5 && p[1] < 5 && p[2] < 5);
+        f->temporal_frames = af_engine_test_temporal(engine).frames;
+        af_local_light local = af_local_light_default(AF_LIGHT_POINT);
+        local.position = (af_vec3){30, 30, 30};
+        CHECK(af_scene_add_local_light(f->scene, local));
+        break;
+    }
+
+    case 13:
+        /* A local light change keeps the GI reprojection history running. */
+        if (hardware)
+            CHECK(af_engine_test_temporal(engine).frames > f->temporal_frames);
         af_engine_request_quit(engine);
         break;
     }
@@ -377,5 +437,5 @@ int main(void) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || f.failed || f.phase != 10 || stats.validation_errors;
+    return result || f.failed || f.phase != 14 || stats.validation_errors;
 }

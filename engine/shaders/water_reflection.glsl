@@ -280,7 +280,7 @@ float compute_gi_falloff(float d, float max_dist) {
 }
 
 vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dist, float hit_t, out vec3 hit_base,
-                  out vec3 hit_normal, out bool can_bounce, bool include_environment) {
+                  out vec3 hit_geometric, out bool can_bounce, bool terminal) {
     ReflectionSurface surface = reflection.surfaces[rayQueryGetIntersectionInstanceCustomIndexEXT(query, true)];
     MeshWords vertices = MeshWords(surface.addresses.xy);
     MeshWords indices = MeshWords(surface.addresses.zw);
@@ -292,27 +292,33 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
                                      vertex_attribute(vertices, index.y, 3) * weights.y +
                                      vertex_attribute(vertices, index.z, 3) * weights.z);
     hit_base = base;
-    hit_normal = -direction;
+    hit_geometric = -direction;
     can_bounce = false;
     if (surface.emission_unlit.w > .5)
         return frame.rtgi_flags.x > .5 ? base + surface.emission_unlit.rgb : vec3(0.0);
 
+    mat3 normal_matrix = transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(query, true)));
     vec3 normal = vertex_attribute(vertices, index.x, 7) * weights.x +
                   vertex_attribute(vertices, index.y, 7) * weights.y +
                   vertex_attribute(vertices, index.z, 7) * weights.z;
-    if (dot(normal, normal) < 1e-12) {
+    bool missing_normal = dot(normal, normal) < 1e-12;
+    vec3 face_normal = vec3(0.0);
+    if (missing_normal || !terminal) {
         vec3 a = vertex_attribute(vertices, index.x, 0);
-        normal = cross(vertex_attribute(vertices, index.y, 0) - a, vertex_attribute(vertices, index.z, 0) - a);
+        face_normal = normal_matrix * cross(vertex_attribute(vertices, index.y, 0) - a,
+                                            vertex_attribute(vertices, index.z, 0) - a);
     }
-    normal = transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(query, true))) * normal;
+    normal = missing_normal ? face_normal : normal_matrix * normal;
     normal = dot(normal, normal) > 1e-12 ? normalize(normal) : -direction;
-    hit_normal = normal;
 
     // Discard backface hits
     float cos_emitter = dot(normal, -direction);
     if (cos_emitter <= 0.0)
         return vec3(0.0);
-    can_bounce = true;
+    // Smooth vertex normals can point the next ray through the hit triangle.
+    can_bounce = !terminal && dot(face_normal, face_normal) > 0.0;
+    if (can_bounce)
+        hit_geometric = dot(face_normal, direction) > 0.0 ? -normalize(face_normal) : normalize(face_normal);
 
     float falloff = compute_gi_falloff(hit_t, max_dist);
     vec3 emissive = frame.rtgi_flags.x > .5 ? surface.emission_unlit.rgb : vec3(0.0);
@@ -325,7 +331,7 @@ vec3 shade_gi_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction, float max_dis
         float visibility = trace_sun_visibility(hit_pos, normal, sun_dir, 0.005, 4u);
         sun = frame.color_ambient.rgb * frame.direction_intensity.w * n_dot_l * visibility;
     }
-    vec3 sky = include_environment ? textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z : vec3(0.0);
+    vec3 sky = terminal ? textureLod(irradiance_map, environment_uv(normal), 0).rgb * frame.render_params.z : vec3(0.0);
     vec3 reflected = base * (frame.color_ambient.w + sun + sky);
     return (reflected + emissive) * (cos_emitter * falloff);
 }
@@ -381,23 +387,23 @@ bool trace_gi_bounce(vec3 pos, vec3 normal, out vec3 gi_radiance) {
             }
             float hit_t = rayQueryGetIntersectionTEXT(query, true);
             vec3 hit_pos = ray_origin + dir * hit_t;
-            vec3 hit_base, hit_normal;
+            vec3 hit_base, hit_geometric;
             bool can_bounce;
             bool terminal = bounce + 1u >= max_bounces;
-            vec3 hit_rad = shade_gi_hit(query, hit_pos, dir, max_dist, hit_t, hit_base, hit_normal, can_bounce,
+            vec3 hit_rad = shade_gi_hit(query, hit_pos, dir, max_dist, hit_t, hit_base, hit_geometric, can_bounce,
                                         terminal);
             bounce_accum += throughput * clamp(hit_rad, vec3(0.0), vec3(3.0));
-            if (!can_bounce || terminal)
+            if (!can_bounce)
                 break;
             throughput *= clamp(hit_base, vec3(0.0), vec3(1.0));
             if (max(throughput.r, max(throughput.g, throughput.b)) < 0.01)
                 break;
             vec3 bounce_b1, bounce_b2;
-            create_orthonormal_basis(hit_normal, bounce_b1, bounce_b2);
+            create_orthonormal_basis(hit_geometric, bounce_b1, bounce_b2);
             vec2 bounce_seed = hash22(seed + vec2(17.0 * float(bounce + 1u), 29.0 * float(bounce + 1u)));
             vec2 bounce_u = sample_hammersley(s, samples, bounce_seed);
-            dir = sample_cosine_hemisphere(bounce_u, hit_normal, bounce_b1, bounce_b2);
-            ray_origin = hit_pos + hit_normal * bias;
+            dir = sample_cosine_hemisphere(bounce_u, hit_geometric, bounce_b1, bounce_b2);
+            ray_origin = hit_pos + hit_geometric * bias;
         }
     }
     vec3 indirect = (bounce_accum / float(samples)) * frame.rtgi_params.y;
