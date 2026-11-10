@@ -6,7 +6,7 @@
 # Bundle the build's corresponding covered source, not the export-time checkout.
 file(GLOB_RECURSE afterlight_source_candidates CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/engine/*" "${PROJECT_SOURCE_DIR}/editor/*"
-    "${PROJECT_SOURCE_DIR}/game/*" "${PROJECT_SOURCE_DIR}/player/*"
+    "${PROJECT_SOURCE_DIR}/game/*" "${PROJECT_SOURCE_DIR}/games/*" "${PROJECT_SOURCE_DIR}/player/*"
     "${PROJECT_SOURCE_DIR}/playground/*" "${PROJECT_SOURCE_DIR}/sandbox/*"
     "${PROJECT_SOURCE_DIR}/scripts/*" "${PROJECT_SOURCE_DIR}/tests/*"
     "${PROJECT_SOURCE_DIR}/docs/*" "${PROJECT_SOURCE_DIR}/cmake/*"
@@ -37,13 +37,21 @@ if(APPLE)
         add_dependencies(${target} afterlight_source)
         target_sources(${target} PRIVATE LICENSE NOTICE THIRD_PARTY_NOTICES.md "${afterlight_source_archive}")
     endforeach()
+    set(low_water_notices "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/NOTICE"
+        "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md")
+    set_source_files_properties(${low_water_notices} TARGET_DIRECTORY afterlight_low_water
+        PROPERTIES HEADER_FILE_ONLY TRUE MACOSX_PACKAGE_LOCATION "Resources")
+    set_source_files_properties("${afterlight_source_archive}" TARGET_DIRECTORY afterlight_low_water
+        PROPERTIES GENERATED TRUE HEADER_FILE_ONLY TRUE MACOSX_PACKAGE_LOCATION "Resources/source")
+    add_dependencies(afterlight_low_water afterlight_source)
+    target_sources(afterlight_low_water PRIVATE ${low_water_notices} "${afterlight_source_archive}")
 else()
     add_custom_target(afterlight_source_notices
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_BINARY_DIR}/LICENSE"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/NOTICE" "${PROJECT_BINARY_DIR}/NOTICE"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md" "${PROJECT_BINARY_DIR}/THIRD_PARTY_NOTICES.md"
         DEPENDS afterlight_source VERBATIM)
-    foreach(target afterlight_sandbox afterlight_editor afterlight_playground afterlight_player)
+    foreach(target afterlight_sandbox afterlight_editor afterlight_playground afterlight_player afterlight_low_water)
         add_dependencies(${target} afterlight_source_notices)
     endforeach()
 endif()

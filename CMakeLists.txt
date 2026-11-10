@@ -165,6 +165,7 @@ add_library(afterlight_editor_ui STATIC editor/gui.c editor/dialog.c editor/play
 target_include_directories(afterlight_editor_ui PRIVATE engine/src sandbox)
 target_link_libraries(afterlight_editor_ui PUBLIC afterlight_nuklear Afterlight::Engine PRIVATE SDL3::SDL3)
 afterlight_warnings(afterlight_editor_ui)
+add_subdirectory(games/low-water)
 
 add_executable(afterlight_sandbox sandbox/main.c)
 target_link_libraries(afterlight_sandbox PRIVATE Afterlight::Engine)
@@ -635,6 +636,11 @@ add_custom_target(bundle_game
     DEPENDS afterlight_player afterlight_playground_game USES_TERMINAL VERBATIM)
 
 include(CTest)
+if(BUILD_TESTING)
+    add_test(NAME afterlight.low_water_story COMMAND afterlight_low_water --raster --verify)
+    set_tests_properties(afterlight.low_water_story PROPERTIES TIMEOUT 90 LABELS graphics
+        ENVIRONMENT "SDL_AUDIO_DRIVER=dummy;VK_LAYER_VALIDATE_SYNC=1")
+endif()
 add_executable(afterlight_water_render_benchmark tests/water_render_benchmark.c)
 target_include_directories(afterlight_water_render_benchmark PRIVATE sandbox)
 target_link_libraries(afterlight_water_render_benchmark PRIVATE Afterlight::Engine)

@@ -30,6 +30,11 @@ cup starts pouring. Both have `_player` targets. See the [water and wind guide](
 for controls, settings, benchmarks and limits, or the [water laboratory guide](docs/development-017.md)
 for the six focused demos.
 
+## Low Water
+
+[Low Water](games/low-water/README.md) is a standalone first-person story chapter
+set in a flood archive. Build and launch it with the `run_low_water` target.
+
 ## Documentation
 
 The [documentation index](docs/README.md) links to all guides. Start with:
