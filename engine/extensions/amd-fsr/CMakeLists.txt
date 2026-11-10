@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.24)
 project(AfterlightTemporalFSR LANGUAGES CXX)
 
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message(FATAL_ERROR "These Afterlight FSR adapters target native Linux Vulkan.")
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    message(FATAL_ERROR "These Afterlight FSR adapters target Vulkan on Linux and macOS.")
 endif()
 
 find_package(Vulkan 1.2 REQUIRED COMPONENTS glslangValidator)
@@ -28,10 +28,10 @@ string(REPLACE "resourceArraySize + contextArraySize,"
 string(REPLACE "backendContext->pEffectContexts = (BackendContext_VK::EffectContext*)pMem;"
     "pMem = reinterpret_cast<uint8_t*>(FFX_ALIGN_UP(reinterpret_cast<uintptr_t>(pMem), alignof(BackendContext_VK::EffectContext)));\n        backendContext->pEffectContexts = (BackendContext_VK::EffectContext*)pMem;"
     backend "${backend}")
-file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ffx_vk_linux.cpp" CONTENT "${backend}" @ONLY)
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ffx_vk_posix.cpp" CONTENT "${backend}" @ONLY)
 
 add_library(afterlight_ffx_vk OBJECT
-    "${CMAKE_CURRENT_BINARY_DIR}/ffx_vk_linux.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/ffx_vk_posix.cpp"
     "${sdk}/src/shared/ffx_assert.cpp"
     "${sdk}/src/shared/ffx_breadcrumbs_list.cpp"
     "${sdk}/src/shared/ffx_message.cpp"
@@ -40,7 +40,7 @@ target_include_directories(afterlight_ffx_vk PUBLIC "${sdk}/include" PRIVATE
     "${sdk}/src/shared" "${sdk}/src/backends/shared")
 target_link_libraries(afterlight_ffx_vk PUBLIC Vulkan::Vulkan)
 target_compile_features(afterlight_ffx_vk PUBLIC cxx_std_20)
-target_compile_options(afterlight_ffx_vk PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/sdk_linux.h")
+target_compile_options(afterlight_ffx_vk PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/sdk_posix.h")
 set_target_properties(afterlight_ffx_vk PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden)
 
 function(add_fsr_extension version component)
@@ -56,8 +56,8 @@ function(add_fsr_extension version component)
         VERBATIM)
 
     set(target afterlight_fsr${version})
-    # Linux wchar_t is wider than the Windows type used to size the SDK's
-    # opaque context. Build the adapter and SDK component with the same size.
+    # Both platforms use a wider wchar_t than the Windows type used to size
+    # the SDK's opaque context. Build the adapter and SDK with the same size.
     set(host_header "${sdk}/include/FidelityFX/host/ffx_${component}.h")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${host_header}")
     file(READ "${host_header}" header)
@@ -69,9 +69,11 @@ function(add_fsr_extension version component)
     target_compile_definitions(${target} PRIVATE AF_EXTENSION_BUILD AF_FSR_VERSION=${version})
     target_include_directories(${target} PRIVATE ../../include "${CMAKE_CURRENT_BINARY_DIR}/include" "${sdk}/src/shared"
         "${sdk}/src/backends/shared" "${sdk}/include/FidelityFX/gpu")
-    target_compile_options(${target} PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/sdk_linux.h")
+    target_compile_options(${target} PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/sdk_posix.h")
     target_link_libraries(${target} PRIVATE afterlight_ffx_vk)
-    target_link_options(${target} PRIVATE "LINKER:--no-undefined")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_options(${target} PRIVATE "LINKER:--no-undefined")
+    endif()
     set_target_properties(${target} PROPERTIES PREFIX "" CXX_EXTENSIONS OFF CXX_VISIBILITY_PRESET hidden)
 endfunction()
 

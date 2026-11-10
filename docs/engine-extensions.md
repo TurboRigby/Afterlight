@@ -140,7 +140,7 @@ Load `afterlight_fsr1.so` through the editor or pass its path to
 
 ## AMD FidelityFX Super Resolution 2 and 3
 
-The optional Linux Vulkan adapters use the FSR 2.3.3 and FSR 3.1.4 temporal
+The optional Vulkan adapters for Linux and macOS use the FSR 2.3.3 and FSR 3.1.4 temporal
 upscalers from AMD's FidelityFX SDK 1.1.4. Both use Quality mode at a 1.5×
 ratio, with HDR scene color, depth, motion vectors and automatic exposure.
 Tone mapping, bloom and UI composition run at output resolution. The FSR 3
@@ -152,6 +152,9 @@ The standalone build needs a C++20 compiler, Python 3, Vulkan 1.2 headers,
 `glslangValidator` and `spirv-dis`. It compiles AMD's GLSL passes for HDR and
 render-resolution motion vectors. It uses FP32 shaders on the device's
 native subgroup size. Keep the SDK checkout external to Afterlight.
+On macOS, the Vulkan driver must expose the required storage-image features
+and compute subgroup quad operations. The modules also work with MoltenVK on
+Apple Silicon.
 
 ```sh
 git clone --depth 1 --branch v1.1.4 --filter=blob:none --sparse \

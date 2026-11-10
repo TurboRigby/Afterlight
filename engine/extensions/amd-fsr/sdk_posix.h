@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-#ifndef AFTERLIGHT_FIDELITYFX_SDK_LINUX_H
-#define AFTERLIGHT_FIDELITYFX_SDK_LINUX_H
+#ifndef AFTERLIGHT_FIDELITYFX_SDK_POSIX_H
+#define AFTERLIGHT_FIDELITYFX_SDK_POSIX_H
 
 #include <cerrno>
 #include <cmath>
