@@ -5,6 +5,7 @@
  */
 
 #include "runtime.h"
+#include <afterlight/blueprint.h>
 #include <math.h>
 #include <inttypes.h>
 #include <SDL3/SDL_filesystem.h>
@@ -153,22 +154,79 @@ bool ed_runtime_start(ed_runtime *r, const af_scene *source, af_engine *engine, 
     snprintf(r->status, sizeof(r->status), "Playing %s. Stop restores the editor scene.", api->name);
     return true;
 }
+static af_object_id story_viewer(const af_scene *scene) {
+    for (size_t i = 0; i < af_scene_object_count(scene); ++i) {
+        const af_scene_object *object = af_scene_object_at(scene, i);
+        if (object->gameplay.player.enabled)
+            return object->id;
+    }
+    return AF_OBJECT_NONE;
+}
+
+static void story_input(ed_runtime *r) {
+    af_engine *engine = r->host.engine;
+    const af_story_dialogue *d = af_scene_story_dialogue(r->scene);
+    if (d) {
+        if (d->choices[0][0] && (af_engine_key_pressed(engine, AF_KEY_UP) ||
+                                 af_engine_key_pressed(engine, AF_KEY_DOWN) ||
+                                 af_engine_key_pressed(engine, AF_KEY_LEFT) ||
+                                 af_engine_key_pressed(engine, AF_KEY_RIGHT)))
+            r->story_choice = 1 - r->story_choice;
+        if (af_engine_key_pressed(engine, AF_KEY_ENTER) || af_engine_action_pressed(engine, "Interact")) {
+            unsigned choice = r->story_choice;
+            r->story_choice = 0;
+            af_scene_answer_dialogue(r->scene, engine, choice);
+        }
+        return;
+    }
+
+    r->story_choice = 0;
+    af_camera camera = af_engine_get_camera(engine);
+    af_interaction_focus focus = af_scene_interaction_focus(r->scene, &camera, story_viewer(r->scene));
+    if (focus.prompt)
+        snprintf(r->story_prompt, sizeof(r->story_prompt), "%s", focus.prompt);
+    bool used = focus.object && af_engine_action_pressed(engine, "Interact") &&
+                af_scene_interact(r->scene, engine, focus.object);
+    if (used)
+        r->story_prompt[0] = 0;
+    static const struct { af_key key; const char *name; } inputs[] = {
+        {AF_KEY_SPACE, "Space"}, {AF_KEY_E, "E"}, {AF_KEY_F, "F"}, {AF_KEY_R, "R"},
+    };
+    for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i)
+        if (af_engine_key_pressed(engine, inputs[i].key) &&
+            !af_scene_story_dialogue(r->scene))
+            af_scene_trigger_blueprint_key(r->scene, engine, inputs[i].name, true);
+}
+
 void ed_runtime_frame_update(ed_runtime *r, double delta, bool input_enabled) {
     if (!r->playing || !isfinite(delta) || delta < 0)
         return;
     if (r->auto_reload)
         ed_runtime_poll_reload(r, delta);
-    r->host.input_enabled = input_enabled && !r->paused;
+    r->story_prompt[0] = 0;
+    bool had_dialogue = af_scene_story_dialogue(r->scene) != NULL;
+    if (!r->paused)
+        af_scene_step_blueprints(r->scene, r->host.engine, (float)fmin(delta, 0.1));
+    bool has_dialogue = af_scene_story_dialogue(r->scene) != NULL;
+    r->host.input_enabled = input_enabled && !r->paused && !has_dialogue;
     r->host.camera_enabled = input_enabled;
     if (r->api->frame_update)
         r->api->frame_update(r->state, &r->host, r->paused ? 0 : fmin(delta, 0.1));
+    if (!r->paused && input_enabled && (had_dialogue || !has_dialogue) && af_scene_blueprint_count(r->scene))
+        story_input(r);
+    if (af_scene_story_dialogue(r->scene))
+        r->host.input_enabled = false;
+    char destination[AF_STORY_LABEL_CAPACITY];
+    if (!r->paused && af_scene_take_story_destination(r->scene, destination) &&
+        !ed_runtime_request_scene(r, destination))
+        snprintf(r->status, sizeof(r->status), "Cannot request scene '%s'.", destination);
     if (!r->paused && r->pending_scene[0])
         ed_runtime_transition(r);
 }
 void ed_runtime_update(ed_runtime *r, double delta, bool input_enabled) {
     if (!r->playing || r->paused || !isfinite(delta) || delta < 0)
         return;
-    r->host.input_enabled = input_enabled;
+    r->host.input_enabled = input_enabled && !af_scene_story_dialogue(r->scene);
     r->api->update(r->state, &r->host, fmin(delta, 0.1));
     if (r->pending_scene[0])
         ed_runtime_transition(r);
@@ -182,7 +240,8 @@ void ed_runtime_step(ed_runtime *r, double delta) {
     r->paused = paused;
 }
 void ed_runtime_stop(ed_runtime *r) {
-    r->pending_scene[0] = 0;
+    r->pending_scene[0] = r->story_prompt[0] = 0;
+    r->story_choice = 0;
     if (r->playing)
         r->api->shutdown(r->state, &r->host);
     if (af_engine_get_scene(r->host.engine) == r->scene)
@@ -477,7 +536,8 @@ bool ed_runtime_transition(ed_runtime *r) {
     ed_runtime candidate = {0};
     snprintf(candidate.scene_directory, sizeof(candidate.scene_directory), "%s", r->scene_directory);
     snprintf(candidate.project_directory, sizeof(candidate.project_directory), "%s", r->project_directory);
-    bool ok = (!engine || af_engine_load_scene_assets(engine, source, &asset_error)) &&
+    bool ok = af_scene_restore_story_flags(source, af_scene_story_flags(r->scene)) &&
+              (!engine || af_engine_load_scene_assets(engine, source, &asset_error)) &&
               (r->module_path[0] ? ed_runtime_start_file(&candidate, source, engine, r->module_path)
                                  : ed_runtime_start(&candidate, source, engine, r->api));
     af_scene_destroy(source);

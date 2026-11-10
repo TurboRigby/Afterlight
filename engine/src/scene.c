@@ -156,6 +156,13 @@ bool af_scene_remove_object(af_scene *scene, af_object_id id) {
     scene->count = write;
     free(removed);
     (void)af_scene_reindex(scene);
+    for (size_t i = 0; i < scene->blueprint_count; ++i) {
+        af_blueprint *bp = scene->blueprints[i];
+        if (bp->bound_object && !find_object(scene, bp->bound_object)) {
+            bp->bound_object = 0;
+            bp->interact_range = 0;
+        }
+    }
     write = 0;
     for (size_t i = 0; i < scene->water_count; ++i)
         if (find_object(scene, scene->waters[i].owner))
@@ -253,13 +260,22 @@ af_scene *af_scene_clone(const af_scene *source) {
     copy->render_settings = source->render_settings;
     copy->local_light_count = source->local_light_count;
     copy->landscape = af_landscape_clone(source->landscape);
+    copy->story_flags = source->story_flags;
     if (source->blueprint_count) {
-        copy->blueprints = malloc(source->blueprint_count * sizeof(*copy->blueprints));
-        if (copy->blueprints) {
-            for (size_t i = 0; i < source->blueprint_count; ++i) {
-                copy->blueprints[i] = af_blueprint_clone(source->blueprints[i]);
+        copy->blueprints = calloc(source->blueprint_count, sizeof(*copy->blueprints));
+        if (!copy->blueprints) {
+            af_scene_destroy(copy);
+            return NULL;
+        }
+        copy->blueprint_capacity = source->blueprint_count;
+        while (copy->blueprint_count < source->blueprint_count) {
+            size_t i = copy->blueprint_count;
+            copy->blueprints[i] = af_blueprint_clone(source->blueprints[i]);
+            if (!copy->blueprints[i]) {
+                af_scene_destroy(copy);
+                return NULL;
             }
-            copy->blueprint_count = copy->blueprint_capacity = source->blueprint_count;
+            ++copy->blueprint_count;
         }
     }
     memcpy(copy->local_lights, source->local_lights, sizeof(copy->local_lights));

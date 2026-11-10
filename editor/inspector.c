@@ -517,6 +517,12 @@ void gameplay_controls(editor *app, af_scene_object object) {
     af_gameplay_component g = object.gameplay;
     bool changed = false;
     label(ctx, "Gameplay components", 30);
+    nk_layout_row_dynamic(ctx, 27, 1);
+    if (!app->runtime.playing && nk_button_label(ctx, "Edit Interactable Blueprint") &&
+        ed_blueprint_attach_interactable(&app->blueprint_state, app->document.scene, object.id)) {
+        app->blueprint_mode = true;
+        app->landscape_mode = false;
+    }
     nk_layout_row_dynamic(ctx, 26, 1);
     nk_bool player = g.player.enabled;
     if (nk_checkbox_label(ctx, "Player controller", &player)) {

@@ -7,6 +7,7 @@
 /* Generated projects use only this C file and the host API; no engine linking. */
 #include <afterlight/game_module.h>
 #include <math.h>
+#include <string.h>
 typedef struct game_state {
     af_object_id body;
     af_character player;
@@ -94,6 +95,42 @@ static void shutdown(void *memory, const af_game_host *host) {
     (void)memory;
     host->capture_mouse(host->engine, false);
 }
+static size_t save_state(const void *memory, void *bytes, size_t capacity) {
+    const game_state *s = memory;
+    float state[] = {s->player.position.x, s->player.position.y, s->player.position.z, s->camera.yaw, s->camera.pitch};
+    if (!bytes)
+        return sizeof(state);
+    if (capacity < sizeof(state))
+        return 0;
+    memcpy(bytes, state, sizeof(state));
+    return sizeof(state);
+}
+
+static bool load_state(void *memory, const af_game_host *host, uint32_t version, const void *bytes, size_t size) {
+    float state[5];
+    if (version != 1 || !bytes || size != sizeof(state))
+        return false;
+    memcpy(state, bytes, sizeof(state));
+    for (size_t i = 0; i < sizeof(state) / sizeof(state[0]); ++i)
+        if (!isfinite(state[i]) || fabsf(state[i]) > 1000000.f)
+            return false;
+    if (fabsf(state[4]) > 1.5f)
+        return false;
+    game_state *s = memory;
+    const af_scene_object *body = host->get_object(host->scene, s->body);
+    if (!body)
+        return false;
+    af_transform transform = body->transform;
+    transform.position = (af_vec3){state[0], state[1], state[2]};
+    if (!host->set_transform(host->scene, s->body, transform))
+        return false;
+    s->player = (af_character){.position = transform.position};
+    s->camera.position = transform.position;
+    s->camera.position.y += s->eye;
+    s->camera.yaw = state[3];
+    s->camera.pitch = state[4];
+    return host->set_camera(host->engine, &s->camera);
+}
 AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t version) {
     static const af_game_module api = {AF_GAME_ABI_VERSION,
                                        sizeof(af_game_module),
@@ -104,6 +141,9 @@ AF_GAME_EXPORT const af_game_module *af_game_get_api(uint32_t version) {
                                        init,
                                        tick,
                                        shutdown,
-                                       frame};
+                                       frame,
+                                       1,
+                                       save_state,
+                                       load_state};
     return version == AF_GAME_ABI_VERSION ? &api : NULL;
 }

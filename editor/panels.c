@@ -818,6 +818,9 @@ void play_hud(editor *app) {
             break;
         }
     ed_play_hud(&app->gui.context, app->engine, app->viewport, app->runtime.paused, app->free_camera, true, player);
+    if (!app->runtime.paused && !app->free_camera && !app->blueprint_mode)
+        ed_story_hud(&app->gui.context, app->viewport, app->runtime.scene, app->runtime.story_prompt,
+                     app->runtime.story_choice);
 }
 
 static bool animation_button(editor *app, unsigned index, const char *text) {

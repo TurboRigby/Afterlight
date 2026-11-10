@@ -9,4 +9,5 @@
 #include "gui.h"
 void ed_play_hud(struct nk_context *context, af_engine *engine, af_rect viewport, bool paused, bool free_camera,
                  bool editor, bool player);
+void ed_story_hud(struct nk_context *, af_rect, const af_scene *, const char *prompt, unsigned choice);
 #endif

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "runtime.h"
+#include <afterlight/story.h>
 #include <SDL3/SDL_timer.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,7 @@
 #endif
 #define HEADER 224u
 #define MAX_STATE (1024u * 1024u)
+#define MAX_STORY_BYTES (4u + AF_STORY_MAX_FLAGS * AF_STORY_FLAG_CAPACITY)
 static void put32(unsigned char *p, uint32_t v) {
     for (unsigned i = 0; i < 4; ++i)
         p[i] = (unsigned char)(v >> (8 * i));
@@ -50,13 +52,16 @@ bool ed_runtime_save_game(ed_runtime *r, const char *path) {
         authored_hash != r->authored_hash || authored_bytes != r->authored_bytes)
         return fail(r, "authored scene changed or is unavailable; restart before "
                        "saving progress.");
-    size_t size = r->api->save_state(r->state, NULL, 0);
-    if (!size || size > MAX_STATE)
+    size_t module_size = r->api->save_state(r->state, NULL, 0);
+    if (!module_size || module_size > MAX_STATE)
         return fail(r, "module state exceeds the save limit.");
+    const af_story_flags *flags = af_scene_story_flags(r->scene);
+    size_t story_size = flags->count ? 4 + flags->count * AF_STORY_FLAG_CAPACITY : 0;
+    size_t size = story_size + module_size;
     unsigned char *data = calloc(1, HEADER + size);
     if (!data)
         return fail(r, "cannot allocate state.");
-    memcpy(data, "AFSAVE2", 7);
+    memcpy(data, story_size ? "AFSAVE3" : "AFSAVE2", 7);
     put32(data + 8, AF_GAME_ABI_VERSION);
     put32(data + 12, r->api->state_version);
     put32(data + 16, (uint32_t)size);
@@ -64,7 +69,11 @@ bool ed_runtime_save_game(ed_runtime *r, const char *path) {
     put32(data + 28, authored_bytes);
     snprintf((char *)data + 32, 64, "%s", r->current_scene);
     snprintf((char *)data + 96, 128, "%s", r->api->name);
-    bool ok = r->api->save_state(r->state, data + HEADER, size) == size;
+    if (story_size) {
+        put32(data + HEADER, (uint32_t)flags->count);
+        memcpy(data + HEADER + 4, flags->names, story_size - 4);
+    }
+    bool ok = r->api->save_state(r->state, data + HEADER + story_size, module_size) == module_size;
     put32(data + 20, checksum(data, HEADER + size));
     char temporary[AF_ASSET_PATH_CAPACITY] = {0};
     int n = snprintf(temporary, sizeof(temporary), "%s.%llu.tmp", path, (unsigned long long)SDL_GetTicksNS());
@@ -95,9 +104,11 @@ bool ed_runtime_load_game(ed_runtime *r, const char *path) {
     if (!f)
         return fail(r, "no saved progress found.");
     unsigned char header[HEADER];
-    bool ok = fread(header, 1, HEADER, f) == HEADER && !memcmp(header, "AFSAVE2\0", 8) &&
-              get32(header + 8) == AF_GAME_ABI_VERSION && get32(header + 16) > 0 && get32(header + 16) <= MAX_STATE &&
-              memchr(header + 32, 0, 64) && memchr(header + 96, 0, 128);
+    bool ok = fread(header, 1, HEADER, f) == HEADER;
+    bool has_story = ok && !memcmp(header, "AFSAVE3\0", 8);
+    ok = ok && (has_story || !memcmp(header, "AFSAVE2\0", 8)) && get32(header + 8) == AF_GAME_ABI_VERSION &&
+         get32(header + 16) > 0 && get32(header + 16) <= (has_story ? MAX_STATE + MAX_STORY_BYTES : MAX_STATE) &&
+         memchr(header + 32, 0, 64) && memchr(header + 96, 0, 128);
     if (ok)
         ok = scene_name((const char *)header + 32) && !strcmp((const char *)header + 96, r->api->name);
     size_t size = ok ? get32(header + 16) : 0;
@@ -117,6 +128,18 @@ bool ed_runtime_load_game(ed_runtime *r, const char *path) {
         free(data);
         return fail(r, "invalid/incompatible progress; current game retained.");
     }
+    af_story_flags flags = {0};
+    size_t story_size = 0;
+    if (has_story) {
+        if (size >= 4)
+            flags.count = get32(data + HEADER);
+        story_size = flags.count <= AF_STORY_MAX_FLAGS ? 4 + flags.count * AF_STORY_FLAG_CAPACITY : size;
+        if (!flags.count || story_size >= size || size - story_size > MAX_STATE) {
+            free(data);
+            return fail(r, "invalid story progress; current game retained.");
+        }
+        memcpy(flags.names, data + HEADER + 4, story_size - 4);
+    }
     uint32_t authored_hash, authored_bytes;
     if (!ed_runtime_scene_fingerprint(r, (const char *)header + 32, &authored_hash, &authored_bytes) ||
         authored_hash != get32(header + 24) || authored_bytes != get32(header + 28)) {
@@ -129,6 +152,11 @@ bool ed_runtime_load_game(ed_runtime *r, const char *path) {
     if (!source) {
         free(data);
         return fail(r, "saved scene is unavailable.");
+    }
+    if (!af_scene_restore_story_flags(source, &flags)) {
+        af_scene_destroy(source);
+        free(data);
+        return fail(r, "invalid story flags; current game retained.");
     }
     af_engine *engine = r->host.engine;
     af_camera old_camera = af_engine_get_camera(engine);
@@ -147,7 +175,8 @@ bool ed_runtime_load_game(ed_runtime *r, const char *path) {
     af_scene_destroy(source);
     if (ok)
         ok = next.api->load_state &&
-             next.api->load_state(next.state, &next.host, get32(header + 12), data + HEADER, size);
+             next.api->load_state(next.state, &next.host, get32(header + 12), data + HEADER + story_size,
+                                  size - story_size);
     free(data);
     if (!ok) {
         ed_runtime_stop(&next);

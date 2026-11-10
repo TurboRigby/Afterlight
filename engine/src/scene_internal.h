@@ -30,6 +30,11 @@ struct af_scene {
     struct af_blueprint **blueprints;
     size_t blueprint_count;
     size_t blueprint_capacity;
+    af_story_flags story_flags;
+    af_story_dialogue story_dialogue;
+    size_t story_graph;
+    uint32_t story_node;
+    char story_destination[AF_STORY_LABEL_CAPACITY];
     size_t *object_slots;
     size_t object_slot_capacity;
     af_scene_object *objects;

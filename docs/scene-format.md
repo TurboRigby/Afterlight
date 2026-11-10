@@ -1,4 +1,4 @@
-# Afterlight scene format, version 23
+# Afterlight scene format, version 30
 
 Scene files are UTF-8 JSON, conventionally named `*.afterlight.json`. They store
 CPU scene data and references to files. Loading a scene does not start Vulkan,
@@ -7,7 +7,7 @@ manifest into the renderer separately. Game library selection stays outside the
 scene file.
 
 The following version 10 example shows the base fields; newer extensions are
-documented below. Current saves include all version 23 tables.
+documented below. Current saves include the tables documented below.
 
 ```json
 {
@@ -668,3 +668,12 @@ continues from a rigid opaque diffuse hit using a cosine-weighted hemisphere ray
 and the hit material's base color as throughput. Unlit and back-facing hits
 terminate the path; misses sample the environment. The existing sample count
 controls the number of independent paths. Game ABI 29 requires rebuilding modules.
+
+## Blueprints (version 30)
+
+The `blueprints` array stores the scene's graphs, including their target
+object IDs, nodes, pin defaults, links and variables. Bound graphs can also
+define an interaction prompt and range in meters. Graphs run in editor Play
+and in the standalone player. Scene files from earlier versions load with
+an empty graph list. Active dialogue and live story flags are runtime data.
+The progress save records the story flags.

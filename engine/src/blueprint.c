@@ -346,6 +346,37 @@ static void init_node_pins(af_bp_node *node) {
         ADD_EXEC_OUT("Exec");
         break;
 
+    case AF_BP_NODE_EVENT_INTERACT:
+        snprintf(node->title, sizeof(node->title), "On Interact");
+        ADD_EXEC_OUT("Exec");
+        break;
+    case AF_BP_NODE_SHOW_DIALOGUE:
+        snprintf(node->title, sizeof(node->title), "Show Dialogue");
+        ADD_EXEC_IN("Exec");
+        ADD_STR_IN("Speaker", "");
+        ADD_STR_IN("First Choice", "");
+        ADD_STR_IN("Second Choice", "");
+        ADD_EXEC_OUT("Continue");
+        ADD_EXEC_OUT("First");
+        ADD_EXEC_OUT("Second");
+        break;
+    case AF_BP_NODE_GET_STORY_FLAG:
+        snprintf(node->title, sizeof(node->title), "Get Story Flag");
+        ADD_STR_IN("Flag", "");
+        ADD_BOOL_OUT("Value");
+        break;
+    case AF_BP_NODE_SET_STORY_FLAG:
+        snprintf(node->title, sizeof(node->title), "Set Story Flag");
+        ADD_EXEC_IN("Exec");
+        ADD_STR_IN("Flag", "");
+        ADD_BOOL_IN("Value", true);
+        ADD_EXEC_OUT("Exec");
+        break;
+    case AF_BP_NODE_CHANGE_SCENE:
+        snprintf(node->title, sizeof(node->title), "Change Scene");
+        ADD_EXEC_IN("Exec");
+        ADD_STR_IN("Scene", "");
+        break;
     default:
         snprintf(node->title, sizeof(node->title), "Node");
         break;
@@ -392,6 +423,8 @@ af_blueprint *af_blueprint_clone(const af_blueprint *bp) {
     if (!copy)
         return NULL;
     copy->bound_object = bp->bound_object;
+    copy->interact_range = bp->interact_range;
+    memcpy(copy->interact_prompt, bp->interact_prompt, sizeof(copy->interact_prompt));
     copy->enabled = bp->enabled;
     copy->next_node_id = bp->next_node_id;
     copy->next_link_id = bp->next_link_id;
@@ -423,11 +456,16 @@ af_blueprint *af_blueprint_clone(const af_blueprint *bp) {
         }
     }
 
+    if (copy->node_count != bp->node_count || copy->link_count != bp->link_count || copy->var_count != bp->var_count) {
+        af_blueprint_destroy(copy);
+        return NULL;
+    }
     return copy;
 }
 
 uint32_t af_blueprint_add_node(af_blueprint *bp, af_bp_node_type type, float x, float y) {
-    if (!bp || type >= AF_BP_NODE_TYPE_COUNT)
+    if (!bp || type < AF_BP_NODE_EVENT_START || type >= AF_BP_NODE_TYPE_COUNT ||
+        bp->node_count >= AF_BP_MAX_NODES || bp->next_node_id == UINT32_MAX)
         return 0;
 
     if (bp->node_count >= bp->node_capacity) {
@@ -545,7 +583,8 @@ bool af_blueprint_can_link_pins(const af_blueprint *bp, uint32_t from_node, uint
 
 uint32_t af_blueprint_add_link(af_blueprint *bp, uint32_t from_node, uint32_t from_pin, uint32_t to_node,
                                uint32_t to_pin) {
-    if (!af_blueprint_can_link_pins(bp, from_node, from_pin, to_node, to_pin))
+    if (!af_blueprint_can_link_pins(bp, from_node, from_pin, to_node, to_pin) ||
+        bp->link_count >= AF_BP_MAX_LINKS || bp->next_link_id == UINT32_MAX)
         return 0;
 
     /* Remove any existing link into the input pin */
@@ -613,7 +652,7 @@ const af_bp_link *af_blueprint_find_link_to_pin(const af_blueprint *bp, uint32_t
 }
 
 bool af_blueprint_add_variable(af_blueprint *bp, const char *name, af_bp_pin_type type, af_bp_value val) {
-    if (!bp || !name || !name[0])
+    if (!bp || !name || !name[0] || bp->var_count >= AF_BP_MAX_VARIABLES)
         return false;
     if (af_blueprint_get_variable(bp, name))
         return false;
@@ -775,13 +814,18 @@ const char *af_bp_node_type_name(af_bp_node_type type) {
     case AF_BP_NODE_PRINT:
         return "Print String";
 
+    case AF_BP_NODE_EVENT_INTERACT: return "On Interact";
+    case AF_BP_NODE_SHOW_DIALOGUE: return "Show Dialogue";
+    case AF_BP_NODE_GET_STORY_FLAG: return "Get Story Flag";
+    case AF_BP_NODE_SET_STORY_FLAG: return "Set Story Flag";
+    case AF_BP_NODE_CHANGE_SCENE: return "Change Scene";
     default:
         return "Unknown";
     }
 }
 
 const char *af_bp_node_type_category(af_bp_node_type type) {
-    if (type <= AF_BP_NODE_EVENT_CUSTOM)
+    if (type <= AF_BP_NODE_EVENT_CUSTOM || type == AF_BP_NODE_EVENT_INTERACT)
         return "Events";
     if (type <= AF_BP_NODE_FOR_LOOP)
         return "Flow Control";
@@ -838,7 +882,7 @@ af_blueprint *af_scene_get_blueprint_by_name(af_scene *scene, const char *name) 
 }
 
 af_blueprint *af_scene_add_blueprint(af_scene *scene, const char *name) {
-    if (!scene)
+    if (!scene || scene->blueprint_count >= AF_SCENE_MAX_BLUEPRINTS)
         return NULL;
     if (scene->blueprint_count >= scene->blueprint_capacity) {
         size_t new_cap = scene->blueprint_capacity == 0 ? 4 : scene->blueprint_capacity * 2;
@@ -864,6 +908,12 @@ bool af_scene_remove_blueprint(af_scene *scene, size_t index) {
                 (scene->blueprint_count - index - 1) * sizeof(af_blueprint *));
     }
     scene->blueprint_count--;
+    if (scene->story_dialogue.text[0]) {
+        if (scene->story_graph == index)
+            scene->story_dialogue = (af_story_dialogue){0};
+        else if (scene->story_graph > index)
+            --scene->story_graph;
+    }
     return true;
 }
 

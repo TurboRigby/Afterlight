@@ -15,7 +15,7 @@ def get_max_scene_version():
         m = re.search(r'#define\s+AF_SCENE_FILE_VERSION\s+(\d+)', scene_h.read_text(encoding='utf-8', errors='ignore'))
         if m:
             return int(m.group(1))
-    return 29
+    return 30
 MAX_SCENE_VERSION = get_max_scene_version()
 def write_json(path, data):
     path.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')

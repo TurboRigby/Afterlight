@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#include <afterlight/blueprint.h>
+#include "story_internal.h"
 #include <afterlight/afterlight.h>
 #include <math.h>
 #include <stdio.h>
@@ -101,6 +101,11 @@ static af_bp_value eval_data_pin(af_bp_vm_ctx *ctx, af_bp_node *node, uint32_t p
 
     /* Compute source node value based on its type */
     switch (source_node->type) {
+    case AF_BP_NODE_GET_STORY_FLAG: {
+        af_bp_value key = get_input_val(ctx, source_node, "Flag");
+        source_pin->runtime_val.b = af_scene_story_flag(ctx->scene, key.s);
+        break;
+    }
     case AF_BP_NODE_ADD: {
         float a = get_input_val(ctx, source_node, "A").f;
         float b = get_input_val(ctx, source_node, "B").f;
@@ -472,6 +477,29 @@ static void execute_node(af_bp_vm_ctx *ctx, af_bp_node *node, uint32_t entry_pin
         follow_exec_pin(ctx, node, "Exec");
         break;
     }
+    case AF_BP_NODE_SHOW_DIALOGUE: {
+        af_bp_value speaker = get_input_val(ctx, node, "Speaker");
+        af_bp_value first = get_input_val(ctx, node, "First Choice");
+        af_bp_value second = get_input_val(ctx, node, "Second Choice");
+        af_story_dialogue dialogue = {0};
+        snprintf(dialogue.text, sizeof(dialogue.text), "%s", node->dialogue_text);
+        snprintf(dialogue.speaker, sizeof(dialogue.speaker), "%s", speaker.s);
+        snprintf(dialogue.choices[0], sizeof(dialogue.choices[0]), "%s", first.s);
+        snprintf(dialogue.choices[1], sizeof(dialogue.choices[1]), "%s", second.s);
+        af_story_open_dialogue(ctx->scene, ctx->bp, node->id, &dialogue);
+        break;
+    }
+    case AF_BP_NODE_SET_STORY_FLAG: {
+        af_bp_value name = get_input_val(ctx, node, "Flag");
+        if (af_scene_set_story_flag(ctx->scene, name.s, get_input_val(ctx, node, "Value").b))
+            follow_exec_pin(ctx, node, "Exec");
+        break;
+    }
+    case AF_BP_NODE_CHANGE_SCENE: {
+        af_bp_value name = get_input_val(ctx, node, "Scene");
+        af_story_request_destination(ctx->scene, name.s);
+        break;
+    }
     case AF_BP_NODE_PLAY_SOUND: {
         if (ctx->engine_handle) {
             af_bp_pin *pin = find_pin_by_name(node, "Sound Name", AF_BP_PIN_INPUT);
@@ -603,4 +631,13 @@ void af_blueprint_trigger_collision(af_blueprint *bp, af_scene *scene, void *eng
             follow_exec_pin(&ctx, &bp->nodes[i], "Exec");
         }
     }
+}
+
+bool af_blueprint_dispatch_story(af_blueprint *bp, af_scene *scene, void *engine, uint32_t id, const char *output) {
+    af_bp_node *node = af_blueprint_get_node(bp, id);
+    if (!node || !bp->enabled)
+        return false;
+    af_bp_vm_ctx ctx = {.bp = bp, .scene = scene, .engine_handle = engine};
+    follow_exec_pin(&ctx, node, output);
+    return true;
 }

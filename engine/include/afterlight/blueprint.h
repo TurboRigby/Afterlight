@@ -11,13 +11,17 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <afterlight/math.h>
-#include <afterlight/scene.h>
+#include <afterlight/story.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define AF_BP_MAX_PINS_PER_NODE 16u
+#define AF_BP_MAX_NODES 256
+#define AF_BP_MAX_LINKS 1024
+#define AF_BP_MAX_VARIABLES 128
+#define AF_SCENE_MAX_BLUEPRINTS 128
 #define AF_BP_NAME_CAPACITY 32u
 #define AF_BP_STRING_CAPACITY 64u
 
@@ -119,6 +123,12 @@ typedef enum af_bp_node_type {
     AF_BP_NODE_PLAY_SOUND,
     AF_BP_NODE_PRINT,
 
+    AF_BP_NODE_EVENT_INTERACT,
+    AF_BP_NODE_SHOW_DIALOGUE,
+    AF_BP_NODE_GET_STORY_FLAG,
+    AF_BP_NODE_SET_STORY_FLAG,
+    AF_BP_NODE_CHANGE_SCENE,
+
     AF_BP_NODE_TYPE_COUNT
 } af_bp_node_type;
 
@@ -131,6 +141,7 @@ typedef struct af_bp_node {
     af_bp_pin pins[AF_BP_MAX_PINS_PER_NODE];
     uint32_t pin_count;
     char extra_str[AF_BP_STRING_CAPACITY];
+    char dialogue_text[AF_STORY_TEXT_CAPACITY];
     float custom_timer;
     bool gate_open;
 } af_bp_node;
@@ -144,6 +155,8 @@ typedef struct af_bp_variable {
 typedef struct af_blueprint {
     char name[64];
     af_object_id bound_object;
+    float interact_range; /* Zero disables the component. */
+    char interact_prompt[AF_STORY_LABEL_CAPACITY];
     bool enabled;
 
     af_bp_node *nodes;

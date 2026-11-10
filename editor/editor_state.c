@@ -59,7 +59,8 @@ void toggle_play(editor *app) {
     app->free_camera = app->resume_game_capture = false;
     if (app->project_path[0])
         ed_runtime_set_project(&app->runtime, app->project_path, app->project.startup_scene);
-    ed_runtime_start_file(&app->runtime, app->document.scene, app->engine, app->module_path);
+    if (ed_runtime_start_file(&app->runtime, app->document.scene, app->engine, app->module_path))
+        app->blueprint_mode = false;
     set_status(app, app->runtime.status);
 }
 

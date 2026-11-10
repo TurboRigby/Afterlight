@@ -23,6 +23,10 @@
 
 #include <SDL3/SDL.h>
 
+static bool blueprint_edit(void *document) {
+    return ed_document_push_undo(document);
+}
+
 static bool should_close(af_engine *engine, void *userdata) {
     (void)engine;
     editor *app = userdata;
@@ -51,16 +55,6 @@ static void keyboard(editor *app, double delta) {
         toggle_play(app);
     if (app->runtime.playing && af_engine_key_pressed(engine, AF_KEY_F6))
         app->maximize_play = !app->maximize_play;
-    if (app->runtime.playing && app->runtime.scene) {
-        if (af_engine_key_pressed(engine, AF_KEY_SPACE))
-            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "Space", true);
-        if (af_engine_key_pressed(engine, AF_KEY_E))
-            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "E", true);
-        if (af_engine_key_pressed(engine, AF_KEY_F))
-            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "F", true);
-        if (af_engine_key_pressed(engine, AF_KEY_R))
-            af_scene_trigger_blueprint_key(app->runtime.scene, engine, "R", true);
-    }
     bool modifier = af_engine_key_down(engine, AF_KEY_LEFT_CONTROL) || af_engine_key_down(engine, AF_KEY_LEFT_SUPER) ||
                     af_engine_key_pressed(engine, AF_KEY_LEFT_CONTROL) ||
                     af_engine_key_pressed(engine, AF_KEY_LEFT_SUPER);
@@ -472,6 +466,8 @@ static bool init(af_engine *engine, void *userdata) {
     app->dragging_right_splitter = false;
     app->blueprint_mode = false;
     ed_blueprint_state_init(&app->blueprint_state);
+    app->blueprint_state.record_edit = blueprint_edit;
+    app->blueprint_state.edit_context = &app->document;
     app->landscape_subtool = 0;
     app->brush_mode = AF_BRUSH_SCULPT_RAISE;
     app->brush_falloff = AF_FALLOFF_SMOOTH;
@@ -691,9 +687,6 @@ static void update(af_engine *engine, double delta, void *userdata) {
     ed_runtime_frame_update(&app->runtime, delta,
                             !af_engine_mouse_down(engine, AF_MOUSE_RIGHT) && !app->fields_active && !app->modal &&
                                 !app->dialog);
-    if (app->runtime.playing && app->runtime.scene) {
-        af_scene_step_blueprints(app->runtime.scene, engine, (float)delta);
-    }
     if (app->runtime.playing)
         app->camera = af_engine_get_camera(engine);
     if (app->runtime.playing && strcmp(app->runtime_status, app->runtime.status)) {

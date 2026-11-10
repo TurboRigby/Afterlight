@@ -70,6 +70,7 @@ add_library(afterlight STATIC
     engine/src/blueprint.c
     engine/src/blueprint_vm.c
     engine/src/blueprint_io.c
+    engine/src/story.c
     engine/src/wind.c
     engine/src/physics_wind.c
     engine/src/water_particles.c
@@ -616,6 +617,16 @@ add_custom_target(bundle_game
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(afterlight_story_runtime_test tests/story_runtime.c)
+    target_include_directories(afterlight_story_runtime_test PRIVATE sandbox)
+    target_link_libraries(afterlight_story_runtime_test PRIVATE afterlight_editor_document SDL3::SDL3)
+    afterlight_warnings(afterlight_story_runtime_test)
+    add_dependencies(afterlight_story_runtime_test afterlight_story_game)
+    add_test(NAME afterlight.story_runtime COMMAND afterlight_story_runtime_test
+        "${PROJECT_BINARY_DIR}/games/low-water/signal-annex.afterlight.project"
+        "${PROJECT_BINARY_DIR}/signal-annex-test.save")
+    set_tests_properties(afterlight.story_runtime PROPERTIES TIMEOUT 60 LABELS graphics
+        ENVIRONMENT "SDL_AUDIO_DRIVER=dummy;VK_LAYER_VALIDATE_SYNC=1")
     add_test(NAME afterlight.low_water_story COMMAND afterlight_low_water --raster --verify)
     set_tests_properties(afterlight.low_water_story PROPERTIES TIMEOUT 90 LABELS graphics
         ENVIRONMENT "SDL_AUDIO_DRIVER=dummy;VK_LAYER_VALIDATE_SYNC=1")

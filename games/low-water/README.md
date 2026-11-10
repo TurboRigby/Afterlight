@@ -47,3 +47,23 @@ The test walks the collision route, exercises the keypad and gate, and checks
 both endings. Run the executable with `--verify-ray` on a ray-query driver to
 test the hardware path. Add `--capture /tmp/low-water-optics.ppm` to save the
 view through the water sight for inspection.
+
+## Signal Annex
+
+Signal Annex is a separate, editor-authored Low Water episode. Restore a
+flooded ward's relay, choose how much of its dispatch to broadcast, and
+check what reaches the ferry landing. Use **WASD** and the mouse to move and
+look, **E** to interact, and the arrow keys and **Enter** to answer Iona.
+Open the pause menu to save or resume progress.
+
+```sh
+cmake --build build --target run_low_water_annex
+cmake --build build --target run_low_water_annex_editor
+cmake --build build --target afterlight_story_runtime_test
+ctest --test-dir build -R '^afterlight.story_runtime$' --output-on-failure
+```
+
+The `annex` directory contains both scene files. Their Blueprints drive the
+valve, gate, relay light, and dialogue. The generated project uses the
+first-person starter module, and the scenes request ray-traced shadows and
+emissive GI when supported by the driver.

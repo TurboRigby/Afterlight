@@ -288,3 +288,26 @@ Exposure and tone mapping affect the scene while leaving editor UI readable.
 **Day preset** / **Night preset** adjust these together as one undoable edit.
 Local and emissive lights keep their own settings. Changes in Edit support
 Undo/Redo and Save; adjustments during Play are temporary and reset on Stop.
+
+## Story interactions and dialogue
+
+Select a scene object and open **Edit Interactable Blueprint** under
+**Gameplay**. The editor binds a graph to the object and adds **On Interact**.
+Set the prompt and range in the graph sidebar. In Play, the prompt appears
+when the player looks toward the object's origin within range with a clear
+line of sight. The prompt uses the project's **Interact** action, which
+defaults to **E**.
+
+Connect **On Interact** to a **Show Dialogue** node and select the node to
+edit its text, speaker and choices. Leave both choice labels empty for a
+single **Continue** path, or fill both and connect **First** and **Second**.
+The player uses the arrow keys to select a choice and **Enter** or
+**Interact** to confirm it.
+
+Use **Set Story Flag** and **Get Story Flag** with a shared name such as
+`relay_open`. In a scene's startup event, branch on the flag to restore
+effects such as an opened gate. Set **Change Scene** to the destination's
+filename stem. For example, `landing` opens `landing.afterlight.json` beside
+the project's startup scene. Saving the scene saves the graphs. The
+player's progress save stores the current scene and flags along with the
+game module's state.

@@ -72,7 +72,8 @@ void object_list(editor *app, float height) {
         nk_style_pop_vec2(context);
         if (app->blueprint_mode) {
             ed_blueprint_sidebar_panel(&app->blueprint_state, context,
-                                       app->runtime.playing ? app->runtime.scene : app->document.scene, height);
+                                       app->runtime.playing ? app->runtime.scene : app->document.scene, height,
+                                       app->runtime.playing);
             nk_end(context);
             return;
         }

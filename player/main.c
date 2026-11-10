@@ -334,9 +334,12 @@ static void update(af_engine *engine, double delta, void *memory) {
     bool character = false;
     for (size_t i = 0; i < af_scene_object_count(app->runtime.scene); ++i)
         character |= af_scene_object_at(app->runtime.scene, i)->gameplay.player.enabled;
-    if (!app->menu)
-        ed_play_hud(&app->gui.context, engine, (af_rect){0, 0, (float)w, (float)h}, false, false, false, character);
-    else {
+    if (!app->menu) {
+        af_rect viewport = {0, 0, (float)w, (float)h};
+        ed_play_hud(&app->gui.context, engine, viewport, false, false, false, character);
+        ed_story_hud(&app->gui.context, viewport, app->runtime.scene, app->runtime.story_prompt,
+                     app->runtime.story_choice);
+    } else {
         struct nk_context *ctx = &app->gui.context;
         float width = fminf(460, (float)w - 24), height = fminf(760, (float)h - 24);
         if (nk_begin(ctx, "Game menu", nk_rect(((float)w - width) / 2, ((float)h - height) / 2, width, height),

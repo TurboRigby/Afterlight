@@ -19,6 +19,8 @@ typedef struct ed_runtime {
     void *state;
     bool playing, paused;
     char status[256];
+    char story_prompt[64];
+    unsigned story_choice;
     SDL_SharedObject *library;
     char shadow_path[AF_ASSET_PATH_CAPACITY];
     char module_path[AF_ASSET_PATH_CAPACITY];

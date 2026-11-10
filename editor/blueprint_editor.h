@@ -13,12 +13,14 @@
 
 typedef struct ed_blueprint_state {
     size_t active_graph_index;
+    bool (*record_edit)(void *);
+    void *edit_context;
     float pan_x, pan_y;
     float zoom;
     uint32_t selected_node_id;
 
     /* Node dragging */
-    bool dragging_node;
+    bool dragging_node, drag_recorded;
     uint32_t drag_node_id;
     float drag_node_offset_x;
     float drag_node_offset_y;
@@ -54,7 +56,9 @@ typedef struct ed_blueprint_state {
 } ed_blueprint_state;
 
 void ed_blueprint_state_init(ed_blueprint_state *state);
-void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ctx, af_scene *scene, float height);
+void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ctx, af_scene *scene, float height,
+                                bool is_playing);
+bool ed_blueprint_attach_interactable(ed_blueprint_state *, af_scene *, af_object_id);
 void ed_blueprint_canvas_panel(ed_blueprint_state *state, struct nk_context *ctx, af_scene *scene,
                                af_rect viewport_rect, bool is_playing);
 

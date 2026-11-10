@@ -5,6 +5,7 @@
  */
 
 #include "scene_internal.h"
+#include "blueprint_io.h"
 #include "water_internal.h"
 #include "landscape_internal.h"
 #include "cJSON.h"
@@ -352,7 +353,7 @@ static bool add_body(cJSON *json, af_rigid_body b) {
 static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scene_error *error) {
     static const char *const root_fields[] = {
         "format",       "version", "next_id",    "objects",        "assets",    "light", "shadows", "render",
-        "local_lights", "joints",  "next_joint", "collider_parts", "next_part", "water", "wind",    "landscape"};
+        "local_lights", "joints",  "next_joint", "collider_parts", "next_part", "water", "wind",    "landscape", "blueprints"};
     static const char *const object_fields[] = {"id",       "name",      "mesh",     "visible", "position",
                                                 "rotation", "scale",     "material", "parent",  "collider",
                                                 "gameplay", "animation", "model",    "rig",     "body"};
@@ -373,7 +374,7 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
         version->valuedouble != 19 && version->valuedouble != 20 && version->valuedouble != 21 &&
         version->valuedouble != 22 && version->valuedouble != 23 && version->valuedouble != 24 &&
         version->valuedouble != 25 && version->valuedouble != 26 && version->valuedouble != 27 &&
-        version->valuedouble != 28 && version->valuedouble != AF_SCENE_FILE_VERSION) {
+        version->valuedouble != 28 && version->valuedouble != 29 && version->valuedouble != AF_SCENE_FILE_VERSION) {
         set_error(error, AF_SCENE_ERROR_VERSION, "Unsupported scene version; expected %d.", AF_SCENE_FILE_VERSION);
         return NULL;
     }
@@ -381,6 +382,7 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                       version->valuedouble == 1 ? 4
                                                 : (version->valuedouble == 2 ? 6
                                                                              : (version->valuedouble == 3    ? 7
+                                                                                : version->valuedouble >= 30 ? 17
                                                                                 : version->valuedouble >= 25 ? 16
                                                                                 : version->valuedouble >= 22 ? 15
                                                                                 : version->valuedouble >= 17 ? 14
@@ -1434,6 +1436,10 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
         set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid landscape fields or limits.");
         goto fail;
     }
+    if (version->valuedouble >= 30 && !af_scene_decode_blueprints(scene, root)) {
+        set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid scene Blueprints.");
+        goto fail;
+    }
     free(ids);
     return scene;
 part_fail:
@@ -1576,7 +1582,7 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
         goto fail;
     if (!wa_encode(scene, root))
         goto fail;
-    if (!ls_encode(scene, root))
+    if (!ls_encode(scene, root) || !af_scene_encode_blueprints(scene, root))
         goto fail;
     cJSON *parts = cJSON_AddArrayToObject(root, "collider_parts");
     if (!parts || !add_id(root, "next_part", scene->next_part_id))
