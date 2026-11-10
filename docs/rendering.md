@@ -219,12 +219,15 @@ all simplified wall regions.
 
 Cook with `--stream` to separate the coarse mesh from the fine pages on disk.
 The same loader accepts both formats. The streamed mesh keeps the coarse
-vertices and indices available from the first frame. Each mesh can retain up
-to 24 fine pages, and the renderer supports up to eight streamed meshes at
-once. A worker reads requested pages, and the renderer uploads them and
-reuses cache slots after their frame fences signal. If a fine page is missing
-or unreadable, the region uses its coarse geometry. Shadow and ray geometry
-for streamed meshes use the resident coarse mesh.
+vertices and indices available from the first frame. The renderer supports up
+to eight streamed meshes and 128 resident fine pages per mesh. All assets
+share an 8 MiB default budget for fine-page vertex and index allocations.
+`af_engine_set_cluster_cache_budget` sets that limit in bytes. A limit of
+zero uses coarse geometry everywhere. A worker reads requested pages, and
+the renderer evicts the least recently used pages whose frame fences have
+signaled to make room for new uploads. If a fine page is missing, unreadable
+or too large for the budget, the region uses its coarse geometry. Shadow and
+ray geometry for streamed meshes use the resident coarse mesh.
 
 ```sh
 build/afterlight_cluster_demo build/cluster-wall.afpages
@@ -234,10 +237,10 @@ ctest --test-dir build -R '^afterlight.cluster_' --output-on-failure
 
 On the Apple M4 test, the near view submitted 27,648 of the wall's 147,456
 triangles. The far view submitted 82,036 with LOD enabled. The streaming test
-loaded 32 pages while moving the camera, with eight evictions and roughly
-1.6 MB of resident fine-page buffers at its final stop. These checks measure
-triangle counts, image agreement and residency. GPU timings vary by path
-and driver.
+loads 32 pages while moving the camera under a 1.25 MiB limit and checks
+that uploads resume after reducing the budget to zero and restoring it.
+These checks measure triangle counts, image agreement and residency.
+GPU timings vary by path and driver.
 
 Each streamed mesh queues up to 32 fine-page requests. Requests for the
 same page share one entry. The worker prefers regions seen most recently,

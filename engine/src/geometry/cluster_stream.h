@@ -4,7 +4,7 @@
 
 #include "cluster.h"
 
-#define AF_CLUSTER_RESIDENT_PAGES 24u
+#define AF_CLUSTER_RESIDENT_PAGES 128u
 #define AF_CLUSTER_STREAM_ASSETS 8u
 #define AF_CLUSTER_REQUEST_LIMIT 32u
 

@@ -882,6 +882,10 @@ void af_engine_set_cluster_gpu_culling(af_engine *engine, bool enabled) {
         af_renderer_set_cluster_gpu_culling(engine->renderer, enabled);
 }
 
+bool af_engine_set_cluster_cache_budget(af_engine *engine, uint64_t bytes) {
+    return engine && af_renderer_set_cluster_cache_budget(engine->renderer, bytes);
+}
+
 af_cluster_stats af_engine_cluster_stats(const af_engine *engine) {
     return engine ? af_renderer_cluster_stats(engine->renderer) : (af_cluster_stats){0};
 }

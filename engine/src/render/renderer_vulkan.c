@@ -230,9 +230,18 @@ typedef struct af_cached_cluster_page {
     uint64_t last_used;
 } af_cached_cluster_page;
 
+typedef struct af_pending_cluster_page {
+    af_cluster_mesh mesh;
+    af_gpu_mesh gpu;
+    VkMemoryRequirements vertices, indices;
+    uint32_t region;
+    uint64_t last_wanted;
+} af_pending_cluster_page;
+
 struct af_cluster_residency {
     af_cluster_stream *stream;
-    bool *failed;
+    uint64_t *page_requirements;
+    af_pending_cluster_page pending;
     af_cached_cluster_page pages[AF_CLUSTER_RESIDENT_PAGES];
 };
 
@@ -371,7 +380,7 @@ struct af_renderer {
     af_mat4 *cluster_matrices;
     af_cluster_span *cluster_spans;
     af_cluster_stream_batch *cluster_stream_batches;
-    uint64_t page_uploads, page_evictions, page_failures;
+    uint64_t page_budget, page_uploads, page_evictions, page_failures;
     size_t cluster_object_capacity;
     size_t visible_objects, culled_objects;
     double gpu_budget_ms;
@@ -1048,7 +1057,9 @@ static void destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh) {
         af_cluster_close_stream(r->stream);
         for (unsigned i = 0; i < AF_CLUSTER_RESIDENT_PAGES; ++i)
             destroy_mesh(renderer, &r->pages[i].gpu);
-        free(r->failed);
+        af_cluster_free(&r->pending.mesh);
+        destroy_mesh(renderer, &r->pending.gpu);
+        free(r->page_requirements);
         free(r);
         mesh->residency = NULL;
     }
@@ -1067,11 +1078,13 @@ static void destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh) {
     mesh->index_count = 0;
 }
 
-static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
-                          af_gpu_buffer *buffer) {
-    bool ray_input =
-        renderer->ray_supported && (usage & (VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
-    if (ray_input)
+static bool ray_buffer_usage(const af_renderer *renderer, VkBufferUsageFlags usage) {
+    return renderer->ray_supported && (usage & (VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
+}
+
+static bool create_upload_buffer(af_renderer *renderer, VkDeviceSize size, VkBufferUsageFlags usage,
+                                 af_gpu_buffer *buffer, VkMemoryRequirements *requirements) {
+    if (ray_buffer_usage(renderer, usage))
         usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
     VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1080,9 +1093,12 @@ static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize 
                                .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
     if (!vk_ok(vkCreateBuffer(renderer->device, &info, NULL, &buffer->handle), "vkCreateBuffer"))
         return false;
-    VkMemoryRequirements requirements;
-    vkGetBufferMemoryRequirements(renderer->device, buffer->handle, &requirements);
-    buffer->allocation_bytes = requirements.size;
+    vkGetBufferMemoryRequirements(renderer->device, buffer->handle, requirements);
+    return true;
+}
+
+static bool fill_upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
+                               af_gpu_buffer *buffer, VkMemoryRequirements requirements) {
     VkPhysicalDeviceMemoryProperties properties;
     vkGetPhysicalDeviceMemoryProperties(renderer->physical_device, &properties);
     uint32_t memory_type = UINT32_MAX;
@@ -1101,11 +1117,13 @@ static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize 
     VkMemoryAllocateFlagsInfo ray_flags = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
                                            .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT};
     VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                                       .pNext = ray_input ? &ray_flags : NULL,
+                                       .pNext = ray_buffer_usage(renderer, usage) ? &ray_flags : NULL,
                                        .allocationSize = requirements.size,
                                        .memoryTypeIndex = memory_type};
-    if (!vk_ok(vkAllocateMemory(renderer->device, &allocation, NULL, &buffer->memory), "vkAllocateMemory") ||
-        !vk_ok(vkBindBufferMemory(renderer->device, buffer->handle, buffer->memory, 0), "vkBindBufferMemory"))
+    if (!vk_ok(vkAllocateMemory(renderer->device, &allocation, NULL, &buffer->memory), "vkAllocateMemory"))
+        return false;
+    buffer->allocation_bytes = requirements.size;
+    if (!vk_ok(vkBindBufferMemory(renderer->device, buffer->handle, buffer->memory, 0), "vkBindBufferMemory"))
         return false;
     if (!data)
         return true;
@@ -1123,6 +1141,13 @@ static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize 
     }
     vkUnmapMemory(renderer->device, buffer->memory);
     return flushed;
+}
+
+static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
+                          af_gpu_buffer *buffer) {
+    VkMemoryRequirements requirements;
+    return create_upload_buffer(renderer, size, usage, buffer, &requirements) &&
+           fill_upload_buffer(renderer, data, size, usage, buffer, requirements);
 }
 
 static size_t find_mesh_index(const af_renderer *renderer, const char *name) {
@@ -1274,9 +1299,9 @@ bool af_renderer_upload_cluster_stream(af_renderer *r, const char *name, af_clus
     if (!cache)
         return false;
     uint32_t count = af_cluster_stream_region_count(stream);
-    cache->failed = calloc(count, sizeof(*cache->failed));
-    if (!cache->failed || !af_renderer_upload_clusters(r, name, mesh)) {
-        free(cache->failed);
+    cache->page_requirements = calloc(count, sizeof(*cache->page_requirements));
+    if (!cache->page_requirements || !af_renderer_upload_clusters(r, name, mesh)) {
+        free(cache->page_requirements);
         free(cache);
         return false;
     }
@@ -1311,6 +1336,7 @@ af_cluster_stats af_renderer_cluster_stats(const af_renderer *r) {
     stats.page_uploads = r->page_uploads;
     stats.page_evictions = r->page_evictions;
     stats.page_failures = r->page_failures;
+    stats.page_budget = r->page_budget;
     for (size_t i = 0; i < r->mesh_count; ++i) {
         const af_cluster_residency *cache = r->meshes[i].gpu.residency;
         if (!cache)
@@ -2135,6 +2161,7 @@ af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation, af_e
     renderer->window = window;
     renderer->gpu_budget_ms = 1000.0 / 60;
     renderer->gpu_budget_bytes = UINT64_C(512) * 1024 * 1024;
+    renderer->page_budget = UINT64_C(8) * 1024 * 1024;
     renderer->resize_pending = true;
     if (!create_instance(renderer, enable_validation, startup))
         goto fail;

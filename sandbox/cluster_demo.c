@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <string.h>
 
+static const uint64_t stream_budget = UINT64_C(1280) * 1024;
+
 typedef struct demo {
     const char *path;
     af_scene *scene;
@@ -38,6 +40,8 @@ static bool init(af_engine *engine, void *user) {
     d->camera.far_clip = 400;
     d->gpu_expected = af_engine_cluster_stats(engine).gpu_supported;
     if (d->verify_stream) {
+        if (!af_engine_set_cluster_cache_budget(engine, stream_budget))
+            return false;
         d->camera.position.x = -12;
         af_engine_set_cluster_gpu_culling(engine, false);
     }
@@ -119,11 +123,26 @@ static void verify_stream_frame(af_engine *engine, demo *d) {
         d->phase = 1;
         return;
     }
-    if (s.page_failures || s.resident_pages > AF_CLUSTER_RESIDENT_PAGES || d->frame > 360) {
+    if (s.page_failures || s.page_bytes > s.page_budget || d->frame > 360) {
         fprintf(stderr, "Streaming failed at stop %u: %" PRIu64 " uploads, %" PRIu64 " failed pages\n", d->phase,
                 s.page_uploads, s.page_failures);
         d->failed = true;
         af_engine_request_quit(engine);
+        return;
+    }
+    if (d->phase == 5) {
+        d->failed = s.page_budget || s.page_bytes || s.resident_pages || !s.coarse_regions ||
+                    !af_engine_set_cluster_cache_budget(engine, stream_budget);
+        d->phase = 6;
+        if (d->failed)
+            af_engine_request_quit(engine);
+        return;
+    }
+    if (d->phase == 6) {
+        if (s.page_uploads > d->previous_uploads && s.page_bytes) {
+            d->phase = 7;
+            af_engine_request_quit(engine);
+        }
         return;
     }
     if (s.page_uploads < d->previous_uploads + 8 || !s.triangles)
@@ -139,8 +158,12 @@ static void verify_stream_frame(af_engine *engine, demo *d) {
            d->phase, s.page_uploads, s.resident_pages, s.page_evictions, s.page_bytes);
     if (++d->phase == 5) {
         printf("Peak queued page requests: %u\n", s.peak_asset_requests);
-        d->failed = !s.page_evictions || s.peak_asset_requests < 2 || s.peak_asset_requests > AF_CLUSTER_REQUEST_LIMIT;
-        af_engine_request_quit(engine);
+        d->previous_uploads = s.page_uploads;
+        d->failed = s.page_budget != stream_budget || !s.page_evictions ||
+                    s.page_uploads >= AF_CLUSTER_RESIDENT_PAGES || s.peak_asset_requests < 2 ||
+                    s.peak_asset_requests > AF_CLUSTER_REQUEST_LIMIT || !af_engine_set_cluster_cache_budget(engine, 0);
+        if (d->failed)
+            af_engine_request_quit(engine);
         return;
     }
     d->previous_uploads = s.page_uploads;
@@ -225,6 +248,5 @@ int main(int argc, char **argv) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || d.failed || (d.verify && (d.phase != (d.verify_stream ? 5u : 7u) || stats.validation_errors)) ? 1
-                                                                                                                   : 0;
+    return result || d.failed || (d.verify && (d.phase != 7 || stats.validation_errors)) ? 1 : 0;
 }

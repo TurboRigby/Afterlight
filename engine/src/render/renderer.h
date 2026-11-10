@@ -68,6 +68,7 @@ bool af_renderer_upload_clusters(af_renderer *, const char *name, af_cluster_mes
 void af_renderer_set_cluster_lod(af_renderer *, bool enabled);
 void af_renderer_set_cluster_gpu_culling(af_renderer *, bool enabled);
 void af_renderer_set_cluster_rendering(af_renderer *, bool enabled, bool debug_colors);
+bool af_renderer_set_cluster_cache_budget(af_renderer *, uint64_t bytes);
 af_cluster_stats af_renderer_cluster_stats(const af_renderer *);
 bool af_renderer_set_render_budget(af_renderer *, double, uint64_t);
 af_engine_stats af_renderer_stats(const af_renderer *renderer);

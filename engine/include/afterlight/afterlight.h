@@ -289,7 +289,7 @@ void af_engine_set_prop_instancing(af_engine *, bool enabled);
 /* Cooked static geometry is opt-in per asset. These counters cover its opaque pass. */
 typedef struct af_cluster_stats {
     uint64_t candidates, visible, triangles, coarse_regions;
-    uint64_t resident_pages, page_bytes, page_uploads, page_evictions, page_failures;
+    uint64_t resident_pages, page_bytes, page_budget, page_uploads, page_evictions, page_failures;
     uint32_t queued_requests, peak_asset_requests;
     bool gpu_supported, gpu_active;
 } af_cluster_stats;
@@ -297,6 +297,8 @@ bool af_engine_load_cluster_mesh(af_engine *, const char *name, const char *path
 void af_engine_set_cluster_lod(af_engine *, bool enabled);
 void af_engine_set_cluster_gpu_culling(af_engine *, bool enabled);
 void af_engine_set_cluster_rendering(af_engine *, bool enabled, bool debug_colors);
+/* Limits fine-page vertex and index allocations across all streamed assets. Zero uses only coarse geometry. */
+bool af_engine_set_cluster_cache_budget(af_engine *, uint64_t bytes);
 af_cluster_stats af_engine_cluster_stats(const af_engine *);
 
 bool af_engine_set_render_budget(af_engine *, double gpu_ms, uint64_t bytes);
