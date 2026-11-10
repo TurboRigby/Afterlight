@@ -286,10 +286,11 @@ af_water_stats af_engine_water_stats(const af_engine *);
 bool af_engine_set_debug_view(af_engine *, af_debug_view);
 void af_engine_set_visibility_culling(af_engine *, bool enabled);
 void af_engine_set_prop_instancing(af_engine *, bool enabled);
-/* Cooked static geometry is opt-in per asset. These counters cover its opaque pass. */
+/* Cooked static geometry is opt-in per asset. The first four counters cover its opaque pass. */
 typedef struct af_cluster_stats {
     uint64_t candidates, visible, triangles, coarse_regions;
     uint64_t resident_pages, page_bytes, page_budget, page_uploads, page_evictions, page_failures;
+    uint64_t shadow_fine_draws, local_shadow_fine_draws, ray_fine_instances;
     uint32_t queued_requests, peak_asset_requests;
     bool gpu_supported, gpu_active;
 } af_cluster_stats;

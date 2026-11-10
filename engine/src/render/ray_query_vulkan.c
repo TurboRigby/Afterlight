@@ -24,9 +24,11 @@ typedef struct ray_acceleration {
     bool dirty;
 } ray_acceleration;
 typedef struct ray_mesh {
-    uint64_t key;
+    uint64_t key, page_generation, serial;
     ray_acceleration as;
     VkDeviceAddress vertices, indices;
+    uint32_t first_index, index_count, frame_mask;
+    bool transient;
 } ray_mesh;
 typedef struct ray_surface {
     af_color color;
@@ -57,7 +59,8 @@ struct af_vk_ray_query {
     PFN_vkGetAccelerationStructureDeviceAddressKHR address;
     PFN_vkGetBufferDeviceAddress buffer_address;
     ray_mesh *meshes;
-    size_t mesh_count, mesh_capacity;
+    size_t mesh_count, mesh_capacity, static_mesh_count;
+    uint64_t mesh_serial;
     ray_frame *frames;
     unsigned frame_count, allocations;
     uint32_t timestamp_bits;
@@ -218,10 +221,13 @@ void af_vk_ray_query_destroy(af_vk_ray_query *r) {
     free(r);
 }
 static ray_mesh *mesh_get(af_vk_ray_query *r, const af_ray_instance *in) {
-    for (size_t i = 0; i < r->mesh_count; ++i)
-        if (r->meshes[i].key == in->mesh_key)
-            return &r->meshes[i];
-    if (r->mesh_count >= MAX_MESHES || in->index_count / 3 > r->limits.maxPrimitiveCount)
+    for (size_t i = 0; i < r->mesh_count; ++i) {
+        ray_mesh *m = &r->meshes[i];
+        if (m->key == in->mesh_key && m->first_index == in->first_index && m->index_count == in->index_count &&
+            m->page_generation == in->page_generation)
+            return m;
+    }
+    if ((!in->transient && r->static_mesh_count >= MAX_MESHES) || in->index_count / 3 > r->limits.maxPrimitiveCount)
         return NULL;
     if (r->mesh_count == r->mesh_capacity) {
         size_t cap = r->mesh_capacity ? r->mesh_capacity * 2 : 16;
@@ -231,8 +237,13 @@ static ray_mesh *mesh_get(af_vk_ray_query *r, const af_ray_instance *in) {
         r->meshes = m;
         r->mesh_capacity = cap;
     }
-    ray_mesh *m = &r->meshes[r->mesh_count++];
-    *m = (ray_mesh){.key = in->mesh_key};
+    ray_mesh *m = &r->meshes[r->mesh_count];
+    *m = (ray_mesh){.key = in->mesh_key,
+                    .page_generation = in->page_generation,
+                    .serial = ++r->mesh_serial,
+                    .first_index = in->first_index,
+                    .index_count = in->index_count,
+                    .transient = in->transient};
     VkBufferDeviceAddressInfo vi = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = in->vertices},
                               ii = vi;
     ii.buffer = in->indices;
@@ -240,6 +251,8 @@ static ray_mesh *mesh_get(af_vk_ray_query *r, const af_ray_instance *in) {
     m->indices = r->buffer_address(r->device, &ii);
     if (!m->vertices || !m->indices)
         return NULL;
+    /* Both the BLAS and hit shading start primitive indices at this range. */
+    m->indices += (VkDeviceSize)in->first_index * sizeof(uint32_t);
     VkAccelerationStructureGeometryKHR geometry = {
         .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
         .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
@@ -251,10 +264,31 @@ static ray_mesh *mesh_get(af_vk_ray_query *r, const af_ray_instance *in) {
                                .maxVertex = in->vertex_count - 1,
                                .indexType = VK_INDEX_TYPE_UINT32,
                                .indexData.deviceAddress = m->indices}};
-    return acceleration_create(r, &m->as, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, geometry,
-                               in->index_count / 3)
-               ? m
-               : NULL;
+    if (!acceleration_create(r, &m->as, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, geometry,
+                             in->index_count / 3)) {
+        acceleration_free(r, &m->as);
+        return NULL;
+    }
+    ++r->mesh_count;
+    r->static_mesh_count += !m->transient;
+    return m;
+}
+
+static void retire_streamed_meshes(af_vk_ray_query *r) {
+    size_t i = 0;
+    while (i < r->mesh_count) {
+        ray_mesh *m = &r->meshes[i];
+        if (m->transient && !m->frame_mask) {
+            acceleration_free(r, &m->as);
+            *m = r->meshes[--r->mesh_count];
+        } else {
+            ++i;
+        }
+    }
+}
+
+size_t af_vk_ray_query_instance_limit(const af_vk_ray_query *r) {
+    return r->limits.maxInstanceCount < MAX_INSTANCES ? (size_t)r->limits.maxInstanceCount : MAX_INSTANCES;
 }
 static uint64_t hash_bytes(uint64_t h, const void *data, size_t bytes) {
     const unsigned char *p = data;
@@ -266,8 +300,11 @@ static uint64_t hash_bytes(uint64_t h, const void *data, size_t bytes) {
 }
 bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_instance *in, size_t count,
                              bool reflections, VkDescriptorSet descriptor) {
-    if (!r || frame >= r->frame_count || count > MAX_INSTANCES || count > r->limits.maxInstanceCount)
+    if (!r || frame >= r->frame_count || count > af_vk_ray_query_instance_limit(r))
         return false;
+    uint32_t frame_bit = 1u << frame;
+    for (size_t i = 0; i < r->mesh_count; ++i)
+        r->meshes[i].frame_mask &= ~frame_bit;
     ray_frame *f = &r->frames[frame];
     if (f->submitted) {
         uint64_t ticks[2];
@@ -305,6 +342,7 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_in
             ok = false;
             break;
         }
+        m->frame_mask |= frame_bit;
         for (unsigned row = 0; row < 3; ++row)
             for (unsigned col = 0; col < 4; ++col)
                 instances[i].transform.matrix[row][col] = in[i].world.elements[col * 4 + row];
@@ -320,6 +358,8 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_in
                                               : VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         instances[i].accelerationStructureReference = m->as.address;
         hash = hash_bytes(hash, &instances[i], sizeof(instances[i]));
+        /* Rebuilding after retirement is necessary even if an address is reused. */
+        hash = hash_bytes(hash, &m->serial, sizeof(m->serial));
     }
     if (ok && !f->surfaces.coherent) {
         VkMappedMemoryRange range = {
@@ -331,6 +371,7 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_in
         free(instances);
         return false;
     }
+    retire_streamed_meshes(r);
     size_t capacity = count ? count : 1;
     if (capacity > f->capacity || !f->as.handle) {
         acceleration_free(r, &f->as);
@@ -431,7 +472,7 @@ void af_vk_ray_query_record(af_vk_ray_query *r, unsigned frame, VkCommandBuffer 
     vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
                          VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &before, 0, NULL, 0, NULL);
     for (size_t i = 0; i < r->mesh_count; ++i)
-        if (r->meshes[i].as.dirty) {
+        if (r->meshes[i].as.dirty && (r->meshes[i].frame_mask & (1u << frame))) {
             build_one(r, &r->meshes[i].as, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, command);
             ++r->stats.blas_builds;
         }

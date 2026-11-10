@@ -6,12 +6,12 @@
 typedef struct af_vk_ray_query af_vk_ray_query;
 enum { AF_RAY_SHADOW_MASK = 1, AF_RAY_REFLECTION_MASK = 2, AF_RAY_GI_MASK = 4 };
 typedef struct af_ray_instance {
-    uint64_t mesh_key;
+    uint64_t mesh_key, page_generation;
     VkBuffer vertices, indices;
-    uint32_t vertex_count, index_count;
+    uint32_t vertex_count, first_index, index_count;
     af_mat4 world;
     uint8_t mask;
-    bool single_sided;
+    bool single_sided, transient;
     af_color color;
     af_vec4 emission_unlit;
 } af_ray_instance;
@@ -24,6 +24,7 @@ af_vk_ray_query *af_vk_ray_query_create(VkPhysicalDevice physical, VkDevice devi
                                         uint32_t timestamp_bits, float timestamp_period);
 /* The caller must retire GPU work before destruction. */
 void af_vk_ray_query_destroy(af_vk_ray_query *r);
+size_t af_vk_ray_query_instance_limit(const af_vk_ray_query *r);
 /* Called after this frame's fence, before acquiring a presentation image. */
 bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_instance *instances, size_t count,
                              bool reflections, VkDescriptorSet descriptor);

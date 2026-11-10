@@ -226,8 +226,17 @@ share an 8 MiB default budget for fine-page vertex and index allocations.
 zero uses coarse geometry everywhere. A worker reads requested pages, and
 the renderer evicts the least recently used pages whose frame fences have
 signaled to make room for new uploads. If a fine page is missing, unreadable
-or too large for the budget, the region uses its coarse geometry. Shadow and
-ray geometry for streamed meshes use the resident coarse mesh.
+or too large for the budget, the region uses its coarse geometry.
+
+Directional and local shadow maps, and hardware ray queries, substitute
+resident fine pages for the same visible regions selected by the opaque
+pass. Regions outside the camera view keep their coarse geometry so they
+can still cast shadows and appear in reflections. The renderer invalidates
+cached shadow maps when their fine-page selection changes. Ray geometry
+groups neighboring coarse regions into indexed ranges and retires unused
+acceleration structures after their frame fences signal. A frame can add
+up to 256 ray instances for streamed detail. An object falls back to its
+coarse mesh if its detail would exceed the remaining instance allowance.
 
 ```sh
 build/afterlight_cluster_demo build/cluster-wall.afpages
@@ -238,9 +247,10 @@ ctest --test-dir build -R '^afterlight.cluster_' --output-on-failure
 On the Apple M4 test, the near view submitted 27,648 of the wall's 147,456
 triangles. The far view submitted 82,036 with LOD enabled. The streaming test
 loads 32 pages while moving the camera under a 1.25 MiB limit and checks
-that uploads resume after reducing the budget to zero and restoring it.
-These checks measure triangle counts, image agreement and residency.
-GPU timings vary by path and driver.
+that fine pages return to both shadow map types after reducing the budget
+to zero and restoring it. On devices with hardware ray queries, the test
+also checks the fine-to-coarse transition in the ray scene. GPU timings
+vary by path and driver.
 
 Each streamed mesh queues up to 32 fine-page requests. Requests for the
 same page share one entry. The worker prefers regions seen most recently,

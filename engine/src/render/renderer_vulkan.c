@@ -227,7 +227,7 @@ typedef struct af_gpu_mesh {
 typedef struct af_cached_cluster_page {
     af_gpu_mesh gpu;
     uint32_t region, frame_mask;
-    uint64_t last_used;
+    uint64_t last_used, generation;
 } af_cached_cluster_page;
 
 typedef struct af_pending_cluster_page {
@@ -2791,8 +2791,38 @@ static void bind_object_mesh(af_frame *frame, const af_gpu_mesh *mesh, const af_
     vkCmdBindVertexBuffers(frame->command, 0, 1, &vertices, &offset);
     vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
 }
+#include "cluster_stream_vulkan.h"
+
+static size_t add_streamed_ray_instances(af_renderer *r, const af_gpu_mesh *mesh, af_ray_instance base,
+                                         af_cluster_view view, size_t extra, af_ray_instance *inputs) {
+    af_cluster_index_range ranges[AF_CLUSTER_INDEX_RANGES];
+    size_t count = cluster_index_ranges(r, mesh, base.world, view, ranges);
+    if (!count || count - 1 > extra) {
+        inputs[0] = base;
+        return 1;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        const af_cluster_index_range *range = &ranges[i];
+        af_ray_instance input = base;
+        input.transient = true;
+        input.first_index = range->first;
+        input.index_count = range->count;
+        if (range->page) {
+            af_cached_cluster_page *page = range->page;
+            use_cluster_page(r, page);
+            input.page_generation = page->generation;
+            input.vertices = page->gpu.vertices.handle;
+            input.indices = page->gpu.indices.handle;
+            input.vertex_count = page->gpu.vertex_count;
+            ++r->cluster_stats.ray_fine_instances;
+        }
+        inputs[i] = input;
+    }
+    return count;
+}
+
 static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *scene, bool shadows, bool reflections,
-                              bool gi, bool material_effects, uint64_t *emitter_signature) {
+                              bool gi, bool material_effects, af_cluster_view view, uint64_t *emitter_signature) {
     if (r->rays && r->ray_revision != r->mesh_revision) {
         if (!af_renderer_wait_idle(r))
             return false;
@@ -2807,12 +2837,18 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
             return false;
     }
     size_t objects = af_scene_object_count(scene);
-    if (objects > r->ray_input_capacity) {
-        af_ray_instance *inputs = realloc(r->ray_inputs, objects * sizeof(*inputs));
+    size_t limit = af_vk_ray_query_instance_limit(r->rays);
+    /* Reserve space for ordinary geometry before adding streamed ranges. */
+    size_t extra = objects < limit ? limit - objects : 0;
+    if (extra > 256)
+        extra = 256;
+    size_t capacity = objects + extra;
+    if (capacity > r->ray_input_capacity) {
+        af_ray_instance *inputs = realloc(r->ray_inputs, capacity * sizeof(*inputs));
         if (!inputs)
             return false;
         r->ray_inputs = inputs;
-        r->ray_input_capacity = objects;
+        r->ray_input_capacity = capacity;
     }
 
     size_t count = 0, shadow_index = 0;
@@ -2847,29 +2883,31 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
         if (caster && shadows)
             caster->ray_caster = true;
 
-        af_ray_instance *input = &r->ray_inputs[count++];
-        *input = (af_ray_instance){
-            .mesh_key = mesh + 1,
-            .vertices = asset->gpu.vertices.handle,
-            .indices = asset->gpu.indices.handle,
-            .vertex_count = asset->gpu.vertex_count,
-            .index_count = asset->gpu.index_count,
-            .world = world,
-            .mask = mask,
-            .single_sided = asset->gpu.sidedness == AF_MESH_SIDES_FRONT,
-            .color = material->base_color,
-            .emission_unlit = {material->emission.x * material->emission_strength,
-                               material->emission.y * material->emission_strength,
-                               material->emission.z * material->emission_strength, material->unlit ? 1.f : 0.f}};
-        af_vec4 emission = input->emission_unlit;
+        af_ray_instance input = {.mesh_key = mesh + 1,
+                                 .vertices = asset->gpu.vertices.handle,
+                                 .indices = asset->gpu.indices.handle,
+                                 .vertex_count = asset->gpu.vertex_count,
+                                 .index_count = asset->gpu.index_count,
+                                 .world = world,
+                                 .mask = mask,
+                                 .single_sided = asset->gpu.sidedness == AF_MESH_SIDES_FRONT,
+                                 .color = material->base_color,
+                                 .emission_unlit = {material->emission.x * material->emission_strength,
+                                                    material->emission.y * material->emission_strength,
+                                                    material->emission.z * material->emission_strength,
+                                                    material->unlit ? 1.f : 0.f}};
+        size_t added = add_streamed_ray_instances(r, &asset->gpu, input, view, extra, r->ray_inputs + count);
+        count += added;
+        extra -= added - 1;
+        af_vec4 emission = input.emission_unlit;
         if (emitter_signature && (emission.x > 0 || emission.y > 0 || emission.z > 0 || material->unlit)) {
             /* Track which emitters contribute and their output. Motion of a
                visible emitter is continuous and should keep temporal history. */
             *emitter_signature = shadow_hash(*emitter_signature, &object->id, sizeof(object->id));
-            *emitter_signature = shadow_hash(*emitter_signature, &input->mesh_key, sizeof(input->mesh_key));
+            *emitter_signature = shadow_hash(*emitter_signature, &input.mesh_key, sizeof(input.mesh_key));
             *emitter_signature = shadow_hash(*emitter_signature, &emission, sizeof(emission));
             if (material->unlit)
-                *emitter_signature = shadow_hash(*emitter_signature, &input->color, sizeof(input->color));
+                *emitter_signature = shadow_hash(*emitter_signature, &input.color, sizeof(input.color));
         }
     }
     if (shadows)
@@ -2879,7 +2917,47 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
     return af_vk_ray_query_prepare(r->rays, r->frame_index, r->ray_inputs, count,
                                    reflections || gi || material_effects, frame->descriptor);
 }
-static uint64_t shadow_signature(af_renderer *r, af_mat4 matrix, af_shadow_settings settings, bool enabled) {
+static size_t shadow_cluster_ranges(const af_renderer *r, const af_shadow_draw *draw, af_cluster_view view,
+                                    af_cluster_index_range *ranges) {
+    if (draw->object_index == SIZE_MAX || (draw->material_flags & 3u) != AF_ALPHA_OPAQUE)
+        return 0;
+    return cluster_index_ranges(r, &r->meshes[draw->mesh].gpu, draw->model, view, ranges);
+}
+
+static void draw_shadow_casters(af_renderer *r, af_frame *frame, const af_scene *scene, af_vk_shadows *maps,
+                                af_mat4 matrix, af_cluster_view view, uint64_t *fine_draws) {
+    for (size_t i = 0; i < r->shadow_count; ++i) {
+        const af_shadow_draw *draw = &r->shadow_draws[i];
+        if (draw->ray_caster || !af_shadow_intersects(matrix, &r->shadow_bounds[i]))
+            continue;
+        const af_mesh_asset *asset = &r->meshes[draw->mesh];
+        const af_gpu_mesh *mesh = asset->dynamic ? &asset->streams[r->frame_index].gpu : &asset->gpu;
+        af_mat4 mvp = af_mat4_mul(matrix, draw->model);
+        af_vk_shadows_push(maps, frame->command, mvp.elements, draw->skin_base, draw->material_flags, draw->alpha,
+                           draw->cutoff, af_vk_texture_descriptor(draw->texture));
+        af_cluster_index_range ranges[AF_CLUSTER_INDEX_RANGES];
+        size_t count = shadow_cluster_ranges(r, draw, view, ranges);
+        if (!count) {
+            bind_object_mesh(frame, mesh, morph_draw_for(r, scene, draw->object_index));
+            vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
+            ++r->shadow_draw_calls;
+            continue;
+        }
+        for (size_t j = 0; j < count; ++j) {
+            af_cached_cluster_page *page = ranges[j].page;
+            if (page) {
+                use_cluster_page(r, page);
+                ++*fine_draws;
+            }
+            bind_object_mesh(frame, page ? &page->gpu : mesh, NULL);
+            vkCmdDrawIndexed(frame->command, ranges[j].count, 1, ranges[j].first, 0, 0);
+        }
+        r->shadow_draw_calls += count;
+    }
+}
+
+static uint64_t shadow_signature(af_renderer *r, af_mat4 matrix, af_shadow_settings settings, bool enabled,
+                                 af_cluster_view view) {
     uint64_t h = shadow_hash(UINT64_C(14695981039346656037), &matrix, sizeof(matrix));
     h = shadow_hash(h, &settings.constant_bias, sizeof(float));
     h = shadow_hash(h, &settings.slope_bias, sizeof(float));
@@ -2899,6 +2977,16 @@ static uint64_t shadow_signature(af_renderer *r, af_mat4 matrix, af_shadow_setti
             const af_morph_draw *morph = morph_draw_for(r, r->morph_scene, r->shadow_draws[i].object_index);
             if (morph)
                 h = shadow_hash(h, &morph->signature, sizeof(morph->signature));
+            const af_shadow_draw *draw = &r->shadow_draws[i];
+            if (r->meshes[draw->mesh].gpu.residency && !draw->ray_caster &&
+                af_shadow_intersects(matrix, &r->shadow_bounds[i])) {
+                af_cluster_index_range ranges[AF_CLUSTER_INDEX_RANGES];
+                size_t count = shadow_cluster_ranges(r, draw, view, ranges);
+                h = shadow_hash(h, &count, sizeof(count));
+                for (size_t j = 0; j < count; ++j)
+                    if (ranges[j].page)
+                        h = shadow_hash(h, &ranges[j].page->generation, sizeof(ranges[j].page->generation));
+            }
         }
     return h ? h : 1;
 }
@@ -3192,30 +3280,6 @@ static void bind_scene_material(af_renderer *r, af_frame *frame, const af_materi
     }
 }
 
-static float cluster_error_scale(af_mat4 world, float pixel_scale) {
-    af_vec3 axes[3];
-    for (unsigned i = 0; i < 3; ++i)
-        axes[i] = (af_vec3){world.elements[i * 4], world.elements[i * 4 + 1], world.elements[i * 4 + 2]};
-    /* Bound the largest singular value, including parent-induced shear. */
-    float squared = 0;
-    for (unsigned i = 0; i < 3; ++i) {
-        float sum = 0;
-        for (unsigned j = 0; j < 3; ++j)
-            sum += fabsf(af_vec3_dot(axes[i], axes[j]));
-        squared = fmaxf(squared, sum);
-    }
-    return sqrtf(squared) * pixel_scale;
-}
-
-static bool cluster_wants_coarse(af_mat4 clip, af_vec3 minimum, af_vec3 maximum, float pixels, bool lod) {
-    if (!lod)
-        return false;
-    float x = clip.elements[3], y = clip.elements[7], z = clip.elements[11];
-    float nearest = clip.elements[15] + x * (x >= 0 ? minimum.x : maximum.x) + y * (y >= 0 ? minimum.y : maximum.y) +
-                    z * (z >= 0 ? minimum.z : maximum.z);
-    return nearest > 0 && pixels <= 2.f * nearest;
-}
-
 static af_cluster_span cluster_range(const af_gpu_mesh *mesh, uint32_t region, af_mat4 clip, float error_scale,
                                      bool lod, bool *coarse) {
     *coarse = false;
@@ -3229,7 +3293,6 @@ static af_cluster_span cluster_range(const af_gpu_mesh *mesh, uint32_t region, a
     return (af_cluster_span){r->fine_first, r->fine_count};
 }
 
-#include "cluster_stream_vulkan.h"
 #include "cluster_compute_vulkan.h"
 
 static size_t draw_cluster_span(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
@@ -3520,6 +3583,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         return false;
     renderer->cpu_fence_ms =
         (double)(SDL_GetPerformanceCounter() - wait_start) * 1000 / (double)SDL_GetPerformanceFrequency();
+    af_cluster_view cluster_camera = cluster_view(&uniform, camera);
+    renderer->cluster_stats = (af_cluster_stats){0};
+    update_cluster_pages(renderer);
     if (!stream_prepare(renderer))
         return false;
     if (renderer->morph_vertex_count &&
@@ -3545,9 +3611,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     uint64_t emitter_signature = UINT64_C(14695981039346656037);
     if ((ray_shadows || ray_reflections || ray_gi || ray_material_effects) &&
         !prepare_ray_scene(renderer, frame, scene, ray_shadows, ray_reflections, ray_gi, ray_material_effects,
-                           ray_gi && environment_settings.rtgi_emissive ? &emitter_signature : NULL)) {
+                           cluster_camera, ray_gi && environment_settings.rtgi_emissive ? &emitter_signature : NULL)) {
         af_log("warning", "Ray-query initialization/build preparation failed; using raster and environment fallbacks.");
         renderer->ray_failed = true;
+        renderer->cluster_stats.ray_fine_instances = 0;
         renderer->resize_pending = true;
         return true;
     }
@@ -3680,7 +3747,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     renderer->shadow_passes = renderer->shadow_cached_passes = 0;
     for (uint32_t layer = 0; layer < shadow_view.count; ++layer) {
         uint64_t signature = shadow_signature(renderer, shadow_view.matrices[layer], af_scene_get_shadows(scene),
-                                              uniform.shadow_params.x > .5f);
+                                              uniform.shadow_params.x > .5f, cluster_camera);
         signature = shadow_hash(signature, &resource_config, sizeof(resource_config));
         if (frame->shadow_signatures[layer] == signature) {
             ++renderer->shadow_cached_passes;
@@ -3690,22 +3757,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         ++renderer->shadow_passes;
         af_vk_shadows_begin(renderer->shadows, frame->command, renderer->frame_index, layer,
                             af_scene_get_shadows(scene), frame->descriptor);
-        for (size_t i = 0; uniform.shadow_params.x > .5f && i < renderer->shadow_count; ++i) {
-            if (!af_shadow_intersects(shadow_view.matrices[layer], &renderer->shadow_bounds[i]))
-                continue;
-            af_shadow_draw draw = renderer->shadow_draws[i];
-            if (ray_shadows && draw.ray_caster)
-                continue;
-            const af_gpu_mesh *mesh = renderer->meshes[draw.mesh].dynamic
-                                          ? &renderer->meshes[draw.mesh].streams[renderer->frame_index].gpu
-                                          : &renderer->meshes[draw.mesh].gpu;
-            af_mat4 mvp = af_mat4_mul(shadow_view.matrices[layer], draw.model);
-            af_vk_shadows_push(renderer->shadows, frame->command, mvp.elements, draw.skin_base, draw.material_flags,
-                               draw.alpha, draw.cutoff, af_vk_texture_descriptor(draw.texture));
-            bind_object_mesh(frame, mesh, morph_draw_for(renderer, scene, draw.object_index));
-            vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
-            ++renderer->shadow_draw_calls;
-        }
+        if (uniform.shadow_params.x > .5f)
+            draw_shadow_casters(renderer, frame, scene, renderer->shadows, shadow_view.matrices[layer], cluster_camera,
+                                &renderer->cluster_stats.shadow_fine_draws);
         vkCmdEndRenderPass(frame->command);
     }
     for (uint32_t layer = 0; layer < renderer->local_shadow_layers; ++layer) {
@@ -3713,7 +3767,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         bias.constant_bias = 1;
         bias.slope_bias = 1.5f;
         uint64_t signature = shadow_signature(renderer, uniform.local_shadow_matrices[layer], bias,
-                                              layer < (uint32_t)uniform.light_count.z);
+                                              layer < (uint32_t)uniform.light_count.z, cluster_camera);
         if (frame->local_shadow_signatures[layer] == signature) {
             ++renderer->shadow_cached_passes;
             continue;
@@ -3722,22 +3776,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         ++renderer->shadow_passes;
         af_vk_shadows_begin(renderer->local_shadows, frame->command, renderer->frame_index, layer, bias,
                             frame->descriptor);
-        for (size_t i = 0; layer < (uint32_t)uniform.light_count.z && i < renderer->shadow_count; ++i) {
-            if (!af_shadow_intersects(uniform.local_shadow_matrices[layer], &renderer->shadow_bounds[i]))
-                continue;
-            af_shadow_draw draw = renderer->shadow_draws[i];
-            if (ray_shadows && draw.ray_caster)
-                continue;
-            const af_gpu_mesh *mesh = renderer->meshes[draw.mesh].dynamic
-                                          ? &renderer->meshes[draw.mesh].streams[renderer->frame_index].gpu
-                                          : &renderer->meshes[draw.mesh].gpu;
-            af_mat4 mvp = af_mat4_mul(uniform.local_shadow_matrices[layer], draw.model);
-            af_vk_shadows_push(renderer->local_shadows, frame->command, mvp.elements, draw.skin_base, draw.material_flags,
-                               draw.alpha, draw.cutoff, af_vk_texture_descriptor(draw.texture));
-            bind_object_mesh(frame, mesh, morph_draw_for(renderer, scene, draw.object_index));
-            vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, 0);
-            ++renderer->shadow_draw_calls;
-        }
+        if (layer < (uint32_t)uniform.light_count.z)
+            draw_shadow_casters(renderer, frame, scene, renderer->local_shadows, uniform.local_shadow_matrices[layer],
+                                cluster_camera, &renderer->cluster_stats.local_shadow_fine_draws);
         vkCmdEndRenderPass(frame->command);
     }
     if (frame->timestamps)
@@ -3754,18 +3795,10 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                                                      : (renderer->swapchain.resource_config & AF_RESOURCE_MOTION) ? 3u
                                                                                                                   : 2u,
                                   .pClearValues = clears};
-    af_mat4 visibility_projection = uniform.unjittered_view_projection;
-    float visible_width = uniform.water_screen.x * (uniform.water_viewport.z - uniform.water_viewport.x),
-          visible_height = uniform.water_screen.y * (uniform.water_viewport.w - uniform.water_viewport.y);
-    for (unsigned column = 0; column < 4; ++column) {
-        visibility_projection.elements[column * 4] *= visible_width / (visible_width + 4);
-        visibility_projection.elements[column * 4 + 1] *= visible_height / (visible_height + 4);
-    }
+    af_mat4 visibility_projection = cluster_camera.projection;
+    float cluster_pixel_scale = cluster_camera.pixel_scale;
     size_t draw_calls = 0, missing_meshes = 0;
     renderer->visible_objects = renderer->culled_objects = 0;
-    renderer->cluster_stats = (af_cluster_stats){0};
-    update_cluster_pages(renderer);
-    float cluster_pixel_scale = visible_height * .5f / tanf(camera->vertical_fov * .5f);
     bool cluster_indirect = prepare_cluster_commands(renderer, frame, scene, visibility_projection,
                                                      cluster_pixel_scale, object_count);
     vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);

@@ -15,6 +15,7 @@ typedef struct demo {
     af_camera camera;
     unsigned frame, phase;
     bool verify, verify_stream, failed, colors, enabled, gpu, gpu_expected, lod;
+    bool ray_expected;
     af_cluster_stats cpu_clusters;
     uint64_t far_triangles, previous_uploads;
     uint64_t initial_coarse_regions;
@@ -32,7 +33,9 @@ static bool init(af_engine *engine, void *user) {
     if (!d->scene || !af_scene_add_object(d->scene, "Rock wall", "wall"))
         return false;
     af_shadow_settings shadows = af_shadow_settings_default();
-    shadows.enabled = false;
+    shadows.enabled = d->verify_stream;
+    shadows.mode = AF_SHADOW_SINGLE;
+    shadows.resolution = 512;
     af_scene_set_shadows(d->scene, shadows);
     af_engine_set_scene(engine, d->scene);
     d->camera = af_camera_default();
@@ -40,6 +43,15 @@ static bool init(af_engine *engine, void *user) {
     d->camera.far_clip = 400;
     d->gpu_expected = af_engine_cluster_stats(engine).gpu_supported;
     if (d->verify_stream) {
+        af_local_light spot = af_local_light_default(AF_LIGHT_SPOT);
+        spot.position = (af_vec3){0, 0, 20};
+        spot.direction = (af_vec3){0, 0, -1};
+        spot.range = 50;
+        spot.outer_angle = 1.2f;
+        spot.cast_shadows = true;
+        if (!af_scene_add_local_light(d->scene, spot))
+            return false;
+        d->ray_expected = af_engine_get_stats(engine).ray_query_supported;
         if (!af_engine_set_cluster_cache_budget(engine, stream_budget))
             return false;
         d->camera.position.x = -12;
@@ -110,7 +122,9 @@ static void verify_stream_frame(af_engine *engine, demo *d) {
     if (d->frame == 1)
         return;
     if (!d->phase) {
-        if (!s.triangles || !s.coarse_regions || s.resident_pages) {
+        af_engine_stats stats = af_engine_get_stats(engine);
+        if (!s.triangles || !s.coarse_regions || s.resident_pages || s.shadow_fine_draws || s.local_shadow_fine_draws ||
+            !stats.shadow_draw_calls || stats.local_shadow_maps != 1) {
             fputs("The first frame should render coarse geometry while fine pages load.\n", stderr);
             d->failed = true;
             af_engine_request_quit(engine);
@@ -131,18 +145,52 @@ static void verify_stream_frame(af_engine *engine, demo *d) {
         return;
     }
     if (d->phase == 5) {
-        d->failed = s.page_budget || s.page_bytes || s.resident_pages || !s.coarse_regions ||
-                    !af_engine_set_cluster_cache_budget(engine, stream_budget);
+        d->failed = s.page_budget || s.page_bytes || s.resident_pages || !s.coarse_regions || s.shadow_fine_draws ||
+                    s.local_shadow_fine_draws || !af_engine_set_cluster_cache_budget(engine, stream_budget);
         d->phase = 6;
         if (d->failed)
             af_engine_request_quit(engine);
         return;
     }
     if (d->phase == 6) {
-        if (s.page_uploads > d->previous_uploads && s.page_bytes) {
-            d->phase = 7;
-            af_engine_request_quit(engine);
+        if (s.page_uploads <= d->previous_uploads || !s.shadow_fine_draws || !s.local_shadow_fine_draws)
+            return;
+        printf("Fine shadow draws after restoring budget: %" PRIu64 " directional, %" PRIu64 " local\n",
+               s.shadow_fine_draws, s.local_shadow_fine_draws);
+        d->phase = 7;
+        d->frame = 0;
+        if (d->ray_expected) {
+            af_render_settings settings = af_scene_get_render_settings(d->scene);
+            settings.ray_traced_shadows = true;
+            d->failed = !af_scene_set_render_settings(d->scene, settings);
         }
+        if (!d->ray_expected || d->failed)
+            af_engine_request_quit(engine);
+        return;
+    }
+    if (d->phase >= 7) {
+        af_engine_stats stats = af_engine_get_stats(engine);
+        if (stats.ray_tracing_failed) {
+            d->failed = true;
+            af_engine_request_quit(engine);
+            return;
+        }
+        if (!stats.ray_traced_shadows_active || !stats.ray_instances)
+            return;
+        if (d->phase == 8) {
+            d->failed = s.ray_fine_instances || stats.ray_instances != 1 ||
+                        !af_engine_set_cluster_cache_budget(engine, stream_budget);
+        } else {
+            if (!s.ray_fine_instances || stats.ray_instances <= s.ray_fine_instances)
+                return;
+            printf("Fine ray instances: %" PRIu64 " of %zu total\n", s.ray_fine_instances, stats.ray_instances);
+            if (d->phase == 7)
+                d->failed = !af_engine_set_cluster_cache_budget(engine, 0);
+        }
+        ++d->phase;
+        d->frame = 0;
+        if (d->phase == 10 || d->failed)
+            af_engine_request_quit(engine);
         return;
     }
     if (s.page_uploads < d->previous_uploads + 8 || !s.triangles)
@@ -248,5 +296,6 @@ int main(int argc, char **argv) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || d.failed || (d.verify && (d.phase != 7 || stats.validation_errors)) ? 1 : 0;
+    return result || d.failed || (d.verify && (d.phase != (d.ray_expected ? 10u : 7u) || stats.validation_errors)) ? 1
+                                                                                                                   : 0;
 }
