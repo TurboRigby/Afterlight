@@ -32,6 +32,8 @@ typedef struct af_cluster_mesh {
     uint32_t region_count;
 } af_cluster_mesh;
 
+bool af_cluster_allocate_mesh(af_cluster_mesh *, uint32_t vertices, uint32_t indices, uint32_t clusters);
+bool af_cluster_validate_mesh(af_cluster_mesh *);
 bool af_cluster_build(const af_mesh_data *, af_cluster_mesh *);
 bool af_cluster_build_lods(af_cluster_mesh *);
 void af_cluster_free(af_cluster_mesh *);

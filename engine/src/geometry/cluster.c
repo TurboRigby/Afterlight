@@ -65,7 +65,9 @@ static int compare_triangle(const void *lhs, const void *rhs) {
     return (a->triangle > b->triangle) - (a->triangle < b->triangle);
 }
 
-static bool allocate_mesh(af_cluster_mesh *out, uint32_t vertices, uint32_t indices, uint32_t clusters) {
+bool af_cluster_allocate_mesh(af_cluster_mesh *out, uint32_t vertices, uint32_t indices, uint32_t clusters) {
+    if (!valid_sizes(vertices, indices, clusters))
+        return false;
     out->mesh = (af_mesh_data){malloc((size_t)vertices * sizeof(af_vertex)), vertices,
                                malloc((size_t)indices * sizeof(uint32_t)), indices};
     out->clusters = malloc((size_t)clusters * sizeof(*out->clusters));
@@ -84,8 +86,9 @@ void af_cluster_free(af_cluster_mesh *m) {
 static bool valid_vertices(const af_mesh_data *mesh) {
     for (uint32_t i = 0; i < mesh->vertex_count; ++i) {
         const af_vertex *v = &mesh->vertices[i];
-        if (!valid_position(v->position) || v->weights.x != 0 || v->weights.y != 0 || v->weights.z != 0 ||
-            v->weights.w != 0)
+        if (!valid_position(v->position) || !valid_position(v->normal) || !isfinite(v->uv.x) || !isfinite(v->uv.y) ||
+            !isfinite(v->color.r) || !isfinite(v->color.g) || !isfinite(v->color.b) || !isfinite(v->color.a) ||
+            v->weights.x != 0 || v->weights.y != 0 || v->weights.z != 0 || v->weights.w != 0)
             return false;
     }
     return true;
@@ -108,7 +111,7 @@ bool af_cluster_build(const af_mesh_data *source, af_cluster_mesh *out) {
         hi = maximum(hi, source->vertices[i].position);
     }
     triangle_order *order = malloc((size_t)triangles * sizeof(*order));
-    if (!order || !allocate_mesh(out, source->vertex_count, source->index_count, count)) {
+    if (!order || !af_cluster_allocate_mesh(out, source->vertex_count, source->index_count, count)) {
         free(order);
         af_cluster_free(out);
         return false;
@@ -161,7 +164,7 @@ bool af_cluster_save(const char *path, const af_cluster_mesh *m) {
     return ok;
 }
 
-static bool validate_clusters(af_cluster_mesh *m) {
+bool af_cluster_validate_mesh(af_cluster_mesh *m) {
     if (!valid_vertices(&m->mesh))
         return false;
     uint32_t end = 0;
@@ -233,7 +236,7 @@ bool af_cluster_load(const char *path, af_cluster_mesh *out) {
     if (legacy)
         sizes[3] = sizes[2];
     ok = ok && sizes[3] && sizes[3] <= sizes[2] && sizes[4] <= sizes[3] &&
-         allocate_mesh(out, sizes[0], sizes[1], sizes[2]) &&
+         af_cluster_allocate_mesh(out, sizes[0], sizes[1], sizes[2]) &&
          fread(out->clusters, sizeof(af_cluster), sizes[2], f) == sizes[2];
     if (ok && sizes[4]) {
         out->regions = malloc((size_t)sizes[4] * sizeof(*out->regions));
@@ -243,7 +246,7 @@ bool af_cluster_load(const char *path, af_cluster_mesh *out) {
     out->region_count = sizes[4];
     ok = ok && fread((void *)out->mesh.vertices, sizeof(af_vertex), sizes[0], f) == sizes[0] &&
          fread((void *)out->mesh.indices, sizeof(uint32_t), sizes[1], f) == sizes[1] && fgetc(f) == EOF && !ferror(f) &&
-         validate_clusters(out) && validate_regions(out);
+         af_cluster_validate_mesh(out) && validate_regions(out);
     fclose(f);
     if (!ok)
         af_cluster_free(out);

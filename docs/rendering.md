@@ -216,3 +216,25 @@ representative as the geometric error. The renderer selects the coarse
 region when that error projects to two pixels or less. N toggles detail
 selection in the demo. The boundary test compares the exact edge sets of
 all simplified wall regions.
+
+Cook with `--stream` to separate the coarse mesh from the fine pages on disk.
+The same loader accepts both formats. The streamed mesh keeps the coarse
+vertices and indices available from the first frame. Each mesh can retain up
+to 24 fine pages, and the renderer supports up to eight streamed meshes at
+once. A worker reads requested pages, and the renderer uploads them and
+reuses cache slots after their frame fences signal. If a fine page is missing
+or unreadable, the region uses its coarse geometry. Shadow and ray geometry
+for streamed meshes use the resident coarse mesh.
+
+```sh
+build/afterlight_cluster_demo build/cluster-wall.afpages
+build/afterlight_cluster_cook --stream input.glb output.afpages
+ctest --test-dir build -R '^afterlight.cluster_' --output-on-failure
+```
+
+On the Apple M4 test, the near view submitted 27,648 of the wall's 147,456
+triangles. The far view submitted 82,036 with LOD enabled. The streaming test
+loaded 32 pages while moving the camera, with eight evictions and roughly
+1.6 MB of resident fine-page buffers at its final stop. These checks measure
+triangle counts, image agreement and residency. GPU timings vary by path
+and driver.

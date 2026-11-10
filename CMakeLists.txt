@@ -58,6 +58,7 @@ add_library(afterlight STATIC
     engine/src/animation/animation_runtime.c
     engine/src/geometry/cluster.c
     engine/src/geometry/cluster_lod.c
+    engine/src/geometry/cluster_stream.c
     engine/src/render/environment_job.c
     engine/src/assets/asset_watch.c
     engine/src/assets/gltf.c
@@ -675,7 +676,12 @@ add_custom_command(OUTPUT "${cluster_wall}"
     COMMAND ${CMAKE_COMMAND} -E rm -f "${cluster_wall}"
     COMMAND afterlight_cluster_cook --wall "${cluster_wall}"
     DEPENDS afterlight_cluster_cook VERBATIM)
-add_custom_target(afterlight_cluster_wall DEPENDS "${cluster_wall}")
+set(cluster_wall_stream "${PROJECT_BINARY_DIR}/cluster-wall.afpages")
+add_custom_command(OUTPUT "${cluster_wall_stream}"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "${cluster_wall_stream}"
+    COMMAND afterlight_cluster_cook --stream --wall "${cluster_wall_stream}"
+    DEPENDS afterlight_cluster_cook VERBATIM)
+add_custom_target(afterlight_cluster_wall DEPENDS "${cluster_wall}" "${cluster_wall_stream}")
 add_dependencies(afterlight_cluster_demo afterlight_cluster_wall)
 if(BUILD_TESTING)
     add_executable(afterlight_cluster_lod_test tests/render/cluster_lod.c)
@@ -685,7 +691,8 @@ if(BUILD_TESTING)
     add_dependencies(afterlight_cluster_lod_test afterlight_cluster_wall)
     add_test(NAME afterlight.cluster_lod_boundaries COMMAND afterlight_cluster_lod_test "${cluster_wall}")
     add_test(NAME afterlight.cluster_geometry COMMAND afterlight_cluster_demo "${cluster_wall}" --verify)
-    set_tests_properties(afterlight.cluster_geometry PROPERTIES TIMEOUT 45 LABELS graphics
+    add_test(NAME afterlight.cluster_streaming COMMAND afterlight_cluster_demo "${cluster_wall_stream}" --verify-stream)
+    set_tests_properties(afterlight.cluster_geometry afterlight.cluster_streaming PROPERTIES TIMEOUT 45 LABELS graphics
         ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
 endif()
 add_executable(afterlight_renderer_benchmark tests/render/renderer_benchmark.c)

@@ -9,7 +9,7 @@
 #include <afterlight/afterlight.h>
 #include <SDL3/SDL.h>
 #include "assets/gltf.h"
-#include "geometry/cluster.h"
+#include "geometry/cluster_stream.h"
 #include "ibl.h"
 #include "render_test.h"
 
@@ -63,6 +63,7 @@ bool af_renderer_test_read_pixel(af_renderer *renderer, unsigned char rgba[4]);
 bool af_renderer_set_debug_view(af_renderer *, af_debug_view);
 void af_renderer_set_visibility_culling(af_renderer *, bool);
 void af_renderer_set_prop_instancing(af_renderer *, bool);
+bool af_renderer_upload_cluster_stream(af_renderer *, const char *name, af_cluster_mesh *, af_cluster_stream *);
 bool af_renderer_upload_clusters(af_renderer *, const char *name, af_cluster_mesh *);
 void af_renderer_set_cluster_lod(af_renderer *, bool enabled);
 void af_renderer_set_cluster_gpu_culling(af_renderer *, bool enabled);

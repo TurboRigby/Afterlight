@@ -289,6 +289,7 @@ void af_engine_set_prop_instancing(af_engine *, bool enabled);
 /* Cooked static geometry is opt-in per asset. These counters cover its opaque pass. */
 typedef struct af_cluster_stats {
     uint64_t candidates, visible, triangles, coarse_regions;
+    uint64_t resident_pages, page_bytes, page_uploads, page_evictions, page_failures;
     bool gpu_supported, gpu_active;
 } af_cluster_stats;
 bool af_engine_load_cluster_mesh(af_engine *, const char *name, const char *path, af_asset_error *);

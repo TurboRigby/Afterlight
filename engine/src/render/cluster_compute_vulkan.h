@@ -20,6 +20,7 @@ static void destroy_cluster_compute(af_renderer *r) {
     free(r->cluster_candidates);
     free(r->cluster_matrices);
     free(r->cluster_spans);
+    free(r->cluster_stream_batches);
 }
 
 static bool create_cluster_compute(af_renderer *r) {
@@ -112,6 +113,8 @@ static void cluster_read_stats(af_renderer *r, af_frame *frame) {
                                      .size = VK_WHOLE_SIZE};
         if (vkInvalidateMappedMemoryRanges(r->device, 1, &range) == VK_SUCCESS) {
             const VkDrawIndexedIndirectCommand *counts = mapped;
+            r->cluster_gpu_candidates = frame->cluster_submitted;
+            r->cluster_gpu_coarse_regions = frame->cluster_coarse_regions;
             r->cluster_gpu_visible = counts[frame->cluster_submitted].instanceCount;
             r->cluster_gpu_triangles = counts[frame->cluster_submitted].indexCount;
         }
@@ -176,7 +179,7 @@ static bool prepare_cluster_commands(af_renderer *r, af_frame *frame, const af_s
         return false;
     memset(r->cluster_spans, 0, objects * sizeof(*r->cluster_spans));
     memset(r->cluster_matrices, 0, objects * sizeof(*r->cluster_matrices));
-    uint32_t count = 0, coarse_regions = 0;
+    uint32_t count = 0, coarse_regions = 0, batches = 0;
     for (size_t i = 0; i < objects; ++i) {
         const af_scene_object *o = af_scene_object_at(scene, i);
         if (o->material.alpha_mode != AF_ALPHA_OPAQUE || !af_scene_object_visible(scene, o->id) ||
@@ -187,7 +190,7 @@ static bool prepare_cluster_commands(af_renderer *r, af_frame *frame, const af_s
             continue;
         const af_gpu_mesh *mesh = &r->meshes[index].gpu;
         af_mat4 world;
-        if (!mesh->cluster_count || mesh->cluster_count > AF_CLUSTER_GPU_LIMIT - count ||
+        if (!mesh->cluster_count || (!mesh->residency && mesh->cluster_count > AF_CLUSTER_GPU_LIMIT - count) ||
             !object_world(r, scene, i, &world))
             continue;
         af_shadow_bounds bounds = af_shadow_transform_bounds(world, mesh->minimum, mesh->maximum);
@@ -197,6 +200,39 @@ static bool prepare_cluster_commands(af_renderer *r, af_frame *frame, const af_s
         r->cluster_matrices[i] = clip;
         uint32_t first = count;
         float error_scale = cluster_error_scale(world, pixel_scale);
+        if (mesh->residency) {
+            if (!r->cluster_stream_batches) {
+                r->cluster_stream_batches = malloc(AF_CLUSTER_GPU_LIMIT * sizeof(*r->cluster_stream_batches));
+                if (!r->cluster_stream_batches)
+                    continue;
+            }
+            uint32_t batch_start = batches, coarse = 0;
+            uint32_t regions = af_cluster_stream_region_count(mesh->residency->stream);
+            for (uint32_t region = 0; region < regions; ++region) {
+                af_cluster_span span;
+                const af_gpu_mesh *selected =
+                    select_cluster_page(r, mesh, region, world, projection, clip, error_scale, &span);
+                if (!selected)
+                    continue;
+                if (span.count > AF_CLUSTER_GPU_LIMIT - count) {
+                    count = first;
+                    batches = batch_start;
+                    coarse = 0;
+                    break;
+                }
+                af_cluster_stream_batch *last = batches > batch_start ? &r->cluster_stream_batches[batches - 1] : NULL;
+                if (last && last->mesh == selected)
+                    last->commands.count += span.count;
+                else
+                    r->cluster_stream_batches[batches++] = (af_cluster_stream_batch){selected, {count, span.count}};
+                coarse += selected == mesh;
+                for (uint32_t c = span.first; c < span.first + span.count; ++c)
+                    r->cluster_candidates[count++] = (af_cluster_candidate){selected->clusters[c], {(uint32_t)i}};
+            }
+            coarse_regions += coarse;
+            r->cluster_spans[i] = (af_cluster_span){batch_start, batches - batch_start};
+            continue;
+        }
         uint32_t regions = mesh->cluster_region_count ? mesh->cluster_region_count : 1;
         for (uint32_t region = 0; region < regions; ++region) {
             bool coarse;
@@ -216,8 +252,9 @@ static bool prepare_cluster_commands(af_renderer *r, af_frame *frame, const af_s
     }
     record_cluster_compute(r, frame, count);
     r->cluster_stats.gpu_active = true;
-    r->cluster_stats.coarse_regions = coarse_regions;
-    r->cluster_stats.candidates = count;
+    frame->cluster_coarse_regions = coarse_regions;
+    r->cluster_stats.coarse_regions = r->cluster_gpu_coarse_regions;
+    r->cluster_stats.candidates = r->cluster_gpu_candidates;
     r->cluster_stats.visible = r->cluster_gpu_visible;
     r->cluster_stats.triangles = r->cluster_gpu_triangles;
     return true;

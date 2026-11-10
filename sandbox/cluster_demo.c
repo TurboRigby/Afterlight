@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <afterlight/afterlight.h>
 #include "render/render_test.h"
+#include "geometry/cluster_stream.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -11,9 +12,10 @@ typedef struct demo {
     af_scene *scene;
     af_camera camera;
     unsigned frame, phase;
-    bool verify, failed, colors, enabled, gpu, gpu_expected, lod;
+    bool verify, verify_stream, failed, colors, enabled, gpu, gpu_expected, lod;
     af_cluster_stats cpu_clusters;
-    uint64_t far_triangles;
+    uint64_t far_triangles, previous_uploads;
+    uint64_t initial_coarse_regions;
     unsigned char reference[64 * 64 * 4];
 } demo;
 
@@ -35,7 +37,11 @@ static bool init(af_engine *engine, void *user) {
     d->camera.position.z = 5;
     d->camera.far_clip = 400;
     d->gpu_expected = af_engine_cluster_stats(engine).gpu_supported;
-    af_engine_set_cluster_rendering(engine, !d->verify, false);
+    if (d->verify_stream) {
+        d->camera.position.x = -12;
+        af_engine_set_cluster_gpu_culling(engine, false);
+    }
+    af_engine_set_cluster_rendering(engine, !d->verify || d->verify_stream, false);
     af_engine_set_cluster_lod(engine, !d->verify);
     return af_engine_set_camera(engine, &d->camera);
 }
@@ -94,8 +100,60 @@ static void verify_frame(af_engine *engine, demo *d) {
     d->frame = 0;
 }
 
+static void verify_stream_frame(af_engine *engine, demo *d) {
+    ++d->frame;
+    af_cluster_stats s = af_engine_cluster_stats(engine);
+    if (d->frame == 1)
+        return;
+    if (!d->phase) {
+        if (!s.triangles || !s.coarse_regions || s.resident_pages) {
+            fputs("The first frame should render coarse geometry while fine pages load.\n", stderr);
+            d->failed = true;
+            af_engine_request_quit(engine);
+            return;
+        }
+        printf("First frame: %" PRIu64 " triangles across %" PRIu64 " coarse regions, no resident pages\n", s.triangles,
+               s.coarse_regions);
+        d->initial_coarse_regions = s.coarse_regions;
+        af_engine_set_cluster_gpu_culling(engine, true);
+        d->phase = 1;
+        return;
+    }
+    if (s.page_failures || s.resident_pages > AF_CLUSTER_RESIDENT_PAGES || d->frame > 360) {
+        fprintf(stderr, "Streaming failed at stop %u: %" PRIu64 " uploads, %" PRIu64 " failed pages\n", d->phase,
+                s.page_uploads, s.page_failures);
+        d->failed = true;
+        af_engine_request_quit(engine);
+        return;
+    }
+    if (s.page_uploads < d->previous_uploads + 8 || !s.triangles)
+        return;
+    if ((d->phase == 1 && s.coarse_regions >= d->initial_coarse_regions) || s.gpu_active != d->gpu_expected ||
+        !s.page_bytes) {
+        d->failed = true;
+        af_engine_request_quit(engine);
+        return;
+    }
+    printf("Stop %u: %" PRIu64 " uploads, %" PRIu64 " resident pages, %" PRIu64 " evictions, %" PRIu64
+           " fine-page bytes\n",
+           d->phase, s.page_uploads, s.resident_pages, s.page_evictions, s.page_bytes);
+    if (++d->phase == 5) {
+        d->failed = !s.page_evictions;
+        af_engine_request_quit(engine);
+        return;
+    }
+    d->previous_uploads = s.page_uploads;
+    d->camera.position.x += 8;
+    (void)af_engine_set_camera(engine, &d->camera);
+    d->frame = 0;
+}
+
 static void update(af_engine *engine, double delta, void *user) {
     demo *d = user;
+    if (d->verify_stream) {
+        verify_stream_frame(engine, d);
+        return;
+    }
     if (d->verify) {
         verify_frame(engine, d);
         return;
@@ -130,8 +188,9 @@ static void update(af_engine *engine, double delta, void *user) {
     af_engine_set_cluster_lod(engine, d->lod);
     if (af_engine_key_pressed(engine, AF_KEY_SPACE)) {
         af_cluster_stats s = af_engine_cluster_stats(engine);
-        printf("%" PRIu64 "/%" PRIu64 " clusters, %" PRIu64 " triangles, %" PRIu64 " coarse regions\n", s.visible,
-               s.candidates, s.triangles, s.coarse_regions);
+        printf("%" PRIu64 "/%" PRIu64 " clusters, %" PRIu64 " triangles, %" PRIu64 " coarse regions, %" PRIu64
+               " resident pages (%" PRIu64 " bytes)\n",
+               s.visible, s.candidates, s.triangles, s.coarse_regions, s.resident_pages, s.page_bytes);
     }
 }
 
@@ -142,11 +201,17 @@ static void shutdown(af_engine *engine, void *user) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2 || argc > 3 || (argc == 3 && strcmp(argv[2], "--verify"))) {
-        fprintf(stderr, "usage: afterlight_cluster_demo MESH.afgeom [--verify]\n");
+    bool verify_stream = argc == 3 && !strcmp(argv[2], "--verify-stream");
+    if (argc < 2 || argc > 3 || (argc == 3 && !verify_stream && strcmp(argv[2], "--verify"))) {
+        fprintf(stderr, "usage: afterlight_cluster_demo MESH.afgeom|MESH.afpages [--verify|--verify-stream]\n");
         return 1;
     }
-    demo d = {.path = argv[1], .enabled = true, .gpu = true, .lod = true, .verify = argc == 3};
+    demo d = {.path = argv[1],
+              .enabled = true,
+              .gpu = true,
+              .lod = true,
+              .verify = argc == 3,
+              .verify_stream = verify_stream};
     af_engine_config cfg = af_engine_config_default();
     cfg.title = "Afterlight cluster wall";
     cfg.width = d.verify ? 400 : 1000;
@@ -159,5 +224,6 @@ int main(int argc, char **argv) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || d.failed || (d.verify && (d.phase != 7 || stats.validation_errors)) ? 1 : 0;
+    return result || d.failed || (d.verify && (d.phase != (d.verify_stream ? 5u : 7u) || stats.validation_errors)) ? 1
+                                                                                                                   : 0;
 }

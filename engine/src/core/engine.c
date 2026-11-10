@@ -851,12 +851,16 @@ bool af_engine_load_mesh(af_engine *engine, const char *name, const char *path, 
 }
 bool af_engine_load_cluster_mesh(af_engine *engine, const char *name, const char *path, af_asset_error *error) {
     af_cluster_mesh mesh;
-    if (!engine || !af_cluster_load(path, &mesh)) {
+    af_cluster_stream *stream = NULL;
+    if (!engine || (!af_cluster_load(path, &mesh) && !(stream = af_cluster_open_stream(path, &mesh)))) {
         if (error)
             snprintf(error->message, sizeof(error->message), "Invalid or unreadable clustered mesh.");
         return false;
     }
-    bool uploaded = af_renderer_upload_clusters(engine->renderer, name, &mesh);
+    bool uploaded = stream ? af_renderer_upload_cluster_stream(engine->renderer, name, &mesh, stream)
+                           : af_renderer_upload_clusters(engine->renderer, name, &mesh);
+    if (!uploaded)
+        af_cluster_close_stream(stream);
     af_cluster_free(&mesh);
     if (error)
         snprintf(error->message, sizeof(error->message), "%s", uploaded ? "" : "GPU mesh upload failed.");
