@@ -208,3 +208,11 @@ its draw commands on the GPU. Each candidate has a fixed command slot, and
 culled clusters receive a zero index count. The X key switches between GPU
 and CPU culling. The color view uses the CPU path for per-cluster colors.
 GPU visibility and triangle counts are read back after a frame fence signals.
+
+The cooker groups nearby clusters into regions and builds a coarser
+replacement for each region it can simplify. It preserves boundary vertices
+and uses the largest displacement from a source vertex to its surviving
+representative as the geometric error. The renderer selects the coarse
+region when that error projects to two pixels or less. N toggles detail
+selection in the demo. The boundary test compares the exact edge sets of
+all simplified wall regions.

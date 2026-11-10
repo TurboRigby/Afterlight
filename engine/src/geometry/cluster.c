@@ -10,10 +10,12 @@ typedef struct triangle_order {
     uint32_t key, triangle;
 } triangle_order;
 
-static const char magic[8] = "AFGEOM1";
+static const char magic[8] = "AFGEOM2";
+static const char legacy_magic[8] = "AFGEOM1";
 
 _Static_assert(sizeof(af_vertex) == 72, "Packed vertex layout");
 _Static_assert(sizeof(af_cluster) == 32, "Packed cluster layout");
+_Static_assert(sizeof(af_cluster_region) == 44, "Packed cluster region layout");
 
 static bool little_endian(void) {
     uint32_t one = 1;
@@ -67,7 +69,7 @@ static bool allocate_mesh(af_cluster_mesh *out, uint32_t vertices, uint32_t indi
     out->mesh = (af_mesh_data){malloc((size_t)vertices * sizeof(af_vertex)), vertices,
                                malloc((size_t)indices * sizeof(uint32_t)), indices};
     out->clusters = malloc((size_t)clusters * sizeof(*out->clusters));
-    out->count = clusters;
+    out->count = out->fine_count = clusters;
     return out->mesh.vertices && out->mesh.indices && out->clusters;
 }
 
@@ -75,6 +77,7 @@ void af_cluster_free(af_cluster_mesh *m) {
     free((void *)m->mesh.vertices);
     free((void *)m->mesh.indices);
     free(m->clusters);
+    free(m->regions);
     *m = (af_cluster_mesh){0};
 }
 
@@ -140,14 +143,15 @@ bool af_cluster_build(const af_mesh_data *source, af_cluster_mesh *out) {
 }
 
 bool af_cluster_save(const char *path, const af_cluster_mesh *m) {
-    if (!little_endian())
+    if (!little_endian() || !valid_sizes(m->mesh.vertex_count, m->mesh.index_count, m->count))
         return false;
     FILE *f = fopen(path, "wbx");
     if (!f)
         return false;
-    uint32_t sizes[] = {m->mesh.vertex_count, m->mesh.index_count, m->count};
-    bool ok = fwrite(magic, 1, sizeof(magic), f) == sizeof(magic) && fwrite(sizes, sizeof(*sizes), 3, f) == 3 &&
+    uint32_t sizes[] = {m->mesh.vertex_count, m->mesh.index_count, m->count, m->fine_count, m->region_count};
+    bool ok = fwrite(magic, 1, sizeof(magic), f) == sizeof(magic) && fwrite(sizes, sizeof(*sizes), 5, f) == 5 &&
               fwrite(m->clusters, sizeof(*m->clusters), m->count, f) == m->count &&
+              (!m->region_count || fwrite(m->regions, sizeof(*m->regions), m->region_count, f) == m->region_count) &&
               fwrite(m->mesh.vertices, sizeof(af_vertex), sizes[0], f) == sizes[0] &&
               fwrite(m->mesh.indices, sizeof(uint32_t), sizes[1], f) == sizes[1];
     if (fclose(f))
@@ -180,20 +184,66 @@ static bool validate_clusters(af_cluster_mesh *m) {
     return end == m->mesh.index_count;
 }
 
+static bool validate_regions(af_cluster_mesh *m) {
+    if (!m->region_count)
+        return m->fine_count == m->count;
+    uint32_t fine = 0, coarse = m->fine_count;
+    for (uint32_t i = 0; i < m->region_count; ++i) {
+        af_cluster_region *r = &m->regions[i];
+        if (r->fine_first != fine || !r->fine_count || r->fine_count > AF_CLUSTER_REGION_LEAVES ||
+            r->fine_count > m->fine_count - fine || !isfinite(r->error) || r->error < 0 ||
+            (r->coarse_count && (r->coarse_first != coarse || r->coarse_count > m->count - coarse)))
+            return false;
+        r->minimum = m->clusters[fine].minimum;
+        r->maximum = m->clusters[fine].maximum;
+        uint32_t fine_indices = 0, coarse_indices = 0;
+        for (uint32_t j = 0; j < r->fine_count; ++j) {
+            const af_cluster *c = &m->clusters[fine + j];
+            r->minimum = minimum(r->minimum, c->minimum);
+            r->maximum = maximum(r->maximum, c->maximum);
+            fine_indices += c->index_count;
+        }
+        for (uint32_t j = 0; j < r->coarse_count; ++j) {
+            const af_cluster *c = &m->clusters[coarse + j];
+            if (c->minimum.x < r->minimum.x || c->minimum.y < r->minimum.y || c->minimum.z < r->minimum.z ||
+                c->maximum.x > r->maximum.x || c->maximum.y > r->maximum.y || c->maximum.z > r->maximum.z)
+                return false;
+            coarse_indices += c->index_count;
+        }
+        if (coarse_indices >= fine_indices)
+            return false;
+        fine += r->fine_count;
+        coarse += r->coarse_count;
+    }
+    return fine == m->fine_count && coarse == m->count;
+}
+
 bool af_cluster_load(const char *path, af_cluster_mesh *out) {
     *out = (af_cluster_mesh){0};
     FILE *f = path && little_endian() ? fopen(path, "rb") : NULL;
     if (!f)
         return false;
     char tag[sizeof(magic)];
-    uint32_t sizes[3];
-    bool ok = fread(tag, 1, sizeof(tag), f) == sizeof(tag) && !memcmp(tag, magic, sizeof(tag)) &&
-              fread(sizes, sizeof(*sizes), 3, f) == 3 && valid_sizes(sizes[0], sizes[1], sizes[2]) &&
-              allocate_mesh(out, sizes[0], sizes[1], sizes[2]) &&
-              fread(out->clusters, sizeof(af_cluster), sizes[2], f) == sizes[2] &&
-              fread((void *)out->mesh.vertices, sizeof(af_vertex), sizes[0], f) == sizes[0] &&
-              fread((void *)out->mesh.indices, sizeof(uint32_t), sizes[1], f) == sizes[1] && fgetc(f) == EOF &&
-              !ferror(f) && validate_clusters(out);
+    uint32_t sizes[5] = {0};
+    bool ok = fread(tag, 1, sizeof(tag), f) == sizeof(tag);
+    bool legacy = ok && !memcmp(tag, legacy_magic, sizeof(tag));
+    ok = ok && (legacy || !memcmp(tag, magic, sizeof(tag))) &&
+         fread(sizes, sizeof(*sizes), legacy ? 3u : 5u, f) == (legacy ? 3u : 5u) &&
+         valid_sizes(sizes[0], sizes[1], sizes[2]);
+    if (legacy)
+        sizes[3] = sizes[2];
+    ok = ok && sizes[3] && sizes[3] <= sizes[2] && sizes[4] <= sizes[3] &&
+         allocate_mesh(out, sizes[0], sizes[1], sizes[2]) &&
+         fread(out->clusters, sizeof(af_cluster), sizes[2], f) == sizes[2];
+    if (ok && sizes[4]) {
+        out->regions = malloc((size_t)sizes[4] * sizeof(*out->regions));
+        ok = out->regions && fread(out->regions, sizeof(*out->regions), sizes[4], f) == sizes[4];
+    }
+    out->fine_count = sizes[3];
+    out->region_count = sizes[4];
+    ok = ok && fread((void *)out->mesh.vertices, sizeof(af_vertex), sizes[0], f) == sizes[0] &&
+         fread((void *)out->mesh.indices, sizeof(uint32_t), sizes[1], f) == sizes[1] && fgetc(f) == EOF && !ferror(f) &&
+         validate_clusters(out) && validate_regions(out);
     fclose(f);
     if (!ok)
         af_cluster_free(out);

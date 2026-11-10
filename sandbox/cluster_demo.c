@@ -11,8 +11,9 @@ typedef struct demo {
     af_scene *scene;
     af_camera camera;
     unsigned frame, phase;
-    bool verify, failed, colors, enabled, gpu, gpu_expected;
+    bool verify, failed, colors, enabled, gpu, gpu_expected, lod;
     af_cluster_stats cpu_clusters;
+    uint64_t far_triangles;
     unsigned char reference[64 * 64 * 4];
 } demo;
 
@@ -32,8 +33,10 @@ static bool init(af_engine *engine, void *user) {
     af_engine_set_scene(engine, d->scene);
     d->camera = af_camera_default();
     d->camera.position.z = 5;
+    d->camera.far_clip = 400;
     d->gpu_expected = af_engine_cluster_stats(engine).gpu_supported;
     af_engine_set_cluster_rendering(engine, !d->verify, false);
+    af_engine_set_cluster_lod(engine, !d->verify);
     return af_engine_set_camera(engine, &d->camera);
 }
 
@@ -41,15 +44,24 @@ static void verify_frame(af_engine *engine, demo *d) {
     if (++d->frame == 12) {
         af_cluster_stats c = af_engine_cluster_stats(engine);
         af_engine_stats s = af_engine_get_stats(engine);
-        const char *modes[] = {"whole", "CPU clusters", "GPU clusters", "colors"};
-        printf("%s: %zu draws, %" PRIu64 "/%" PRIu64 " clusters, %" PRIu64 " cluster triangles, %.3f ms GPU scene\n",
-               modes[d->phase], s.draw_calls, c.visible, c.candidates, c.triangles, s.gpu_scene_ms);
-        if (d->phase == 1)
+        const char *modes[] = {"whole", "CPU clusters", "GPU clusters", "colors", "far fine", "far LOD", "far GPU LOD"};
+        printf("%s: %zu draws, %" PRIu64 "/%" PRIu64 " clusters, %" PRIu64 " triangles, %" PRIu64
+               " coarse regions, %.3f ms GPU scene\n",
+               modes[d->phase], s.draw_calls, c.visible, c.candidates, c.triangles, c.coarse_regions, s.gpu_scene_ms);
+        if (d->phase == 1 || d->phase == 5)
             d->cpu_clusters = c;
-        if ((d->phase && (!c.visible || c.visible >= c.candidates)) || (!d->phase && c.candidates) ||
-            (d->phase == 2 && (c.gpu_active != d->gpu_expected || c.visible != d->cpu_clusters.visible ||
-                               c.triangles != d->cpu_clusters.triangles)) ||
-            (d->phase != 2 && c.gpu_active) || !af_engine_test_capture_region(engine, (af_vec2){168, 118}, 64, 64)) {
+        if (d->phase == 4)
+            d->far_triangles = c.triangles;
+        bool gpu_phase = d->phase == 2 || d->phase == 6;
+        bool good = d->phase ? c.visible > 0 : c.candidates == 0;
+        if (d->phase >= 1 && d->phase <= 3)
+            good &= c.visible < c.candidates;
+        if (d->phase >= 5)
+            good &= c.coarse_regions > 0 && c.triangles < d->far_triangles * 9 / 10;
+        if (gpu_phase)
+            good &= c.visible == d->cpu_clusters.visible && c.triangles == d->cpu_clusters.triangles;
+        if (!good || c.gpu_active != (gpu_phase && d->gpu_expected) ||
+            !af_engine_test_capture_region(engine, (af_vec2){168, 118}, 64, 64)) {
             d->failed = true;
             af_engine_request_quit(engine);
         }
@@ -58,21 +70,27 @@ static void verify_frame(af_engine *engine, demo *d) {
     if (d->frame < 13)
         return;
     unsigned char pixels[sizeof(d->reference)];
+    bool compare = d->phase == 1 || d->phase == 2 || d->phase == 3 || d->phase == 6;
     if (!af_engine_test_read_pixels(engine, pixels, sizeof(pixels), NULL, NULL) ||
-        (d->phase && (!memcmp(d->reference, pixels, sizeof(pixels))) != (d->phase <= 2))) {
+        (compare && (!memcmp(d->reference, pixels, sizeof(pixels))) != (d->phase != 3))) {
         fprintf(stderr, "Unexpected cluster capture in phase %u.\n", d->phase);
         d->failed = true;
         af_engine_request_quit(engine);
         return;
     }
-    if (!d->phase)
+    if (!d->phase || d->phase == 5)
         memcpy(d->reference, pixels, sizeof(pixels));
-    if (++d->phase == 4) {
+    if (++d->phase == 7) {
         af_engine_request_quit(engine);
         return;
     }
+    if (d->phase == 4) {
+        d->camera.position.z = 240;
+        (void)af_engine_set_camera(engine, &d->camera);
+    }
     af_engine_set_cluster_rendering(engine, true, d->phase == 3);
-    af_engine_set_cluster_gpu_culling(engine, d->phase == 2);
+    af_engine_set_cluster_gpu_culling(engine, d->phase == 2 || d->phase == 6);
+    af_engine_set_cluster_lod(engine, d->phase >= 5);
     d->frame = 0;
 }
 
@@ -88,11 +106,14 @@ static void update(af_engine *engine, double delta, void *user) {
         d->colors = !d->colors;
     if (af_engine_key_pressed(engine, AF_KEY_X))
         d->gpu = !d->gpu;
+    if (af_engine_key_pressed(engine, AF_KEY_N))
+        d->lod = !d->lod;
     if (af_engine_key_pressed(engine, AF_KEY_V))
         d->enabled = !d->enabled;
     if (af_engine_key_pressed(engine, AF_KEY_R)) {
         d->camera = af_camera_default();
         d->camera.position.z = 5;
+        d->camera.far_clip = 400;
     }
     if (af_engine_mouse_pressed(engine, AF_MOUSE_RIGHT))
         (void)af_engine_set_mouse_capture(engine, !af_engine_mouse_captured(engine));
@@ -106,9 +127,11 @@ static void update(af_engine *engine, double delta, void *user) {
     (void)af_engine_set_camera(engine, &d->camera);
     af_engine_set_cluster_rendering(engine, d->enabled, d->colors);
     af_engine_set_cluster_gpu_culling(engine, d->gpu);
+    af_engine_set_cluster_lod(engine, d->lod);
     if (af_engine_key_pressed(engine, AF_KEY_SPACE)) {
         af_cluster_stats s = af_engine_cluster_stats(engine);
-        printf("%" PRIu64 "/%" PRIu64 " clusters, %" PRIu64 " triangles\n", s.visible, s.candidates, s.triangles);
+        printf("%" PRIu64 "/%" PRIu64 " clusters, %" PRIu64 " triangles, %" PRIu64 " coarse regions\n", s.visible,
+               s.candidates, s.triangles, s.coarse_regions);
     }
 }
 
@@ -123,7 +146,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: afterlight_cluster_demo MESH.afgeom [--verify]\n");
         return 1;
     }
-    demo d = {.path = argv[1], .enabled = true, .gpu = true, .verify = argc == 3};
+    demo d = {.path = argv[1], .enabled = true, .gpu = true, .lod = true, .verify = argc == 3};
     af_engine_config cfg = af_engine_config_default();
     cfg.title = "Afterlight cluster wall";
     cfg.width = d.verify ? 400 : 1000;
@@ -136,5 +159,5 @@ int main(int argc, char **argv) {
     int result = af_engine_run(engine, &game);
     af_engine_stats stats = af_engine_get_stats(engine);
     af_engine_destroy(engine);
-    return result || d.failed || (d.verify && (d.phase != 4 || stats.validation_errors)) ? 1 : 0;
+    return result || d.failed || (d.verify && (d.phase != 7 || stats.validation_errors)) ? 1 : 0;
 }

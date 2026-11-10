@@ -57,6 +57,7 @@ add_library(afterlight STATIC
     engine/src/animation/animation_events.c
     engine/src/animation/animation_runtime.c
     engine/src/geometry/cluster.c
+    engine/src/geometry/cluster_lod.c
     engine/src/render/environment_job.c
     engine/src/assets/asset_watch.c
     engine/src/assets/gltf.c
@@ -677,6 +678,12 @@ add_custom_command(OUTPUT "${cluster_wall}"
 add_custom_target(afterlight_cluster_wall DEPENDS "${cluster_wall}")
 add_dependencies(afterlight_cluster_demo afterlight_cluster_wall)
 if(BUILD_TESTING)
+    add_executable(afterlight_cluster_lod_test tests/render/cluster_lod.c)
+    target_include_directories(afterlight_cluster_lod_test PRIVATE engine/src)
+    target_link_libraries(afterlight_cluster_lod_test PRIVATE Afterlight::Engine)
+    afterlight_warnings(afterlight_cluster_lod_test)
+    add_dependencies(afterlight_cluster_lod_test afterlight_cluster_wall)
+    add_test(NAME afterlight.cluster_lod_boundaries COMMAND afterlight_cluster_lod_test "${cluster_wall}")
     add_test(NAME afterlight.cluster_geometry COMMAND afterlight_cluster_demo "${cluster_wall}" --verify)
     set_tests_properties(afterlight.cluster_geometry PROPERTIES TIMEOUT 45 LABELS graphics
         ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")

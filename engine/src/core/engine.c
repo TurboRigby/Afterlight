@@ -868,6 +868,11 @@ void af_engine_set_cluster_rendering(af_engine *engine, bool enabled, bool debug
         af_renderer_set_cluster_rendering(engine->renderer, enabled, debug_colors);
 }
 
+void af_engine_set_cluster_lod(af_engine *engine, bool enabled) {
+    if (engine)
+        af_renderer_set_cluster_lod(engine->renderer, enabled);
+}
+
 void af_engine_set_cluster_gpu_culling(af_engine *engine, bool enabled) {
     if (engine)
         af_renderer_set_cluster_gpu_culling(engine->renderer, enabled);

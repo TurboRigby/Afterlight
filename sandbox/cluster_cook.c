@@ -57,9 +57,10 @@ int main(int argc, char **argv) {
     bool ok = af_cluster_build(&source.data, &mesh);
     af_mesh_file_free(&source);
     if (ok)
-        ok = af_cluster_save(argv[2], &mesh);
+        ok = af_cluster_build_lods(&mesh) && af_cluster_save(argv[2], &mesh);
     if (ok)
-        printf("%u triangles in %u clusters\n", mesh.mesh.index_count / 3, mesh.count);
+        printf("%u clusters across %u regions, %u fine clusters and %u total stored triangles\n", mesh.count,
+               mesh.region_count, mesh.fine_count, mesh.mesh.index_count / 3);
     else
         fprintf(stderr, "Cannot cook mesh or create %s. Use a new output file.\n", argv[2]);
     af_cluster_free(&mesh);
