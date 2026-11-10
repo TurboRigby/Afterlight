@@ -73,6 +73,7 @@ const uint DRAW_FLIP_BACK_NORMAL = 1u << 2;
 const uint DRAW_MIRRORED = 1u << 3;
 const uint DRAW_BLEND_OPAQUE = 1u << 4;
 const uint DRAW_BLEND_PARTIAL = 1u << 5;
+const uint DRAW_CLUSTER_DEBUG = 1u << 7;
 bool draw_flag(uint flag) {
     return (uint(draw.params.y) & flag) != 0u;
 }
@@ -362,7 +363,7 @@ void main() {
                 n = normalize(mat3(tangent, cross(n, tangent) * handedness, n) * normalize(mapped));
         }
     }
-    vec4 base = texture(base_texture, uv) * vertex_color;
+    vec4 base = draw_flag(DRAW_CLUSTER_DEBUG) ? draw.tint : texture(base_texture, uv) * vertex_color;
     bool front = gl_FrontFacing != draw_flag(DRAW_MIRRORED);
     if (!front && draw_flag(DRAW_CULL_BACK))
         discard;

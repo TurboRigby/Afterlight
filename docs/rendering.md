@@ -181,3 +181,24 @@ other supported casters retain raster maps. Ray resources are lazy, per-frame
 TLAS ownership follows fences, and tracked GPU bytes include AS storage/scratch
 and instances. Disabling the effect releases them. The ordinary raster shader is
 kept for unsupported devices. See the [0.22 guide](development-022.md).
+
+## Clustered geometry
+
+The offline cooker packs static indexed geometry into spatial clusters of up
+to 128 triangles. Load the resulting `.afgeom` asset with
+`af_engine_load_cluster_mesh` and reference its mesh name on a scene object.
+The opaque pass culls clusters against the view. Shadows and other passes use
+the mesh as a whole.
+
+```sh
+cmake --build build --target afterlight_cluster_demo
+build/afterlight_cluster_demo build/cluster-wall.afgeom
+build/afterlight_cluster_cook input.glb output.afgeom
+ctest --test-dir build -R '^afterlight.cluster_geometry$' --output-on-failure
+```
+
+In the demo, WASD and Q/E move the camera, right click toggles mouse look,
+R resets the camera, C toggles cluster colors, V switches to the regular mesh
+path, and Space prints the cluster counters. The built-in wall is procedural.
+The Vulkan test compares a capture from the regular path with the clustered
+path and checks that the debug view changes the colors.

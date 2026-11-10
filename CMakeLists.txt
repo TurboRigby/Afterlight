@@ -56,6 +56,7 @@ add_library(afterlight STATIC
     engine/src/animation/animation_player.c
     engine/src/animation/animation_events.c
     engine/src/animation/animation_runtime.c
+    engine/src/geometry/cluster.c
     engine/src/render/environment_job.c
     engine/src/assets/asset_watch.c
     engine/src/assets/gltf.c
@@ -660,6 +661,26 @@ add_executable(afterlight_physics_benchmark tests/physics/physics_stress.c)
 target_compile_definitions(afterlight_physics_benchmark PRIVATE AF_PHYSICS_BENCHMARK=1)
 target_link_libraries(afterlight_physics_benchmark PRIVATE Afterlight::Engine)
 afterlight_warnings(afterlight_physics_benchmark)
+add_executable(afterlight_cluster_cook sandbox/cluster_cook.c)
+target_include_directories(afterlight_cluster_cook PRIVATE engine/src)
+target_link_libraries(afterlight_cluster_cook PRIVATE Afterlight::Engine)
+afterlight_warnings(afterlight_cluster_cook)
+add_executable(afterlight_cluster_demo sandbox/cluster_demo.c)
+target_include_directories(afterlight_cluster_demo PRIVATE engine/src)
+target_link_libraries(afterlight_cluster_demo PRIVATE Afterlight::Engine)
+afterlight_warnings(afterlight_cluster_demo)
+set(cluster_wall "${PROJECT_BINARY_DIR}/cluster-wall.afgeom")
+add_custom_command(OUTPUT "${cluster_wall}"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "${cluster_wall}"
+    COMMAND afterlight_cluster_cook --wall "${cluster_wall}"
+    DEPENDS afterlight_cluster_cook VERBATIM)
+add_custom_target(afterlight_cluster_wall DEPENDS "${cluster_wall}")
+add_dependencies(afterlight_cluster_demo afterlight_cluster_wall)
+if(BUILD_TESTING)
+    add_test(NAME afterlight.cluster_geometry COMMAND afterlight_cluster_demo "${cluster_wall}" --verify)
+    set_tests_properties(afterlight.cluster_geometry PROPERTIES TIMEOUT 45 LABELS graphics
+        ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+endif()
 add_executable(afterlight_renderer_benchmark tests/render/renderer_benchmark.c)
 target_include_directories(afterlight_renderer_benchmark PRIVATE engine/src sandbox)
 target_link_libraries(afterlight_renderer_benchmark PRIVATE Afterlight::Engine)

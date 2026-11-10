@@ -109,7 +109,8 @@ enum {
     AF_DRAW_MIRRORED = 1u << 3,
     AF_DRAW_BLEND_OPAQUE = 1u << 4,
     AF_DRAW_BLEND_PARTIAL = 1u << 5,
-    AF_DRAW_INSTANCED = 1u << 6
+    AF_DRAW_INSTANCED = 1u << 6,
+    AF_DRAW_CLUSTER_DEBUG = 1u << 7
 };
 static uint32_t mesh_face_flags(af_mesh_sidedness sidedness, af_mat4 model) {
     if (sidedness == AF_MESH_SIDES_DEFAULT)
@@ -199,6 +200,8 @@ typedef struct af_gpu_mesh {
     af_vec3 minimum, maximum;
     af_mesh_morph *morph;
     af_vertex *morph_base;
+    af_cluster *clusters;
+    uint32_t cluster_count;
 } af_gpu_mesh;
 typedef struct af_morph_draw {
     VkDeviceSize offset;
@@ -318,6 +321,8 @@ struct af_renderer {
     size_t missing_meshes;
     af_debug_view debug_view;
     bool culling_disabled, prop_instancing_disabled;
+    bool clusters_disabled, cluster_colors;
+    af_cluster_stats cluster_stats;
     size_t visible_objects, culled_objects;
     double gpu_budget_ms;
     uint64_t gpu_budget_bytes;
@@ -987,6 +992,9 @@ static void destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh) {
     destroy_buffer(renderer, &mesh->indices);
     af_mesh_morph_free(mesh->morph);
     free(mesh->morph_base);
+    free(mesh->clusters);
+    mesh->clusters = NULL;
+    mesh->cluster_count = 0;
     mesh->morph = NULL;
     mesh->morph_base = NULL;
     mesh->index_count = 0;
@@ -1168,6 +1176,25 @@ bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_me
         return false;
     mesh->morph = NULL;
     return true;
+}
+
+bool af_renderer_upload_clusters(af_renderer *r, const char *name, af_cluster_mesh *mesh) {
+    if (!af_renderer_upload_mesh(r, name, &mesh->mesh))
+        return false;
+    af_gpu_mesh *gpu = &r->meshes[find_mesh_index(r, name)].gpu;
+    gpu->clusters = mesh->clusters;
+    gpu->cluster_count = mesh->count;
+    mesh->clusters = NULL;
+    return true;
+}
+
+void af_renderer_set_cluster_rendering(af_renderer *r, bool enabled, bool debug_colors) {
+    r->clusters_disabled = !enabled;
+    r->cluster_colors = debug_colors;
+}
+
+af_cluster_stats af_renderer_cluster_stats(const af_renderer *r) {
+    return r->cluster_stats;
 }
 
 bool af_renderer_remove_mesh(af_renderer *renderer, const char *name) {
@@ -3004,6 +3031,34 @@ static void bind_scene_material(af_renderer *r, af_frame *frame, const af_materi
     }
 }
 
+static size_t draw_clusters(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
+                            af_mat4 visibility, uint32_t object) {
+    size_t draws = 0;
+    r->cluster_stats.candidates += mesh->cluster_count;
+    for (uint32_t i = 0; i < mesh->cluster_count; ++i) {
+        const af_cluster *c = &mesh->clusters[i];
+        af_shadow_bounds bounds = af_shadow_transform_bounds(draw.model, c->minimum, c->maximum);
+        if (!r->culling_disabled && !af_shadow_intersects(visibility, &bounds))
+            continue;
+        if (r->cluster_colors) {
+            uint32_t color = (i + 1) * UINT32_C(2654435761);
+            draw.material.tint = (af_color){.2f + (float)(color & 255u) / 320,
+                                            .2f + (float)((color >> 8) & 255u) / 320,
+                                            .2f + (float)((color >> 16) & 255u) / 320, 1};
+            draw.material.params.x = 1;
+            draw.material.params.y = (float)((uint32_t)draw.material.params.y | AF_DRAW_CLUSTER_DEBUG);
+            draw.material.emission = (af_vec4){0};
+            vkCmdPushConstants(frame->command, r->swapchain.pipeline_layout,
+                               VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(draw), &draw);
+        }
+        vkCmdDrawIndexed(frame->command, c->index_count, 1, c->first_index, 0, object);
+        r->cluster_stats.triangles += c->index_count / 3;
+        ++draws;
+    }
+    r->cluster_stats.visible += draws;
+    return draws;
+}
+
 static bool prop_batch_matches(const af_prop_batch *batch, const af_gpu_mesh *mesh, const af_material *material,
                                const af_mesh_draw *draw) {
     return batch->mesh == mesh && !memcmp(&batch->draw.material, &draw->material, sizeof(draw->material)) &&
@@ -3459,6 +3514,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     }
     size_t draw_calls = 0, missing_meshes = 0;
     renderer->visible_objects = renderer->culled_objects = 0;
+    renderer->cluster_stats = (af_cluster_stats){0};
     bool gi_denoised = false;
     const af_landscape *scene_ls = scene ? af_scene_get_landscape(scene) : NULL;
     bool has_landscape = scene_ls && scene_ls->enabled && scene_ls->chunk_count > 0;
@@ -3611,7 +3667,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                     }};
                 /* Keep the original depth-test order for coplanar surfaces. Culled
                    objects don't break a run of compatible submitted draws. */
-                bool can_batch = batch_props && !alpha_pass && !asset->dynamic && !mesh->skinned && !morph &&
+                bool clustered = !renderer->clusters_disabled && !alpha_pass && !water && !morph &&
+                                 mesh->cluster_count && object->material.alpha_mode == AF_ALPHA_OPAQUE;
+                bool can_batch = !clustered && batch_props && !alpha_pass && !asset->dynamic && !mesh->skinned && !morph &&
                                  object->material.alpha_mode == AF_ALPHA_OPAQUE && object->id != highlighted;
                 if (can_batch) {
                     if (!prop_batch_matches(&batch, mesh, &object->material, &transform)) {
@@ -3671,8 +3729,12 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 } else
                     vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                       alpha_pass ? renderer->swapchain.blend_pipeline : renderer->swapchain.pipeline);
-                vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, (uint32_t)i);
-                ++draw_calls;
+                if (clustered)
+                    draw_calls += draw_clusters(renderer, frame, mesh, transform, visibility_projection, (uint32_t)i);
+                else {
+                    vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, (uint32_t)i);
+                    ++draw_calls;
+                }
             }
 
             draw_prop_batch(renderer, frame, &batch, &draw_calls);

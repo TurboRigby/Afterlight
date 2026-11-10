@@ -849,6 +849,29 @@ bool af_engine_load_mesh(af_engine *engine, const char *name, const char *path, 
         snprintf(error->message, sizeof(error->message), "GPU mesh upload failed.");
     return result;
 }
+bool af_engine_load_cluster_mesh(af_engine *engine, const char *name, const char *path, af_asset_error *error) {
+    af_cluster_mesh mesh;
+    if (!engine || !af_cluster_load(path, &mesh)) {
+        if (error)
+            snprintf(error->message, sizeof(error->message), "Invalid or unreadable clustered mesh.");
+        return false;
+    }
+    bool uploaded = af_renderer_upload_clusters(engine->renderer, name, &mesh);
+    af_cluster_free(&mesh);
+    if (error)
+        snprintf(error->message, sizeof(error->message), "%s", uploaded ? "" : "GPU mesh upload failed.");
+    return uploaded;
+}
+
+void af_engine_set_cluster_rendering(af_engine *engine, bool enabled, bool debug_colors) {
+    if (engine)
+        af_renderer_set_cluster_rendering(engine->renderer, enabled, debug_colors);
+}
+
+af_cluster_stats af_engine_cluster_stats(const af_engine *engine) {
+    return engine ? af_renderer_cluster_stats(engine->renderer) : (af_cluster_stats){0};
+}
+
 static void asset_error_context(af_asset_error *error, const af_scene_asset *asset) {
     if (!error || !asset)
         return;
