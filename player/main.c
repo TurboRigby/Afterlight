@@ -6,10 +6,10 @@
 
 #include "bundle.h"
 #include "cube.h"
-#include "gui.h"
-#include "play_hud.h"
+#include "ui/gui.h"
+#include "ui/play_hud.h"
 #include "preferences.h"
-#include "runtime.h"
+#include "runtime/runtime.h"
 #include <SDL3/SDL_filesystem.h>
 #include <afterlight/asset_watch.h>
 #include <afterlight/extension.h>

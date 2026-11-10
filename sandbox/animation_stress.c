@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-#include "animation_runtime.h"
+#include "animation/animation_runtime.h"
 #include <afterlight/model.h>
 #include <SDL3/SDL.h>
 #include <math.h>

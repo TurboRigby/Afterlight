@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test sign-off validation
-        run: python3 tests/dco.py
+        run: python3 tests/tooling/dco.py
       - name: Check introduced commits
         env:
           DCO_BASE: ${{ github.event.pull_request.base.sha }}

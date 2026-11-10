@@ -55,5 +55,5 @@ Run the same check locally, using the base and head revisions for your change:
 
 ```sh
 python3 scripts/check_dco.py --base origin/main --head HEAD
-python3 tests/dco.py
+python3 tests/tooling/dco.py
 ```

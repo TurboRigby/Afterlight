@@ -6,8 +6,8 @@
 
 #include <afterlight/game_module.h>
 #include "cube.h"
-#include "gui.h"
-#include "play_hud.h"
+#include "ui/gui.h"
+#include "ui/play_hud.h"
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>

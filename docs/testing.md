@@ -47,7 +47,7 @@ reported a global-buffer-overflow in CoreGraphics/CoreSpotlight and aborted. The
 crash report from editor PID 48575 came from that CTest sanitizer run.
 
 A standalone load/unload probe reproduced this without Afterlight, SDL or Vulkan.
-The fix uses `engine/src/module_sanitizer.c` as the **first linked object** in each
+The fix uses `engine/src/core/module_sanitizer.c` as the **first linked object** in each
 macOS Clang module. Its ordinary C destructor registers via the working atexit
 path and calls compiler-rt's image-global unregistration entry point. Linking it
 first registers this cleanup before user destructors, making cleanup execute

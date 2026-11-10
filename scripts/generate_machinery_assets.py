@@ -26,6 +26,6 @@ header=(root/'engine/include/afterlight/input.h').read_text().split('} af_key;')
 keys=list(dict.fromkeys(re.findall(r'\bAF_KEY_[A-Z_0-9]+\b',header)));ordinals={k:i for i,k in enumerate(keys)}
 def number(v):return ordinals[v] if v.startswith('AF_KEY_') else int(v)
 records=[]
-for name,args in re.findall(r'BIND\("([^"]+)",([^;]+)\);',(root/'engine/src/input.c').read_text()):
+for name,args in re.findall(r'BIND\("([^"]+)",([^;]+)\);',(root/'engine/src/core/input.c').read_text()):
     neg,pos,button,axis,mouse,scale=[number(v.strip()) for v in args.split(',')];records.append(dict(name=name,negative_key=neg,positive_key=pos,pad_button=button,pad_axis=axis,mouse_axis=mouse,deadzone=.18,scale=scale))
 (root/'sandbox/input.json').write_text(json.dumps(records,indent=2)+'\n')

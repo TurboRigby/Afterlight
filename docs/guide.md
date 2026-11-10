@@ -291,43 +291,53 @@ See [sanitizer checks and the macOS module-unload fix](testing.md).
 
 ## Layout
 
+Engine implementation files live in subsystem directories under `engine/src`.
+The editor separates application state, documents, Play runtime, content
+tools, viewport and authoring tools, and UI panels. Tests are organized by
+subsystem, with dedicated editor, runtime and tooling directories. Shared test
+fixtures live under `tests/assets`.
+
 ```text
-engine/include/afterlight/afterlight.h   Public engine, mesh, and input API
-engine/include/afterlight/math.h         Vector and matrix API
-engine/include/afterlight/camera.h       Flying camera API
-engine/include/afterlight/mesh.h         Mesh data and asset-name definitions
-engine/include/afterlight/scene.h        CPU-only objects and scene API
-engine/src/scene.c                      Object lifetime, IDs, names, transforms
-engine/src/scene_io.c                   Versioned JSON save/load and file replacement
-engine/include/afterlight/game_module.h Versioned C game/host contract
-engine/src/asset.c                      OBJ/image loading and path resolution
-engine/src/texture_vulkan.c             Shared image upload and descriptors
-engine/include/afterlight/shadow.h       Directional shadow settings
-engine/src/shadow_math.c                Cascade splits, fitting and stabilization
-engine/src/shadow_vulkan.c              Per-frame shadow arrays and depth passes
-game/demo_game.c                       Reloadable C gameplay example
-editor/runtime.c                       Play copies, module loading and hot reload
-sandbox/scenes/demo.afterlight.json     Default sandbox scene
-engine/src/math.c                       C math implementation
-engine/src/camera.c                     Camera movement and view matrix
-engine/src/engine.c                     Lifetime, events, input, timing
-engine/src/renderer_vulkan.c            Buffers, pipeline, depth, presentation
-engine/shaders/mesh.vert                Model/view/projection vertex transform
-engine/shaders/mesh.frag                Texturing, lighting, PCF and cascade blending
-engine/shaders/shadow.vert              Light-space depth transform
-sandbox/main.c                         Example C game and camera controls
-sandbox/cube.h                         Indexed cube geometry
-tests/vulkan_policy.c                  Vulkan device/driver selection checks
-tests/scene_io.c                       Scene persistence and malformed-file checks
-tests/scene.c                          CPU-only scene and transform checks
-tests/math.c                           Math and camera checks
-editor/                                C editor, document history, Nuklear UI, dialogs
-engine/src/ui_vulkan.c                  Overlay atlas, buffers, alpha blending
-engine/include/afterlight/overlay.h     Renderer-independent overlay packet
-tests/editor_document.c                Editor document regression checks
-docs/editor.md                         Editor usage and limitations
-tests/smoke.c                          Graphics, input, and lifecycle checks
-docs/architecture.md                   Ownership and editor boundaries
+engine/include/afterlight/afterlight.h      Public engine, mesh, and input API
+engine/include/afterlight/math.h            Vector and matrix API
+engine/include/afterlight/camera.h          Flying camera API
+engine/include/afterlight/mesh.h            Mesh data and asset-name definitions
+engine/include/afterlight/scene.h           CPU-only objects and scene API
+engine/src/scene/scene.c                    Object lifetime, IDs, names, transforms
+engine/src/scene/scene_io.c                 Versioned JSON save/load and file replacement
+engine/include/afterlight/game_module.h     Versioned C game/host contract
+engine/src/assets/asset.c                   OBJ/image loading and path resolution
+engine/src/render/texture_vulkan.c          Shared image upload and descriptors
+engine/include/afterlight/shadow.h          Directional shadow settings
+engine/src/render/shadow_math.c             Cascade splits, fitting and stabilization
+engine/src/render/shadow_vulkan.c           Per-frame shadow arrays and depth passes
+game/demo_game.c                            Reloadable C gameplay example
+editor/runtime/runtime.c                            Play copies, module loading and hot reload
+sandbox/scenes/demo.afterlight.json         Default sandbox scene
+engine/src/core/math.c                      C math implementation
+engine/src/core/camera.c                    Camera movement and view matrix
+engine/src/core/engine.c                    Lifetime, events, input, timing
+engine/src/render/renderer_vulkan.c         Buffers, pipeline, depth, presentation
+engine/shaders/mesh.vert                    Model/view/projection vertex transform
+engine/shaders/mesh.frag                    Texturing, lighting, PCF and cascade blending
+engine/shaders/shadow.vert                  Light-space depth transform
+sandbox/main.c                              Example C game and camera controls
+sandbox/cube.h                              Indexed cube geometry
+tests/render/vulkan/vulkan_policy.c         Vulkan device/driver selection checks
+tests/scene/scene_io.c                      Scene persistence and malformed-file checks
+tests/scene/scene.c                         CPU-only scene and transform checks
+tests/core/math.c                           Math and camera checks
+editor/core/                                Editor entry point and application state
+editor/document/                            Scene edits and undo history
+editor/ui/                                  Nuklear panels, dialogs and Play HUD
+editor/content/                             Asset browsing, thumbnails and project tools
+editor/tools/                               Blueprint and landscape editing, gizmos and overlays
+engine/src/render/ui_vulkan.c               Overlay atlas, buffers, alpha blending
+engine/include/afterlight/overlay.h         Renderer-independent overlay packet
+tests/editor/editor_document.c              Editor document regression checks
+docs/editor.md                              Editor usage and limitations
+tests/runtime/smoke.c                       Graphics, input, and lifecycle checks
+docs/architecture.md                        Ownership and editor boundaries
 ```
 
 The sandbox links `Afterlight::Engine`. Its source includes only the public

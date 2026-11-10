@@ -419,7 +419,7 @@ and final tone mapping precede the separate display-space UI. `ibl.c` builds
 original HDR environment images and GGX/diffuse/BRDF integration inputs.
 `local_shadow.c` builds point/spot projections; local depth arrays are separate
 from cascaded directional shadows and protected per frame in flight.
-`editor/thumbnail.c` produces bounded CPU previews and maintains a 64-entry
+`editor/content/thumbnail.c` produces bounded CPU previews and maintains a 64-entry
 visible-widget cache. Overlay commands select independent UI images without
 exposing Vulkan descriptors in the public API. See [0.8 details](lighting-08.md).
 

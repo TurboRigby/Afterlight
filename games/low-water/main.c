@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "world.h"
-#include "gui.h"
-#include "render_test.h"
+#include "ui/gui.h"
+#include "render/render_test.h"
 #include <afterlight/extension.h>
 #include <inttypes.h>
 #include <math.h>

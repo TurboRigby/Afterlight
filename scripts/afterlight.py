@@ -28,7 +28,7 @@ def create_project(destination, name):
     try:
         (stage/'scenes').mkdir();(stage/'game').mkdir();(stage/'assets').mkdir()
         shutil.copytree(ROOT/'engine/include/afterlight',stage/'include/afterlight')
-        shutil.copy2(ROOT/'game/starter_game.c',stage/'game/game.c');shutil.copy2(ROOT/'engine/src/module_sanitizer.c',stage/'game/module_sanitizer.c')
+        shutil.copy2(ROOT/'game/starter_game.c',stage/'game/game.c');shutil.copy2(ROOT/'engine/src/core/module_sanitizer.c',stage/'game/module_sanitizer.c')
         shutil.copy2(ROOT/'LICENSE',stage/'LICENSE')
         (stage/'tools').mkdir();shutil.copy2(ROOT/'scripts/package_source.py',stage/'tools/package_source.py')
         (stage/'NOTICE').write_text('''Afterlight starter project

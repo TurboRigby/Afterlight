@@ -35,7 +35,7 @@ keys=list(dict.fromkeys(re.findall(r'\bAF_KEY_[A-Z_0-9]+\b',header)))
 ordinals={name:i for i,name in enumerate(keys)}
 def number(value):return ordinals[value] if value.startswith('AF_KEY_') else int(value)
 bindings=[]
-for name,arguments in re.findall(r'BIND\("([^"]+)",([^;]+)\);',(root/'engine/src/input.c').read_text()):
+for name,arguments in re.findall(r'BIND\("([^"]+)",([^;]+)\);',(root/'engine/src/core/input.c').read_text()):
     neg,pos,button,axis,mouse,scale=[number(value.strip()) for value in arguments.split(',')]
     bindings.append(dict(name=name,negative_key=neg,positive_key=pos,pad_button=button,pad_axis=axis,mouse_axis=mouse,deadzone=.18,scale=scale))
 (root/'sandbox/input.json').write_text(json.dumps(bindings,indent=2)+'\n')
