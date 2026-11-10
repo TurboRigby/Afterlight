@@ -311,3 +311,40 @@ filename stem. For example, `landing` opens `landing.afterlight.json` beside
 the project's startup scene. Saving the scene saves the graphs. The
 player's progress save stores the current scene and flags along with the
 game module's state.
+
+### Event timelines
+
+Add a **Timeline** node and connect an event to **Play**. Select the node and
+choose a target for transform keys in the Inspector. Set the duration and use **Add key at playhead** to add
+keys for position, rotation and scale, directional light intensity, or WAV
+cues. Transform and light keys interpolate linearly and hold their values
+outside the keyed range. **Preview in viewport** lets you scrub the visual
+tracks without editing the scene or firing sound cues.
+
+**Completed** fires when playback reaches the end. Use it to set a story flag
+for the result, then connect the matching startup branch to **Apply End** to
+restore the final pose and lighting silently. Repeated Play signals during
+playback leave the sequence running. An in-progress sequence restarts with the
+authored scene on load unless the graph restores its end state.
+
+### Blueprint debugger
+
+Open **Scripts** during Play and select the live graph. Nodes and wires flash
+when execution passes through them. The sidebar shows active story flags and
+the last 32 execution entries for the selected graph. Select an entry to
+highlight its node. If a scene change fails, the sidebar shows the requesting
+node, destination and failure reason.
+
+### Looping sound emitters
+
+Place an object at the source of the sound. Add a **Looping Sound Emitter**
+node, pick that object as its target, and enter the registered WAV asset name.
+Set the gain and the minimum and maximum hearing distances in meters. The
+sound follows the target's world position, including movement from its parent.
+Use **BeginPlay** for ambient loops or an interaction to start the loop later.
+
+**Play** starts one loop per node and fades it in over **Fade Seconds**.
+**Fade** moves the volume to **Fade To** over the same interval, and **Stop**
+fades the loop out and releases its voice. Zero seconds makes the change
+immediate. Pause freezes loop playback and fades. Scene changes stop the old
+scene's loops, and startup graphs can recreate the loops for the new scene.

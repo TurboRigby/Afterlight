@@ -321,7 +321,8 @@ static void keyboard(editor *app, double delta) {
         if (!app->edit_joint && af_engine_key_pressed(engine, AF_KEY_R))
             app->gizmo.mode = ED_GIZMO_SCALE;
     }
-    bool navigate = !app->blueprint_mode && af_engine_mouse_pressed(engine, AF_MOUSE_RIGHT) &&
+    bool navigate = (!app->blueprint_mode || app->blueprint_state.timeline_preview) &&
+                    af_engine_mouse_pressed(engine, AF_MOUSE_RIGHT) &&
                     (inside(app->viewport, mouse) || (app->runtime.playing && af_engine_mouse_captured(engine)));
     if (navigate && !app->free_camera && !af_engine_key_pressed(engine, AF_KEY_ESCAPE)) {
         app->resume_game_capture = app->runtime.playing && af_engine_mouse_captured(engine);
@@ -348,7 +349,7 @@ static void build_ui(editor *app, float width, float height) {
         draw_lights(app);
         draw_landscape_brush(app);
     }
-    if (app->blueprint_mode) {
+    if (app->blueprint_mode && !app->blueprint_state.timeline_preview) {
         ed_blueprint_canvas_panel(&app->blueprint_state, context,
                                   app->runtime.playing ? app->runtime.scene : app->document.scene, app->viewport,
                                   app->runtime.playing);
@@ -423,7 +424,6 @@ static void build_ui(editor *app, float width, float height) {
     extensions_panel(app, width, height);
     environment_panel(app, width, height);
     post_processing_panel(app, width, height);
-    af_engine_set_scene(app->engine, app->runtime.playing ? app->runtime.scene : app->document.scene);
     animation_panel(app, width, height);
     input_panel(app);
     prefab_panel(app);
@@ -607,7 +607,7 @@ static void update(af_engine *engine, double delta, void *userdata) {
     }
     if (app->selected_light >= af_scene_local_light_count(app->document.scene))
         app->light_selected = false;
-    if (!app->runtime.playing)
+    if (!app->runtime.playing && !app->blueprint_state.preview_scene)
         af_engine_set_scene(engine, app->document.scene);
     int w = 0, h = 0;
     af_engine_get_window_size(engine, &w, &h);
@@ -695,7 +695,10 @@ static void update(af_engine *engine, double delta, void *userdata) {
     }
     light_tools_smoke(app);
     animation_tools_smoke(app);
-    af_engine_set_scene(engine, app->runtime.playing ? app->runtime.scene : app->document.scene);
+    af_scene *display = ed_blueprint_preview(&app->blueprint_state, engine,
+                                             app->runtime.playing ? app->runtime.scene : app->document.scene,
+                                             app->document.revision, app->blueprint_mode && !app->runtime.playing);
+    af_engine_set_scene(engine, display);
     af_engine_set_animation_playback(engine, app->runtime.playing || app->animation_preview,
                                      !app->runtime.playing && app->animation_preview);
     af_engine_highlight_object(engine, app->runtime.playing ? AF_OBJECT_NONE : app->document.selection);
@@ -739,6 +742,7 @@ static void shutdown(af_engine *engine, void *userdata) {
     if (app->tool_process)
         SDL_DestroyProcess(app->tool_process);
     af_engine_set_scene(engine, NULL);
+    af_scene_destroy(app->blueprint_state.preview_scene);
     af_engine_set_overlay(engine, NULL);
     ed_runtime_stop(&app->runtime);
     af_asset_watch_destroy(app->asset_watch);

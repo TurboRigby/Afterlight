@@ -34,7 +34,7 @@ struct af_scene {
     af_story_dialogue story_dialogue;
     size_t story_graph;
     uint32_t story_node;
-    char story_destination[AF_STORY_LABEL_CAPACITY];
+    af_story_scene_change story_change;
     size_t *object_slots;
     size_t object_slot_capacity;
     af_scene_object *objects;

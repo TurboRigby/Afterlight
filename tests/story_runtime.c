@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "runtime.h"
+#include "blueprint_editor.h"
 #include "cube.h"
 #include <afterlight/blueprint.h>
 #include <afterlight/project.h>
@@ -87,6 +88,13 @@ static float gate_height(const af_scene *s) {
     return o ? o->transform.position.y : 0;
 }
 
+static bool use_focused(ed_runtime *r, af_engine *engine, const char *name) {
+    af_camera camera = af_engine_get_camera(engine);
+    af_interaction_focus focus = af_scene_interaction_focus(r->scene, &camera, 1);
+    return focus.object && focus.object == object_named(r->scene, name) &&
+           af_scene_interact(r->scene, engine, focus.object);
+}
+
 static void frame(af_engine *engine, double dt, void *data) {
     story_test *t = data;
     ed_runtime *r = &t->runtime;
@@ -108,6 +116,16 @@ static void frame(af_engine *engine, double dt, void *data) {
     switch (t->phase) {
     case 0: {
         CHECK(af_scene_blueprint_count(r->scene) == 2 && gate_height(r->scene) < 2);
+        CHECK(af_engine_audio_stats(engine).looping == 1 && af_engine_audio_stats(engine).plays == 1);
+        ed_blueprint_state preview = {.timeline_preview = true, .timeline_time = 2.5f};
+        const af_blueprint *relay = af_scene_get_blueprint_const(r->scene, 0);
+        for (size_t i = 0; i < relay->node_count; ++i)
+            if (relay->nodes[i].timeline)
+                preview.selected_node_id = relay->nodes[i].id;
+        af_scene *sample = ed_blueprint_preview(&preview, engine, r->scene, 1, true);
+        CHECK(sample != r->scene && gate_height(sample) > 2 && gate_height(sample) < 4 && gate_height(r->scene) < 2);
+        CHECK(ed_blueprint_preview(&preview, engine, r->scene, 1, false) == r->scene && !preview.preview_scene);
+        CHECK(af_engine_audio_stats(engine).plays == 1);
         af_camera c = af_camera_default();
         c.position = (af_vec3){0, 1.55f, -3.1f};
         af_blueprint *terminal = af_scene_get_blueprint(r->scene, 1);
@@ -130,16 +148,31 @@ static void frame(af_engine *engine, double dt, void *data) {
         CHECK(press(SDL_SCANCODE_F));
         break;
     case 2:
+        CHECK(!af_scene_story_flag(r->scene, "relay_open") && gate_height(r->scene) < 2);
+        for (unsigned i = 0; i < 25; ++i)
+            ed_runtime_frame_update(r, .1, false);
+        CHECK(gate_height(r->scene) > 2 && gate_height(r->scene) < 4);
+        CHECK(!af_scene_story_flag(r->scene, "relay_open"));
+        {
+            float height = gate_height(r->scene);
+            r->paused = true;
+            ed_runtime_frame_update(r, .1, false);
+            CHECK(gate_height(r->scene) == height);
+            r->paused = false;
+        }
+        for (unsigned i = 0; i < 26; ++i)
+            ed_runtime_frame_update(r, .1, false);
         CHECK(af_scene_story_flag(r->scene, "relay_open"));
         CHECK(gate_height(r->scene) > 4);
         CHECK(af_scene_get_light(r->scene).intensity > 2);
-        CHECK(af_engine_audio_stats(engine).plays > 0);
+        CHECK(af_engine_audio_stats(engine).plays == 2 && af_engine_audio_stats(engine).looping == 1);
         CHECK(ed_runtime_save_game(r, t->save_path));
         CHECK(af_scene_set_story_flag(r->scene, "relay_open", false) && ed_runtime_load_game(r, t->save_path));
         CHECK(af_scene_story_flag(r->scene, "relay_open"));
         break;
     case 3:
         CHECK(gate_height(r->scene) > 4);
+        CHECK(af_engine_audio_stats(engine).plays == 3 && af_engine_audio_stats(engine).looping == 1);
         CHECK(look_at(r, (af_vec3){0, .903f, -6.4f}, (af_vec3){0, 1.18f, -8.1f}));
         CHECK(press(SDL_SCANCODE_F));
         break;
@@ -155,8 +188,9 @@ static void frame(af_engine *engine, double dt, void *data) {
               af_scene_story_flag(r->scene, "relay_open") && ed_runtime_save_game(r, t->save_path));
         CHECK(af_scene_set_story_flag(r->scene, "sealed_dispatch", false) && ed_runtime_load_game(r, t->save_path));
         CHECK(af_scene_story_flag(r->scene, "sealed_dispatch"));
+        CHECK(af_engine_audio_stats(engine).looping == 0);
         CHECK(look_at(r, (af_vec3){0, .903f, .6f}, (af_vec3){0, 1.17f, -1}));
-        CHECK(press(SDL_SCANCODE_F));
+        CHECK(use_focused(r, engine, "Ferry receiver focus"));
         break;
     case 7:
         CHECK(d && strstr(d->speaker, "SEALED"));
@@ -164,16 +198,19 @@ static void frame(af_engine *engine, double dt, void *data) {
         CHECK(start(t, engine));
         CHECK(!af_scene_story_flag(r->scene, "sealed_dispatch"));
         CHECK(af_scene_set_story_flag(r->scene, "relay_open", true));
+        ed_runtime_frame_update(r, 0, false);
+        CHECK(gate_height(r->scene) > 4);
         CHECK(look_at(r, (af_vec3){0, .903f, -6.4f}, (af_vec3){0, 1.18f, -8.1f}));
-        CHECK(press(SDL_SCANCODE_F));
+        CHECK(use_focused(r, engine, "Dispatch keypad focus"));
         break;
     case 8:
-        CHECK(d && !strcmp(d->speaker, "IONA") && r->story_choice == 0 && press(SDL_SCANCODE_RETURN));
+        CHECK(d && !strcmp(d->speaker, "IONA") && r->story_choice == 0 &&
+              af_scene_answer_dialogue(r->scene, engine, 0));
         break;
     case 9:
         CHECK(!strcmp(r->current_scene, "landing") && !af_scene_story_flag(r->scene, "sealed_dispatch"));
         CHECK(look_at(r, (af_vec3){0, .903f, .6f}, (af_vec3){0, 1.17f, -1}));
-        CHECK(press(SDL_SCANCODE_F));
+        CHECK(use_focused(r, engine, "Ferry receiver focus"));
         break;
     case 10: {
         CHECK(d && strstr(d->speaker, "OPEN BAND"));

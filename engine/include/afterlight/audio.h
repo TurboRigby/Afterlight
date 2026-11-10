@@ -8,16 +8,24 @@
 #define AFTERLIGHT_AUDIO_H
 #include <afterlight/asset.h>
 typedef struct af_audio af_audio;
+typedef uint64_t af_sound_loop;
 typedef struct af_audio_stats {
     size_t clips, playing;
     uint64_t plays;
     bool device_ready;
+    size_t looping;
 } af_audio_stats;
 typedef struct af_sound_emitter {
     af_vec3 position;
     float gain, min_distance, max_distance;
 } af_sound_emitter;
 bool af_audio_play_at(af_audio *, const char *, af_sound_emitter);
+/* Zero is an invalid handle. A loop continues across clip boundaries until stopped. */
+af_sound_loop af_audio_start_loop(af_audio *, const char *, af_sound_emitter, float fade_seconds);
+bool af_audio_move_loop(af_audio *, af_sound_loop, af_vec3 position);
+bool af_audio_fade_loop(af_audio *, af_sound_loop, float gain, float seconds);
+bool af_audio_stop_loop(af_audio *, af_sound_loop, float fade_seconds);
+void af_audio_suspend(af_audio *, bool suspended);
 bool af_audio_spatial_gains(af_vec3 listener, af_vec3 forward, af_sound_emitter, float *left, float *right);
 /* Interleaved stereo 48 kHz floats. Main-thread mixer, at most 4096 frames. */
 bool af_audio_mix(af_audio *, af_vec3 listener, af_vec3 forward, float *samples, size_t frames);

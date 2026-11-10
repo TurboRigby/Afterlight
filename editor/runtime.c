@@ -216,10 +216,18 @@ void ed_runtime_frame_update(ed_runtime *r, double delta, bool input_enabled) {
         story_input(r);
     if (af_scene_story_dialogue(r->scene))
         r->host.input_enabled = false;
-    char destination[AF_STORY_LABEL_CAPACITY];
-    if (!r->paused && af_scene_take_story_destination(r->scene, destination) &&
-        !ed_runtime_request_scene(r, destination))
-        snprintf(r->status, sizeof(r->status), "Cannot request scene '%s'.", destination);
+    af_story_scene_change change;
+    if (!r->paused && af_scene_take_story_change(r->scene, &change)) {
+        bool requested = ed_runtime_request_scene(r, change.destination);
+        if (requested && ed_runtime_transition(r))
+            return;
+        af_blueprint *bp = af_scene_get_blueprint(r->scene, change.graph);
+        char reason[160];
+        snprintf(reason, sizeof(reason), "%.159s", requested ? r->status : "could not queue scene change");
+        af_blueprint_report_scene_change(bp, change.node, change.destination, reason);
+        snprintf(r->status, sizeof(r->status), "%.35s node %u -> %.63s. %.120s", bp ? bp->name : "Blueprint",
+                 (unsigned)change.node, change.destination, reason);
+    }
     if (!r->paused && r->pending_scene[0])
         ed_runtime_transition(r);
 }
@@ -519,6 +527,7 @@ bool ed_runtime_transition(ed_runtime *r) {
     if (snprintf(path, sizeof(path), "%s%s.afterlight.json", r->scene_directory, r->pending_scene) >=
         (int)sizeof(path)) {
         r->pending_scene[0] = 0;
+        snprintf(r->status, sizeof(r->status), "Scene path exceeds the path limit.");
         return false;
     }
     r->pending_scene[0] = 0;

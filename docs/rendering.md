@@ -144,9 +144,35 @@ allocation limits. GPU timestamps exclude presentation; CPU render time includes
 waits and presentation work.
 
 Conservative frustum culling uses unjittered camera bounds expanded by two
-framebuffer pixels, including skinned and water mesh bounds. There is still one
-draw per visible object. See the [measured benchmark](development-021.md#visibility-baseline)
-for the workload and limits; this does not establish dense-scene throughput.
+framebuffer pixels, including skinned and water mesh bounds. The original
+[visibility benchmark](development-021.md#visibility-baseline) measures
+culling separately from draw batching.
+
+## Instanced props
+
+The opaque scene pass batches consecutive visible rigid props that share mesh,
+material and sidedness flags. The order of submitted objects is preserved for
+depth ties. Each instance keeps its own transform and motion history. Water,
+transparent materials, skinned or morphed meshes, and editor highlights use
+individual draws. Shadow maps use their existing submission path.
+
+```sh
+cmake --build build --target afterlight_renderer_benchmark
+build/afterlight_renderer_benchmark 4095 --props --no-validation
+ctest --test-dir build -R '^afterlight.prop_instancing$' --output-on-failure
+```
+
+The benchmark compares 4,096 visible railings, pipes and fixtures across three
+material runs. Median of three Release runs on Apple M4 with MoltenVK 1.4.2,
+an 800 × 600 framebuffer, shadows disabled, and 31 sampled frames per mode:
+
+| Mode | Scene draws | GPU scene | CPU command recording | CPU render less fence and acquire | Tracked GPU memory |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Individual | 4,096 | 2.56 ms | 1.66 ms | 16.12 ms | 36.04 MiB |
+| Instanced | 3 | 0.86 ms | 1.68 ms | 16.31 ms | 36.67 MiB |
+
+CPU render time includes presentation. The validation test compares a captured
+region byte for byte and verifies that all 1,024 test props remain visible.
 
 ## Ray-query sun shadows (0.22)
 

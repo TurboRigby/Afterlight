@@ -2,6 +2,7 @@
 #include "cube.h"
 #include "render_test.h"
 #include <afterlight/afterlight.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,9 +10,9 @@ typedef struct state {
     af_scene *scene;
     size_t objects;
     unsigned ticks, phase;
-    double gpu, cpu;
+    double gpu, cpu, record;
     unsigned samples;
-    bool pending, failed;
+    bool pending, failed, props;
     unsigned char reference[64 * 64 * 4];
 } state;
 static bool init(af_engine *e, void *data) {
@@ -24,17 +25,32 @@ static bool init(af_engine *e, void *data) {
     shadows.enabled = false;
     shadows.resolution = 512;
     af_scene_set_shadows(s->scene, shadows);
+    size_t columns = (size_t)ceil(sqrt((double)s->objects + 1));
+    const char *names[] = {"Railing", "Pipe", "Fixture"};
+    const af_color colors[] = {{.7f, .4f, .14f, 1}, {.16f, .49f, .62f, 1}, {.8f, .8f, .7f, 1}};
     for (size_t i = 0; i <= s->objects; ++i) {
-        af_object_id id = af_scene_add_object(s->scene, "Box", "cube");
+        size_t kind = i * 3 / (s->objects + 1);
+        af_object_id id = af_scene_add_object(s->scene, s->props ? names[kind] : "Box", "cube");
         af_transform t = af_transform_identity();
-        if (i)
+        if (s->props) {
+            float spacing = 12.f / (float)columns;
+            t.position =
+                (af_vec3){((float)(i % columns) + .5f) * spacing - 6, ((float)(i / columns) + .5f) * spacing - 6, -13};
+            t.scale =
+                (af_vec3){spacing * (kind == 1 ? .22f : .65f), spacing * (kind == 0 ? .2f : .65f), spacing * .33f};
+            af_material m = af_scene_get_object(s->scene, id)->material;
+            m.base_color = colors[kind];
+            if (!af_scene_set_object_material(s->scene, id, m))
+                return false;
+        } else if (i)
             t.position = (af_vec3){1000 + (float)i, 0, -10};
         if (!af_scene_set_object_transform(s->scene, id, t))
             return false;
     }
     af_engine_set_scene(e, s->scene);
     af_engine_set_simulation_paused(e, true);
-    af_engine_set_visibility_culling(e, false);
+    af_engine_set_visibility_culling(e, s->props);
+    af_engine_set_prop_instancing(e, false);
     return true;
 }
 static void update(af_engine *e, double dt, void *data) {
@@ -45,14 +61,19 @@ static void update(af_engine *e, double dt, void *data) {
     if (s->ticks > 8 && s->ticks < 40) {
         s->gpu += stats.gpu_scene_ms;
         s->cpu += stats.cpu_render_ms - stats.cpu_fence_ms - stats.cpu_acquire_ms;
+        s->record += stats.cpu_record_ms;
         ++s->samples;
     }
     if (s->ticks == 40) {
-        printf("%s,%zu,%zu,%zu,%.6f,%.6f,%llu\n", s->phase ? "culled" : "unculled", s->objects + 1, stats.draw_calls,
-               stats.culled_objects, s->gpu / s->samples, s->cpu / s->samples,
-               (unsigned long long)stats.tracked_gpu_bytes);
+        const char *mode = s->props ? (s->phase ? "instanced" : "individual") : (s->phase ? "culled" : "unculled");
+        printf("%s,%zu,%zu,%zu,%.6f,%.6f,%llu,%.6f\n", mode, s->objects + 1, stats.draw_calls, stats.culled_objects,
+               s->gpu / s->samples, s->cpu / s->samples, (unsigned long long)stats.tracked_gpu_bytes,
+               s->record / s->samples);
         bool good = s->phase ? (stats.draw_calls == 1 && stats.culled_objects == s->objects)
                              : (stats.draw_calls == s->objects + 1 && stats.culled_objects == 0);
+        if (s->props && s->phase)
+            good = stats.draw_calls == (s->objects > 1 ? 3u : 2u) && stats.culled_objects == 0 &&
+                   stats.visible_objects == s->objects + 1;
         if (!good || !af_engine_test_capture_region(e, (af_vec2){184, 134}, 64, 64)) {
             s->failed = true;
             af_engine_request_quit(e);
@@ -74,10 +95,13 @@ static void update(af_engine *e, double dt, void *data) {
             return;
         }
         memcpy(s->reference, pixels, sizeof(pixels));
-        af_engine_set_visibility_culling(e, true);
+        if (s->props)
+            af_engine_set_prop_instancing(e, true);
+        else
+            af_engine_set_visibility_culling(e, true);
         s->phase = 1;
         s->ticks = s->samples = 0;
-        s->gpu = s->cpu = 0;
+        s->gpu = s->cpu = s->record = 0;
         s->pending = false;
     }
 }
@@ -94,8 +118,12 @@ int main(int argc, char **argv) {
             validation = false;
             continue;
         }
+        if (!strcmp(argv[argument], "--props")) {
+            s.props = true;
+            continue;
+        }
         if (!strcmp(argv[argument], "--help")) {
-            puts("afterlight_renderer_benchmark [object_count] [--no-validation]");
+            puts("afterlight_renderer_benchmark [object_count] [--props] [--no-validation]");
             return 0;
         }
         char *end;
@@ -113,7 +141,7 @@ int main(int argc, char **argv) {
     if (!e)
         return 1;
     puts("mode,objects,draws,culled,gpu_scene_ms,cpu_render_less_fence_acquire_ms,"
-         "tracked_gpu_bytes");
+         "tracked_gpu_bytes,cpu_record_ms");
     af_game game = {.init = init, .update = update, .shutdown = shutdown, .user_data = &s};
     int r = af_engine_run(e, &game);
     af_engine_stats stats = af_engine_get_stats(e);

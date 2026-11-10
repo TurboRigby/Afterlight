@@ -63,7 +63,9 @@ cmake --build build --target afterlight_story_runtime_test
 ctest --test-dir build -R '^afterlight.story_runtime$' --output-on-failure
 ```
 
-The `annex` directory contains both scene files. Their Blueprints drive the
-valve, gate, relay light, and dialogue. The generated project uses the
+The `annex` directory contains both scene files. A five-second Blueprint
+timeline raises the gate, flickers the light and cues the relay sound. A
+looping emitter at the valve provides room tone, and Blueprints drive the
+dispatch dialogue. The generated project uses the
 first-person starter module, and the scenes request ray-traced shadows and
 emissive GI when supported by the driver.

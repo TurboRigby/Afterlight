@@ -66,7 +66,7 @@ typedef struct af_engine_stats {
     uint32_t local_shadow_lights, local_shadow_maps, local_shadow_resolution, local_shadow_overflow;
     bool hdr_enabled;
     size_t missing_textures;
-    size_t draw_calls; /* Visible objects actually drawn in the last submitted frame. */
+    size_t draw_calls; /* Scene draws submitted in the last frame, including instanced batches. */
     uint64_t water_upload_bytes, water_stream_uploads, mesh_idle_waits;
     double water_upload_ms;
     size_t missing_meshes; /* Visible objects skipped for unresolved mesh names. */
@@ -80,6 +80,7 @@ typedef struct af_engine_stats {
         cpu_render_ms; /* Last completed CPU iteration; render includes waits/present. */
     double gpu_frame_ms, gpu_shadow_ms, gpu_scene_ms, gpu_post_ms, gpu_overlay_ms;
     double cpu_fence_ms, cpu_acquire_ms;         /* Renderer waits, separate from command recording. */
+    double cpu_record_ms;                        /* Command recording and draw-record upload, before submission. */
     bool gpu_timing_supported, gpu_timing_valid; /* Delayed completed-frame sample; excludes presentation. */
     uint64_t simulation_ticks;
     unsigned simulation_steps;
@@ -284,6 +285,7 @@ bool af_engine_disturb_water(af_engine *, af_object_id, af_vec3, float, float);
 af_water_stats af_engine_water_stats(const af_engine *);
 bool af_engine_set_debug_view(af_engine *, af_debug_view);
 void af_engine_set_visibility_culling(af_engine *, bool enabled);
+void af_engine_set_prop_instancing(af_engine *, bool enabled);
 bool af_engine_set_render_budget(af_engine *, double gpu_ms, uint64_t bytes);
 af_engine_stats af_engine_get_stats(const af_engine *engine);
 
@@ -293,6 +295,10 @@ bool af_engine_upload_normal_map(af_engine *engine, const char *name, const unsi
 bool af_engine_load_normal_map(af_engine *engine, const char *name, const char *path, af_asset_error *error);
 bool af_engine_load_sound(af_engine *engine, const char *name, const char *path, af_asset_error *error);
 bool af_engine_play_sound_at(af_engine *, const char *, af_sound_emitter);
+af_sound_loop af_engine_start_sound_loop(af_engine *, const char *, af_sound_emitter, float fade_seconds);
+bool af_engine_move_sound_loop(af_engine *, af_sound_loop, af_vec3 position);
+bool af_engine_fade_sound_loop(af_engine *, af_sound_loop, float gain, float seconds);
+bool af_engine_stop_sound_loop(af_engine *, af_sound_loop, float fade_seconds);
 bool af_engine_play_sound(af_engine *engine, const char *name, float gain);
 void af_engine_stop_sounds(af_engine *engine);
 af_audio_stats af_engine_audio_stats(const af_engine *engine);

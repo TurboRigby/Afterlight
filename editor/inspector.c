@@ -690,6 +690,8 @@ void inspector(editor *app, float width, float height) {
                 label(context, info, 20);
                 snprintf(info, sizeof(info), "Execution: %s", app->runtime.playing ? "Live Active" : "Editing");
                 label(context, info, 20);
+                if (!app->runtime.playing)
+                    ed_blueprint_timeline_inspector(&app->blueprint_state, context, scene);
             } else {
                 label(context, "No active graph.", 20);
             }

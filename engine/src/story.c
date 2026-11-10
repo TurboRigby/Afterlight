@@ -146,17 +146,32 @@ bool af_scene_answer_dialogue(af_scene *s, void *engine, unsigned choice) {
     return af_blueprint_dispatch_story(af_scene_get_blueprint(s, s->story_graph), s, engine, s->story_node, output);
 }
 
-bool af_story_request_destination(af_scene *s, const char *name) {
-    if (!s || s->story_destination[0] || !identifier(name, sizeof(s->story_destination)))
+bool af_story_request_destination(af_scene *s, const af_blueprint *bp, uint32_t node, const char *name) {
+    if (!s || s->story_change.destination[0] || !identifier(name, sizeof(s->story_change.destination)))
         return false;
-    memcpy(s->story_destination, name, strlen(name) + 1);
+    s->story_change.graph = SIZE_MAX;
+    s->story_change.node = node;
+    for (size_t i = 0; i < s->blueprint_count; ++i)
+        if (s->blueprints[i] == bp) {
+            s->story_change.graph = i;
+            break;
+        }
+    memcpy(s->story_change.destination, name, strlen(name) + 1);
+    return true;
+}
+
+bool af_scene_take_story_change(af_scene *s, af_story_scene_change *out) {
+    if (!s || !out || !s->story_change.destination[0])
+        return false;
+    *out = s->story_change;
+    s->story_change = (af_story_scene_change){0};
     return true;
 }
 
 bool af_scene_take_story_destination(af_scene *s, char out[AF_STORY_LABEL_CAPACITY]) {
-    if (!s || !out || !s->story_destination[0])
+    af_story_scene_change change;
+    if (!out || !af_scene_take_story_change(s, &change))
         return false;
-    memcpy(out, s->story_destination, sizeof(s->story_destination));
-    s->story_destination[0] = 0;
+    memcpy(out, change.destination, sizeof(change.destination));
     return true;
 }

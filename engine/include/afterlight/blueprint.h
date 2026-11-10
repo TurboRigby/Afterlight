@@ -24,6 +24,36 @@ extern "C" {
 #define AF_SCENE_MAX_BLUEPRINTS 128
 #define AF_BP_NAME_CAPACITY 32u
 #define AF_BP_STRING_CAPACITY 64u
+#define AF_BP_TRACE_CAPACITY 32u
+#define AF_TIMELINE_MAX_KEYS 16u
+#define AF_TIMELINE_MAX_SECONDS 300.f
+
+typedef struct af_timeline_pose {
+    float time;
+    af_transform transform;
+} af_timeline_pose;
+
+typedef struct af_timeline_light {
+    float time, intensity;
+} af_timeline_light;
+
+typedef struct af_timeline_sound {
+    float time, gain;
+    char clip[AF_BP_STRING_CAPACITY];
+} af_timeline_sound;
+
+typedef struct af_timeline {
+    float duration;
+    size_t pose_count, light_count, sound_count;
+    af_timeline_pose poses[AF_TIMELINE_MAX_KEYS];
+    af_timeline_light lights[AF_TIMELINE_MAX_KEYS];
+    af_timeline_sound sounds[AF_TIMELINE_MAX_KEYS];
+} af_timeline;
+
+/* Key times are strictly increasing within each track and inside the duration. */
+bool af_timeline_valid(const af_timeline *);
+/* Samples the visual tracks without firing sound cues. */
+bool af_timeline_sample(const af_timeline *, af_scene *, af_object_id target, float time);
 
 typedef enum af_bp_pin_type {
     AF_BP_PIN_EXEC = 0,
@@ -128,6 +158,8 @@ typedef enum af_bp_node_type {
     AF_BP_NODE_GET_STORY_FLAG,
     AF_BP_NODE_SET_STORY_FLAG,
     AF_BP_NODE_CHANGE_SCENE,
+    AF_BP_NODE_TIMELINE,
+    AF_BP_NODE_SOUND_LOOP,
 
     AF_BP_NODE_TYPE_COUNT
 } af_bp_node_type;
@@ -144,6 +176,11 @@ typedef struct af_bp_node {
     char dialogue_text[AF_STORY_TEXT_CAPACITY];
     float custom_timer;
     bool gate_open;
+    af_timeline *timeline; /* Owned by a Timeline node. */
+    af_object_id timeline_target;
+    bool timeline_playing;
+    uint64_t sound_loop;
+    af_object_id sound_target;
 } af_bp_node;
 
 typedef struct af_bp_variable {
@@ -151,6 +188,11 @@ typedef struct af_bp_variable {
     af_bp_pin_type type;
     af_bp_value val;
 } af_bp_variable;
+
+typedef struct af_bp_trace_entry {
+    uint32_t node, pin;
+    float time;
+} af_bp_trace_entry;
 
 typedef struct af_blueprint {
     char name[64];
@@ -177,6 +219,11 @@ typedef struct af_blueprint {
     float last_exec_time;
     uint32_t last_executed_node_id;
     bool started;
+    float trace_time;
+    unsigned trace_next, trace_count;
+    af_bp_trace_entry trace[AF_BP_TRACE_CAPACITY];
+    uint32_t diagnostic_node;
+    char diagnostic[192];
 } af_blueprint;
 
 /* Graph Construction & Manipulation */
@@ -203,6 +250,8 @@ bool af_blueprint_remove_variable(af_blueprint *bp, const char *name);
 
 /* Execution VM */
 void af_blueprint_reset_runtime(af_blueprint *bp);
+const af_bp_trace_entry *af_blueprint_trace_at(const af_blueprint *, unsigned newest_first);
+void af_blueprint_report_scene_change(af_blueprint *, uint32_t node, const char *destination, const char *reason);
 void af_blueprint_step(af_blueprint *bp, af_scene *scene, void *engine_handle, float dt);
 void af_blueprint_trigger_key(af_blueprint *bp, af_scene *scene, void *engine_handle, const char *key_name,
                               bool pressed);

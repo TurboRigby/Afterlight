@@ -33,6 +33,7 @@ struct af_engine {
     double cpu_physics_ms;
     bool fixed_active;
     af_audio *audio;
+    bool audio_focus_lost;
     af_environment_job *environment_job;
     af_animation_runtime *animations;
     bool animation_enabled, animation_real_time;
@@ -421,6 +422,8 @@ int af_engine_run(af_engine *engine, const af_game *game) {
                 event.window.windowID == window_id) {
                 if (event.type == SDL_EVENT_WINDOW_MINIMIZED)
                     suspending = SDL_WINDOW_MINIMIZED;
+                if (event.type == SDL_EVENT_WINDOW_FOCUS_GAINED || event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+                    engine->audio_focus_lost = event.type == SDL_EVENT_WINDOW_FOCUS_LOST;
                 if (wayland && event.type == SDL_EVENT_WINDOW_OCCLUDED)
                     suspending = SDL_WINDOW_OCCLUDED;
                 if (event.type == SDL_EVENT_WINDOW_RESTORED || event.type == SDL_EVENT_WINDOW_MAXIMIZED)
@@ -441,7 +444,7 @@ int af_engine_run(af_engine *engine, const af_game *game) {
                 memset(engine->fixed_pressed, 0, sizeof(engine->fixed_pressed));
                 memset(engine->mouse_pressed, 0, sizeof(engine->mouse_pressed));
                 (void)af_engine_set_mouse_capture(engine, false);
-                af_engine_stop_sounds(engine);
+                af_audio_suspend(engine->audio, true);
             }
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
                 if (!game->should_close || game->should_close(engine, game->user_data))
@@ -493,6 +496,7 @@ int af_engine_run(af_engine *engine, const af_game *game) {
             af_environment_job_finish(engine->environment_job, uploaded,
                                       (double)(SDL_GetPerformanceCounter() - started) * 1000 / frequency);
         }
+        af_audio_suspend(engine->audio, engine->simulation_paused || engine->audio_focus_lost || suspended);
         af_audio_update(engine->audio, engine->camera.position, af_camera_forward(&engine->camera));
         update_actions(engine, delta);
         if (game->update)
@@ -710,6 +714,10 @@ bool af_engine_set_debug_view(af_engine *e, af_debug_view view) {
 void af_engine_set_visibility_culling(af_engine *e, bool enabled) {
     if (e)
         af_renderer_set_visibility_culling(e->renderer, enabled);
+}
+void af_engine_set_prop_instancing(af_engine *e, bool enabled) {
+    if (e)
+        af_renderer_set_prop_instancing(e->renderer, enabled);
 }
 bool af_engine_set_render_budget(af_engine *e, double ms, uint64_t bytes) {
     return e && af_renderer_set_render_budget(e->renderer, ms, bytes);
@@ -945,7 +953,7 @@ void af_engine_set_simulation_paused(af_engine *engine, bool paused) {
         return;
     engine->simulation_paused = paused;
     if (paused)
-        af_engine_stop_sounds(engine);
+        af_audio_suspend(engine->audio, true);
     engine->clock.accumulator = 0;
     memset(engine->fixed_pressed, 0, sizeof(engine->fixed_pressed));
     af_engine_reset_interpolation(engine);
@@ -992,6 +1000,19 @@ bool af_engine_load_sound(af_engine *engine, const char *name, const char *path,
 }
 bool af_engine_play_sound(af_engine *engine, const char *name, float gain) {
     return engine && af_audio_play(engine->audio, name, gain);
+}
+af_sound_loop af_engine_start_sound_loop(af_engine *engine, const char *clip, af_sound_emitter emitter,
+                                         float fade_seconds) {
+    return engine ? af_audio_start_loop(engine->audio, clip, emitter, fade_seconds) : 0;
+}
+bool af_engine_move_sound_loop(af_engine *engine, af_sound_loop loop, af_vec3 position) {
+    return engine && af_audio_move_loop(engine->audio, loop, position);
+}
+bool af_engine_fade_sound_loop(af_engine *engine, af_sound_loop loop, float gain, float seconds) {
+    return engine && af_audio_fade_loop(engine->audio, loop, gain, seconds);
+}
+bool af_engine_stop_sound_loop(af_engine *engine, af_sound_loop loop, float seconds) {
+    return engine && af_audio_stop_loop(engine->audio, loop, seconds);
 }
 void af_engine_stop_sounds(af_engine *engine) {
     if (engine)

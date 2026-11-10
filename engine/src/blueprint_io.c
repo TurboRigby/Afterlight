@@ -126,6 +126,86 @@ static bool read_value(const cJSON *j, af_bp_pin_type type, af_bp_value *out) {
     }
 }
 
+static cJSON *timeline_json(const af_timeline *t) {
+    if (!af_timeline_valid(t))
+        return NULL;
+    cJSON *root = cJSON_CreateObject();
+    if (!root)
+        return NULL;
+    cJSON *poses = cJSON_AddArrayToObject(root, "poses");
+    cJSON *lights = cJSON_AddArrayToObject(root, "lights");
+    cJSON *sounds = cJSON_AddArrayToObject(root, "sounds");
+    if (!poses || !lights || !sounds || !cJSON_AddNumberToObject(root, "duration", t->duration))
+        goto fail;
+    for (size_t i = 0; i < t->pose_count; ++i) {
+        const af_timeline_pose *key = &t->poses[i];
+        af_transform pose = key->transform;
+        double values[] = {key->time,       pose.position.x, pose.position.y, pose.position.z, pose.rotation.x,
+                           pose.rotation.y, pose.rotation.z, pose.scale.x,    pose.scale.y,    pose.scale.z};
+        if (!put(poses, NULL, cJSON_CreateDoubleArray(values, 10)))
+            goto fail;
+    }
+    for (size_t i = 0; i < t->light_count; ++i) {
+        double values[] = {t->lights[i].time, t->lights[i].intensity};
+        if (!put(lights, NULL, cJSON_CreateDoubleArray(values, 2)))
+            goto fail;
+    }
+    for (size_t i = 0; i < t->sound_count; ++i) {
+        const af_timeline_sound *key = &t->sounds[i];
+        cJSON *j = cJSON_CreateObject();
+        if (!put(sounds, NULL, j) || !cJSON_AddNumberToObject(j, "time", key->time) ||
+            !cJSON_AddNumberToObject(j, "gain", key->gain) || !cJSON_AddStringToObject(j, "clip", key->clip))
+            goto fail;
+    }
+    return root;
+fail:
+    cJSON_Delete(root);
+    return NULL;
+}
+
+static bool read_numbers(const cJSON *entry, float *values, int count) {
+    if (!cJSON_IsArray(entry) || cJSON_GetArraySize(entry) != count)
+        return false;
+    for (int i = 0; i < count; ++i)
+        if (!read_float(cJSON_GetArrayItem(entry, i), &values[i]))
+            return false;
+    return true;
+}
+
+static bool read_timeline(const cJSON *root, af_timeline *t) {
+    const cJSON *poses = cJSON_GetObjectItemCaseSensitive(root, "poses");
+    const cJSON *lights = cJSON_GetObjectItemCaseSensitive(root, "lights");
+    const cJSON *sounds = cJSON_GetObjectItemCaseSensitive(root, "sounds");
+    if (!cJSON_IsObject(root) || !cJSON_IsArray(poses) || !cJSON_IsArray(lights) || !cJSON_IsArray(sounds) ||
+        cJSON_GetArraySize(poses) > (int)AF_TIMELINE_MAX_KEYS ||
+        cJSON_GetArraySize(lights) > (int)AF_TIMELINE_MAX_KEYS ||
+        cJSON_GetArraySize(sounds) > (int)AF_TIMELINE_MAX_KEYS ||
+        !read_float(cJSON_GetObjectItemCaseSensitive(root, "duration"), &t->duration))
+        return false;
+    const cJSON *entry;
+    cJSON_ArrayForEach(entry, poses) {
+        float v[10];
+        if (!read_numbers(entry, v, 10))
+            return false;
+        t->poses[t->pose_count++] =
+            (af_timeline_pose){v[0], {{v[1], v[2], v[3]}, {v[4], v[5], v[6]}, {v[7], v[8], v[9]}}};
+    }
+    cJSON_ArrayForEach(entry, lights) {
+        float v[2];
+        if (!read_numbers(entry, v, 2))
+            return false;
+        t->lights[t->light_count++] = (af_timeline_light){v[0], v[1]};
+    }
+    cJSON_ArrayForEach(entry, sounds) {
+        af_timeline_sound *key = &t->sounds[t->sound_count++];
+        if (!read_float(cJSON_GetObjectItemCaseSensitive(entry, "time"), &key->time) ||
+            !read_float(cJSON_GetObjectItemCaseSensitive(entry, "gain"), &key->gain) ||
+            !read_string(cJSON_GetObjectItemCaseSensitive(entry, "clip"), key->clip, sizeof(key->clip)))
+            return false;
+    }
+    return af_timeline_valid(t);
+}
+
 static cJSON *encode(const af_blueprint *bp) {
     if (!bp)
         return NULL;
@@ -162,6 +242,8 @@ static cJSON *encode(const af_blueprint *bp) {
             !cJSON_AddNumberToObject(j, "x", n->x) || !cJSON_AddNumberToObject(j, "y", n->y) ||
             (n->extra_str[0] && !cJSON_AddStringToObject(j, "extra", n->extra_str)) ||
             (n->type == AF_BP_NODE_SHOW_DIALOGUE && !cJSON_AddStringToObject(j, "text", n->dialogue_text)))
+            goto fail;
+        if (n->type == AF_BP_NODE_TIMELINE && !put(j, "timeline", timeline_json(n->timeline)))
             goto fail;
         cJSON *pins = cJSON_AddArrayToObject(j, "pins");
         if (!pins)
@@ -275,9 +357,11 @@ static af_blueprint *decode(const cJSON *root) {
         node->id = id;
         const cJSON *extra = cJSON_GetObjectItemCaseSensitive(entry, "extra");
         const cJSON *text = cJSON_GetObjectItemCaseSensitive(entry, "text");
+        const cJSON *timeline = cJSON_GetObjectItemCaseSensitive(entry, "timeline");
         if ((extra && !read_string(extra, node->extra_str, sizeof(node->extra_str))) ||
             (text && (type != AF_BP_NODE_SHOW_DIALOGUE ||
                       !read_string(text, node->dialogue_text, sizeof(node->dialogue_text)))) ||
+            (node->timeline ? !read_timeline(timeline, node->timeline) : timeline != NULL) ||
             !read_pins(node, cJSON_GetObjectItemCaseSensitive(entry, "pins")))
             goto fail;
     }

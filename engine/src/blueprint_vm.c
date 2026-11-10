@@ -26,6 +26,36 @@ typedef struct af_bp_vm_ctx {
 static af_bp_value eval_data_pin(af_bp_vm_ctx *ctx, af_bp_node *node, uint32_t pin_id);
 static void execute_node(af_bp_vm_ctx *ctx, af_bp_node *node, uint32_t entry_pin_id);
 
+static void trace_pin(af_blueprint *bp, uint32_t node, uint32_t pin) {
+    bp->trace[bp->trace_next] = (af_bp_trace_entry){node, pin, bp->trace_time};
+    bp->trace_next = (bp->trace_next + 1) % AF_BP_TRACE_CAPACITY;
+    if (bp->trace_count < AF_BP_TRACE_CAPACITY)
+        ++bp->trace_count;
+}
+
+const af_bp_trace_entry *af_blueprint_trace_at(const af_blueprint *bp, unsigned index) {
+    if (!bp || index >= bp->trace_count)
+        return NULL;
+    return &bp->trace[(bp->trace_next + AF_BP_TRACE_CAPACITY - 1 - index) % AF_BP_TRACE_CAPACITY];
+}
+
+void af_blueprint_report_scene_change(af_blueprint *bp, uint32_t node, const char *destination, const char *reason) {
+    if (!bp)
+        return;
+    bp->diagnostic_node = node;
+    snprintf(bp->diagnostic, sizeof(bp->diagnostic), "Scene '%s': %s", destination, reason);
+}
+
+static void timeline_cues(af_bp_vm_ctx *ctx, const af_timeline *timeline, float previous, float time) {
+    if (!ctx->engine_handle)
+        return;
+    for (size_t i = 0; i < timeline->sound_count; ++i) {
+        const af_timeline_sound *cue = &timeline->sounds[i];
+        if (cue->time > previous && cue->time <= time)
+            af_engine_play_sound(ctx->engine_handle, cue->clip, cue->gain);
+    }
+}
+
 static af_bp_pin *find_pin_mut(af_bp_node *node, uint32_t pin_id) {
     if (!node)
         return NULL;
@@ -55,6 +85,42 @@ static af_bp_value get_input_val(af_bp_vm_ctx *ctx, af_bp_node *node, const char
     return eval_data_pin(ctx, node, pin->id);
 }
 
+static bool sound_position(const af_scene *scene, af_object_id target, af_vec3 *position) {
+    af_mat4 world;
+    if (!af_scene_world_matrix(scene, target, &world))
+        return false;
+    *position = (af_vec3){world.elements[12], world.elements[13], world.elements[14]};
+    return true;
+}
+
+static bool sound_loop_action(af_bp_vm_ctx *ctx, af_bp_node *node, const af_bp_pin *entry) {
+    af_engine *engine = ctx->engine_handle;
+    if (!engine || !entry)
+        return false;
+    float seconds = get_input_val(ctx, node, "Fade Seconds").f;
+    if (!strcmp(entry->name, "Stop"))
+        return af_engine_stop_sound_loop(engine, node->sound_loop, seconds);
+    if (!strcmp(entry->name, "Fade"))
+        return af_engine_fade_sound_loop(engine, node->sound_loop, get_input_val(ctx, node, "Fade To").f, seconds);
+
+    af_object_id target = get_input_val(ctx, node, "Target").obj;
+    if (!target)
+        target = ctx->bp->bound_object;
+    af_sound_emitter emitter = {
+        .gain = get_input_val(ctx, node, "Gain").f,
+        .min_distance = get_input_val(ctx, node, "Min Distance").f,
+        .max_distance = get_input_val(ctx, node, "Max Distance").f,
+    };
+    if (!sound_position(ctx->scene, target, &emitter.position))
+        return false;
+    if (!af_engine_move_sound_loop(engine, node->sound_loop, emitter.position)) {
+        af_bp_value name = get_input_val(ctx, node, "Sound Name");
+        node->sound_loop = af_engine_start_sound_loop(engine, name.s, emitter, seconds);
+    }
+    node->sound_target = target;
+    return node->sound_loop != 0;
+}
+
 static void follow_exec_pin(af_bp_vm_ctx *ctx, af_bp_node *node, const char *pin_name) {
     af_bp_pin *pin = find_pin_by_name(node, pin_name, AF_BP_PIN_OUTPUT);
     if (!pin || pin->type != AF_BP_PIN_EXEC)
@@ -65,6 +131,7 @@ static void follow_exec_pin(af_bp_vm_ctx *ctx, af_bp_node *node, const char *pin
         if (link->from_node_id == node->id && link->from_pin_id == pin->id) {
             af_bp_node *next_node = af_blueprint_get_node(ctx->bp, link->to_node_id);
             if (next_node) {
+                trace_pin(ctx->bp, node->id, pin->id);
                 execute_node(ctx, next_node, link->to_pin_id);
             }
             break;
@@ -282,6 +349,8 @@ static void execute_node(af_bp_vm_ctx *ctx, af_bp_node *node, uint32_t entry_pin
         return;
 
     ctx->bp->last_executed_node_id = node->id;
+    ctx->bp->last_exec_time = ctx->bp->trace_time;
+    trace_pin(ctx->bp, node->id, entry_pin_id);
 
     switch (node->type) {
     /* Flow Control */
@@ -497,9 +566,32 @@ static void execute_node(af_bp_vm_ctx *ctx, af_bp_node *node, uint32_t entry_pin
     }
     case AF_BP_NODE_CHANGE_SCENE: {
         af_bp_value name = get_input_val(ctx, node, "Scene");
-        af_story_request_destination(ctx->scene, name.s);
+        if (!af_story_request_destination(ctx->scene, ctx->bp, node->id, name.s))
+            af_blueprint_report_scene_change(ctx->bp, node->id, name.s, "invalid name or a change is already queued");
         break;
     }
+    case AF_BP_NODE_TIMELINE: {
+        af_bp_pin *entry = find_pin_mut(node, entry_pin_id);
+        if (!entry || !node->timeline)
+            break;
+        bool apply_end = strcmp(entry->name, "Apply End") == 0;
+        if (node->timeline_playing && !apply_end)
+            break;
+        af_object_id target = get_input_val(ctx, node, "Target").obj;
+        if (!target)
+            target = ctx->bp->bound_object;
+        node->timeline_target = target;
+        node->custom_timer = apply_end ? node->timeline->duration : 0.f;
+        bool sampled = af_timeline_sample(node->timeline, ctx->scene, target, node->custom_timer);
+        node->timeline_playing = sampled && !apply_end;
+        if (node->timeline_playing)
+            timeline_cues(ctx, node->timeline, -1.f, 0.f);
+        break;
+    }
+    case AF_BP_NODE_SOUND_LOOP:
+        if (sound_loop_action(ctx, node, find_pin_mut(node, entry_pin_id)))
+            follow_exec_pin(ctx, node, "Exec");
+        break;
     case AF_BP_NODE_PLAY_SOUND: {
         if (ctx->engine_handle) {
             af_bp_pin *pin = find_pin_by_name(node, "Sound Name", AF_BP_PIN_INPUT);
@@ -530,8 +622,16 @@ void af_blueprint_reset_runtime(af_blueprint *bp) {
         return;
     bp->started = false;
     bp->last_executed_node_id = 0;
+    bp->last_exec_time = bp->trace_time = 0;
+    bp->trace_count = bp->trace_next = 0;
+    bp->diagnostic_node = 0;
+    bp->diagnostic[0] = 0;
     for (size_t i = 0; i < bp->node_count; ++i) {
         bp->nodes[i].custom_timer = 0.0f;
+        bp->nodes[i].timeline_playing = false;
+        bp->nodes[i].timeline_target = AF_OBJECT_NONE;
+        bp->nodes[i].sound_loop = 0;
+        bp->nodes[i].sound_target = AF_OBJECT_NONE;
         if (bp->nodes[i].type == AF_BP_NODE_GATE) {
             bp->nodes[i].gate_open = true;
         }
@@ -541,6 +641,8 @@ void af_blueprint_reset_runtime(af_blueprint *bp) {
 void af_blueprint_step(af_blueprint *bp, af_scene *scene, void *engine_handle, float dt) {
     if (!bp || !scene || !bp->enabled)
         return;
+    if (isfinite(dt) && dt > 0)
+        bp->trace_time += dt;
 
     af_bp_vm_ctx ctx = {
         .bp = bp,
@@ -559,6 +661,34 @@ void af_blueprint_step(af_blueprint *bp, af_scene *scene, void *engine_handle, f
                 ctx.steps = 0;
                 follow_exec_pin(&ctx, &bp->nodes[i], "Exec");
             }
+        }
+    }
+
+    for (size_t i = 0; i < bp->node_count; ++i) {
+        af_bp_node *node = &bp->nodes[i];
+        if (node->sound_loop) {
+            af_vec3 position;
+            if (!sound_position(scene, node->sound_target, &position)) {
+                af_engine_stop_sound_loop(engine_handle, node->sound_loop, 0);
+                node->sound_loop = 0;
+            } else if (!af_engine_move_sound_loop(engine_handle, node->sound_loop, position))
+                node->sound_loop = 0;
+        }
+        if (!node->timeline_playing || !isfinite(dt) || dt <= 0)
+            continue;
+        const af_timeline *timeline = node->timeline;
+        float previous = node->custom_timer;
+        float time = fminf(previous + dt, timeline->duration);
+        if (!af_timeline_sample(timeline, scene, node->timeline_target, time)) {
+            node->timeline_playing = false;
+            continue;
+        }
+        node->custom_timer = time;
+        timeline_cues(&ctx, timeline, previous, time);
+        if (time >= timeline->duration) {
+            node->timeline_playing = false;
+            ctx.steps = 0;
+            follow_exec_pin(&ctx, node, "Completed");
         }
     }
 

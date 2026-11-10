@@ -58,6 +58,29 @@ int main(int argc, char **argv) {
     CHECK(af_audio_mix(audio, (af_vec3){0}, (af_vec3){0, 0, -1}, samples, 256));
     for (unsigned i = 0; i < 512; ++i)
         CHECK(isfinite(samples[i]) && fabsf(samples[i]) <= 1);
+    af_audio_stop(audio);
+    af_sound_emitter emitter = {.position = {2, 0, 0}, .gain = .7f, .min_distance = 1, .max_distance = 10};
+    af_sound_loop loop = af_audio_start_loop(audio, "jump", emitter, .02f);
+    CHECK(loop && af_audio_get_stats(audio).looping == 1);
+    float block[8192];
+    for (unsigned i = 0; i < 40; ++i)
+        CHECK(af_audio_mix(audio, (af_vec3){0}, (af_vec3){0, 0, -1}, block, 4096));
+    CHECK(af_audio_get_stats(audio).looping == 1);
+    CHECK(af_audio_move_loop(audio, loop, (af_vec3){20, 0, 0}));
+    CHECK(af_audio_mix(audio, (af_vec3){0}, (af_vec3){0, 0, -1}, block, 4096));
+    for (unsigned i = 0; i < 8192; ++i)
+        CHECK(block[i] == 0);
+    CHECK(af_audio_move_loop(audio, loop, emitter.position) && af_audio_fade_loop(audio, loop, .4f, .04f));
+    CHECK(af_audio_stop_loop(audio, loop, .04f));
+    af_audio_suspend(audio, true);
+    CHECK(af_audio_mix(audio, (af_vec3){0}, (af_vec3){0, 0, -1}, block, 4096));
+    CHECK(af_audio_get_stats(audio).looping == 1 && block[0] == 0);
+    af_audio_suspend(audio, false);
+    CHECK(af_audio_mix(audio, (af_vec3){0}, (af_vec3){0, 0, -1}, block, 4096));
+    CHECK(af_audio_get_stats(audio).looping == 0 && !af_audio_move_loop(audio, loop, emitter.position));
+    CHECK(af_audio_start_loop(audio, "jump", emitter, 0) != loop);
+    af_audio_stop(audio);
+    CHECK(af_audio_get_stats(audio).looping == 0);
     af_audio_destroy(audio);
     puts("Audio: actual WAV decoding, lazy dummy playback, mixed clips, gain, stop/replay, invalid input and "
          "replacement preservation passed.");

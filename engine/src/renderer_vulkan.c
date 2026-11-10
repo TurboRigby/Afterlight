@@ -108,7 +108,8 @@ enum {
     AF_DRAW_FLIP_BACK_NORMAL = 1u << 2,
     AF_DRAW_MIRRORED = 1u << 3,
     AF_DRAW_BLEND_OPAQUE = 1u << 4,
-    AF_DRAW_BLEND_PARTIAL = 1u << 5
+    AF_DRAW_BLEND_PARTIAL = 1u << 5,
+    AF_DRAW_INSTANCED = 1u << 6
 };
 static uint32_t mesh_face_flags(af_mesh_sidedness sidedness, af_mat4 model) {
     if (sidedness == AF_MESH_SIDES_DEFAULT)
@@ -299,7 +300,7 @@ struct af_renderer {
     float timestamp_period;
     bool timing_valid;
     double gpu_ms[5];
-    double cpu_fence_ms, cpu_acquire_ms;
+    double cpu_fence_ms, cpu_acquire_ms, cpu_record_ms;
     uint32_t graphics_family;
     uint32_t present_family;
     VkQueue graphics_queue;
@@ -316,7 +317,7 @@ struct af_renderer {
     size_t draw_calls;
     size_t missing_meshes;
     af_debug_view debug_view;
-    bool culling_disabled;
+    bool culling_disabled, prop_instancing_disabled;
     size_t visible_objects, culled_objects;
     double gpu_budget_ms;
     uint64_t gpu_budget_bytes;
@@ -1031,6 +1032,8 @@ static bool upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize 
     if (!vk_ok(vkAllocateMemory(renderer->device, &allocation, NULL, &buffer->memory), "vkAllocateMemory") ||
         !vk_ok(vkBindBufferMemory(renderer->device, buffer->handle, buffer->memory, 0), "vkBindBufferMemory"))
         return false;
+    if (!data)
+        return true;
     void *mapped = NULL;
     if (!vk_ok(vkMapMemory(renderer->device, buffer->memory, 0, VK_WHOLE_SIZE, 0, &mapped), "vkMapMemory"))
         return false;
@@ -2800,8 +2803,8 @@ static uint64_t temporal_light_hash(uint64_t h, af_local_light value) {
     h = shadow_hash(h, &value.outer_angle, sizeof(value.outer_angle));
     return h;
 }
-static bool prepare_temporal(af_renderer *r, af_frame *frame, const af_scene *scene, const af_camera *camera,
-                             af_rect area, af_color clear, af_render_settings settings, bool temporal, bool jitter,
+static bool prepare_temporal(af_renderer *r, const af_scene *scene, const af_camera *camera, af_rect area,
+                             af_color clear, af_render_settings settings, bool temporal, bool jitter,
                              af_frame_uniform *uniform, uint64_t *local_light_signature) {
     uniform->unjittered_view_projection = uniform->view_projection;
     uniform->previous_view_projection = uniform->view_projection;
@@ -2859,20 +2862,9 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame, const af_scene *sc
         r->temporal_valid ? r->previous_view_projection : uniform->unjittered_view_projection;
     uniform->sky_params.y = 1;
     size_t count = af_scene_object_count(scene);
-    if (count > AF_SCENE_FILE_MAX_OBJECTS) {
-        af_log("error", "Temporal rendering supports at most %u objects.", AF_SCENE_FILE_MAX_OBJECTS);
-        return false;
-    }
     size_t capacity = 16;
     while (capacity < count)
         capacity *= 2;
-    if (r->motion_records_capacity < capacity) {
-        af_motion_record *next = realloc(r->motion_records, capacity * sizeof(*next));
-        if (!next)
-            return false;
-        r->motion_records = next;
-        r->motion_records_capacity = capacity;
-    }
     if (r->motion_next_capacity < capacity) {
         af_motion_snapshot *next = realloc(r->motion_next, capacity * sizeof(*next));
         if (!next)
@@ -2882,7 +2874,7 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame, const af_scene *sc
     }
     r->motion_next_count = count;
     af_motion_record *records = r->motion_records;
-    memset(records, 0, r->motion_records_capacity * sizeof(*records));
+    memset(records, 0, (count ? count : 1) * sizeof(*records));
     r->temporal_objects = r->temporal_skins = 0;
     for (size_t i = 0; i < count; ++i) {
         const af_scene_object *o = af_scene_object_at(scene, i);
@@ -2919,41 +2911,124 @@ static bool prepare_temporal(af_renderer *r, af_frame *frame, const af_scene *sc
     }
     if (count > 1)
         qsort(r->motion_next, count, sizeof(*r->motion_next), motion_compare);
-    VkDeviceSize bytes = (count ? count : 1) * sizeof(*records);
-    if (frame->motion_buffer.capacity < bytes) {
-        af_gpu_buffer replacement = {0};
-        VkDeviceSize allocation = r->motion_records_capacity * sizeof(*records);
-        if (!upload_buffer(r, records, allocation, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &replacement)) {
-            destroy_buffer(r, &replacement);
-            return false;
-        }
-        destroy_buffer(r, &frame->motion_buffer);
-        frame->motion_buffer = replacement;
-        frame->motion_buffer.capacity = allocation;
-        VkDescriptorBufferInfo info = {frame->motion_buffer.handle, 0, VK_WHOLE_SIZE};
-        VkWriteDescriptorSet write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                      .dstSet = frame->descriptor,
-                                      .dstBinding = 9,
-                                      .descriptorCount = 1,
-                                      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                      .pBufferInfo = &info};
-        vkUpdateDescriptorSets(r->device, 1, &write, 0, NULL);
-    } else {
-        void *mapped = NULL;
-        if (!vk_ok(vkMapMemory(r->device, frame->motion_buffer.memory, 0, VK_WHOLE_SIZE, 0, &mapped),
-                   "map temporal transforms"))
-            return false;
-        memcpy(mapped, records, (size_t)bytes);
-        VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-                                     .memory = frame->motion_buffer.memory,
-                                     .size = VK_WHOLE_SIZE};
-        bool success = vk_ok(vkFlushMappedMemoryRanges(r->device, 1, &range), "flush temporal transforms");
-        vkUnmapMemory(r->device, frame->motion_buffer.memory);
-        if (!success)
-            return false;
-    }
     return true;
 }
+
+/* The frame's storage buffer holds previous poses by scene index, followed by
+   compact current poses for instanced draws. The frame fence owns both ranges. */
+static bool reserve_draw_records(af_renderer *r, af_frame *frame, size_t count) {
+    if (!count)
+        return true;
+    size_t capacity = 16;
+    while (capacity < count)
+        capacity *= 2;
+    if (r->motion_records_capacity < capacity) {
+        af_motion_record *records = realloc(r->motion_records, capacity * sizeof(*records));
+        if (!records)
+            return false;
+        r->motion_records = records;
+        r->motion_records_capacity = capacity;
+    }
+    VkDeviceSize bytes = capacity * sizeof(af_motion_record);
+    if (frame->motion_buffer.capacity >= bytes)
+        return true;
+    af_gpu_buffer replacement = {0};
+    if (!upload_buffer(r, NULL, bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &replacement)) {
+        destroy_buffer(r, &replacement);
+        return false;
+    }
+    replacement.capacity = bytes;
+    destroy_buffer(r, &frame->motion_buffer);
+    frame->motion_buffer = replacement;
+    VkDescriptorBufferInfo info = {frame->motion_buffer.handle, 0, VK_WHOLE_SIZE};
+    VkWriteDescriptorSet write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                  .dstSet = frame->descriptor,
+                                  .dstBinding = 9,
+                                  .descriptorCount = 1,
+                                  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                  .pBufferInfo = &info};
+    vkUpdateDescriptorSets(r->device, 1, &write, 0, NULL);
+    return true;
+}
+
+static bool upload_draw_records(af_renderer *r, af_frame *frame, size_t count) {
+    if (!count)
+        return true;
+    void *mapped = NULL;
+    if (!vk_ok(vkMapMemory(r->device, frame->motion_buffer.memory, 0, VK_WHOLE_SIZE, 0, &mapped),
+               "map draw transforms"))
+        return false;
+    memcpy(mapped, r->motion_records, count * sizeof(*r->motion_records));
+    VkMappedMemoryRange range = {
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = frame->motion_buffer.memory, .size = VK_WHOLE_SIZE};
+    bool success = vk_ok(vkFlushMappedMemoryRanges(r->device, 1, &range), "flush draw transforms");
+    vkUnmapMemory(r->device, frame->motion_buffer.memory);
+    return success;
+}
+
+typedef struct af_draw_material {
+    af_color tint;
+    af_vec4 params, surface, emission;
+} af_draw_material;
+
+typedef struct af_mesh_draw {
+    af_mat4 model;
+    af_draw_material material;
+} af_mesh_draw;
+_Static_assert(sizeof(af_mesh_draw) == 128, "Portable draw push constant limit");
+
+typedef struct af_prop_batch {
+    const af_gpu_mesh *mesh;
+    const af_material *material;
+    af_mesh_draw draw;
+    uint32_t first_object, first_record, count;
+} af_prop_batch;
+
+static void bind_scene_material(af_renderer *r, af_frame *frame, const af_material *material, size_t object_count) {
+    const char *names[] = {material->texture, material->normal_map, material->metallic_roughness_map};
+    af_vk_texture *textures[] = {r->white, r->flat_normal, r->white};
+    const uint32_t sets[] = {1, 3, 4};
+    for (unsigned i = 0; i < 3; ++i) {
+        if (names[i][0]) {
+            size_t t = 0;
+            while (t < r->texture_count && (r->textures[t].normal != (i != 0) || strcmp(r->textures[t].name, names[i])))
+                ++t;
+            if (t < r->texture_count)
+                textures[i] = r->textures[t].texture;
+            else
+                r->missing_textures += object_count;
+        }
+        VkDescriptorSet descriptor = af_vk_texture_descriptor(textures[i]);
+        vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS, r->swapchain.pipeline_layout, sets[i],
+                                1, &descriptor, 0, NULL);
+    }
+}
+
+static bool prop_batch_matches(const af_prop_batch *batch, const af_gpu_mesh *mesh, const af_material *material,
+                               const af_mesh_draw *draw) {
+    return batch->mesh == mesh && !memcmp(&batch->draw.material, &draw->material, sizeof(draw->material)) &&
+           !strcmp(batch->material->texture, material->texture) &&
+           !strcmp(batch->material->normal_map, material->normal_map) &&
+           !strcmp(batch->material->metallic_roughness_map, material->metallic_roughness_map);
+}
+
+static void draw_prop_batch(af_renderer *r, af_frame *frame, af_prop_batch *batch, size_t *draws) {
+    if (!batch->count)
+        return;
+    uint32_t first_instance = batch->first_object;
+    if (batch->count > 1) {
+        batch->draw.material.params.y += (float)AF_DRAW_INSTANCED;
+        first_instance = batch->first_record;
+    }
+    bind_scene_material(r, frame, batch->material, batch->count);
+    vkCmdPushConstants(frame->command, r->swapchain.pipeline_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(batch->draw), &batch->draw);
+    bind_object_mesh(frame, batch->mesh, NULL);
+    vkCmdDrawIndexed(frame->command, batch->mesh->index_count, batch->count, 0, 0, first_instance);
+    ++*draws;
+    *batch = (af_prop_batch){0};
+}
+
 static VkImageMemoryBarrier upscaler_barrier(VkImage image, VkImageAspectFlags aspect, VkImageLayout old_layout,
                                              VkImageLayout new_layout, VkAccessFlags source,
                                              VkAccessFlags destination) {
@@ -3228,8 +3303,20 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     bool spatial = upscale && renderer->upscaler->struct_size >= sizeof(*renderer->upscaler) &&
                    (renderer->upscaler->flags & AF_VULKAN_UPSCALER_SPATIAL);
     bool jitter = (upscale && !spatial) || environment_settings.anti_aliasing == AF_AA_TAA;
+    size_t object_count = af_scene_object_count(scene);
+    if (temporal && object_count > AF_SCENE_FILE_MAX_OBJECTS) {
+        af_log("error", "Temporal rendering supports at most %u objects.", AF_SCENE_FILE_MAX_OBJECTS);
+        return false;
+    }
+    size_t record_count = temporal ? (object_count ? object_count : 1) : 0;
+    bool batch_props =
+        !renderer->prop_instancing_disabled && object_count > 1 && object_count <= AF_SCENE_FILE_MAX_OBJECTS;
+    if (batch_props && !reserve_draw_records(renderer, frame, record_count + object_count))
+        batch_props = false;
+    if (!batch_props && !reserve_draw_records(renderer, frame, record_count))
+        return false;
     uint64_t local_light_signature = UINT64_C(14695981039346656037);
-    if (!prepare_temporal(renderer, frame, scene, camera, resolve_viewport(renderer, viewport_rect), color,
+    if (!prepare_temporal(renderer, scene, camera, resolve_viewport(renderer, viewport_rect), color,
                           environment_settings, temporal, jitter, &uniform, ray_gi ? &local_light_signature : NULL))
         return false;
     bool gi_lighting_changed = ray_gi && emitter_signature != renderer->gi_emitter_signature;
@@ -3272,6 +3359,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         return false;
     VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+    Uint64 record_start = SDL_GetPerformanceCounter();
     if (!vk_ok(vkBeginCommandBuffer(frame->command, &begin), "vkBeginCommandBuffer"))
         return false;
     af_vk_refraction_prepare(renderer->swapchain.refraction, frame->command, image_index);
@@ -3372,7 +3460,6 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     size_t draw_calls = 0, missing_meshes = 0;
     renderer->visible_objects = renderer->culled_objects = 0;
     bool gi_denoised = false;
-    size_t object_count = af_scene_object_count(scene);
     const af_landscape *scene_ls = scene ? af_scene_get_landscape(scene) : NULL;
     bool has_landscape = scene_ls && scene_ls->enabled && scene_ls->chunk_count > 0;
     if (object_count > 0 || environment_settings.skybox || has_landscape) {
@@ -3454,6 +3541,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             }
             vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               alpha_pass ? renderer->swapchain.blend_pipeline : renderer->swapchain.pipeline);
+            af_prop_batch batch = {0};
             for (size_t order = 0; order < (alpha_pass ? blend_count : object_count); ++order) {
                 size_t i = alpha_pass ? blended[order].index : order;
 
@@ -3506,87 +3594,61 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                     base.g *= 1.1f;
                     base.b *= 0.75f;
                 }
-                struct {
-                    af_mat4 model;
-                    af_color tint;
-                    af_vec4 params, surface, emission;
-                } transform = {
-                    world,
-                    base,
-                    {(float)((object->material.unlit ? 1u : 0u) | ((uint32_t)object->material.alpha_mode << 1u) |
-                             ((uint32_t)lroundf(object->material.alpha_cutoff * 65535) << 3u) |
-                             (object->material.normal_map[0] ? (1u << 23u) : 0u)),
-                     (float)draw_flags, object->material.physically_based ? 1.0f : 0.0f, object->material.ior},
-                    {object->material.roughness, object->material.metallic, object->material.normal_strength,
-                     (float)skin_base(renderer, object->id, mesh)},
-                    {object->material.emission.x, object->material.emission.y, object->material.emission.z,
-                     object->material.emission_strength}};
+                af_mesh_draw transform = {
+                    .model = world,
+                    .material = {
+                        .tint = base,
+                        .params = {(float)((object->material.unlit ? 1u : 0u) |
+                                           ((uint32_t)object->material.alpha_mode << 1u) |
+                                           ((uint32_t)lroundf(object->material.alpha_cutoff * 65535) << 3u) |
+                                           (object->material.normal_map[0] ? (1u << 23u) : 0u)),
+                                   (float)draw_flags, object->material.physically_based ? 1.0f : 0.0f,
+                                   object->material.ior},
+                        .surface = {object->material.roughness, object->material.metallic,
+                                    object->material.normal_strength, (float)skin_base(renderer, object->id, mesh)},
+                        .emission = {object->material.emission.x, object->material.emission.y,
+                                     object->material.emission.z, object->material.emission_strength},
+                    }};
+                /* Keep the original depth-test order for coplanar surfaces. Culled
+                   objects don't break a run of compatible submitted draws. */
+                bool can_batch = batch_props && !alpha_pass && !asset->dynamic && !mesh->skinned && !morph &&
+                                 object->material.alpha_mode == AF_ALPHA_OPAQUE && object->id != highlighted;
+                if (can_batch) {
+                    if (!prop_batch_matches(&batch, mesh, &object->material, &transform)) {
+                        draw_prop_batch(renderer, frame, &batch, &draw_calls);
+                        batch = (af_prop_batch){mesh, &object->material, transform, (uint32_t)i, 0, 1};
+                    } else {
+                        if (batch.count == 1) {
+                            batch.first_record = (uint32_t)record_count;
+                            renderer->motion_records[record_count++] =
+                                (af_motion_record){batch.draw.model, {batch.first_object}};
+                        }
+                        renderer->motion_records[record_count++] = (af_motion_record){world, {(uint32_t)i}};
+                        ++batch.count;
+                    }
+                    continue;
+                }
+                draw_prop_batch(renderer, frame, &batch, &draw_calls);
                 if (water) {
-                    transform.tint = (af_color){water->scattering.x, water->scattering.y, water->scattering.z, 1};
-                    transform.params = (af_vec4){(float)((1u << 19u) | (1u << 21u) | (2u << 1u)), 1, 1, water->wind};
+                    transform.material.tint =
+                        (af_color){water->scattering.x, water->scattering.y, water->scattering.z, 1};
+                    transform.material.params =
+                        (af_vec4){(float)((1u << 19u) | (1u << 21u) | (2u << 1u)), 1, 1, water->wind};
                     if (water->mode != AF_WATER_PARTICLES)
-                        transform.params.x += (float)(1u << 18u);
+                        transform.material.params.x += (float)(1u << 18u);
                     if (refract)
-                        transform.params.x += (float)(1u << 22u);
+                        transform.material.params.x += (float)(1u << 22u);
                     if (water->mode != AF_WATER_PARTICLES &&
                         wa_contains(ph_water_runtime(renderer->water_physics), scene, water->owner, camera->position))
-                        transform.params.x += (float)(1u << 23u);
-                    transform.surface =
+                        transform.material.params.x += (float)(1u << 23u);
+                    transform.material.surface =
                         (af_vec4){water->roughness, water->ripple_scale,
                                   water->mode == AF_WATER_PARTICLES ? water->particle_spacing : water->depth,
                                   water->mode == AF_WATER_PARTICLES ? 0 : water->ripple_strength};
-                    transform.emission =
+                    transform.material.emission =
                         (af_vec4){water->absorption.x, water->absorption.y, water->absorption.z, water->ior};
                 }
-                _Static_assert(sizeof(transform) == 128, "Portable draw push constant limit");
-                af_vk_texture *texture = renderer->white;
-                if (object->material.texture[0]) {
-                    bool found = false;
-                    for (size_t t = 0; t < renderer->texture_count; ++t)
-                        if (!renderer->textures[t].normal &&
-                            !strcmp(renderer->textures[t].name, object->material.texture)) {
-                            texture = renderer->textures[t].texture;
-                            found = true;
-                            break;
-                        }
-                    if (!found && count_object)
-                        ++renderer->missing_textures;
-                }
-                VkDescriptorSet descriptor = af_vk_texture_descriptor(texture);
-                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        renderer->swapchain.pipeline_layout, 1, 1, &descriptor, 0, NULL);
-                af_vk_texture *normal = renderer->flat_normal;
-                if (object->material.normal_map[0]) {
-                    bool found = false;
-                    for (size_t t = 0; t < renderer->texture_count; ++t)
-                        if (renderer->textures[t].normal &&
-                            !strcmp(renderer->textures[t].name, object->material.normal_map)) {
-                            normal = renderer->textures[t].texture;
-                            found = true;
-                            break;
-                        }
-                    if (!found && count_object)
-                        ++renderer->missing_textures;
-                }
-                VkDescriptorSet normal_descriptor = af_vk_texture_descriptor(normal);
-                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        renderer->swapchain.pipeline_layout, 3, 1, &normal_descriptor, 0, NULL);
-                af_vk_texture *mr = renderer->white;
-                if (object->material.metallic_roughness_map[0]) {
-                    bool found = false;
-                    for (size_t t = 0; t < renderer->texture_count; ++t)
-                        if (renderer->textures[t].normal &&
-                            !strcmp(renderer->textures[t].name, object->material.metallic_roughness_map)) {
-                            mr = renderer->textures[t].texture;
-                            found = true;
-                            break;
-                        }
-                    if (!found && count_object)
-                        ++renderer->missing_textures;
-                }
-                VkDescriptorSet mr_descriptor = af_vk_texture_descriptor(mr);
-                vkCmdBindDescriptorSets(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        renderer->swapchain.pipeline_layout, 4, 1, &mr_descriptor, 0, NULL);
+                bind_scene_material(renderer, frame, &object->material, count_object ? 1 : 0);
                 vkCmdPushConstants(frame->command, renderer->swapchain.pipeline_layout,
                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(transform),
                                    &transform);
@@ -3594,13 +3656,13 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 if (water) {
                     vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                       renderer->swapchain.water_attenuation);
-                    transform.params.x += (float)(1u << 20u);
+                    transform.material.params.x += (float)(1u << 20u);
                     vkCmdPushConstants(frame->command, renderer->swapchain.pipeline_layout,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(transform),
                                        &transform);
                     vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, (uint32_t)i);
                     ++draw_calls;
-                    transform.params.x -= (float)(1u << 20u);
+                    transform.material.params.x -= (float)(1u << 20u);
                     vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                       renderer->swapchain.water_scattering);
                     vkCmdPushConstants(frame->command, renderer->swapchain.pipeline_layout,
@@ -3612,6 +3674,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, (uint32_t)i);
                 ++draw_calls;
             }
+
+            draw_prop_batch(renderer, frame, &batch, &draw_calls);
 
             if (alpha_pass == 0 && scene_ls && scene_ls->enabled) {
                 const af_landscape *ls = scene_ls;
@@ -3921,8 +3985,11 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
         renderer->capture_format =
             renderer->capture_motion ? VK_FORMAT_R16G16B16A16_SFLOAT : renderer->swapchain.surface_format.format;
     }
-    if (!vk_ok(vkEndCommandBuffer(frame->command), "vkEndCommandBuffer"))
+    if (!upload_draw_records(renderer, frame, record_count) ||
+        !vk_ok(vkEndCommandBuffer(frame->command), "vkEndCommandBuffer"))
         return false;
+    renderer->cpu_record_ms =
+        (double)(SDL_GetPerformanceCounter() - record_start) * 1000 / (double)SDL_GetPerformanceFrequency();
     VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                                       VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
@@ -3993,6 +4060,10 @@ bool af_renderer_set_debug_view(af_renderer *r, af_debug_view view) {
 void af_renderer_set_visibility_culling(af_renderer *r, bool enabled) {
     if (r)
         r->culling_disabled = !enabled;
+}
+void af_renderer_set_prop_instancing(af_renderer *r, bool enabled) {
+    if (r)
+        r->prop_instancing_disabled = !enabled;
 }
 bool af_renderer_set_render_budget(af_renderer *r, double ms, uint64_t bytes) {
     if (!r || !isfinite(ms) || ms <= 0 || ms > 1000 || bytes < 1024u * 1024u)
@@ -4081,6 +4152,7 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer) {
         .gpu_overlay_ms = renderer->gpu_ms[4],
         .cpu_fence_ms = renderer->cpu_fence_ms,
         .cpu_acquire_ms = renderer->cpu_acquire_ms,
+        .cpu_record_ms = renderer->cpu_record_ms,
         .hdr_enabled = renderer->swapchain.post != NULL,
         .local_shadow_lights = renderer->local_shadow_lights,
         .local_shadow_maps = renderer->local_shadow_lights ? renderer->local_shadow_layers : 0,

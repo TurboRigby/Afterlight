@@ -70,6 +70,7 @@ add_library(afterlight STATIC
     engine/src/blueprint.c
     engine/src/blueprint_vm.c
     engine/src/blueprint_io.c
+    engine/src/timeline.c
     engine/src/story.c
     engine/src/wind.c
     engine/src/physics_wind.c
@@ -619,7 +620,7 @@ include(CTest)
 if(BUILD_TESTING)
     add_executable(afterlight_story_runtime_test tests/story_runtime.c)
     target_include_directories(afterlight_story_runtime_test PRIVATE sandbox)
-    target_link_libraries(afterlight_story_runtime_test PRIVATE afterlight_editor_document SDL3::SDL3)
+    target_link_libraries(afterlight_story_runtime_test PRIVATE afterlight_editor_document afterlight_editor_ui SDL3::SDL3)
     afterlight_warnings(afterlight_story_runtime_test)
     add_dependencies(afterlight_story_runtime_test afterlight_story_game)
     add_test(NAME afterlight.story_runtime COMMAND afterlight_story_runtime_test
@@ -720,7 +721,8 @@ if(BUILD_TESTING)
     afterlight_warnings(afterlight_render_foundations_test)
     add_test(NAME afterlight.render_foundations COMMAND afterlight_render_foundations_test)
     add_test(NAME afterlight.visibility_culling COMMAND afterlight_renderer_benchmark 1000)
-    set_tests_properties(afterlight.render_foundations afterlight.visibility_culling PROPERTIES TIMEOUT 60 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_test(NAME afterlight.prop_instancing COMMAND afterlight_renderer_benchmark 1023 --props)
+    set_tests_properties(afterlight.render_foundations afterlight.visibility_culling afterlight.prop_instancing PROPERTIES TIMEOUT 60 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
     foreach(optics water_render refraction underwater)
         foreach(aa fxaa smaa taa)
             add_test(NAME afterlight.${optics}_${aa} COMMAND afterlight_${optics}_test)

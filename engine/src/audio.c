@@ -8,6 +8,7 @@
 #define CLIP_LIMIT 32
 #define VOICE_LIMIT 32
 #define BYTE_LIMIT (64u * 1024u * 1024u)
+#define SAMPLE_RATE 48000u
 typedef struct clip {
     char name[64];
     float *samples;
@@ -19,13 +20,17 @@ typedef struct voice {
     bool active, spatial;
     af_sound_emitter emitter;
     Uint64 ends;
+    af_sound_loop loop;
+    float fade_gain;
+    size_t fade_frames;
+    bool stopping;
 } voice;
 struct af_audio {
     clip clips[CLIP_LIMIT];
     voice voices[VOICE_LIMIT];
     size_t count, bytes;
     uint64_t plays;
-    bool initialized;
+    bool initialized, suspended;
     SDL_AudioStream *stream;
 };
 static bool finite3(af_vec3 v) {
@@ -102,9 +107,15 @@ bool af_audio_load(af_audio *a, const char *name, const char *path, af_asset_err
         return fail(e, "Audio cache exceeds 32 clips / 64 MiB.");
     }
     if (at < a->count) {
-        for (unsigned i = 0; i < VOICE_LIMIT; ++i)
-            if (a->voices[i].clip == at)
-                a->voices[i].active = false;
+        for (unsigned i = 0; i < VOICE_LIMIT; ++i) {
+            voice *v = &a->voices[i];
+            if (v->active && v->clip == at) {
+                if (v->loop)
+                    v->cursor %= (size_t)count / 8;
+                else
+                    v->active = false;
+            }
+        }
         SDL_free(a->clips[at].samples);
     } else
         ++a->count;
@@ -125,35 +136,108 @@ static bool device(af_audio *a) {
     }
     return a->stream && SDL_ResumeAudioStreamDevice(a->stream);
 }
-static bool play(af_audio *a, const char *name, float gain, const af_sound_emitter *emitter) {
+static voice *play(af_audio *a, const char *name, float gain, const af_sound_emitter *emitter) {
     if (!a || !name || !isfinite(gain) || gain < 0 || gain > 1)
-        return false;
+        return NULL;
     size_t at = 0;
     while (at < a->count && strcmp(a->clips[at].name, name))
         ++at;
     if (at == a->count)
-        return false;
+        return NULL;
     Uint64 now = SDL_GetTicks();
     unsigned slot = 0;
     while (slot < VOICE_LIMIT && a->voices[slot].active && a->voices[slot].ends > now)
         ++slot;
     if (slot == VOICE_LIMIT || !device(a))
-        return false;
+        return NULL;
     a->voices[slot] = (voice){.clip = at,
                               .active = true,
                               .gain = gain,
                               .spatial = emitter != NULL,
-                              .ends = now + (Uint64)(a->clips[at].frames * 1000 / 48000) + 100};
+                              .ends = now + (Uint64)(a->clips[at].frames * 1000 / SAMPLE_RATE) + 100};
     if (emitter)
         a->voices[slot].emitter = *emitter;
     ++a->plays;
-    return true;
+    return &a->voices[slot];
 }
 bool af_audio_play(af_audio *a, const char *name, float gain) {
     return play(a, name, gain, NULL);
 }
 bool af_audio_play_at(af_audio *a, const char *name, af_sound_emitter e) {
     return emitter_valid(e) && play(a, name, e.gain, &e);
+}
+static bool valid_fade(float seconds) {
+    return isfinite(seconds) && seconds >= 0 && seconds <= 60;
+}
+
+static voice *find_loop(af_audio *a, af_sound_loop id) {
+    if (!a || !id)
+        return NULL;
+    for (unsigned i = 0; i < VOICE_LIMIT; ++i)
+        if (a->voices[i].active && a->voices[i].loop == id)
+            return &a->voices[i];
+    return NULL;
+}
+
+static void fade(voice *v, float gain, float seconds) {
+    v->fade_gain = gain;
+    v->fade_frames = (size_t)ceilf(seconds * SAMPLE_RATE);
+    if (!v->fade_frames) {
+        v->gain = gain;
+        if (v->stopping)
+            v->active = false;
+    }
+}
+
+af_sound_loop af_audio_start_loop(af_audio *a, const char *clip, af_sound_emitter e, float seconds) {
+    if (!emitter_valid(e) || !valid_fade(seconds))
+        return 0;
+    voice *v = play(a, clip, seconds > 0 ? 0 : e.gain, &e);
+    if (!v)
+        return 0;
+    v->loop = a->plays;
+    v->ends = UINT64_MAX;
+    fade(v, e.gain, seconds);
+    return v->loop;
+}
+
+bool af_audio_move_loop(af_audio *a, af_sound_loop id, af_vec3 position) {
+    voice *v = find_loop(a, id);
+    if (!v || !finite3(position))
+        return false;
+    v->emitter.position = position;
+    return true;
+}
+
+bool af_audio_fade_loop(af_audio *a, af_sound_loop id, float gain, float seconds) {
+    voice *v = find_loop(a, id);
+    if (!v || !valid_fade(seconds) || !isfinite(gain) || gain < 0 || gain > 1)
+        return false;
+    v->stopping = false;
+    fade(v, gain, seconds);
+    return true;
+}
+
+bool af_audio_stop_loop(af_audio *a, af_sound_loop id, float seconds) {
+    voice *v = find_loop(a, id);
+    if (!v || !valid_fade(seconds))
+        return false;
+    v->stopping = true;
+    fade(v, 0, seconds);
+    return true;
+}
+
+void af_audio_suspend(af_audio *a, bool suspended) {
+    if (!a || a->suspended == suspended)
+        return;
+    a->suspended = suspended;
+    if (suspended) {
+        for (unsigned i = 0; i < VOICE_LIMIT; ++i)
+            if (!a->voices[i].loop)
+                a->voices[i].active = false;
+        if (a->stream)
+            SDL_ClearAudioStream(a->stream);
+    }
 }
 bool af_audio_spatial_gains(af_vec3 listener, af_vec3 forward, af_sound_emitter e, float *left, float *right) {
     if (!left || !right || !finite3(listener) || !finite3(forward) || !emitter_valid(e))
@@ -177,20 +261,27 @@ bool af_audio_mix(af_audio *a, af_vec3 listener, af_vec3 forward, float *out, si
     memset(out, 0, frames * 2 * sizeof(float));
     for (unsigned v = 0; v < VOICE_LIMIT; ++v) {
         voice *voice = &a->voices[v];
-        if (!voice->active)
+        if (!voice->active || (voice->loop && a->suspended))
             continue;
         clip *c = &a->clips[voice->clip];
-        float left = voice->gain, right = left;
-        if (voice->spatial && !af_audio_spatial_gains(listener, forward, voice->emitter, &left, &right))
+        float left = 1, right = 1;
+        af_sound_emitter emitter = voice->emitter;
+        emitter.gain = 1;
+        if (voice->spatial && !af_audio_spatial_gains(listener, forward, emitter, &left, &right))
             return false;
-        size_t remaining = c->frames - voice->cursor, n = frames < remaining ? frames : remaining;
-        for (size_t i = 0; i < n; ++i) {
-            out[i * 2] += c->samples[(voice->cursor + i) * 2] * left;
-            out[i * 2 + 1] += c->samples[(voice->cursor + i) * 2 + 1] * right;
+        for (size_t i = 0; i < frames && voice->active; ++i) {
+            out[i * 2] += c->samples[voice->cursor * 2] * (voice->gain * left);
+            out[i * 2 + 1] += c->samples[voice->cursor * 2 + 1] * (voice->gain * right);
+            if (++voice->cursor == c->frames) {
+                voice->cursor = 0;
+                voice->active = voice->loop != 0;
+            }
+            if (voice->fade_frames) {
+                voice->gain += (voice->fade_gain - voice->gain) / (float)voice->fade_frames;
+                if (!--voice->fade_frames && voice->stopping)
+                    voice->active = false;
+            }
         }
-        voice->cursor += n;
-        if (voice->cursor == c->frames)
-            voice->active = false;
     }
     for (size_t i = 0; i < frames * 2; ++i)
         out[i] = fminf(1, fmaxf(-1, out[i]));
@@ -219,7 +310,9 @@ af_audio_stats af_audio_get_stats(const af_audio *a) {
     af_audio_stats s = {.clips = a->count, .plays = a->plays, .device_ready = a->stream != NULL};
     Uint64 now = SDL_GetTicks();
     for (unsigned i = 0; i < VOICE_LIMIT; ++i)
-        if (a->voices[i].active && a->voices[i].ends > now)
+        if (a->voices[i].active && a->voices[i].ends > now) {
             ++s.playing;
+            s.looping += a->voices[i].loop != 0;
+        }
     return s;
 }

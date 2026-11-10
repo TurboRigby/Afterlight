@@ -377,6 +377,27 @@ static void init_node_pins(af_bp_node *node) {
         ADD_EXEC_IN("Exec");
         ADD_STR_IN("Scene", "");
         break;
+    case AF_BP_NODE_TIMELINE:
+        snprintf(node->title, sizeof(node->title), "Timeline");
+        ADD_EXEC_IN("Play");
+        ADD_EXEC_IN("Apply End");
+        ADD_OBJ_IN("Target");
+        ADD_EXEC_OUT("Completed");
+        break;
+    case AF_BP_NODE_SOUND_LOOP:
+        snprintf(node->title, sizeof(node->title), "Looping Sound Emitter");
+        ADD_EXEC_IN("Play");
+        ADD_EXEC_IN("Fade");
+        ADD_EXEC_IN("Stop");
+        ADD_OBJ_IN("Target");
+        ADD_STR_IN("Sound Name", "");
+        ADD_FLOAT_IN("Gain", 1.f);
+        ADD_FLOAT_IN("Fade To", 0.f);
+        ADD_FLOAT_IN("Fade Seconds", .5f);
+        ADD_FLOAT_IN("Min Distance", 1.f);
+        ADD_FLOAT_IN("Max Distance", 15.f);
+        ADD_EXEC_OUT("Exec");
+        break;
     default:
         snprintf(node->title, sizeof(node->title), "Node");
         break;
@@ -410,6 +431,8 @@ af_blueprint *af_blueprint_create(const char *name) {
 void af_blueprint_destroy(af_blueprint *bp) {
     if (!bp)
         return;
+    for (size_t i = 0; i < bp->node_count; ++i)
+        free(bp->nodes[i].timeline);
     free(bp->nodes);
     free(bp->links);
     free(bp->variables);
@@ -433,8 +456,21 @@ af_blueprint *af_blueprint_clone(const af_blueprint *bp) {
         copy->nodes = (af_bp_node *)malloc(bp->node_count * sizeof(af_bp_node));
         if (copy->nodes) {
             memcpy(copy->nodes, bp->nodes, bp->node_count * sizeof(af_bp_node));
-            copy->node_count = bp->node_count;
             copy->node_capacity = bp->node_count;
+            for (size_t i = 0; i < bp->node_count; ++i) {
+                copy->nodes[i].timeline = NULL;
+                copy->nodes[i].sound_loop = 0;
+                copy->nodes[i].sound_target = AF_OBJECT_NONE;
+                ++copy->node_count;
+                if (bp->nodes[i].timeline) {
+                    copy->nodes[i].timeline = malloc(sizeof(af_timeline));
+                    if (!copy->nodes[i].timeline) {
+                        af_blueprint_destroy(copy);
+                        return NULL;
+                    }
+                    *copy->nodes[i].timeline = *bp->nodes[i].timeline;
+                }
+            }
         }
     }
 
@@ -477,6 +513,13 @@ uint32_t af_blueprint_add_node(af_blueprint *bp, af_bp_node_type type, float x, 
         bp->node_capacity = new_cap;
     }
 
+    af_timeline *timeline = NULL;
+    if (type == AF_BP_NODE_TIMELINE) {
+        timeline = calloc(1, sizeof(*timeline));
+        if (!timeline)
+            return 0;
+        timeline->duration = 5.f;
+    }
     af_bp_node *node = &bp->nodes[bp->node_count++];
     memset(node, 0, sizeof(*node));
     node->id = bp->next_node_id++;
@@ -485,6 +528,7 @@ uint32_t af_blueprint_add_node(af_blueprint *bp, af_bp_node_type type, float x, 
     node->y = y;
     node->width = 180.0f;
     node->height = 120.0f;
+    node->timeline = timeline;
 
     init_node_pins(node);
     return node->id;
@@ -505,6 +549,7 @@ bool af_blueprint_remove_node(af_blueprint *bp, uint32_t node_id) {
 
     for (size_t i = 0; i < bp->node_count; ++i) {
         if (bp->nodes[i].id == node_id) {
+            free(bp->nodes[i].timeline);
             if (i + 1 < bp->node_count) {
                 memmove(&bp->nodes[i], &bp->nodes[i + 1], (bp->node_count - i - 1) * sizeof(af_bp_node));
             }
@@ -819,6 +864,10 @@ const char *af_bp_node_type_name(af_bp_node_type type) {
     case AF_BP_NODE_GET_STORY_FLAG: return "Get Story Flag";
     case AF_BP_NODE_SET_STORY_FLAG: return "Set Story Flag";
     case AF_BP_NODE_CHANGE_SCENE: return "Change Scene";
+    case AF_BP_NODE_TIMELINE:
+        return "Timeline";
+    case AF_BP_NODE_SOUND_LOOP:
+        return "Looping Sound Emitter";
     default:
         return "Unknown";
     }
@@ -913,6 +962,12 @@ bool af_scene_remove_blueprint(af_scene *scene, size_t index) {
             scene->story_dialogue = (af_story_dialogue){0};
         else if (scene->story_graph > index)
             --scene->story_graph;
+    }
+    if (scene->story_change.destination[0] && scene->story_change.graph != SIZE_MAX) {
+        if (scene->story_change.graph == index)
+            scene->story_change.graph = SIZE_MAX;
+        else if (scene->story_change.graph > index)
+            --scene->story_change.graph;
     }
     return true;
 }

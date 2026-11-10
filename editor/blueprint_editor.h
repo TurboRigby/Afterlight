@@ -18,6 +18,14 @@ typedef struct ed_blueprint_state {
     float pan_x, pan_y;
     float zoom;
     uint32_t selected_node_id;
+    bool timeline_preview;
+    float timeline_time, preview_time;
+    int timeline_track;
+    size_t timeline_key, timeline_graph, preview_graph;
+    uint32_t timeline_node, preview_node;
+    uint64_t preview_revision;
+    const af_scene *preview_source;
+    af_scene *preview_scene;
 
     /* Node dragging */
     bool dragging_node, drag_recorded;
@@ -59,6 +67,8 @@ void ed_blueprint_state_init(ed_blueprint_state *state);
 void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ctx, af_scene *scene, float height,
                                 bool is_playing);
 bool ed_blueprint_attach_interactable(ed_blueprint_state *, af_scene *, af_object_id);
+void ed_blueprint_timeline_inspector(ed_blueprint_state *, struct nk_context *, af_scene *);
+af_scene *ed_blueprint_preview(ed_blueprint_state *, af_engine *, af_scene *, uint64_t revision, bool enabled);
 void ed_blueprint_canvas_panel(ed_blueprint_state *state, struct nk_context *ctx, af_scene *scene,
                                af_rect viewport_rect, bool is_playing);
 

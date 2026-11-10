@@ -677,3 +677,11 @@ define an interaction prompt and range in meters. Graphs run in editor Play
 and in the standalone player. Scene files from earlier versions load with
 an empty graph list. Active dialogue and live story flags are runtime data.
 The progress save records the story flags.
+
+A Timeline Blueprint node stores a `timeline` object with `duration` in
+seconds and the `poses`, `lights`, and `sounds` arrays. A pose key stores
+time followed by local position, Euler rotation in radians, and scale (three
+numbers each). A light key stores time and directional light intensity. A
+sound key stores `time`, `gain`, and the registered WAV asset name in `clip`.
+Each track holds up to 16 keys in strictly increasing time order. Graphs saved
+without timeline nodes retain their existing representation.

@@ -84,6 +84,197 @@ static bool text_edit(struct nk_context *ctx, ed_blueprint_state *state, char *v
     return true;
 }
 
+static af_object_id timeline_target(const af_blueprint *bp, const af_bp_node *node) {
+    for (uint32_t i = 0; i < node->pin_count; ++i)
+        if (node->pins[i].dir == AF_BP_PIN_INPUT && node->pins[i].type == AF_BP_PIN_OBJECT) {
+            af_object_id target = node->pins[i].default_val.obj;
+            return target ? target : bp->bound_object;
+        }
+    return AF_OBJECT_NONE;
+}
+
+static void pose_fields(struct nk_context *ctx, const char *label, af_vec3 *v) {
+    nk_layout_row_dynamic(ctx, 20, 1);
+    nk_label(ctx, label, NK_TEXT_LEFT);
+    nk_layout_row_dynamic(ctx, 24, 3);
+    nk_property_float(ctx, "X", -10000, &v->x, 10000, .1f, .01f);
+    nk_property_float(ctx, "Y", -10000, &v->y, 10000, .1f, .01f);
+    nk_property_float(ctx, "Z", -10000, &v->z, 10000, .1f, .01f);
+}
+
+static const af_scene_asset *first_sound(const af_scene *scene) {
+    for (size_t i = 0; i < af_scene_asset_count(scene); ++i) {
+        const af_scene_asset *asset = af_scene_asset_at(scene, i);
+        if (asset->kind == AF_ASSET_AUDIO)
+            return asset;
+    }
+    return NULL;
+}
+
+static void timeline_panel(ed_blueprint_state *state, struct nk_context *ctx, const af_scene *scene,
+                           const af_blueprint *bp, af_bp_node *node) {
+    af_timeline t = *node->timeline;
+    if (state->timeline_node != node->id || state->timeline_graph != state->active_graph_index) {
+        state->timeline_node = node->id;
+        state->timeline_graph = state->active_graph_index;
+        state->timeline_key = 0;
+        state->timeline_time = 0;
+    }
+    nk_layout_row_dynamic(ctx, 24, 1);
+    float minimum = .01f;
+    if (t.pose_count)
+        minimum = fmaxf(minimum, t.poses[t.pose_count - 1].time);
+    if (t.light_count)
+        minimum = fmaxf(minimum, t.lights[t.light_count - 1].time);
+    if (t.sound_count)
+        minimum = fmaxf(minimum, t.sounds[t.sound_count - 1].time);
+    nk_property_float(ctx, "Duration (s)", minimum, &t.duration, AF_TIMELINE_MAX_SECONDS, .1f, .01f);
+    state->timeline_time = fminf(state->timeline_time, t.duration);
+    nk_layout_row_dynamic(ctx, 24, 1);
+    nk_slider_float(ctx, 0, &state->timeline_time, t.duration, fminf(.01f, t.duration));
+    nk_layout_row_dynamic(ctx, 24, 1);
+    nk_property_float(ctx, "Playhead (s)", 0, &state->timeline_time, t.duration, .01f, .01f);
+    nk_layout_row_dynamic(ctx, 24, 1);
+    nk_bool preview = state->timeline_preview;
+    nk_checkbox_label(ctx, "Preview in viewport", &preview);
+    state->timeline_preview = preview != 0;
+
+    const char *tracks[] = {"Transform", "Directional light", "Sound cues"};
+    nk_layout_row_dynamic(ctx, 24, 1);
+    int track = nk_combo(ctx, tracks, 3, state->timeline_track, 24, nk_vec2(220, 100));
+    if (track != state->timeline_track)
+        state->timeline_key = 0;
+    state->timeline_track = track;
+
+    unsigned char *keys;
+    size_t *count, stride;
+    const af_scene_object *target = af_scene_get_object(scene, timeline_target(bp, node));
+    const af_scene_asset *asset = track == 2 ? first_sound(scene) : NULL;
+    af_timeline_pose pose = {state->timeline_time, target ? target->transform : af_transform_identity()};
+    af_timeline_light light = {state->timeline_time, af_scene_get_light(scene).intensity};
+    af_timeline_sound sound = {.time = state->timeline_time, .gain = 1};
+    const void *new_key;
+    if (track == 0) {
+        keys = (unsigned char *)t.poses;
+        count = &t.pose_count;
+        stride = sizeof(pose);
+        new_key = &pose;
+    } else if (track == 1) {
+        keys = (unsigned char *)t.lights;
+        count = &t.light_count;
+        stride = sizeof(light);
+        new_key = &light;
+    } else {
+        keys = (unsigned char *)t.sounds;
+        count = &t.sound_count;
+        stride = sizeof(sound);
+        new_key = &sound;
+        if (asset)
+            snprintf(sound.clip, sizeof(sound.clip), "%s", asset->name);
+    }
+    if ((track == 0 && !target) || (track == 2 && !asset)) {
+        nk_layout_row_dynamic(ctx, 24, 1);
+        nk_label(ctx, track == 0 ? "Choose a target above." : "Import a WAV clip first.", NK_TEXT_LEFT);
+    } else if (*count < AF_TIMELINE_MAX_KEYS) {
+        nk_layout_row_dynamic(ctx, 24, 1);
+        if (nk_button_label(ctx, "Add key at playhead")) {
+            size_t at = 0;
+            while (at < *count && *(float *)(keys + at * stride) < state->timeline_time)
+                ++at;
+            if (at == *count || *(float *)(keys + at * stride) != state->timeline_time) {
+                memmove(keys + (at + 1) * stride, keys + at * stride, (*count - at) * stride);
+                memcpy(keys + at * stride, new_key, stride);
+                ++*count;
+            }
+            state->timeline_key = at;
+        }
+    }
+    if (*count) {
+        size_t selected = state->timeline_key < *count ? state->timeline_key : *count - 1;
+        char labels[AF_TIMELINE_MAX_KEYS][32];
+        const char *items[AF_TIMELINE_MAX_KEYS];
+        for (size_t i = 0; i < *count; ++i) {
+            snprintf(labels[i], sizeof(labels[i]), "Key %zu  ·  %.2f s", i + 1, (double)*(float *)(keys + i * stride));
+            items[i] = labels[i];
+        }
+        nk_layout_row_dynamic(ctx, 24, 1);
+        state->timeline_key = (size_t)nk_combo(ctx, items, (int)*count, (int)selected, 24, nk_vec2(220, 160));
+        selected = state->timeline_key;
+        float *time = (float *)(keys + selected * stride);
+        float lower = selected ? nextafterf(*(float *)(keys + (selected - 1) * stride), INFINITY) : 0;
+        float upper =
+            selected + 1 < *count ? nextafterf(*(float *)(keys + (selected + 1) * stride), -INFINITY) : t.duration;
+        nk_layout_row_dynamic(ctx, 24, 1);
+        nk_property_float(ctx, "Key time", lower, time, upper, .01f, .01f);
+        if (track == 0) {
+            af_transform *transform = &t.poses[selected].transform;
+            pose_fields(ctx, "Position", &transform->position);
+            pose_fields(ctx, "Rotation (radians)", &transform->rotation);
+            pose_fields(ctx, "Scale", &transform->scale);
+        } else if (track == 1) {
+            nk_layout_row_dynamic(ctx, 24, 1);
+            nk_property_float(ctx, "Intensity", 0, &t.lights[selected].intensity, 100, .1f, .01f);
+        } else {
+            af_timeline_sound *cue = &t.sounds[selected];
+            nk_layout_row_dynamic(ctx, 24, 1);
+            if (nk_combo_begin_label(ctx, cue->clip, nk_vec2(220, 160))) {
+                nk_layout_row_dynamic(ctx, 24, 1);
+                for (size_t i = 0; i < af_scene_asset_count(scene); ++i) {
+                    const af_scene_asset *clip = af_scene_asset_at(scene, i);
+                    if (clip->kind == AF_ASSET_AUDIO && nk_combo_item_label(ctx, clip->name, NK_TEXT_LEFT))
+                        snprintf(cue->clip, sizeof(cue->clip), "%s", clip->name);
+                }
+                nk_combo_end(ctx);
+            }
+            nk_layout_row_dynamic(ctx, 24, 1);
+            nk_property_float(ctx, "Gain", 0, &cue->gain, 1, .05f, .01f);
+        }
+        nk_layout_row_dynamic(ctx, 24, 2);
+        if (nk_button_label(ctx, "Go to key"))
+            state->timeline_time = *time;
+        if (nk_button_label(ctx, "Delete key")) {
+            memmove(keys + selected * stride, keys + (selected + 1) * stride, (*count - selected - 1) * stride);
+            --*count;
+        }
+    }
+    if (memcmp(&t, node->timeline, sizeof(t)) && af_timeline_valid(&t) && record_edit(state))
+        *node->timeline = t;
+}
+
+af_scene *ed_blueprint_preview(ed_blueprint_state *state, af_engine *engine, af_scene *source, uint64_t revision,
+                               bool enabled) {
+    const af_blueprint *bp = af_scene_get_blueprint_const(source, state->active_graph_index);
+    const af_bp_node *node = af_blueprint_get_node_const(bp, state->selected_node_id);
+    enabled = enabled && state->timeline_preview && node && node->timeline;
+    if (enabled && state->preview_scene && state->preview_source == source && state->preview_revision == revision &&
+        state->preview_graph == state->active_graph_index && state->preview_node == node->id &&
+        state->preview_time == state->timeline_time)
+        return state->preview_scene;
+    if (state->preview_scene) {
+        if (af_engine_get_scene(engine) == state->preview_scene)
+            af_engine_set_scene(engine, source);
+        af_scene_destroy(state->preview_scene);
+        state->preview_scene = NULL;
+    }
+    if (!enabled) {
+        state->timeline_preview = false;
+        return source;
+    }
+    af_scene *preview = af_scene_clone(source);
+    if (!af_timeline_sample(node->timeline, preview, timeline_target(bp, node), state->timeline_time)) {
+        af_scene_destroy(preview);
+        state->timeline_preview = false;
+        return source;
+    }
+    state->preview_scene = preview;
+    state->preview_source = source;
+    state->preview_revision = revision;
+    state->preview_graph = state->active_graph_index;
+    state->preview_node = node->id;
+    state->preview_time = state->timeline_time;
+    return preview;
+}
+
 static void node_defaults(ed_blueprint_state *state, struct nk_context *ctx, const af_scene *scene, af_blueprint *bp) {
     af_bp_node *node = af_blueprint_get_node(bp, state->selected_node_id);
     if (!node)
@@ -156,6 +347,15 @@ static void node_defaults(ed_blueprint_state *state, struct nk_context *ctx, con
         if (memcmp(&pin->default_val, &next, sizeof(next)) && record_edit(state))
             pin->runtime_val = pin->default_val = next;
     }
+    if (node->timeline)
+        timeline_panel(state, ctx, scene, bp, node);
+}
+
+void ed_blueprint_timeline_inspector(ed_blueprint_state *state, struct nk_context *ctx, af_scene *scene) {
+    af_blueprint *bp = af_scene_get_blueprint(scene, state->active_graph_index);
+    const af_bp_node *node = af_blueprint_get_node_const(bp, state->selected_node_id);
+    if (node && node->timeline)
+        node_defaults(state, ctx, scene, bp);
 }
 
 static const char *pin_type_to_str(af_bp_pin_type type) {
@@ -261,6 +461,63 @@ static void get_pin_pos(const af_bp_node *node, uint32_t pin_id, float pan_x, fl
     *out_y = ny;
 }
 
+static bool recently_fired(const af_blueprint *bp, uint32_t node, uint32_t pin) {
+    for (unsigned i = 0; i < bp->trace_count; ++i) {
+        const af_bp_trace_entry *entry = af_blueprint_trace_at(bp, i);
+        if (bp->trace_time - entry->time > .6f)
+            break;
+        if (entry->node == node && (!pin || entry->pin == pin))
+            return true;
+    }
+    return false;
+}
+
+static void blueprint_debugger(ed_blueprint_state *state, struct nk_context *ctx, const af_scene *scene,
+                               const af_blueprint *bp, float height) {
+    nk_layout_row_dynamic(ctx, fmaxf(100, height - 190), 1);
+    if (!nk_group_begin(ctx, "Blueprint Debugger", 0))
+        return;
+    nk_layout_row_dynamic(ctx, 24, 1);
+    nk_label(ctx, "Story flags (true)", NK_TEXT_LEFT);
+    const af_story_flags *flags = af_scene_story_flags(scene);
+    if (!flags->count) {
+        nk_layout_row_dynamic(ctx, 20, 1);
+        nk_label(ctx, "None", NK_TEXT_LEFT);
+    }
+    for (size_t i = 0; i < flags->count; ++i) {
+        nk_layout_row_dynamic(ctx, 20, 1);
+        nk_label(ctx, flags->names[i], NK_TEXT_LEFT);
+    }
+    char line[160];
+    if (bp->diagnostic_node) {
+        snprintf(line, sizeof(line), "Scene change failed at node %u", (unsigned)bp->diagnostic_node);
+        nk_layout_row_dynamic(ctx, 24, 1);
+        if (nk_button_label(ctx, line))
+            state->selected_node_id = bp->diagnostic_node;
+        nk_layout_row_dynamic(ctx, 64, 1);
+        nk_label_wrap(ctx, bp->diagnostic);
+    }
+    nk_layout_row_dynamic(ctx, 25, 1);
+    nk_label(ctx, "Execution history (newest first)", NK_TEXT_LEFT);
+    for (unsigned i = 0; i < bp->trace_count; ++i) {
+        const af_bp_trace_entry *entry = af_blueprint_trace_at(bp, i);
+        const af_bp_node *node = af_blueprint_get_node_const(bp, entry->node);
+        if (!node)
+            continue;
+        const char *pin = "";
+        for (uint32_t p = 0; p < node->pin_count; ++p)
+            if (node->pins[p].id == entry->pin) {
+                pin = node->pins[p].name;
+                break;
+            }
+        snprintf(line, sizeof(line), "#%u %s / %s", (unsigned)entry->node, node->title, pin);
+        nk_layout_row_dynamic(ctx, 23, 1);
+        if (nk_button_label(ctx, line))
+            state->selected_node_id = node->id;
+    }
+    nk_group_end(ctx);
+}
+
 void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ctx, af_scene *scene, float height, bool is_playing) {
     if (!state || !ctx || !scene)
         return;
@@ -268,16 +525,12 @@ void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ct
     size_t bp_count = af_scene_blueprint_count(scene);
     nk_layout_row_dynamic(ctx, 24, 1);
     nk_label(ctx, "Blueprint Scripting", NK_TEXT_LEFT);
-    if (is_playing) {
-        nk_layout_row_dynamic(ctx, 24, 1);
-        nk_label(ctx, "Stop Play to edit graphs.", NK_TEXT_LEFT);
-        return;
-    }
-
     /* Graph Selector */
     nk_layout_row_dynamic(ctx, 26, 1);
     if (bp_count == 0) {
         nk_label(ctx, "No Blueprints in scene.", NK_TEXT_LEFT);
+        if (is_playing)
+            return;
         nk_layout_row_dynamic(ctx, 28, 1);
         nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, state->new_graph_name, sizeof(state->new_graph_name),
                                        nk_filter_default);
@@ -310,6 +563,11 @@ void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ct
             }
         }
         nk_combo_end(ctx);
+    }
+
+    if (is_playing) {
+        blueprint_debugger(state, ctx, scene, af_scene_get_blueprint_const(scene, state->active_graph_index), height);
+        return;
     }
 
     /* Graph Settings */
@@ -369,7 +627,9 @@ void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ct
                     active_bp->interact_range = range;
             }
         }
-        node_defaults(state, ctx, scene, active_bp);
+        const af_bp_node *selected = af_blueprint_get_node_const(active_bp, state->selected_node_id);
+        if (selected && !selected->timeline)
+            node_defaults(state, ctx, scene, active_bp);
         nk_layout_row_dynamic(ctx, 22, 1);
         nk_label(ctx, "Story", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 24, 1);
@@ -386,6 +646,8 @@ void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ct
         nk_layout_row_dynamic(ctx, 24, 1);
         if (nk_button_label(ctx, "+ Change Scene"))
             add_node(state, active_bp, AF_BP_NODE_CHANGE_SCENE, -state->pan_x + 290, -state->pan_y + 240);
+        if (nk_button_label(ctx, "+ Timeline"))
+            add_node(state, active_bp, AF_BP_NODE_TIMELINE, -state->pan_x + 290, -state->pan_y + 300);
         /* Variables */
         nk_layout_row_dynamic(ctx, 22, 1);
         nk_label(ctx, "--- Variables ---", NK_TEXT_LEFT);
@@ -445,6 +707,8 @@ void ed_blueprint_sidebar_panel(ed_blueprint_state *state, struct nk_context *ct
             add_node(state, active_bp, AF_BP_NODE_ADD_FORCE, -state->pan_x + 300, -state->pan_y + 340);
         if (nk_button_label(ctx, "+ Play Sound"))
             add_node(state, active_bp, AF_BP_NODE_PLAY_SOUND, -state->pan_x + 300, -state->pan_y + 380);
+        if (nk_button_label(ctx, "+ Looping Emitter"))
+            add_node(state, active_bp, AF_BP_NODE_SOUND_LOOP, -state->pan_x + 300, -state->pan_y + 420);
         if (nk_button_label(ctx, "+ Set Light"))
             add_node(state, active_bp, AF_BP_NODE_SET_LIGHT, -state->pan_x + 300, -state->pan_y + 400);
         nk_layout_row_dynamic(ctx, 24, 1);
@@ -597,7 +861,7 @@ void ed_blueprint_canvas_panel(ed_blueprint_state *state, struct nk_context *ctx
         float wire_thickness = (ptype == AF_BP_PIN_EXEC) ? 3.0f * zoom : 2.0f * zoom;
 
         /* If playing and node was recently executed, flash the wire! */
-        if (is_playing && bp->last_executed_node_id == fn->id) {
+        if (is_playing && ptype == AF_BP_PIN_EXEC && recently_fired(bp, fn->id, l->from_pin_id)) {
             wire_col = nk_rgb(255, 230, 80);
             wire_thickness += 2.0f * zoom;
         }
@@ -688,7 +952,11 @@ void ed_blueprint_canvas_panel(ed_blueprint_state *state, struct nk_context *ctx
         nk_fill_rect(canvas, node_rect, 6.0f * zoom, body_bg);
 
         /* Selection outline */
-        if (state->selected_node_id == n->id) {
+        if (is_playing && bp->diagnostic_node == n->id) {
+            nk_stroke_rect(canvas, node_rect, 6.0f * zoom, 2.5f, nk_rgb(255, 100, 90));
+        } else if (is_playing && recently_fired(bp, n->id, 0)) {
+            nk_stroke_rect(canvas, node_rect, 6.0f * zoom, 2.5f, nk_rgb(110, 240, 170));
+        } else if (state->selected_node_id == n->id) {
             nk_stroke_rect(canvas, node_rect, 6.0f * zoom, 2.0f, nk_rgb(255, 210, 60));
         } else {
             nk_stroke_rect(canvas, node_rect, 6.0f * zoom, 1.0f, nk_rgba(60, 64, 78, 200));

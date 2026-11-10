@@ -179,6 +179,13 @@ static void test_serialization(void) {
     uint32_t n1 = af_blueprint_add_node(bp, AF_BP_NODE_EVENT_START, 100, 150);
     uint32_t n2 = af_blueprint_add_node(bp, AF_BP_NODE_PRINT, 350, 150);
     af_blueprint_add_link(bp, n1, 1, n2, 1);
+    uint32_t n3 = af_blueprint_add_node(bp, AF_BP_NODE_TIMELINE, 560, 150);
+    af_bp_node *node = af_blueprint_get_node(bp, n3);
+    CHECK(node && node->timeline);
+    af_timeline *timeline = node->timeline;
+    timeline->light_count = 2;
+    timeline->lights[0] = (af_timeline_light){0, 1};
+    timeline->lights[1] = (af_timeline_light){5, 3};
 
     char *json = af_blueprint_serialize_json(bp);
     CHECK(json != NULL);
@@ -190,13 +197,24 @@ static void test_serialization(void) {
     CHECK(loaded != NULL);
     CHECK(strcmp(loaded->name, "SerializeTest") == 0);
     CHECK(loaded->bound_object == 42);
-    CHECK(loaded->node_count == 2);
+    CHECK(loaded->node_count == 3);
     CHECK(loaded->link_count == 1);
     CHECK(loaded->var_count == 1);
 
     const af_bp_variable *pi_var = af_blueprint_get_variable(loaded, "Pi");
     CHECK(pi_var != NULL);
     CHECK(fabsf(pi_var->val.f - 3.1415f) < 1e-4f);
+    af_blueprint *clone = af_blueprint_clone(loaded);
+    CHECK(clone);
+    af_timeline *copy = af_blueprint_get_node(clone, n3)->timeline;
+    CHECK(copy && copy != af_blueprint_get_node(loaded, n3)->timeline);
+    af_scene *scene = af_scene_create();
+    CHECK(scene && af_timeline_sample(copy, scene, AF_OBJECT_NONE, 2.5f));
+    CHECK(af_scene_get_light(scene).intensity == 2);
+    copy->lights[1].time = 0;
+    CHECK(!af_timeline_valid(copy) && !af_blueprint_serialize_json(clone));
+    af_scene_destroy(scene);
+    af_blueprint_destroy(clone);
 
     free(json);
     af_blueprint_destroy(loaded);

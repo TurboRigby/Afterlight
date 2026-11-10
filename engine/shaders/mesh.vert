@@ -73,13 +73,20 @@ void main() {
     if (base > 0 && dot(in_weights, vec4(1)) > 0)
         deformation = skin.bones[base + in_joints.x] * in_weights.x + skin.bones[base + in_joints.y] * in_weights.y +
                       skin.bones[base + in_joints.z] * in_weights.z + skin.bones[base + in_joints.w] * in_weights.w;
-    vec4 world = draw.model * deformation * vec4(in_position, 1);
+    mat4 model = draw.model;
+    uint motion_index = uint(gl_InstanceIndex);
+    if ((uint(draw.params.y) & (1u << 6u)) != 0u) {
+        MotionRecord instance = motion.objects[gl_InstanceIndex];
+        model = instance.model;
+        motion_index = instance.info.x;
+    }
+    vec4 world = model * deformation * vec4(in_position, 1);
     gl_Position = frame.view_projection * world;
     current_clip = frame.unjittered_view_projection * world;
     previous_clip = current_clip;
     motion_valid = 0;
     if (frame.sky_params.y > 0.5) {
-        MotionRecord old = motion.objects[gl_InstanceIndex];
+        MotionRecord old = motion.objects[motion_index];
         motion_valid = old.info.y;
         mat4 old_skin = mat4(1);
         if (base > 0 && old.info.x > 0 && dot(in_weights, vec4(1)) > 0) {
@@ -92,6 +99,6 @@ void main() {
     world_position = world.xyz;
     uv = in_uv;
     vertex_color = in_color * draw.tint;
-    mat3 basis = mat3(draw.model * deformation);
+    mat3 basis = mat3(model * deformation);
     world_normal = abs(determinant(basis)) > 1e-12 ? transpose(inverse(basis)) * in_normal : vec3(0);
 }
