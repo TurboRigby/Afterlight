@@ -7,6 +7,7 @@ static void update_cluster_pages(af_renderer *r) {
         af_cluster_residency *cache = r->meshes[i].gpu.residency;
         if (!cache)
             continue;
+        af_cluster_prune_requests(cache->stream, r->rendered_frames);
         af_cached_cluster_page *slot = NULL;
         for (unsigned j = 0; j < AF_CLUSTER_RESIDENT_PAGES; ++j) {
             af_cached_cluster_page *page = &cache->pages[j];
@@ -62,7 +63,9 @@ static const af_gpu_mesh *select_cluster_page(af_renderer *r, const af_gpu_mesh 
                 return &page->gpu;
             }
         }
-        (void)af_cluster_request_page(cache->stream, region_index);
+        af_vec3 center = af_vec3_scale(af_vec3_add(region->minimum, region->maximum), .5f);
+        float distance = af_mat4_transform(clip, (af_vec4){center.x, center.y, center.z, 1}).w;
+        af_cluster_request_page(cache->stream, region_index, r->rendered_frames, distance);
     }
     *span = (af_cluster_span){region->coarse_first, region->coarse_count};
     return base;

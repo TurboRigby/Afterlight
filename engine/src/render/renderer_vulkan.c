@@ -1315,6 +1315,10 @@ af_cluster_stats af_renderer_cluster_stats(const af_renderer *r) {
         const af_cluster_residency *cache = r->meshes[i].gpu.residency;
         if (!cache)
             continue;
+        stats.queued_requests += af_cluster_request_depth(cache->stream);
+        uint32_t peak = af_cluster_request_peak(cache->stream);
+        if (peak > stats.peak_asset_requests)
+            stats.peak_asset_requests = peak;
         for (unsigned p = 0; p < AF_CLUSTER_RESIDENT_PAGES; ++p) {
             const af_gpu_mesh *gpu = &cache->pages[p].gpu;
             stats.resident_pages += gpu->cluster_count != 0;

@@ -138,7 +138,8 @@ static void verify_stream_frame(af_engine *engine, demo *d) {
            " fine-page bytes\n",
            d->phase, s.page_uploads, s.resident_pages, s.page_evictions, s.page_bytes);
     if (++d->phase == 5) {
-        d->failed = !s.page_evictions;
+        printf("Peak queued page requests: %u\n", s.peak_asset_requests);
+        d->failed = !s.page_evictions || s.peak_asset_requests < 2 || s.peak_asset_requests > AF_CLUSTER_REQUEST_LIMIT;
         af_engine_request_quit(engine);
         return;
     }

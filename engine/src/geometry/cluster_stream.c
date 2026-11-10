@@ -14,11 +14,19 @@
 static const char magic[] = "AFPAGES1";
 _Static_assert(sizeof(af_cluster_stream_region) == 48, "Packed page directory layout");
 
+typedef struct af_page_request {
+    uint64_t frame;
+    float distance;
+    uint32_t index;
+} af_page_request;
+
 struct af_cluster_stream {
     FILE *file;
     af_cluster_stream_region *regions;
     long *offsets;
     uint32_t count, pending;
+    af_page_request requests[AF_CLUSTER_REQUEST_LIMIT];
+    uint32_t queued, peak;
     SDL_Thread *thread;
     SDL_Mutex *mutex;
     SDL_Condition *condition;
@@ -182,15 +190,30 @@ static bool load_directory(af_cluster_stream *s, af_cluster_mesh *coarse) {
     return offset == (uint64_t)size && next == coarse->count;
 }
 
+static bool higher_priority(af_page_request a, af_page_request b) {
+    if (a.frame != b.frame)
+        return a.frame > b.frame;
+    if (a.distance != b.distance)
+        return a.distance < b.distance;
+    return a.index < b.index;
+}
+
 static int read_pages(void *context) {
     af_cluster_stream *s = context;
     SDL_LockMutex(s->mutex);
     while (!s->stopping) {
-        if (!s->busy) {
+        if (!s->queued || s->ready) {
             SDL_WaitCondition(s->condition, s->mutex);
             continue;
         }
-        uint32_t index = s->pending;
+        uint32_t best = 0;
+        for (uint32_t i = 1; i < s->queued; ++i)
+            if (higher_priority(s->requests[i], s->requests[best]))
+                best = i;
+        uint32_t index = s->requests[best].index;
+        s->requests[best] = s->requests[--s->queued];
+        s->pending = index;
+        s->busy = true;
         SDL_UnlockMutex(s->mutex);
         af_cluster_mesh page = {0};
         const af_cluster_stream_region *r = &s->regions[index];
@@ -256,18 +279,56 @@ const af_cluster_stream_region *af_cluster_stream_region_at(const af_cluster_str
     return &s->regions[i];
 }
 
-bool af_cluster_request_page(af_cluster_stream *s, uint32_t index) {
-    if (index >= s->count || !s->regions[index].page_clusters)
-        return false;
+void af_cluster_prune_requests(af_cluster_stream *s, uint64_t frame) {
     SDL_LockMutex(s->mutex);
-    bool started = !s->busy && !s->ready;
-    if (started) {
-        s->pending = index;
-        s->busy = true;
-        SDL_SignalCondition(s->condition);
-    }
+    uint32_t remaining = 0;
+    for (uint32_t i = 0; i < s->queued; ++i)
+        if (frame - s->requests[i].frame <= 2)
+            s->requests[remaining++] = s->requests[i];
+    s->queued = remaining;
     SDL_UnlockMutex(s->mutex);
-    return started;
+}
+
+void af_cluster_request_page(af_cluster_stream *s, uint32_t index, uint64_t frame, float distance) {
+    if (index >= s->count || !s->regions[index].page_clusters)
+        return;
+    af_page_request request = {frame, isfinite(distance) ? distance : INFINITY, index};
+    SDL_LockMutex(s->mutex);
+    if ((s->busy || s->ready) && s->pending == index)
+        goto done;
+    uint32_t worst = 0;
+    for (uint32_t i = 0; i < s->queued; ++i) {
+        if (s->requests[i].index == index) {
+            if (higher_priority(request, s->requests[i]))
+                s->requests[i] = request;
+            goto done;
+        }
+        if (higher_priority(s->requests[worst], s->requests[i]))
+            worst = i;
+    }
+    if (s->queued < AF_CLUSTER_REQUEST_LIMIT) {
+        s->requests[s->queued++] = request;
+        if (s->peak < s->queued)
+            s->peak = s->queued;
+    } else if (higher_priority(request, s->requests[worst]))
+        s->requests[worst] = request;
+    SDL_SignalCondition(s->condition);
+done:
+    SDL_UnlockMutex(s->mutex);
+}
+
+uint32_t af_cluster_request_depth(af_cluster_stream *s) {
+    SDL_LockMutex(s->mutex);
+    uint32_t queued = s->queued;
+    SDL_UnlockMutex(s->mutex);
+    return queued;
+}
+
+uint32_t af_cluster_request_peak(af_cluster_stream *s) {
+    SDL_LockMutex(s->mutex);
+    uint32_t peak = s->peak;
+    SDL_UnlockMutex(s->mutex);
+    return peak;
 }
 
 bool af_cluster_take_page(af_cluster_stream *s, uint32_t *index, af_cluster_mesh *page) {
@@ -278,6 +339,7 @@ bool af_cluster_take_page(af_cluster_stream *s, uint32_t *index, af_cluster_mesh
         *page = s->result;
         s->result = (af_cluster_mesh){0};
         s->ready = false;
+        SDL_SignalCondition(s->condition);
     }
     SDL_UnlockMutex(s->mutex);
     return ready;

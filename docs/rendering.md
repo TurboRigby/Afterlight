@@ -238,3 +238,8 @@ loaded 32 pages while moving the camera, with eight evictions and roughly
 1.6 MB of resident fine-page buffers at its final stop. These checks measure
 triangle counts, image agreement and residency. GPU timings vary by path
 and driver.
+
+Each streamed mesh queues up to 32 fine-page requests. Requests for the
+same page share one entry. The worker prefers regions seen most recently,
+then regions closest to the camera. Requests that leave the view expire
+after two frames. The queue keeps a single completed read ready for upload.

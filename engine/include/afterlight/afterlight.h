@@ -290,6 +290,7 @@ void af_engine_set_prop_instancing(af_engine *, bool enabled);
 typedef struct af_cluster_stats {
     uint64_t candidates, visible, triangles, coarse_regions;
     uint64_t resident_pages, page_bytes, page_uploads, page_evictions, page_failures;
+    uint32_t queued_requests, peak_asset_requests;
     bool gpu_supported, gpu_active;
 } af_cluster_stats;
 bool af_engine_load_cluster_mesh(af_engine *, const char *name, const char *path, af_asset_error *);
