@@ -16,7 +16,7 @@ find_package(SDL3 3.4 CONFIG REQUIRED)
 
 # Compile GLSL into embedded SPIR-V; no runtime paths or shader compiler needed.
 set(afterlight_shader_headers)
-foreach(shader mesh.vert mesh.frag shadow.vert shadow.frag ui.vert ui.frag fullscreen.vert post.frag sky.frag gi_denoise.frag)
+foreach(shader mesh.vert mesh.frag cluster.comp shadow.vert shadow.frag ui.vert ui.frag fullscreen.vert post.frag sky.frag gi_denoise.frag)
     string(REPLACE "." "_" shader_name "${shader}")
     set(shader_source "${CMAKE_CURRENT_SOURCE_DIR}/engine/shaders/${shader}")
     set(shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/${shader_name}.h")

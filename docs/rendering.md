@@ -202,3 +202,9 @@ R resets the camera, C toggles cluster colors, V switches to the regular mesh
 path, and Space prints the cluster counters. The built-in wall is procedural.
 The Vulkan test compares a capture from the regular path with the clustered
 path and checks that the debug view changes the colors.
+
+With Vulkan compute and indexed multi-draw support, the shaded pass generates
+its draw commands on the GPU. Each candidate has a fixed command slot, and
+culled clusters receive a zero index count. The X key switches between GPU
+and CPU culling. The color view uses the CPU path for per-cluster colors.
+GPU visibility and triangle counts are read back after a frame fence signals.

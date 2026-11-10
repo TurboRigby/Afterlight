@@ -1,0 +1,52 @@
+#version 450
+/* SPDX-License-Identifier: MPL-2.0 */
+
+layout(local_size_x = 64) in;
+
+struct Candidate {
+    vec3 minimum;
+    uint first_index;
+    vec3 maximum;
+    uint index_count;
+    uvec4 object;
+};
+struct IndexedDraw {
+    uint index_count;
+    uint instance_count;
+    uint first_index;
+    int vertex_offset;
+    uint first_instance;
+};
+layout(std430, set = 0, binding = 0) readonly buffer Candidates { Candidate candidates[]; };
+layout(std430, set = 0, binding = 1) readonly buffer Transforms { mat4 clips[]; };
+layout(std430, set = 0, binding = 2) buffer Draws { IndexedDraw draws[]; };
+layout(push_constant) uniform Dispatch { uint count; uint cull; } dispatch;
+
+bool visible(Candidate cluster) {
+    mat4 clip = clips[cluster.object.x];
+    uint outside = 63;
+    for (uint i = 0; i < 8; ++i) {
+        vec3 p = vec3((i & 1) == 0 ? cluster.minimum.x : cluster.maximum.x,
+                      (i & 2) == 0 ? cluster.minimum.y : cluster.maximum.y,
+                      (i & 4) == 0 ? cluster.minimum.z : cluster.maximum.z);
+        vec4 q = clip * vec4(p, 1);
+        uint sides = (q.x < -q.w ? 1u : 0u) | (q.x > q.w ? 2u : 0u) |
+                     (q.y < -q.w ? 4u : 0u) | (q.y > q.w ? 8u : 0u) |
+                     (q.z < 0 ? 16u : 0u) | (q.z > q.w ? 32u : 0u);
+        outside &= sides;
+    }
+    return outside == 0;
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= dispatch.count)
+        return;
+    Candidate cluster = candidates[index];
+    uint indices = dispatch.cull == 0 || visible(cluster) ? cluster.index_count : 0;
+    draws[index] = IndexedDraw(indices, 1, cluster.first_index, 0, cluster.object.x);
+    if (indices != 0) {
+        atomicAdd(draws[dispatch.count].index_count, indices / 3);
+        atomicAdd(draws[dispatch.count].instance_count, 1);
+    }
+}

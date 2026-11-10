@@ -27,6 +27,7 @@
 #include <stdatomic.h>
 #include <stddef.h>
 #include "mesh_vert.h"
+#include "cluster_comp.h"
 #include "mesh_frag.h"
 #include "mesh_ray_frag.h"
 #define af_fullscreen_vert af_sky_vertex
@@ -151,12 +152,26 @@ typedef struct af_texture_asset {
     bool normal;
 } af_texture_asset;
 
+typedef struct af_cluster_candidate {
+    af_cluster bounds;
+    uint32_t object[4];
+} af_cluster_candidate;
+_Static_assert(sizeof(af_cluster_candidate) == 48, "std430 cluster candidate");
+_Static_assert(sizeof(VkDrawIndexedIndirectCommand) == 20, "std430 indexed indirect command");
+
+typedef struct af_cluster_span {
+    uint32_t first, count;
+} af_cluster_span;
+
 typedef struct af_frame {
     VkCommandBuffer command;
     VkSemaphore acquired;
     VkFence fence;
     af_gpu_buffer uniform, skin_buffer, motion_buffer, morph_buffer;
     VkDescriptorSet descriptor;
+    af_gpu_buffer cluster_input, cluster_transforms, cluster_output;
+    VkDescriptorSet cluster_descriptor;
+    uint32_t cluster_submitted;
     VkQueryPool timestamps;
     bool timestamp_submitted;
     uint64_t shadow_signatures[4], local_shadow_signatures[24];
@@ -323,6 +338,16 @@ struct af_renderer {
     bool culling_disabled, prop_instancing_disabled;
     bool clusters_disabled, cluster_colors;
     af_cluster_stats cluster_stats;
+    bool cluster_gpu_supported, cluster_gpu_disabled;
+    uint32_t cluster_draw_limit, cluster_gpu_visible, cluster_gpu_triangles;
+    VkDescriptorSetLayout cluster_layout;
+    VkDescriptorPool cluster_pool;
+    VkPipelineLayout cluster_pipeline_layout;
+    VkPipeline cluster_pipeline;
+    af_cluster_candidate *cluster_candidates;
+    af_mat4 *cluster_matrices;
+    af_cluster_span *cluster_spans;
+    size_t cluster_object_capacity;
     size_t visible_objects, culled_objects;
     double gpu_budget_ms;
     uint64_t gpu_budget_bytes;
@@ -644,6 +669,7 @@ static bool create_device(af_renderer *renderer, af_extensions *startup) {
         return false;
     vkGetPhysicalDeviceQueueFamilyProperties(renderer->physical_device, &queue_families, queue_properties);
     renderer->timestamp_bits = queue_properties[renderer->graphics_family].timestampValidBits;
+    bool graphics_compute = (queue_properties[renderer->graphics_family].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
     free(queue_properties);
     renderer->timestamp_period = selected_properties.limits.timestampPeriod;
     float priority = 1.0f;
@@ -702,6 +728,10 @@ static bool create_device(af_renderer *renderer, af_extensions *startup) {
     vkGetPhysicalDeviceFeatures(renderer->physical_device, &supported);
     VkPhysicalDeviceFeatures enabled = {.samplerAnisotropy = supported.samplerAnisotropy,
                                         .independentBlend = supported.independentBlend};
+    renderer->cluster_draw_limit = selected_properties.limits.maxDrawIndirectCount;
+    renderer->cluster_gpu_supported = graphics_compute && supported.multiDrawIndirect &&
+                                      supported.drawIndirectFirstInstance && renderer->cluster_draw_limit > 1;
+    enabled.multiDrawIndirect = enabled.drawIndirectFirstInstance = renderer->cluster_gpu_supported;
     renderer->temporal_supported = supported.independentBlend != 0;
     if (!renderer->temporal_supported)
         af_log("info", "TAA requires independent attachment blending; TAA scenes will use FXAA on this device.");
@@ -1193,8 +1223,14 @@ void af_renderer_set_cluster_rendering(af_renderer *r, bool enabled, bool debug_
     r->cluster_colors = debug_colors;
 }
 
+void af_renderer_set_cluster_gpu_culling(af_renderer *r, bool enabled) {
+    r->cluster_gpu_disabled = !enabled;
+}
+
 af_cluster_stats af_renderer_cluster_stats(const af_renderer *r) {
-    return r->cluster_stats;
+    af_cluster_stats stats = r->cluster_stats;
+    stats.gpu_supported = r->cluster_gpu_supported;
+    return stats;
 }
 
 bool af_renderer_remove_mesh(af_renderer *renderer, const char *name) {
@@ -2040,12 +2076,15 @@ fail:
     return NULL;
 }
 
+static void destroy_cluster_compute(af_renderer *r);
+
 void af_renderer_destroy(af_renderer *renderer) {
     if (!renderer)
         return;
     if (renderer->device) {
         (void)vk_ok(vkDeviceWaitIdle(renderer->device), "vkDeviceWaitIdle during shutdown");
         destroy_swapchain(renderer);
+        destroy_cluster_compute(renderer);
         af_vk_ray_query_destroy(renderer->rays);
         destroy_buffer(renderer, &renderer->capture_buffer);
         af_vk_ui_destroy(renderer->ui);
@@ -3031,6 +3070,8 @@ static void bind_scene_material(af_renderer *r, af_frame *frame, const af_materi
     }
 }
 
+#include "cluster_compute_vulkan.h"
+
 static size_t draw_clusters(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
                             af_mat4 visibility, uint32_t object) {
     size_t draws = 0;
@@ -3504,7 +3545,6 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                                                      : (renderer->swapchain.resource_config & AF_RESOURCE_MOTION) ? 3u
                                                                                                                   : 2u,
                                   .pClearValues = clears};
-    vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
     af_mat4 visibility_projection = uniform.unjittered_view_projection;
     float visible_width = uniform.water_screen.x * (uniform.water_viewport.z - uniform.water_viewport.x),
           visible_height = uniform.water_screen.y * (uniform.water_viewport.w - uniform.water_viewport.y);
@@ -3515,6 +3555,8 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     size_t draw_calls = 0, missing_meshes = 0;
     renderer->visible_objects = renderer->culled_objects = 0;
     renderer->cluster_stats = (af_cluster_stats){0};
+    bool cluster_indirect = prepare_cluster_commands(renderer, frame, scene, visibility_projection, object_count);
+    vkCmdBeginRenderPass(frame->command, &pass, VK_SUBPASS_CONTENTS_INLINE);
     bool gi_denoised = false;
     const af_landscape *scene_ls = scene ? af_scene_get_landscape(scene) : NULL;
     bool has_landscape = scene_ls && scene_ls->enabled && scene_ls->chunk_count > 0;
@@ -3729,7 +3771,9 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
                 } else
                     vkCmdBindPipeline(frame->command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                       alpha_pass ? renderer->swapchain.blend_pipeline : renderer->swapchain.pipeline);
-                if (clustered)
+                if (clustered && cluster_indirect && renderer->cluster_spans[i].count)
+                    draw_calls += draw_cluster_commands(renderer, frame, renderer->cluster_spans[i]);
+                else if (clustered)
                     draw_calls += draw_clusters(renderer, frame, mesh, transform, visibility_projection, (uint32_t)i);
                 else {
                     vkCmdDrawIndexed(frame->command, mesh->index_count, 1, 0, 0, (uint32_t)i);
@@ -4154,7 +4198,9 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer) {
     }
     for (unsigned f = 0; f < AF_FRAMES_IN_FLIGHT; ++f)
         other += renderer->frames[f].uniform.allocation_bytes + renderer->frames[f].skin_buffer.allocation_bytes +
-                 renderer->frames[f].motion_buffer.allocation_bytes + renderer->frames[f].morph_buffer.allocation_bytes;
+                 renderer->frames[f].motion_buffer.allocation_bytes + renderer->frames[f].morph_buffer.allocation_bytes +
+                 renderer->frames[f].cluster_input.allocation_bytes + renderer->frames[f].cluster_transforms.allocation_bytes +
+                 renderer->frames[f].cluster_output.allocation_bytes;
     for (uint32_t i = 0; i < renderer->swapchain.image_count; ++i)
         other += renderer->swapchain.depths[i].allocation_bytes;
     af_vk_texture *fixed[] = {renderer->white, renderer->flat_normal, renderer->environment, renderer->irradiance,
