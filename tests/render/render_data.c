@@ -220,6 +220,14 @@ int main(int argc, char **argv) {
     cJSON *v23 = cJSON_Duplicate(root, 1);
     cJSON_SetNumberValue(cJSON_GetObjectItemCaseSensitive(v23, "version"), 23);
     cJSON_DeleteItemFromObjectCaseSensitive(v23, "landscape");
+    cJSON_DeleteItemFromObjectCaseSensitive(v23, "blueprints");
+    cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(v23, "light"), "angular_radius");
+    cJSON *v23object;
+    cJSON_ArrayForEach(v23object, cJSON_GetObjectItemCaseSensitive(v23, "objects")) {
+        cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(v23object, "material"), "ior");
+    }
+    cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(v23, "render"),
+                                            "ray_traced_material_effects");
     cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(v23, "render"), "ray_traced_shadows");
     cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(v23, "render"),
                                             "ray_traced_water_reflections");
@@ -296,6 +304,8 @@ int main(int argc, char **argv) {
     CHECK(rejects(bad));
     cJSON *v8 = cJSON_Duplicate(root, 1);
     cJSON_DeleteItemFromObjectCaseSensitive(v8, "landscape");
+    cJSON_DeleteItemFromObjectCaseSensitive(v8, "blueprints");
+    cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(v8, "light"), "angular_radius");
     cJSON_DeleteItemFromObjectCaseSensitive(v8, "wind");
     cJSON_DeleteItemFromObjectCaseSensitive(v8, "water");
     cJSON_DeleteItemFromObjectCaseSensitive(v8, "collider_parts");
@@ -304,6 +314,7 @@ int main(int argc, char **argv) {
     cJSON_DeleteItemFromObjectCaseSensitive(v8, "next_joint");
     cJSON_SetNumberValue(cJSON_GetObjectItemCaseSensitive(v8, "version"), 8);
     cJSON *v8render = cJSON_GetObjectItemCaseSensitive(v8, "render");
+    cJSON_DeleteItemFromObjectCaseSensitive(v8render, "ray_traced_material_effects");
     cJSON_DeleteItemFromObjectCaseSensitive(v8render, "ray_traced_shadows");
     cJSON_DeleteItemFromObjectCaseSensitive(v8render, "ray_traced_water_reflections");
     cJSON_DeleteItemFromObjectCaseSensitive(v8render, "anti_aliasing");
@@ -324,6 +335,7 @@ int main(int argc, char **argv) {
         cJSON *legacy_material = cJSON_GetObjectItemCaseSensitive(v8object, "material");
         cJSON_DeleteItemFromObjectCaseSensitive(legacy_material, "alpha_mode");
         cJSON_DeleteItemFromObjectCaseSensitive(legacy_material, "alpha_cutoff");
+        cJSON_DeleteItemFromObjectCaseSensitive(legacy_material, "ior");
     }
     cJSON *old_assets = cJSON_GetObjectItemCaseSensitive(v8, "assets");
     for (int i = cJSON_GetArraySize(old_assets) - 1; i >= 0; --i)

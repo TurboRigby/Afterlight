@@ -106,7 +106,10 @@ int main(void) {
     cJSON_SetNumberValue(cJSON_GetObjectItemCaseSensitive(root, "version"), 21);
     cJSON_DeleteItemFromObjectCaseSensitive(root, "wind");
     cJSON_DeleteItemFromObjectCaseSensitive(root, "landscape");
+    cJSON_DeleteItemFromObjectCaseSensitive(root, "blueprints");
+    cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(root, "light"), "angular_radius");
     cJSON *legacy_render = cJSON_GetObjectItemCaseSensitive(root, "render");
+    cJSON_DeleteItemFromObjectCaseSensitive(legacy_render, "ray_traced_material_effects");
     cJSON_DeleteItemFromObjectCaseSensitive(legacy_render, "ray_traced_shadows");
     cJSON_DeleteItemFromObjectCaseSensitive(legacy_render, "ray_traced_water_reflections");
     cJSON_DeleteItemFromObjectCaseSensitive(legacy_render, "anti_aliasing");
@@ -115,6 +118,10 @@ int main(void) {
     cJSON *w = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(root, "water"), 0);
     cJSON_DeleteItemFromObjectCaseSensitive(w, "ripple_scale");
     cJSON_DeleteItemFromObjectCaseSensitive(w, "ripple_strength");
+    cJSON *legacy_object;
+    cJSON_ArrayForEach(legacy_object, cJSON_GetObjectItemCaseSensitive(root, "objects")) {
+        cJSON_DeleteItemFromObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(legacy_object, "material"), "ior");
+    }
     char *legacy = cJSON_Print(root);
     f = fopen("wind-legacy.json", "wb");
     CHECK(f && legacy && fputs(legacy, f) >= 0 && fclose(f) == 0);
