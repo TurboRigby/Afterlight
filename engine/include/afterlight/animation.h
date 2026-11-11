@@ -68,6 +68,16 @@ typedef struct af_animation_file {
     size_t skin_count;
 } af_animation_file;
 bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_error *error);
+/* Native .afanim assets retain the rig, skins, clips, morph tracks and events. */
+bool af_animation_file_save(const char *path, const af_animation_file *file, af_asset_error *error);
+bool af_animation_file_copy(const af_animation_file *source, af_animation_file *out, af_asset_error *error);
+bool af_animation_file_validate(const af_animation_file *file);
+bool af_animation_pose_valid(const af_animation_pose *pose);
+/* Editing keeps channels sorted. A new channel starts at the bind pose at zero. */
+bool af_animation_clip_add(af_animation_file *file, const char *name, double duration);
+bool af_animation_key_set(af_animation_file *file, size_t clip, uint32_t node, af_animation_path path, float time,
+                          af_vec4 value, af_animation_interpolation interpolation);
+bool af_animation_key_remove(af_animation_file *file, size_t clip, uint32_t node, af_animation_path path, float time);
 void af_animation_file_free(af_animation_file *file);
 /* Output has file->node_count entries. Time clamps per channel. */
 bool af_animation_sample(const af_animation_file *file, size_t clip, double time, af_animation_pose *out,

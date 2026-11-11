@@ -53,6 +53,8 @@ target_include_directories(afterlight_image PRIVATE third_party/stb)
 add_library(afterlight STATIC
     ${afterlight_shader_headers}
     engine/src/animation/animation.c
+    engine/src/animation/animation_asset.c
+    engine/src/animation/animation_edit.c
     engine/src/animation/animation_player.c
     engine/src/animation/animation_events.c
     engine/src/animation/animation_runtime.c
@@ -1241,6 +1243,14 @@ if(BUILD_TESTING)
     afterlight_warnings(afterlight_animation_scene_test)
     add_test(NAME afterlight.animation_scene COMMAND afterlight_animation_scene_test "${PROJECT_SOURCE_DIR}/tests/assets/animated.gltf" "${PROJECT_SOURCE_DIR}/tests/assets/skinned.gltf")
     set_tests_properties(afterlight.animation_scene PROPERTIES TIMEOUT 60 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_executable(afterlight_animation_authoring_test tests/animation/animation_authoring.c)
+    target_include_directories(afterlight_animation_authoring_test PRIVATE engine/src)
+    target_link_libraries(afterlight_animation_authoring_test PRIVATE afterlight_editor_document)
+    afterlight_warnings(afterlight_animation_authoring_test)
+    add_test(NAME afterlight.animation_authoring COMMAND afterlight_animation_authoring_test
+        "${PROJECT_SOURCE_DIR}/tests/assets/skinned.gltf" "${PROJECT_SOURCE_DIR}/tests/assets/animated.gltf"
+        "${PROJECT_SOURCE_DIR}/tests/assets/morph.gltf")
+    set_tests_properties(afterlight.animation_authoring PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/animation-tests")
     add_executable(afterlight_animation_runtime_test tests/animation/animation_runtime.c)
     target_include_directories(afterlight_animation_runtime_test PRIVATE engine/src)
     target_link_libraries(afterlight_animation_runtime_test PRIVATE afterlight_editor_document SDL3::SDL3)

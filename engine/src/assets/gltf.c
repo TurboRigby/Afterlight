@@ -1081,7 +1081,7 @@ static bool load_events(const cgltf_animation *a, af_animation_clip *clip) {
     cJSON_Delete(json);
     return ok;
 }
-bool af_animation_file_load(const char *path, af_animation_file *out, af_asset_error *error) {
+bool af_animation_gltf_load(const char *path, af_animation_file *out, af_asset_error *error) {
     if (error)
         *error = (af_asset_error){0};
     if (out)
