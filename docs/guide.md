@@ -72,6 +72,11 @@ Select the character's imported model and open **Animation clips** to see its
 posed skeleton, state, weights, phase and events. `run_character-stress_editor`
 opens the 64-character scene. See [0.11 workflow and limits](development-011.md).
 
+To author a clip in the editor, select a rigged model and click **Author skeletal
+clips**. Pose bones, record keys on the timeline and save a native `.afanim` asset.
+The source model can have a skin without any animation clips. See
+[skeletal animation authoring](editor.md#skeletal-animation-authoring).
+
 The earlier [animation demos](development-010.md) remain available through
 `run_mechanism_editor` and `run_animation_editor`, and the
 [Lighting Lab](assets-09.md) through `run_lighting_editor`.

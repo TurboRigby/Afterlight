@@ -160,7 +160,7 @@ bool af_animation_key_remove(af_animation_file *f, size_t index, uint32_t node, 
     af_animation_clip *clip = &f->clips[index];
     for (size_t i = 0; i < clip->channel_count; ++i) {
         af_animation_channel *c = &clip->channels[i];
-        if (c->node != node || c->path != path || c->interpolation == AF_ANIM_CUBIC)
+        if (c->node != node || c->path != path)
             continue;
         size_t key = 0;
         while (key < c->key_count && c->times[key] != time)
@@ -169,7 +169,13 @@ bool af_animation_key_remove(af_animation_file *f, size_t index, uint32_t node, 
             return false;
         --c->key_count;
         memmove(c->times + key, c->times + key + 1, (c->key_count - key) * sizeof(float));
-        memmove(c->values + key, c->values + key + 1, (c->key_count - key) * sizeof(af_vec4));
+        size_t stride = c->interpolation == AF_ANIM_CUBIC ? 3u : 1u;
+        memmove(c->values + key * stride, c->values + (key + 1) * stride,
+                (c->key_count - key) * stride * sizeof(af_vec4));
+        if (stride == 3 && c->key_count == 1) {
+            c->values[0] = c->values[1];
+            c->interpolation = AF_ANIM_LINEAR;
+        }
         if (!c->key_count) {
             free(c->times);
             free(c->values);

@@ -553,3 +553,107 @@ void smoke(editor *app) {
     if (app->updates == 171)
         app->failed |= app->modal || af_scene_object_count(d->scene) != 0 || ed_document_dirty(d);
 }
+
+void animation_authoring_smoke(editor *app) {
+    /* Leave a release frame between simulated button presses. */
+    if (app->updates < 8 || app->updates % 2)
+        return;
+    if (!(SDL_GetWindowFlags(af_engine_sdl_window(app->engine)) & SDL_WINDOW_INPUT_FOCUS)) {
+        SDL_RaiseWindow(af_engine_sdl_window(app->engine));
+        return;
+    }
+    ed_animation_editor *e = &app->animation_author;
+    int click = -1;
+    switch (app->animation_test_step++) {
+    case 0:
+        SMOKE_CHECK(app, e->open && nk_window_find(&app->gui.context, "Skeletal animation") &&
+                             nk_window_find(&app->gui.context, "Rig bones") && e->file.skin_count == 1);
+        click = 0;
+        break;
+    case 1:
+        SMOKE_CHECK(app, e->file.clip_count == 2 && e->clip == 1);
+        e->time = 1;
+        ed_animation_editor_sample(e);
+        ed_animation_editor_select(e, 2);
+        e->poses[2].translation.x = .5f;
+        e->poses[2].rotation = af_quaternion_from_euler((af_vec3){0, 0, .6f});
+        e->pose_dirty = true;
+        ed_animation_editor_select(e, 2);
+        click = 1;
+        break;
+    case 2:
+        SMOKE_CHECK(app, !e->pose_dirty && e->file.clips[1].channel_count == 3);
+        SMOKE_CHECK(app, app->document.revision == app->animation_test_revision);
+        click = 4;
+        break;
+    case 3:
+        SMOKE_CHECK(app, e->file.clips[1].channel_count == 0);
+        click = 5;
+        break;
+    case 4:
+        SMOKE_CHECK(app, e->file.clips[1].channel_count == 3);
+        e->time = .5f;
+        ed_animation_editor_sample(e);
+        SMOKE_CHECK(app, fabsf(e->poses[2].translation.x - .25f) < .0001f);
+        snprintf(e->path, sizeof(e->path), "editor-authoring.afanim");
+        click = 2;
+        break;
+    case 5: {
+        SMOKE_CHECK(app, !ed_animation_editor_dirty(e) && e->path[0] &&
+                             app->document.revision > app->animation_test_revision);
+        const af_scene_object *root = af_scene_get_object(app->document.scene, e->root);
+        SMOKE_CHECK(app, root && !strncmp(root->animation.asset, "authored_", 9));
+        click = 3;
+        break;
+    }
+    case 6:
+        SMOKE_CHECK(app, e->playing);
+        click = 3;
+        break;
+    case 7:
+        SMOKE_CHECK(app, !e->playing);
+        click = 7;
+        break;
+    case 8:
+        SMOKE_CHECK(app, !e->open);
+        toggle_play(app);
+        SMOKE_CHECK(app, app->runtime.playing && af_engine_animation_play(app->engine, app->animation_target, 1, 0));
+        SMOKE_CHECK(app, af_engine_animation_pause(app->engine, app->animation_target, true) &&
+                             af_engine_animation_seek(app->engine, app->animation_target, .5));
+        break;
+    case 9: {
+        af_object_id tip = 0;
+        for (size_t i = 0; i < af_scene_object_count(app->runtime.scene); ++i) {
+            const af_scene_object *object = af_scene_object_at(app->runtime.scene, i);
+            if (object->model.root == app->animation_target && !object->model.primitive && object->model.node == 2)
+                tip = object->id;
+        }
+        af_mat4 world, root_world, inverse;
+        SMOKE_CHECK(app, tip && af_engine_animated_world_matrix(app->engine, tip, &world) &&
+                             af_engine_animated_world_matrix(app->engine, app->animation_target, &root_world) &&
+                             af_mat4_inverse(root_world, &inverse));
+        if (!app->failed) {
+            af_mat4 local = af_mat4_mul(inverse, world);
+            SMOKE_CHECK(app, fabsf(local.elements[12] - .25f) < .0001f);
+        }
+        stop_play(app);
+        if (!app->failed)
+            puts("Editor skeletal authoring: New clip, Record, Undo/Redo, native Save, Play/Pause, Close and game "
+                 "playback "
+                 "passed.");
+        af_engine_request_quit(app->engine);
+        return;
+    }
+    default:
+        break;
+    }
+    if (app->failed) {
+        af_engine_request_quit(app->engine);
+        return;
+    }
+    if (click >= 0) {
+        nk_window_set_focus(&app->gui.context, click == 1 ? "Bone pose" : "Skeletal animation");
+        af_rect bounds = app->author_buttons[click];
+        smoke_click(app, bounds.x + bounds.width * .5f, bounds.y + bounds.height * .5f);
+    }
+}

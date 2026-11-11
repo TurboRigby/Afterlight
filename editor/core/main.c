@@ -33,6 +33,10 @@ static bool should_close(af_engine *engine, void *userdata) {
     if (app->dialog || app->tool_process)
         return false;
     stop_play(app);
+    if (app->animation_author.open && ed_animation_editor_dirty(&app->animation_author)) {
+        request_animation_close(app, ED_CLOSE);
+        return false;
+    }
     if (!app->document_ready || !ed_document_dirty(&app->document))
         return true;
     app->pending = ED_CLOSE;
@@ -68,22 +72,34 @@ static void keyboard(editor *app, double delta) {
         }
         if (af_engine_key_pressed(engine, AF_KEY_O))
             request_action(app, ED_OPEN);
-        if (af_engine_key_pressed(engine, AF_KEY_S))
-            save_document(app, shift, ED_NONE);
+        if (af_engine_key_pressed(engine, AF_KEY_S)) {
+            if (app->animation_author.open) {
+                if (shift)
+                    save_authored_animation_as(app);
+                else
+                    save_authored_animation(app, NULL);
+            } else
+                save_document(app, shift, ED_NONE);
+        }
     }
     if (modifier && !app->fields_active && !app->runtime.playing) {
         if (af_engine_key_pressed(engine, AF_KEY_Z)) {
-            if (shift)
+            if (app->animation_author.open)
+                ed_animation_editor_undo(&app->animation_author, shift);
+            else if (shift)
                 ed_document_redo(&app->document);
             else
                 ed_document_undo(&app->document);
             refresh(app);
         }
         if (af_engine_key_pressed(engine, AF_KEY_Y)) {
-            ed_document_redo(&app->document);
+            if (app->animation_author.open)
+                ed_animation_editor_undo(&app->animation_author, true);
+            else
+                ed_document_redo(&app->document);
             refresh(app);
         }
-        if (af_engine_key_pressed(engine, AF_KEY_D)) {
+        if (!app->animation_author.open && af_engine_key_pressed(engine, AF_KEY_D)) {
             if (app->light_selected && app->selected_light < af_scene_local_light_count(app->document.scene)) {
                 af_local_light dup = *af_scene_local_light_at(app->document.scene, app->selected_light);
                 dup.position.x += 1.0f;
@@ -102,7 +118,9 @@ static void keyboard(editor *app, double delta) {
         }
     }
     if (!app->runtime.playing && !app->fields_active && !modifier && af_engine_key_pressed(engine, AF_KEY_DELETE)) {
-        if (app->light_selected && app->selected_light < af_scene_local_light_count(app->document.scene)) {
+        if (app->animation_author.open) {
+            ed_animation_editor_delete_key(&app->animation_author);
+        } else if (app->light_selected && app->selected_light < af_scene_local_light_count(app->document.scene)) {
             ed_document_remove_light(&app->document, app->selected_light);
             app->light_selected = false;
             app->gizmo.dragging = false;
@@ -184,7 +202,7 @@ static void keyboard(editor *app, double delta) {
 
     if (app->landscape_mode) {
         landscape_update_stroke(app, delta, mouse, shift);
-    } else if (!app->blueprint_mode) {
+    } else if (!app->blueprint_mode && !app->animation_author.open) {
         if (!app->runtime.playing && inside(app->viewport, mouse) && af_engine_mouse_pressed(engine, AF_MOUSE_LEFT) &&
             !af_engine_mouse_captured(engine)) {
             ed_gui_unfocus(&app->gui);
@@ -232,6 +250,12 @@ static void keyboard(editor *app, double delta) {
         app->fields_active = false;
     }
 
+    if (app->animation_author.open && !app->runtime.playing) {
+        bool dragging = app->gizmo.dragging;
+        animation_bone_input(app);
+        if (dragging || app->gizmo.dragging)
+            return;
+    }
     if (app->gizmo.dragging && app->edit_part) {
         if (af_engine_key_pressed(engine, AF_KEY_ESCAPE)) {
             if (app->document.revision != app->part_drag_revision)
@@ -354,12 +378,14 @@ static void build_ui(editor *app, float width, float height) {
                                   app->runtime.playing ? app->runtime.scene : app->document.scene, app->viewport,
                                   app->runtime.playing);
     }
-    if (!app->animation_preview && !app->landscape_mode && !app->blueprint_mode)
+    if ((!app->animation_preview || app->animation_author.open) && !app->landscape_mode && !app->blueprint_mode)
         draw_gizmo(app);
     toolbar(app, width);
     if (!app->runtime.playing || !app->maximize_play) {
-        object_list(app, height);
-        inspector(app, width, height);
+        if (!app->animation_author.open || app->runtime.playing) {
+            object_list(app, height);
+            inspector(app, width, height);
+        }
         draw_splitters(app, width, height);
     }
     nk_style_push_vec2(context, &context->style.window.padding, nk_vec2(14, 5));
@@ -425,6 +451,7 @@ static void build_ui(editor *app, float width, float height) {
     environment_panel(app, width, height);
     post_processing_panel(app, width, height);
     animation_panel(app, width, height);
+    animation_author_panel(app, width, height);
     input_panel(app);
     prefab_panel(app);
     if (app->modal) {
@@ -530,6 +557,8 @@ static bool init(af_engine *engine, void *userdata) {
     reset_camera(app);
     refresh(app);
     af_engine_set_scene(engine, app->document.scene);
+    if (app->animation_authoring_test)
+        start_animation_authoring(app);
     af_engine_set_clear_color(engine, (af_color){0.018f, 0.022f, 0.033f, 1});
     return true;
 }
@@ -622,6 +651,8 @@ static void update(af_engine *engine, double delta, void *userdata) {
             ? (af_rect){0, 64, width, fmaxf(1, height - 96)}
             : (af_rect){app->left_sidebar_width, 104,
                         fmaxf(1, width - app->left_sidebar_width - app->right_sidebar_width), fmaxf(1, height - 136)};
+    if (app->animation_author.open && !app->runtime.playing)
+        app->viewport.height = fmaxf(1, app->viewport.height - 244);
     af_engine_set_viewport(engine, &app->viewport);
     const af_scene_object *selected = af_scene_get_object(app->document.scene, app->document.selection);
     const af_joint *editing = af_scene_get_joint(app->document.scene, app->edit_joint);
@@ -670,6 +701,8 @@ static void update(af_engine *engine, double delta, void *userdata) {
             app->gizmo.projected = false;
     } else
         app->gizmo.projected = false;
+    if (app->animation_author.open && !app->runtime.playing)
+        project_animation_bone(app);
     if (app->watch_assets) {
         unsigned before = af_asset_watch_get_stats(app->asset_watch).reloads;
         af_asset_error message;
@@ -694,11 +727,15 @@ static void update(af_engine *engine, double delta, void *userdata) {
         set_status(app, app->runtime.status);
     }
     light_tools_smoke(app);
-    animation_tools_smoke(app);
+    if (app->animation_authoring_test)
+        animation_authoring_smoke(app);
+    else
+        animation_tools_smoke(app);
     af_scene *display = ed_blueprint_preview(&app->blueprint_state, engine,
                                              app->runtime.playing ? app->runtime.scene : app->document.scene,
                                              app->document.revision, app->blueprint_mode && !app->runtime.playing);
     af_engine_set_scene(engine, display);
+    update_animation_authoring(app, delta);
     af_engine_set_animation_playback(engine, app->runtime.playing || app->animation_preview,
                                      !app->runtime.playing && app->animation_preview);
     af_engine_highlight_object(engine, app->runtime.playing ? AF_OBJECT_NONE : app->document.selection);
@@ -742,6 +779,9 @@ static void shutdown(af_engine *engine, void *userdata) {
     if (app->tool_process)
         SDL_DestroyProcess(app->tool_process);
     af_engine_set_scene(engine, NULL);
+    ed_animation_editor_destroy(&app->animation_author);
+    if (app->animation_authoring_test)
+        remove("editor-authoring.afanim");
     af_scene_destroy(app->blueprint_state.preview_scene);
     af_engine_set_overlay(engine, NULL);
     ed_runtime_stop(&app->runtime);
@@ -800,6 +840,11 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--wizard-test") && i + 1 < argc) {
             app.wizard_test = true;
             snprintf(app.wizard_folder, sizeof(app.wizard_folder), "%s-%" PRIu64, argv[++i], SDL_GetTicksNS());
+            if (!app.frame_limit)
+                app.frame_limit = 600;
+        } else if (!strcmp(argv[i], "--animation-authoring-test") && i + 1 < argc) {
+            app.animation_test_path = argv[++i];
+            app.animation_authoring_test = true;
             if (!app.frame_limit)
                 app.frame_limit = 600;
         } else if (!strcmp(argv[i], "--animation-tools-test") && i + 1 < argc) {

@@ -160,6 +160,10 @@ void request_action(editor *app, ed_action action) {
     if (app->dialog || app->modal || app->tool_process)
         return;
     stop_play(app);
+    if (app->animation_author.open) {
+        request_animation_close(app, action);
+        return;
+    }
     ed_document_end_edit(&app->document);
     if (ed_document_dirty(&app->document)) {
         app->pending = action;
@@ -206,7 +210,10 @@ void poll_dialog(editor *app) {
     const char *extension = strrchr(path, '.');
     bool open_project_file =
         !app->dialog_asset && !app->dialog_save && extension && SDL_strcasecmp(extension, ".project") == 0;
-    if (app->dialog_asset == ED_DIALOG_EXTENSION) {
+    if (app->dialog_asset == 40) {
+        app->dialog_asset = 0;
+        save_authored_animation(app, path);
+    } else if (app->dialog_asset == ED_DIALOG_EXTENSION) {
         bool loaded = af_engine_load_extension(app->engine, path);
         af_extension_info info;
         if (loaded && af_engine_get_extension(app->engine, af_engine_extension_count(app->engine) - 1, &info) &&

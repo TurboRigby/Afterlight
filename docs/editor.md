@@ -289,6 +289,39 @@ Exposure and tone mapping affect the scene while leaving editor UI readable.
 Local and emissive lights keep their own settings. Changes in Edit support
 Undo/Redo and Save; adjustments during Play are temporary and reset on Stop.
 
+## Skeletal animation authoring
+
+Select an imported rigged model or one of its children and click **Author skeletal
+clips** in the Inspector. A model with a skin can start from its bind pose even
+when its source contains no animation clips.
+
+The workspace shows the rig hierarchy on the left, a bone Inspector on the right,
+and a clip timeline below the viewport. Select a bone in the hierarchy or click
+its joint in the viewport. Use **Move**, **Rotate** or **Scale**, or edit the local
+bone fields. Rotation fields use degrees. Choose **New clip**, set the playhead,
+pose the bones, then click **Record pose**. Recording keeps edits to multiple bones
+at the same time. New channels receive a bind-pose key at zero. Recorded channels
+use linear translation/scale and quaternion SLERP, or **Step** interpolation.
+
+Click key markers to select their exact time. **Delete key** removes the selected
+bone's transform keys at the playhead. **Play clip**, **Pause** and **Loop** preview
+the result. Undo/Redo apply to the animation draft, including clip creation,
+recording and key deletion. Unrecorded pose edits can be reverted before changing
+keys. Preview uses a separate pose for the selected model instance.
+
+**Save clips** writes a native `.afanim` asset and assigns the selected clip to the
+model. **Save As** creates a separate asset. Save the scene to persist the model's
+animation binding. Use **Animation clips** after closing the workspace to configure
+**Autoplay in game**, speed and looping. The saved native clips work with gameplay
+playback, blending and root motion. Export includes the animation asset.
+
+Native assets contain the rig, inverse binds, clips, morph channels and events.
+They use a versioned binary representation with explicit integer/float encoding.
+Writes replace the destination only after the complete asset is written. The
+editor prompts to save or discard an animation draft before closing its workspace
+or changing scenes. Scene undo restores asset bindings, and animation undo edits
+the draft. Save the draft again to persist an animation undo.
+
 ## Story interactions and dialogue
 
 Select a scene object and open **Edit Interactable Blueprint** under

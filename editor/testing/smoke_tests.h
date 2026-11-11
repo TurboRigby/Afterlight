@@ -17,6 +17,7 @@ void smoke_click(editor *app, float x, float y);
 void smoke_button(editor *app, Uint8 button, bool down);
 void smoke_key(editor *app, SDL_Scancode key);
 void animation_tools_smoke(editor *app);
+void animation_authoring_smoke(editor *app);
 void light_tools_smoke(editor *app);
 void play_controls_smoke(editor *app);
 void smoke(editor *app);

@@ -26,6 +26,7 @@
 #include "ui/play_hud.h"
 #include "ui/dialog.h"
 #include "tools/blueprint_editor.h"
+#include "tools/animation_editor.h"
 #include "core/platform_sdl.h"
 #include "render/render_test.h"
 #include "cube.h"
@@ -104,7 +105,10 @@ typedef struct editor {
     bool show_animation, animation_preview, show_skeleton;
     af_object_id animation_target;
     float animation_blend;
+    ed_animation_editor animation_author;
+    af_rect author_buttons[8];
     const char *animation_test_path;
+    bool animation_authoring_test;
     unsigned animation_test_step;
     uint64_t animation_test_revision;
     double animation_test_time;
@@ -181,6 +185,14 @@ void poll_dialog(editor *app);
 void select_object(editor *app, af_object_id id);
 void select_light(editor *app, size_t index);
 void focus_selection(editor *app);
+void start_animation_authoring(editor *);
+bool save_authored_animation(editor *, const char *path);
+void save_authored_animation_as(editor *);
+void request_animation_close(editor *, ed_action after);
+void animation_author_panel(editor *, float width, float height);
+void update_animation_authoring(editor *, double delta);
+void project_animation_bone(editor *);
+void animation_bone_input(editor *);
 nk_flags panel_flags(editor *app);
 void label(struct nk_context *context, const char *text, float height);
 bool vector_fields(struct nk_context *context, const char *title, af_vec3 *value, float step, float increment);

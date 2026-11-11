@@ -66,6 +66,10 @@ void ed_animation_editor_sample(ed_animation_editor *e) {
     if (e->clip >= e->file.clip_count || !af_animation_sample(&e->file, e->clip, e->time, e->poses, e->file.node_count))
         memcpy(e->poses, e->file.bind_pose, e->file.node_count * sizeof(*e->poses));
     e->pose_dirty = false;
+    if (e->clip < e->file.clip_count) {
+        snprintf(e->clip_name, sizeof(e->clip_name), "%s", e->file.clips[e->clip].name);
+        e->clip_duration = (float)e->file.clips[e->clip].duration;
+    }
     ed_animation_editor_select(e, e->node);
 }
 bool ed_animation_editor_open(ed_animation_editor *e, af_object_id root, const char *path, size_t clip,
@@ -182,6 +186,10 @@ bool ed_animation_editor_clip_settings(ed_animation_editor *e, const char *name,
     return true;
 }
 bool ed_animation_editor_undo(ed_animation_editor *e, bool redo) {
+    if (e->pose_dirty && !redo) {
+        ed_animation_editor_sample(e);
+        return true;
+    }
     ed_animation_snapshot *from = redo ? e->redo : e->undo, *to = redo ? e->undo : e->redo;
     size_t *from_count = redo ? &e->redo_count : &e->undo_count, *to_count = redo ? &e->undo_count : &e->redo_count;
     if (!*from_count)

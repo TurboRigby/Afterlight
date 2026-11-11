@@ -763,6 +763,11 @@ void inspector(editor *app, float width, float height) {
                     app->show_animation = true;
                     app->animation_target = object.animation.asset[0] ? object.id : object.model.root;
                 }
+                nk_layout_row_dynamic(context, 30, 1);
+                if (nk_button_label(context, "Author skeletal clips")) {
+                    app->animation_target = object.animation.asset[0] ? object.id : object.model.root;
+                    start_animation_authoring(app);
+                }
             }
             label(context, "Name", 23);
             nk_layout_row_dynamic(context, 34, 1);

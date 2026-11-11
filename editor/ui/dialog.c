@@ -158,3 +158,7 @@ ed_file_dialog *ed_dialog_begin_project(af_engine *engine, bool save, const char
     static const SDL_DialogFileFilter filter = {"Afterlight projects", "project"};
     return begin_dialog(engine, save, path, &filter);
 }
+ed_file_dialog *ed_dialog_begin_animation(af_engine *engine, const char *path) {
+    static const SDL_DialogFileFilter filter = {"Afterlight animation", "afanim"};
+    return begin_dialog(engine, true, path, &filter);
+}

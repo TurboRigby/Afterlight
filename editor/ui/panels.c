@@ -70,12 +70,18 @@ void toolbar(editor *app, float width) {
                 save_document(app, true, ED_NONE);
             nk_layout_row_push(context, basic);
             if (nk_button_label(context, "Undo")) {
-                ed_document_undo(&app->document);
+                if (app->animation_author.open)
+                    ed_animation_editor_undo(&app->animation_author, false);
+                else
+                    ed_document_undo(&app->document);
                 refresh(app);
             }
             nk_layout_row_push(context, basic);
             if (nk_button_label(context, "Redo")) {
-                ed_document_redo(&app->document);
+                if (app->animation_author.open)
+                    ed_animation_editor_undo(&app->animation_author, true);
+                else
+                    ed_document_redo(&app->document);
                 refresh(app);
             }
             nk_layout_row_push(context, compact ? 64 : 74);
@@ -869,6 +875,9 @@ void animation_panel(editor *app, float width, float height) {
             bool changed = false;
             label(ctx, component.asset, 24);
             if (!app->runtime.playing) {
+                nk_layout_row_dynamic(ctx, 30, 1);
+                if (nk_button_label(ctx, "Author skeletal clips"))
+                    start_animation_authoring(app);
                 af_character_rig rig = target->rig;
                 nk_layout_row_dynamic(ctx, 26, 1);
                 nk_bool enabled = rig.enabled;

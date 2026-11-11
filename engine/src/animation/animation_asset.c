@@ -2,6 +2,7 @@
 #include <afterlight/animation.h>
 #include "assets/gltf.h"
 #include <errno.h>
+#include <float.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdatomic.h>
@@ -15,6 +16,7 @@
 #endif
 
 static const unsigned char magic[8] = {'A', 'F', 'A', 'N', 'I', 'M', 1, 0};
+_Static_assert(sizeof(float) == 4 && sizeof(double) == 8, "Native animation stores 32-bit floats and 64-bit seconds");
 static bool failure(af_asset_error *error, const char *message) {
     if (error)
         snprintf(error->message, sizeof(error->message), "%s", message);
@@ -67,8 +69,9 @@ bool af_animation_file_validate(const af_animation_file *f) {
     for (size_t i = 0; i < f->clip_count; ++i) {
         const af_animation_clip *clip = &f->clips[i];
         if (!memchr(clip->name, 0, sizeof(clip->name)) || !clip->name[0] || !isfinite(clip->duration) ||
-            clip->duration < 0 || clip->channel_count > 1024 || (clip->channel_count && !clip->channels) ||
-            clip->event_count > AF_ANIMATION_MAX_EVENTS || channels > 4096 - clip->channel_count)
+            clip->duration < 0 || clip->duration > FLT_MAX || clip->channel_count > 1024 ||
+            (clip->channel_count && !clip->channels) || clip->event_count > AF_ANIMATION_MAX_EVENTS ||
+            channels > 4096 - clip->channel_count)
             return false;
         channels += clip->channel_count;
         for (size_t j = 0; j < clip->event_count; ++j) {

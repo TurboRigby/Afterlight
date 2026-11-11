@@ -20,6 +20,8 @@ typedef struct ed_animation_editor {
     int interpolation;
     bool open, playing, loop, pose_dirty, close_requested;
     char path[AF_ASSET_PATH_CAPACITY];
+    char clip_name[64];
+    float clip_duration;
     uint64_t revision, saved_revision, serial;
     ed_animation_snapshot undo[ED_ANIMATION_HISTORY], redo[ED_ANIMATION_HISTORY];
     size_t undo_count, redo_count;

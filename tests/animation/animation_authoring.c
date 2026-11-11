@@ -33,6 +33,15 @@ static int roundtrip(const char *path) {
             CHECK(af_animation_sample(&loaded, i, time, b, loaded.node_count));
             CHECK(!memcmp(a, b, source.node_count * sizeof(*a)));
         }
+    for (size_t i = 0; i < loaded.clip_count; ++i)
+        for (size_t j = 0; j < loaded.clips[i].channel_count; ++j) {
+            af_animation_channel *channel = &loaded.clips[i].channels[j];
+            if (channel->interpolation != AF_ANIM_CUBIC || channel->path == AF_ANIM_WEIGHTS)
+                continue;
+            size_t count = channel->key_count;
+            CHECK(af_animation_key_remove(&loaded, i, channel->node, channel->path, channel->times[0]));
+            CHECK(channel->key_count == count - 1 && af_animation_file_validate(&loaded));
+        }
     free(a);
     free(b);
     af_animation_file_free(&source);

@@ -222,6 +222,7 @@ add_executable(afterlight_editor
     editor/ui/inspector.c
     editor/tools/landscape_editor.c
     editor/ui/panels.c
+    editor/ui/animation_authoring.c
     editor/content/project_tools.c
     editor/testing/smoke_tests.c
     editor/tools/viewport_overlays.c
@@ -1238,6 +1239,8 @@ if(BUILD_TESTING)
     set_tests_properties(afterlight.animation_demo_complex PROPERTIES DEPENDS afterlight.animation_demo_simple)
     add_test(NAME afterlight.editor_animation COMMAND afterlight_editor --animation-tools-test "${PROJECT_SOURCE_DIR}/tests/assets/animated.gltf" --validation)
     set_tests_properties(afterlight.editor_animation PROPERTIES TIMEOUT 30 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
+    add_test(NAME afterlight.editor_animation_authoring COMMAND afterlight_editor --animation-authoring-test "${PROJECT_SOURCE_DIR}/tests/assets/skinned.gltf" --validation)
+    set_tests_properties(afterlight.editor_animation_authoring PROPERTIES TIMEOUT 45 LABELS "graphics" FAIL_REGULAR_EXPRESSION "\\[validation error\\]" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1" WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/animation-tests")
     add_executable(afterlight_animation_scene_test tests/animation/animation_scene.c)
     target_include_directories(afterlight_animation_scene_test PRIVATE engine/src)
     target_link_libraries(afterlight_animation_scene_test PRIVATE Afterlight::Engine)
