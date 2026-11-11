@@ -10,6 +10,7 @@
 #include <afterlight/collision_mesh.h>
 #include <afterlight/landscape.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -712,6 +713,33 @@ bool ed_document_animation(ed_document *d, af_object_id id, af_animation_compone
     if (!next)
         return false;
     if (!af_scene_set_object_animation(next, id, component)) {
+        af_scene_destroy(next);
+        return false;
+    }
+    return commit(d, next, d->selection, 0);
+}
+
+bool ed_document_save_animation(ed_document *d, af_object_id root, const char *path, const af_animation_file *file,
+                                size_t clip, af_asset_error *error) {
+    const af_scene_object *object = af_scene_get_object(d->scene, root);
+    char absolute[AF_ASSET_PATH_CAPACITY], name[64];
+    if (!object || !file || clip >= file->clip_count ||
+        !af_asset_resolve_path(d->path, path, absolute, sizeof(absolute)))
+        return false;
+    uint64_t hash = UINT64_C(14695981039346656037);
+    for (const unsigned char *p = (const unsigned char *)absolute; *p; ++p) {
+        hash ^= *p;
+        hash *= UINT64_C(1099511628211);
+    }
+    snprintf(name, sizeof(name), "authored_%016" PRIx64, hash);
+    af_scene *next = af_scene_clone(d->scene);
+    if (!next)
+        return false;
+    af_animation_component component = object->animation;
+    snprintf(component.asset, sizeof(component.asset), "%s", name);
+    component.clip = (uint32_t)clip;
+    if (!af_scene_set_asset(next, name, AF_ASSET_ANIMATION, absolute) ||
+        !af_scene_set_object_animation(next, root, component) || !af_animation_file_save(absolute, file, error)) {
         af_scene_destroy(next);
         return false;
     }

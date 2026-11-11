@@ -2,6 +2,7 @@
 #include <afterlight/animation.h>
 #include "animation/animation_runtime.h"
 #include "document/document.h"
+#include "tools/animation_editor.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,6 +88,45 @@ int main(int argc, char **argv) {
     CHECK(af_animation_runtime_seek(runtime, d.selection, .5));
     CHECK(af_animation_runtime_update(runtime, NULL, 1, 0, true));
     CHECK(af_animation_runtime_status(runtime, d.selection).clip == clip);
+    ed_animation_editor editor = {0};
+    CHECK(ed_animation_editor_open(&editor, d.selection, argv[1], 0, &error));
+    CHECK(ed_animation_editor_new_clip(&editor));
+    ed_animation_editor_select(&editor, 2);
+    editor.time = 1;
+    ed_animation_editor_sample(&editor);
+    editor.poses[2].translation.x = 2;
+    editor.pose_dirty = true;
+    CHECK(ed_animation_editor_record(&editor) && ed_animation_editor_dirty(&editor));
+    CHECK(ed_animation_editor_undo(&editor, false));
+    CHECK(editor.poses[2].translation.x == 0);
+    CHECK(ed_animation_editor_undo(&editor, true));
+    CHECK(editor.poses[2].translation.x == 2);
+    editor.time = .5f;
+    ed_animation_editor_sample(&editor);
+    CHECK(fabsf(editor.poses[2].translation.x - 1) < .0001f);
+    CHECK(af_animation_runtime_preview_pose(runtime, d.selection, editor.poses, editor.file.node_count));
+    CHECK(af_animation_runtime_update(runtime, NULL, 1, 0, false));
+    af_object_id tip = 0;
+    for (size_t i = 0; i < af_scene_object_count(d.scene); ++i) {
+        const af_scene_object *object = af_scene_object_at(d.scene, i);
+        if (object->model.root == d.selection && !object->model.primitive && object->model.node == 2)
+            tip = object->id;
+    }
+    af_mat4 world;
+    CHECK(tip && af_animation_runtime_world(runtime, tip, &world) && fabsf(world.elements[12] - 1) < .0001f);
+    CHECK(af_scene_get_object(d.scene, tip)->transform.position.x == 0);
+    editor.poses[2].rotation.w = NAN;
+    CHECK(!af_animation_runtime_preview_pose(runtime, d.selection, editor.poses, editor.file.node_count));
+    CHECK(af_animation_runtime_preview_pose(runtime, d.selection, NULL, 0));
+    CHECK(af_animation_runtime_update(runtime, NULL, 1, 0, false) && af_animation_runtime_world(runtime, tip, &world) &&
+          fabsf(world.elements[12]) < .0001f);
+    CHECK(ed_document_save_animation(&d, d.selection, "authoring-editor.afanim", &editor.file, editor.clip, &error));
+    CHECK(strcmp(af_scene_get_object(d.scene, d.selection)->animation.asset, "actor_animation"));
+    CHECK(ed_document_undo(&d) &&
+          !strcmp(af_scene_get_object(d.scene, d.selection)->animation.asset, "actor_animation"));
+    CHECK(ed_document_redo(&d));
+    ed_animation_editor_destroy(&editor);
+    remove("authoring-editor.afanim");
     af_animation_runtime_scene(runtime, NULL);
     af_animation_runtime_destroy(runtime);
     ed_document_destroy(&d);

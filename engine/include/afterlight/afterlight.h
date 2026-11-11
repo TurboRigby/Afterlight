@@ -197,6 +197,8 @@ bool af_engine_animation_pause(af_engine *engine, af_object_id root, bool paused
 bool af_engine_animation_stop(af_engine *engine, af_object_id root);
 bool af_engine_animation_seek(af_engine *engine, af_object_id root, double seconds);
 bool af_engine_animation_options(af_engine *engine, af_object_id root, float speed, bool loop);
+/* Editor pose override for one model instance. Copies poses. NULL/zero restores playback. */
+bool af_engine_animation_preview_pose(af_engine *, af_object_id root, const af_animation_pose *, size_t count);
 bool af_engine_animated_world_matrix(const af_engine *engine, af_object_id object, af_mat4 *world);
 bool af_engine_upload_texture(af_engine *engine, const char *name, const unsigned char *rgba, uint32_t width,
                               uint32_t height);

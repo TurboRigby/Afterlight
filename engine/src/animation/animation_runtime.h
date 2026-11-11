@@ -26,6 +26,7 @@ bool af_animation_runtime_pause(af_animation_runtime *runtime, af_object_id obje
 bool af_animation_runtime_stop(af_animation_runtime *runtime, af_object_id object);
 bool af_animation_runtime_seek(af_animation_runtime *runtime, af_object_id object, double seconds);
 bool af_animation_runtime_options(af_animation_runtime *runtime, af_object_id object, float speed, bool loop);
+bool af_animation_runtime_preview_pose(af_animation_runtime *, af_object_id, const af_animation_pose *, size_t);
 bool af_animation_runtime_world(const af_animation_runtime *runtime, af_object_id object, af_mat4 *world);
 af_animation_debug af_animation_runtime_debug(af_animation_runtime *, af_object_id);
 size_t af_animation_runtime_bones(af_animation_runtime *, af_object_id, af_animation_bone *, size_t);

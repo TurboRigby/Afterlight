@@ -27,6 +27,7 @@ typedef struct animation_instance {
     char last_event[32];
     af_animation_player player;
     af_animation_pose *poses;
+    af_animation_pose *preview;
     af_object_id *nodes;
     size_t node_count;
 } animation_instance;
@@ -61,6 +62,7 @@ static void free_instance(animation_instance *i) {
     af_animation_player_destroy(&i->player);
     af_locomotion_player_destroy(&i->locomotion);
     free(i->poses);
+    free(i->preview);
     free(i->nodes);
     *i = (animation_instance){0};
 }
@@ -377,6 +379,32 @@ bool af_animation_runtime_options(af_animation_runtime *r, af_object_id object, 
     i->player.loop = loop;
     return true;
 }
+bool af_animation_runtime_preview_pose(af_animation_runtime *r, af_object_id object, const af_animation_pose *poses,
+                                       size_t count) {
+    if (!r)
+        return false;
+    animation_instance *i = instance(r, object);
+    if (!i)
+        return false;
+    if (!poses && !count) {
+        free(i->preview);
+        i->preview = NULL;
+        return true;
+    }
+    if (!poses || count != i->node_count)
+        return false;
+    const af_animation_file *file = &asset(r, i->configuration.asset)->file;
+    for (size_t j = 0; j < count; ++j)
+        if (!af_animation_pose_valid(&poses[j]) || poses[j].morph_count != file->bind_pose[j].morph_count)
+            return false;
+    if (!i->preview) {
+        i->preview = malloc(count * sizeof(*i->preview));
+        if (!i->preview)
+            return false;
+    }
+    memcpy(i->preview, poses, count * sizeof(*poses));
+    return true;
+}
 static animation_instance *existing_instance(af_animation_runtime *r, af_object_id root) {
     for (size_t i = 0; i < r->instance_count; ++i)
         if (r->instances[i].root == root)
@@ -502,6 +530,10 @@ bool af_animation_runtime_update(af_animation_runtime *r, const af_scene *previo
         if (!a || i->generation != a->generation || i->node_count != a->file.node_count)
             continue;
         memset(i->nodes, 0, i->node_count * sizeof(*i->nodes));
+        if (i->preview) {
+            memcpy(i->poses, i->preview, i->node_count * sizeof(*i->poses));
+            continue;
+        }
         if (animate && !i->driven && i->player.playing && i->player.clip < a->file.clip_count) {
             af_animation_events events;
             if (af_animation_collect_events(&a->file.clips[i->player.clip], i->player.time, delta * i->player.speed,

@@ -1264,6 +1264,9 @@ bool af_engine_animation_seek(af_engine *e, af_object_id object, double seconds)
 bool af_engine_animation_options(af_engine *e, af_object_id object, float speed, bool loop) {
     return e && af_animation_runtime_options(e->animations, object, speed, loop);
 }
+bool af_engine_animation_preview_pose(af_engine *e, af_object_id root, const af_animation_pose *poses, size_t count) {
+    return e && af_animation_runtime_preview_pose(e->animations, root, poses, count);
+}
 bool af_engine_animated_world_matrix(const af_engine *e, af_object_id object, af_mat4 *world) {
     return e &&
            (af_animation_runtime_world(e->animations, object, world) || af_scene_world_matrix(e->scene, object, world));

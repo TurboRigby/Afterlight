@@ -167,6 +167,7 @@ add_library(afterlight_editor_document STATIC
     editor/document/environment.c
     editor/tools/joint_gizmo.c
     editor/tools/gizmo.c
+    editor/tools/animation_editor.c
     editor/runtime/runtime.c
     editor/runtime/save_game.c
     editor/content/asset_browser.c
