@@ -1,5 +1,7 @@
 # Materials, lighting and profiling
 
+For the current **0.23.0** release, see [streamed geometry and compatibility](development-023.md).
+
 Afterlight **0.9** adds [imported HDR environments and skyboxes](assets-09.md).
 Afterlight **0.8** added floating-point HDR rendering, environment lighting, local
 shadows and bloom. Start with [the Lighting Lab and current controls](lighting-08.md).
@@ -40,8 +42,9 @@ are supported. Clearcoat, transmission and area lights remain future work. The
 Ambient scalar is separate from the convolved environment contribution.
 
 Emission adds linear RGB times strength independently of lights, including for
-unlit materials. It does not illuminate neighboring geometry. When enabled, bloom filters bright
-HDR emission before presentation.
+unlit materials. Optional hardware diffuse RTGI can include emissive surfaces
+when `rtgi_emissive` is enabled. Without that path, emission does not illuminate
+neighboring geometry. When enabled, bloom filters bright HDR emission before presentation.
 Color textures, vertex colors and material base color multiply before lighting.
 Selection tint remains transient editor state. Geometry supports opaque, cutout and sorted alpha blending; see [0.12](development-012.md).
 

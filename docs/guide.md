@@ -13,6 +13,12 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
+Afterlight **0.23.0** adds native skeletal animation authoring, clustered geometry
+LOD and asynchronous streaming, and editor story tools for dialogue, timelines,
+spatial audio and Blueprint debugging. Try Low Water and Signal Annex, or author
+skeletal clips directly on an imported rig. See the [0.23.0 guide](development-023.md)
+for workflows, compatibility and limits.
+
 Afterlight 0.22 adds interactive terrain editing and sculpting, multi-layer texturing,
 GPU-instanced foliage painting with spatial chunk partitioning, a comprehensive
 post-processing pipeline (ACES/AgX tone mapping, bloom, color grading, bokeh DoF,
@@ -364,7 +370,8 @@ freeing it, or keep it alive until engine destruction. The next frame reflects
 object edits without mesh uploads. Objects with unloaded mesh names are skipped
 and counted in `af_engine_stats.missing_meshes`. Stats also expose `loaded_meshes`
 and the last submitted frame's `draw_calls`. Sharing saves GPU allocations and
-uploads; each visible object currently gets one indexed draw, not instancing.
+uploads. Compatible opaque props can share an instanced draw; clustered meshes
+use culled indirect draws when supported. See [rendering](rendering.md).
 
 Read-only object views are invalidated by structural scene changes. Retain IDs
 and query again after adding/removing objects. IDs are local to a scene and never
@@ -403,7 +410,7 @@ Failed builds/loads retain the previous running code. Stop restores the edit
 scene. Runtime scene state survives a reload; private module state is freshly
 initialized. See [C game contract and workflow](game-code.md).
 
-The scene format is version 22 and still reads versions 1–21. Asset bytes stay in
+The scene format is version 30 and still reads versions 1–29. Asset bytes stay in
 source files referenced by the manifest. See [assets/materials](assets.md),
 [scene format](scene-format.md) and [editor controls](editor.md).
 

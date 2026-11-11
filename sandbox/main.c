@@ -102,7 +102,7 @@ static bool game_init(af_engine *engine, void *user_data) {
     }
     af_engine_set_scene(engine, game->scene);
     game->ready = true;
-    puts("Afterlight 0.5.0 — File-backed scene | C + Vulkan");
+    puts("Afterlight " AF_VERSION_STRING " — File-backed scene | C + Vulkan");
     printf("%zu scene objects; cube mesh available\n", af_scene_object_count(game->scene));
     puts("Click: mouse look | WASD: fly | Q/E: down/up | Shift: faster");
     puts("Space: pause | R: reset view | Escape: release mouse, then quit");

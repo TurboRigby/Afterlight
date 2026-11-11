@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <afterlight/version.h>
 #include <afterlight/math.h>
 #include <afterlight/input.h>
 #include <afterlight/physics.h>

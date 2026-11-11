@@ -214,7 +214,7 @@ Scene format is 26; rebuild modules and restart old processes.
 
 ABI 25 adds `af_render_settings.ray_traced_water_reflections` and the active
 reflection flag in `af_engine_stats`. The C game ABI is independent of the
-0.22 release version.
+engine release version (currently 0.23.0).
 
 ABI 26 adds `af_render_settings.ray_traced_gi`, `rtgi_intensity`,
 `rtgi_ray_distance` and `rtgi_samples`, plus `ray_traced_gi_active` in

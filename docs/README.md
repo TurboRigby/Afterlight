@@ -27,6 +27,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.23.0: animation authoring, streamed geometry and story tools](development-023.md)
 - [0.22: ray tracing, landscape system, post-processing, and bundling](development-022.md)
 - [0.21: engine foundations and native Linux](development-021.md)
 - [0.20: anti-aliasing](development-020.md)

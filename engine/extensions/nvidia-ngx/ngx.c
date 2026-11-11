@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <afterlight/extension_vulkan.h>
+#include <afterlight/version.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
 #include <nvsdk_ngx_helpers_vk.h>
@@ -9,7 +10,7 @@
 #include <string.h>
 
 static const char project_id[] = "38be4447-7dfd-4d1f-915e-2af138fa57c3";
-static const char engine_version[] = "0.23";
+static const char engine_version[] = AF_VERSION_STRING;
 static const char *const quality_names[] = {
     "Quality",
     "Balanced",

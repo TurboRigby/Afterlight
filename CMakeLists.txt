@@ -4,7 +4,13 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.24)
-project(Afterlight VERSION 0.23.0 LANGUAGES C)
+set(afterlight_version_header "${CMAKE_CURRENT_SOURCE_DIR}/engine/include/afterlight/version.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${afterlight_version_header}")
+foreach(component MAJOR MINOR PATCH)
+    file(STRINGS "${afterlight_version_header}" version_line REGEX "^#define AF_VERSION_${component} [0-9]+$")
+    string(REGEX REPLACE ".* " "" afterlight_version_${component} "${version_line}")
+endforeach()
+project(Afterlight VERSION "${afterlight_version_MAJOR}.${afterlight_version_MINOR}.${afterlight_version_PATCH}" LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)

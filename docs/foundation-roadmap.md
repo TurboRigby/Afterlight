@@ -4,8 +4,9 @@ Afterlight already has raster PBR, image-based lighting, shadow maps, animation,
 physics, water, profiling and playable exports. The [0.21 baseline](development-021.md)
 exercises these together in the water expedition, adds persistence/diagnostics and records native Linux evidence. The
 order below remains the direction for continued hardening. [Prop instancing](rendering.md#instanced-props)
-now batches compatible opaque draws. LOD and asynchronous geometry streaming
-still need workload evidence and implementation. Windows verification is
+now batches compatible opaque draws. [0.23.0](development-023.md) adds clustered
+LOD and asynchronous geometry streaming; broader workload evidence is still
+needed. Windows verification is
 deferred. The [0.22 experiment](development-022.md) now
 adds optional ray-query sun shadows with a raster fallback; the scalability and
 broader platform work still applies.

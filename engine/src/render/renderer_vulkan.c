@@ -5,6 +5,7 @@
  */
 
 #include "renderer.h"
+#include <afterlight/version.h>
 #include "animation/morph.h"
 #include "core/extension_runtime.h"
 #include "water/water_internal.h"
@@ -494,12 +495,13 @@ static bool create_instance(af_renderer *renderer, bool enable_validation, af_ex
                        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
         .pfnUserCallback = debug_callback,
         .pUserData = renderer};
-    VkApplicationInfo application = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-                                     .pApplicationName = "Afterlight",
-                                     .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
-                                     .pEngineName = "Afterlight",
-                                     .engineVersion = VK_MAKE_VERSION(0, 1, 0),
-                                     .apiVersion = VK_API_VERSION_1_1};
+    VkApplicationInfo application = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pApplicationName = "Afterlight",
+        .applicationVersion = VK_MAKE_VERSION(AF_VERSION_MAJOR, AF_VERSION_MINOR, AF_VERSION_PATCH),
+        .pEngineName = "Afterlight",
+        .engineVersion = VK_MAKE_VERSION(AF_VERSION_MAJOR, AF_VERSION_MINOR, AF_VERSION_PATCH),
+        .apiVersion = VK_API_VERSION_1_1};
     uint32_t loader_version = VK_API_VERSION_1_0;
     if (vkEnumerateInstanceVersion(&loader_version) == VK_SUCCESS && loader_version >= VK_API_VERSION_1_2)
         application.apiVersion = VK_API_VERSION_1_2;
