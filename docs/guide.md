@@ -13,7 +13,14 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
-Afterlight **0.23.0** adds native skeletal animation authoring, clustered geometry
+Afterlight **0.24.0** introduces a pooled Vulkan memory suballocator with staged
+`DEVICE_LOCAL` uploads, modular renderer/CMake structure, 128-light tiled
+forward shading, custom SPIR-V material shaders, dynamic-pool physics with COW
+landscape cloning, deterministic `af_jobs` multithreading, and QOA/IMA-ADPCM
+disk-streaming audio with mix buses. See the [0.24.0 guide](development-024.md)
+for details and verification.
+
+Afterlight 0.23.0 adds native skeletal animation authoring, clustered geometry
 LOD and asynchronous streaming, and editor story tools for dialogue, timelines,
 spatial audio and Blueprint debugging. Try Low Water and Signal Annex, or author
 skeletal clips directly on an imported rig. See the [0.23.0 guide](development-023.md)

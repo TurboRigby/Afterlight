@@ -3,12 +3,15 @@
 A game engine written in C17, with Vulkan rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.23.0** adds skeletal animation authoring with native `.afanim` clips,
-clustered geometry LOD and streaming with a byte-based cache budget, and story
-tools for dialogue, timelines, spatial audio and Blueprint debugging. It includes
-Low Water and its editor-authored Signal Annex episode, alongside terrain,
-foliage, post-processing, native upscalers and optional hardware ray tracing.
-See the [0.23.0 release guide](docs/development-023.md) and [documentation index](docs/README.md).
+Afterlight **0.24.0** adds a pooled Vulkan memory suballocator with staged
+`DEVICE_LOCAL` uploads, modular renderer/CMake layout, 128-light screen-tiled
+forward shading, custom SPIR-V material pipelines, dynamic-pool physics with
+COW landscape cloning, deterministic `af_jobs` multithreading, and
+QOA/IMA-ADPCM disk-streaming audio with mix buses. It includes Low Water and
+its editor-authored Signal Annex episode, skeletal animation authoring,
+clustered geometry streaming, terrain, foliage, post-processing, native
+upscalers and optional hardware ray tracing.
+See the [0.24.0 release guide](docs/development-024.md) and [documentation index](docs/README.md).
 
 ## Build and run
 

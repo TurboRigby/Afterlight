@@ -9,7 +9,7 @@
 
 /* Release version; scene formats and module ABIs are versioned separately. */
 #define AF_VERSION_MAJOR 0
-#define AF_VERSION_MINOR 23
+#define AF_VERSION_MINOR 24
 #define AF_VERSION_PATCH 0
 
 #define AF_VERSION_TEXT_(value) #value

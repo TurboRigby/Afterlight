@@ -1,6 +1,6 @@
 # Materials, lighting and profiling
 
-For the current **0.23.0** release, see [streamed geometry and compatibility](development-023.md).
+For the current **0.24.0** release, see [scalability, Vulkan suballocation and custom shaders](development-024.md) (and [0.23.0 streamed geometry](development-023.md)).
 
 Afterlight **0.9** adds [imported HDR environments and skyboxes](assets-09.md).
 Afterlight **0.8** added floating-point HDR rendering, environment lighting, local
