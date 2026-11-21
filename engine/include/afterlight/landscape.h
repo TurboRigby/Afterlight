@@ -126,6 +126,7 @@ typedef struct af_landscape {
     af_foliage_layer foliage_layers[AF_LANDSCAPE_MAX_FOLIAGE_LAYERS];
     size_t total_foliage_instances;
     uint64_t modification_version;
+    void *cow_storage;
 } af_landscape;
 
 af_terrain_layer af_terrain_layer_default(size_t index);

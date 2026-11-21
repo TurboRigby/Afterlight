@@ -7,94 +7,35 @@
 #include "texture_vulkan.h"
 #include "core/log.h"
 #include "assets/mipmap.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-typedef struct ui_buffer {
+
+typedef struct staging_buffer {
     VkBuffer buffer;
-    VkDeviceMemory memory;
-    void *mapped;
-    VkDeviceSize capacity;
-    bool coherent;
-} ui_buffer;
+    af_vk_allocation alloc;
+} staging_buffer;
+
 struct af_vk_texture {
     af_texture_info info;
     VkPhysicalDevice physical;
     VkDevice device;
+    af_vk_allocator *allocator;
     VkImage image;
-    VkDeviceMemory memory;
+    af_vk_allocation memory;
     VkImageView view;
     VkSampler sampler;
     VkDescriptorSetLayout descriptor_layout;
     VkDescriptorPool descriptor_pool;
     VkDescriptorSet descriptor;
-    ui_buffer upload;
+    staging_buffer upload;
 };
+
 static bool ok(VkResult result, const char *operation) {
     if (result == VK_SUCCESS)
         return true;
     af_log("error", "Texture %s failed (VkResult %d).", operation, (int)result);
     return false;
-}
-static uint32_t memory_type(af_vk_texture *ui, uint32_t bits, VkMemoryPropertyFlags required,
-                            VkMemoryPropertyFlags preferred) {
-    VkPhysicalDeviceMemoryProperties properties;
-    vkGetPhysicalDeviceMemoryProperties(ui->physical, &properties);
-    uint32_t fallback = UINT32_MAX;
-    for (uint32_t i = 0; i < properties.memoryTypeCount; ++i) {
-        VkMemoryPropertyFlags flags = properties.memoryTypes[i].propertyFlags;
-        if (!(bits & (1u << i)) || (flags & required) != required)
-            continue;
-        fallback = i;
-        if ((flags & preferred) == preferred)
-            return i;
-    }
-    return fallback;
-}
-static void free_buffer(af_vk_texture *ui, ui_buffer *buffer) {
-    if (buffer->mapped)
-        vkUnmapMemory(ui->device, buffer->memory);
-    if (buffer->buffer)
-        vkDestroyBuffer(ui->device, buffer->buffer, NULL);
-    if (buffer->memory)
-        vkFreeMemory(ui->device, buffer->memory, NULL);
-    *buffer = (ui_buffer){0};
-}
-static bool reserve_buffer(af_vk_texture *ui, ui_buffer *buffer, VkDeviceSize size, VkBufferUsageFlags usage) {
-    if (buffer->capacity >= size)
-        return true;
-    free_buffer(ui, buffer); /* Owner frame fence is already complete. */
-    VkDeviceSize capacity = size < 65536 ? 65536 : size * 2;
-    VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                               .size = capacity,
-                               .usage = usage,
-                               .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-    if (!ok(vkCreateBuffer(ui->device, &info, NULL, &buffer->buffer), "vkCreateBuffer"))
-        return false;
-    VkMemoryRequirements requirements;
-    vkGetBufferMemoryRequirements(ui->device, buffer->buffer, &requirements);
-    uint32_t index = memory_type(ui, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    if (index == UINT32_MAX)
-        return false;
-    VkMemoryAllocateInfo allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = requirements.size, .memoryTypeIndex = index};
-    if (!ok(vkAllocateMemory(ui->device, &allocation, NULL, &buffer->memory), "vkAllocateMemory") ||
-        !ok(vkBindBufferMemory(ui->device, buffer->buffer, buffer->memory, 0), "vkBindBufferMemory") ||
-        !ok(vkMapMemory(ui->device, buffer->memory, 0, VK_WHOLE_SIZE, 0, &buffer->mapped), "vkMapMemory"))
-        return false;
-    VkPhysicalDeviceMemoryProperties properties;
-    vkGetPhysicalDeviceMemoryProperties(ui->physical, &properties);
-    buffer->coherent = (properties.memoryTypes[index].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
-    buffer->capacity = capacity;
-    return true;
-}
-static bool flush_buffer(af_vk_texture *ui, ui_buffer *buffer) {
-    if (buffer->coherent)
-        return true;
-    VkMappedMemoryRange range = {
-        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = buffer->memory, .size = VK_WHOLE_SIZE};
-    return ok(vkFlushMappedMemoryRanges(ui->device, 1, &range), "vkFlushMappedMemoryRanges");
 }
 
 void af_vk_texture_destroy(af_vk_texture *ui) {
@@ -110,21 +51,23 @@ void af_vk_texture_destroy(af_vk_texture *ui) {
         vkDestroyImageView(ui->device, ui->view, NULL);
     if (ui->image)
         vkDestroyImage(ui->device, ui->image, NULL);
-    if (ui->memory)
-        vkFreeMemory(ui->device, ui->memory, NULL);
-    free_buffer(ui, &ui->upload);
+    af_vk_free(ui->allocator, &ui->memory);
+    af_vk_destroy_buffer(ui->allocator, &ui->upload.buffer, &ui->upload.alloc);
     free(ui);
 }
+
 VkDescriptorSetLayout af_vk_texture_layout(const af_vk_texture *ui) {
     return ui->descriptor_layout;
 }
+
 VkDescriptorSet af_vk_texture_descriptor(const af_vk_texture *ui) {
     return ui->descriptor;
 }
-static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+
+static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                                      const void *rgba, uint32_t width, uint32_t height, bool srgb, bool repeat,
                                      float anisotropy, uint32_t hdr_levels, VkCommandBuffer external) {
-    if (!rgba || !width || !height || width > 8192 || height > 8192)
+    if (!allocator || !rgba || !width || !height || width > 8192 || height > 8192)
         return NULL;
     VkFormat format = hdr_levels ? VK_FORMAT_R16G16B16A16_SFLOAT
                       : srgb     ? VK_FORMAT_R8G8B8A8_SRGB
@@ -138,8 +81,8 @@ static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device,
         return NULL;
     ui->device = device;
     ui->physical = physical;
-    ui_buffer staging = {0};
-    VkCommandPool pool = VK_NULL_HANDLE;
+    ui->allocator = allocator;
+    staging_buffer staging = {0};
     af_mip_chain mips = {0};
     if (hdr_levels) {
         if (hdr_levels > AF_MAX_MIPS) {
@@ -189,12 +132,15 @@ static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device,
         free(ui);
         return NULL;
     }
+
     VkDeviceSize bytes = mips.bytes;
-    if (!reserve_buffer(ui, &staging, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT))
+    if (!af_vk_create_buffer(allocator, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false, &staging.buffer, &staging.alloc))
         goto fail;
-    memcpy(staging.mapped, mips.pixels, (size_t)bytes);
-    if (!flush_buffer(ui, &staging))
+    memcpy(staging.alloc.mapped, mips.pixels, (size_t)bytes);
+    if (!af_vk_flush(allocator, &staging.alloc, 0, bytes))
         goto fail;
+
     VkImageCreateInfo image = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                .imageType = VK_IMAGE_TYPE_2D,
                                .format = format,
@@ -216,14 +162,11 @@ static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device,
                                  .allocation_bytes = requirements.size,
                                  .anisotropy = repeat ? anisotropy : 1,
                                  .srgb = srgb};
-    uint32_t index = memory_type(ui, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
-    if (index == UINT32_MAX)
+    if (!af_vk_allocate(allocator, requirements, AF_VK_MEM_IMAGE, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0, false,
+                        &ui->memory) ||
+        !ok(vkBindImageMemory(device, ui->image, ui->memory.memory, ui->memory.offset), "vkBindImageMemory"))
         goto fail;
-    VkMemoryAllocateInfo allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = requirements.size, .memoryTypeIndex = index};
-    if (!ok(vkAllocateMemory(device, &allocation, NULL, &ui->memory), "atlas memory") ||
-        !ok(vkBindImageMemory(device, ui->image, ui->memory, 0), "vkBindImageMemory"))
-        goto fail;
+
     VkImageViewCreateInfo view = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                                   .image = ui->image,
                                   .viewType = VK_IMAGE_VIEW_TYPE_2D,
@@ -274,23 +217,11 @@ static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device,
                                   .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                   .pImageInfo = &image_info};
     vkUpdateDescriptorSets(device, 1, &write, 0, NULL);
-    VkCommandBuffer command = external;
-    if (!external) {
-        VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-                                             .queueFamilyIndex = family};
-        if (!ok(vkCreateCommandPool(device, &pool_info, NULL, &pool), "upload pool"))
-            goto fail;
-        VkCommandBufferAllocateInfo command_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                                                    .commandPool = pool,
-                                                    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                                                    .commandBufferCount = 1};
-        if (!ok(vkAllocateCommandBuffers(device, &command_info, &command), "upload commands"))
-            goto fail;
-        VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                                          .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-        if (!ok(vkBeginCommandBuffer(command, &begin), "begin upload"))
-            goto fail;
-    }
+
+    VkCommandBuffer command = external ? external : af_vk_begin_transfer(allocator);
+    if (!command)
+        goto fail;
+
     VkImageMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                     .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                                     .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -315,27 +246,18 @@ static af_vk_texture *create_texture(VkPhysicalDevice physical, VkDevice device,
     vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0,
                          NULL, 1, &barrier);
     if (!external) {
-        if (!ok(vkEndCommandBuffer(command), "end upload"))
+        if (!af_vk_end_transfer(allocator, command))
             goto fail;
-        VkSubmitInfo submit = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &command};
-        if (!ok(vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE), "upload submit") ||
-            !ok(vkQueueWaitIdle(queue), "upload wait"))
-            goto fail;
-        vkDestroyCommandPool(device, pool, NULL);
-        pool = VK_NULL_HANDLE;
-        free_buffer(ui, &staging);
+        af_vk_destroy_buffer(allocator, &staging.buffer, &staging.alloc);
     } else {
         ui->upload = staging;
-        staging = (ui_buffer){0};
+        staging = (staging_buffer){0};
     }
     free(mips.pixels);
     return ui;
 fail:
     free(mips.pixels);
-    if (pool)
-        vkDestroyCommandPool(device, pool, NULL);
-    free_buffer(ui, &staging);
+    af_vk_destroy_buffer(allocator, &staging.buffer, &staging.alloc);
     af_vk_texture_destroy(ui);
     return NULL;
 }
@@ -344,25 +266,26 @@ af_texture_info af_vk_texture_info(const af_vk_texture *texture) {
     return texture->info;
 }
 
-af_vk_texture *af_vk_texture_create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+af_vk_texture *af_vk_texture_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                                     const unsigned char *rgba, uint32_t width, uint32_t height, bool srgb, bool repeat,
                                     float anisotropy) {
-    return create_texture(physical, device, queue, family, rgba, width, height, srgb, repeat, anisotropy, 0,
+    return create_texture(physical, device, allocator, rgba, width, height, srgb, repeat, anisotropy, 0,
                           VK_NULL_HANDLE);
 }
-af_vk_texture *af_vk_texture_create_hdr(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+
+af_vk_texture *af_vk_texture_create_hdr(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                                         const float *rgba, uint32_t width, uint32_t height, uint32_t levels,
                                         bool wrap_u) {
-    return create_texture(physical, device, queue, family, rgba, width, height, false, wrap_u, 1, levels,
-                          VK_NULL_HANDLE);
+    return create_texture(physical, device, allocator, rgba, width, height, false, wrap_u, 1, levels, VK_NULL_HANDLE);
 }
+
 VkDescriptorImageInfo af_vk_texture_image(const af_vk_texture *texture) {
     return (VkDescriptorImageInfo){texture->sampler, texture->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 }
 
-af_vk_texture *af_vk_texture_create_recorded(VkPhysicalDevice physical, VkDevice device, VkCommandBuffer command,
-                                             const unsigned char *rgba, uint32_t width, uint32_t height) {
-    return command
-               ? create_texture(physical, device, VK_NULL_HANDLE, 0, rgba, width, height, false, false, 1, 0, command)
-               : NULL;
+af_vk_texture *af_vk_texture_create_recorded(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
+                                             VkCommandBuffer command, const unsigned char *rgba, uint32_t width,
+                                             uint32_t height) {
+    return command ? create_texture(physical, device, allocator, rgba, width, height, false, false, 1, 0, command)
+                   : NULL;
 }

@@ -5,7 +5,7 @@
 #include "cluster.h"
 
 #define AF_CLUSTER_RESIDENT_PAGES 128u
-#define AF_CLUSTER_STREAM_ASSETS 8u
+#define AF_CLUSTER_STREAM_ASSETS 256u
 #define AF_CLUSTER_REQUEST_LIMIT 32u
 
 typedef struct af_cluster_stream_region {

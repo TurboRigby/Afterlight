@@ -24,6 +24,7 @@ typedef struct af_material {
     char normal_map[AF_MESH_NAME_CAPACITY]; /* Linear tangent-space RGB; empty means flat. */
     float normal_strength;
     char metallic_roughness_map[AF_MESH_NAME_CAPACITY]; /* Linear glTF G=roughness, B=metallic. */
+    char shader[AF_MESH_NAME_CAPACITY];                 /* Optional custom SPIR-V fragment shader; empty = built-in. */
 } af_material;
 typedef struct af_directional_light {
     af_vec3 direction; /* Direction the light travels; nonzero. */
@@ -31,7 +32,7 @@ typedef struct af_directional_light {
     float intensity, ambient;
     float angular_radius; /* Apparent sun radius in radians; 0 selects hard ray shadows. */
 } af_directional_light;
-#define AF_SCENE_MAX_LOCAL_LIGHTS 16
+#define AF_SCENE_MAX_LOCAL_LIGHTS 128
 typedef enum af_light_type { AF_LIGHT_POINT, AF_LIGHT_SPOT } af_light_type;
 typedef struct af_local_light {
     char name[64];

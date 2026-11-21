@@ -57,11 +57,20 @@ implemented. GPU scene timing includes post processing.
 
 ## Local lights
 
-A scene holds up to 16 named point/spot lights, separate from the directional
-light. Positions are world-space. Linear RGB is [0,100], intensity [0,10000], and
+A scene holds up to 128 named point/spot lights (`AF_SCENE_MAX_LOCAL_LIGHTS`), separate from the directional
+light, uploaded via a per-frame storage buffer and culled on the CPU into 32×32 screen-space `uvec4` tile bitmasks.
+Positions are world-space. Linear RGB is [0,100], intensity [0,10000], and
 range [0.01,10000]. Intensity is an engine multiplier rather than a calibrated
 photometric unit. Distance attenuation is inverse-square with a smooth range
 window and a small denominator floor near the source.
+
+## Custom material shaders
+
+Materials can reference a named custom fragment shader via `af_material.shader` (persisted in scene v30 JSON).
+Call `af_engine_upload_material_shader` with validated SPIR-V fragment bytecode matching the standard
+5-descriptor-set / 128-byte push-constant interface (`mesh.vert` outputs at locations 0–6; color/motion/GI outputs
+at locations 0–2). Custom pipelines are created for both opaque and alpha-blended passes, survive swapchain
+rebuilds, and fall back to the built-in pipeline after `af_engine_remove_material_shader`.
 
 Spot direction points along emitted light. Inner and outer angles are half-cone
 angles in radians in the C API/scene file, displayed in degrees in the editor:

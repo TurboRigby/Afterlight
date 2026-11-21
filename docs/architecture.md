@@ -100,52 +100,64 @@ this is not a GPU timestamp measurement. The sandbox enables it by default.
 ## Shaders and geometry
 
 The game supplies `af_mesh_data` through `af_engine_upload_mesh` with a mesh
-asset name. The renderer validates vertices/indices and copies the data into
-owned vertex/index buffers. A registry holds multiple named assets. Re-uploading
-a name replaces its buffers only after a successful upload and GPU idle wait;
-failure preserves the existing asset. Removal also waits before releasing buffers.
-The engine owns this registry and frees every asset during teardown.
+asset name. The renderer validates vertices/indices and uploads them through its
+shared Vulkan memory suballocator (`vk_memory.c`). A registry holds named
+meshes, textures, environments, and optional custom SPIR-V material fragment
+shaders (`af_engine_upload_material_shader` / `af_engine_remove_material_shader`).
+Re-uploading a name replaces its GPU resources only after a successful upload
+and GPU idle wait; failure preserves the existing asset. Removal also waits
+before releasing resources. The engine owns this registry and frees every asset
+during teardown.
 
 Scenes are CPU-only and contain named objects referencing those mesh names.
-The renderer iterates visible objects, resolves the referenced asset, and sends
-each object's model matrix to the shader before its indexed draw. A shared asset
-is uploaded once, regardless of how many objects use it. This is not hardware
-instancing: there is one draw per visible, resolved object. Missing assets are
-skipped, counted in stats, and logged when the missing-object count changes.
+Objects are indexed by a dense hash table (`af_scene_object` IDs), culled
+against the camera frustum, and consecutive compatible rigid props are batched
+via hardware instancing into a per-frame storage buffer. Dynamic meshes (such as
+animated water and terrain chunks) stream via per-frame ring buffers, and static
+clustered meshes stream fine LOD pages up to 256 concurrent assets (`cluster_stream.h`).
+Missing assets are skipped, counted in stats, and logged when the missing-object
+count changes.
 
-The sandbox animates two cubes and an imported OBJ pyramid over a ground
-platform. Cube objects share an asset with 24 vertices and 36 indices; the
-pyramid uses imported geometry and the demo also loads a checker texture. Scene changes,
-mesh lookup, and drawing currently use simple linear arrays/searches, suitable
-for the current small scenes. No lookup pointers are retained across mutations.
+All Vulkan buffers and images flow through the pooled block suballocator
+(`vk_memory.c`), which separates buffer and image heaps to respect
+`bufferImageGranularity` and `nonCoherentAtomSize` while keeping actual
+`vkAllocateMemory` counts small. Static mesh geometry uses `DEVICE_LOCAL`
+memory: direct zero-copy upload on unified `DEVICE_LOCAL | HOST_VISIBLE` heaps
+(e.g., Apple Silicon or ReBAR), and staged transfer via transient staging
+buffers (`vkCmdCopyBuffer`) on discrete VRAM heaps (also testable with
+`AFTERLIGHT_FORCE_STAGING_UPLOAD=1`). Object transform and camera changes do not
+re-upload geometry or wait for the GPU.
 
-Mesh memory is host-visible, preferring coherent memory. Noncoherent allocations
-are flushed before unmapping. This is a setup-time upload path; staging buffers,
-device-local mesh allocations, and streaming can follow when needed. Object
-transform and camera changes do not re-upload geometry or wait for the GPU.
+The renderer itself is split across focused translation units
+(`renderer_device_vulkan.c`, `renderer_mesh_vulkan.c`,
+`renderer_cluster_vulkan.c`, `renderer_assets_vulkan.c`, and
+`renderer_vulkan.c`) and the CMake build is modularized under `cmake/`.
 
 The math module is independent of SDL and Vulkan. Matrices use column-major
-storage and column vectors, so the shader receives `projection * view * model`
-in a 3216-byte per-frame camera/light/shadow/water uniform plus a 128-byte per-draw push constant
-(model matrix, material/selection tint, flags, surface values and emission). World space is right-handed with Y up,
+storage and column vectors, so the shader receives camera/light/shadow/water/tile
+state in a 2384-byte per-frame uniform buffer, up to 128 local lights and
+32×32 screen-space tile bitmasks in per-frame storage buffers (set 0 bindings
+12 and 13), plus a 128-byte per-draw push constant (model matrix, material/selection
+tint, flags, surface values, and emission). World space is right-handed with Y up,
 angles use radians, and the camera looks along -Z by default. Perspective maps
 near/far planes to Vulkan's [0,1] depth and flips clip Y for the positive-height
 viewport. Aspect ratio follows the logical scene viewport, which is scaled to framebuffer pixels.
 
 Binding stride and attribute offsets come from the C vertex struct layout.
-The pipeline uses opaque triangle lists, no culling, and no alpha blending.
-Vertex normals and UVs feed textured ambient/Lambert directional lighting. A
-material can select unlit output. Directional diffuse is multiplied by shadow
-visibility; ambient remains unshadowed. Normal transforms use the inverse transpose
-of the world model matrix, with a fragment geometric fallback for zero normals.
-Depth rejects hidden surfaces regardless of index submission order. Viewport
-and scissor are dynamic. The pipeline/layout are owned by the swapchain and
-rebuilt with the render pass. Mesh buffers survive resize. Shader modules are
-released immediately after pipeline creation.
+Pipelines support opaque, alpha-cutout, sorted alpha-blended, and two-pass water
+rendering, plus custom material pipelines created from caller-supplied SPIR-V
+fragment shaders that share the standard 5-descriptor-set / 128-byte push-constant
+contract and survive swapchain rebuilds. Vertex normals and UVs feed textured
+Lambert or Cook–Torrance PBR lighting with HDR image-based lighting (IBL) and
+unlit fallback. Normal transforms use the inverse transpose of the world model
+matrix, with a fragment geometric fallback for zero normals. Depth rejects hidden
+surfaces regardless of index submission order. Viewport and scissor are dynamic.
+Pipelines and layouts are owned by the swapchain and rebuilt with the render
+pass. Mesh buffers and custom shader SPIR-V bytecode survive resize.
 
-CMake runs `glslangValidator` for Vulkan 1.1 with SPIR-V validation and embeds the
-result as generated C headers. No shader file lookup or compilation occurs at
-runtime. This is the built-in color pipeline, not a custom material/shader API.
+CMake runs `glslangValidator` for Vulkan 1.1 (and 1.2 for optional ray-query
+shaders) with SPIR-V validation and embeds the built-in shaders as generated C
+headers. No runtime shader compilation is required for built-in pipelines.
 
 ## Directional shadows
 
@@ -203,16 +215,23 @@ asset names, not GPU handles, and are preserved in the scene file format.
 ## Scene persistence
 
 `af_scene_load` and `af_scene_save` work without SDL, Vulkan, or game callbacks.
-Version 5 uses UTF-8 JSON with a format tag and explicit version. Object IDs and
-the next-ID counter use canonical decimal strings to retain all 64 bits; the
-counter preserves deleted/exhausted ID history. Objects retain order, names,
-mesh/texture references, materials, parent IDs, visibility, and local TRS. It also
-records the asset manifest, directional light, shadow settings and per-material
-cast/receive flags; versions 1–4 load with backward-compatible defaults.
-Version 4 adds surface/normal/emission fields, exposure and bounded local lights. The loader validates
-schema, uniqueness, counter consistency, encoding, finite float ranges, and
-file/object/depth limits before returning a new scene. Failed loads leave the
-caller's existing scene untouched.
+Current scene files (version 30) use UTF-8 JSON with a format tag and explicit
+version, maintaining backward-compatible loading from earlier versions (v1–v30).
+Object IDs and the next-ID counter use canonical decimal strings to retain all 64
+bits; the counter preserves deleted/exhausted ID history. Scenes persist objects,
+hierarchy, materials (including optional custom `"shader"` names), asset
+manifests, directional/local lights, shadow/render settings, colliders, compound
+parts, rigid bodies, joints, water volumes, wind, animation bindings, character
+rigs, blueprints, and landscapes. The loader validates schema, uniqueness,
+counter consistency, encoding, finite float ranges, and file/object/depth limits
+before returning a new scene. Failed loads leave the caller's existing scene
+untouched.
+
+Heavy `af_landscape` terrain chunk and foliage storage uses atomic reference-counted
+copy-on-write (`cow_storage`) during `af_scene_clone` and editor undo snapshots:
+cloning a scene shares chunk arrays in O(1) until `af_scene_get_landscape_mut`
+triggers a unique detached copy. Editor history accounting deduplicates shared
+landscape chunk storage across undo/redo snapshots.
 
 Saving creates the complete JSON before opening an exclusive sibling temporary
 file. It replaces the destination after a successful write/close and cleans up
@@ -367,11 +386,14 @@ lighting. Normal mapping reconstructs a tangent frame from world-position/UV
 derivatives, preserves UV handedness and falls back for degenerate UVs. The
 minimum Vulkan push-constant budget remains sufficient at 128 bytes per draw.
 
-Scene-owned point/spot lights are bounded at 16, copied into the per-frame UBO,
-and iterated in the fragment shader. Range falloff smoothly windows inverse-square
-attenuation; spot half-cones apply a smooth inner/outer angular ramp. They do not
-use shadow maps. Scene exposure and optional Reinhard mapping apply to scene
-fragment output; there is no floating-point intermediate color buffer or IBL.
+Scene-owned point/spot lights scale up to 128 active lights (`AF_SCENE_MAX_LOCAL_LIGHTS`),
+uploaded via a per-frame storage buffer (set 0 binding 12) and binned on the CPU into
+32×32 screen-space `uvec4` tile bitmasks (set 0 binding 13) so fragments evaluate only
+lights overlapping their screen tile. Range falloff smoothly windows inverse-square
+attenuation; spot half-cones apply a smooth inner/outer angular ramp. Up to four
+visible shadow-casting local lights receive point/spot shadow maps. Scene shading renders
+into an RGBA16F HDR intermediate buffer with IBL, optional bloom, exposure, tone mapping,
+and configurable AA (FXAA, SMAA, TAA, or external upscaler).
 
 CPU counters measure event processing, game/editor update and render submission
 including waits. Timestamp query pools belong to frame slots. After the slot's
@@ -587,3 +609,26 @@ uploads, BLAS builds, TLAS builds and fragment traversal. Failed optional
 preparation can therefore retry raster without consuming an acquired image.
 Shared geometry changes retire GPU use before invalidation; transforms rebuild
 the affected frame's TLAS without rebuilding BLAS. See the [0.22 lifecycle notes](development-022.md#resources-and-synchronization).
+
+## Scalability, multithreading and streaming audio
+
+- **Dynamic physics pools & O(1) body lookup:** `af_physics` allocates body,
+  contact, cache-bucket, compound-part, joint, and island arrays dynamically
+  instead of embedding multi-megabyte fixed arrays, scaling cleanly past 1,024
+  bodies (up to `AF_PHYSICS_MAX_BODIES` = 16,384 / `AF_PHYSICS_MAX_CONTACTS` =
+  131,072) with an open-addressed ID hash index.
+- **Deterministic worker pool (`af_jobs`):** `engine/src/core/jobs.c` provides an
+  SDL3-backed worker pool (`af_jobs_parallel_for`) with lock-free atomic chunk
+  claiming, calling-thread participation, and deadlock-free nested fallback
+  (overridable via `AFTERLIGHT_JOB_THREADS`). It deterministically parallelizes
+  independent physics constraint islands (`physics_solver.c`), PBF water particle
+  passes (`water_particles.c`), multi-actor animation pose sampling
+  (`animation_runtime.c`), large morph-target vertex blending, and dirty terrain
+  chunk mesh builds (`renderer_mesh_vulkan.c`).
+- **Compressed & streaming audio with mix buses:** `audio_codec.c` implements
+  zero-dependency MPL-2.0 decoders for QOA (5× compression) and WAV (8/16/24/32-bit
+  PCM, 32-bit float, and 4:1 IMA-ADPCM). `audio.c` dynamically grows clip (up to
+  512 / 128 MiB), voice (up to 256), and stream (up to 32) pools, adds disk-streaming
+  music/ambience playback (`af_audio_stream_start` with no 30 s / 8 MiB ceiling),
+  provides Master/SFX/Music/Ambience mix buses, and applies a smooth soft-clipper
+  above 0.85 amplitude.

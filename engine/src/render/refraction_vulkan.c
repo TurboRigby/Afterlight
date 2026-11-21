@@ -4,7 +4,7 @@
 #include <stdlib.h>
 typedef struct image {
     VkImage image;
-    VkDeviceMemory memory;
+    af_vk_allocation memory;
     VkImageView view;
 } image;
 typedef struct frame {
@@ -13,8 +13,8 @@ typedef struct frame {
 } frame;
 struct af_vk_refraction {
     uint64_t allocation_bytes;
-    VkPhysicalDevice physical;
     VkDevice device;
+    af_vk_allocator *allocator;
     VkExtent2D extent;
     uint32_t count;
     VkFormat depth_format;
@@ -48,22 +48,10 @@ static bool create_image(af_vk_refraction *r, image *out, VkFormat format, VkIma
         return false;
     VkMemoryRequirements req;
     vkGetImageMemoryRequirements(r->device, out->image, &req);
-    VkPhysicalDeviceMemoryProperties props;
-    vkGetPhysicalDeviceMemoryProperties(r->physical, &props);
-    uint32_t type = UINT32_MAX;
-    for (uint32_t i = 0; i < props.memoryTypeCount; ++i)
-        if ((req.memoryTypeBits & (1u << i)) &&
-            (props.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-            type = i;
-            break;
-        }
-    if (type == UINT32_MAX)
-        return false;
     r->allocation_bytes += req.size;
-    VkMemoryAllocateInfo allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size, .memoryTypeIndex = type};
-    if (!ok(vkAllocateMemory(r->device, &allocation, NULL, &out->memory)) ||
-        !ok(vkBindImageMemory(r->device, out->image, out->memory, 0)))
+    if (!af_vk_allocate(r->allocator, req, AF_VK_MEM_IMAGE, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0, false,
+                        &out->memory) ||
+        !ok(vkBindImageMemory(r->device, out->image, out->memory.memory, out->memory.offset)))
         return false;
     VkImageViewCreateInfo view = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                                   .image = out->image,
@@ -72,13 +60,15 @@ static bool create_image(af_vk_refraction *r, image *out, VkFormat format, VkIma
                                   .subresourceRange = {aspect, 0, 1, 0, 1}};
     return ok(vkCreateImageView(r->device, &view, NULL, &out->view));
 }
-af_vk_refraction *af_vk_refraction_create(VkPhysicalDevice physical, VkDevice device, VkExtent2D extent, uint32_t count,
+af_vk_refraction *af_vk_refraction_create(VkDevice device, af_vk_allocator *allocator, VkExtent2D extent, uint32_t count,
                                           VkFormat depth) {
+    if (!allocator)
+        return NULL;
     af_vk_refraction *r = calloc(1, sizeof(*r));
     if (!r)
         return NULL;
-    r->physical = physical;
     r->device = device;
+    r->allocator = allocator;
     r->extent = extent;
     r->count = count;
     r->depth_format = depth;
@@ -120,8 +110,7 @@ void af_vk_refraction_destroy(af_vk_refraction *r) {
                 vkDestroyImageView(r->device, a->view, NULL);
             if (a->image)
                 vkDestroyImage(r->device, a->image, NULL);
-            if (a->memory)
-                vkFreeMemory(r->device, a->memory, NULL);
+            af_vk_free(r->allocator, &a->memory);
         }
     }
     if (r->color_sampler)

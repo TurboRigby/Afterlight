@@ -4,11 +4,16 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#include <afterlight/landscape.h>
+#include "landscape_internal.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+typedef struct ls_cow_storage {
+    _Atomic uint32_t refs;
+} ls_cow_storage;
 
 #define CHUNK_V AF_LANDSCAPE_CHUNK_VERTICES
 #define CHUNK_Q AF_LANDSCAPE_CHUNK_QUADS
@@ -191,6 +196,44 @@ static void init_chunk(af_landscape *landscape, size_t chunk_idx, int32_t cx, in
     snprintf(c->mesh_name, sizeof(c->mesh_name), "__terrain_c_%d_%d", cx, cz);
 }
 
+static void free_chunk_array(af_terrain_chunk *chunks, size_t chunk_count) {
+    if (!chunks)
+        return;
+    for (size_t c = 0; c < chunk_count; ++c) {
+        for (size_t fl = 0; fl < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++fl)
+            free(chunks[c].foliage[fl].instances);
+    }
+    free(chunks);
+}
+
+static af_terrain_chunk *clone_chunk_array(const af_terrain_chunk *src_chunks, size_t chunk_count) {
+    af_terrain_chunk *dst_chunks = calloc(chunk_count, sizeof(af_terrain_chunk));
+    if (!dst_chunks)
+        return NULL;
+    for (size_t c = 0; c < chunk_count; ++c) {
+        memcpy(&dst_chunks[c], &src_chunks[c], sizeof(af_terrain_chunk));
+        dst_chunks[c].dirty_mesh = true;
+        for (size_t fl = 0; fl < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++fl) {
+            const af_foliage_chunk *sc = &src_chunks[c].foliage[fl];
+            af_foliage_chunk *dc = &dst_chunks[c].foliage[fl];
+            dc->instances = NULL;
+            dc->capacity = 0;
+            dc->count = 0;
+            if (sc->count > 0 && sc->instances) {
+                dc->instances = malloc(sc->count * sizeof(af_foliage_instance));
+                if (!dc->instances) {
+                    free_chunk_array(dst_chunks, chunk_count);
+                    return NULL;
+                }
+                memcpy(dc->instances, sc->instances, sc->count * sizeof(af_foliage_instance));
+                dc->count = sc->count;
+                dc->capacity = sc->count;
+            }
+        }
+    }
+    return dst_chunks;
+}
+
 af_landscape *af_landscape_create(uint32_t chunks_x, uint32_t chunks_z, float spacing) {
     if (chunks_x == 0)
         chunks_x = 4;
@@ -203,11 +246,19 @@ af_landscape *af_landscape_create(uint32_t chunks_x, uint32_t chunks_z, float sp
     if (!ls)
         return NULL;
 
+    ls_cow_storage *cow = calloc(1, sizeof(*cow));
+    if (!cow) {
+        free(ls);
+        return NULL;
+    }
+    atomic_init(&cow->refs, 1u);
+
     ls->enabled = true;
     ls->chunk_count_x = chunks_x;
     ls->chunk_count_z = chunks_z;
     ls->vertex_spacing = spacing;
     ls->chunk_count = (size_t)chunks_x * chunks_z;
+    ls->cow_storage = cow;
 
     float total_w = (float)(chunks_x * CHUNK_Q) * spacing;
     float total_d = (float)(chunks_z * CHUNK_Q) * spacing;
@@ -215,6 +266,7 @@ af_landscape *af_landscape_create(uint32_t chunks_x, uint32_t chunks_z, float sp
 
     ls->chunks = calloc(ls->chunk_count, sizeof(af_terrain_chunk));
     if (!ls->chunks) {
+        free(cow);
         free(ls);
         return NULL;
     }
@@ -243,47 +295,74 @@ af_landscape *af_landscape_clone(const af_landscape *src) {
     af_landscape *dst = calloc(1, sizeof(*dst));
     if (!dst)
         return NULL;
-
-    memcpy(dst, src, sizeof(*dst));
-    dst->chunks = calloc(dst->chunk_count, sizeof(af_terrain_chunk));
-    if (!dst->chunks) {
+    ls_cow_storage *cow = calloc(1, sizeof(*cow));
+    if (!cow) {
         free(dst);
         return NULL;
     }
+    atomic_init(&cow->refs, 1u);
 
-    for (size_t c = 0; c < src->chunk_count; ++c) {
-        memcpy(&dst->chunks[c], &src->chunks[c], sizeof(af_terrain_chunk));
-        dst->chunks[c].dirty_mesh = true;
-        /* Deep clone foliage chunks */
-        for (size_t fl = 0; fl < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++fl) {
-            const af_foliage_chunk *sc = &src->chunks[c].foliage[fl];
-            af_foliage_chunk *dc = &dst->chunks[c].foliage[fl];
-            dc->instances = NULL;
-            dc->capacity = 0;
-            dc->count = 0;
-            if (sc->count > 0 && sc->instances) {
-                dc->instances = malloc(sc->count * sizeof(af_foliage_instance));
-                if (dc->instances) {
-                    memcpy(dc->instances, sc->instances, sc->count * sizeof(af_foliage_instance));
-                    dc->count = sc->count;
-                    dc->capacity = sc->count;
-                }
-            }
-        }
+    memcpy(dst, src, sizeof(*dst));
+    dst->cow_storage = cow;
+    dst->chunks = clone_chunk_array(src->chunks, src->chunk_count);
+    if (!dst->chunks) {
+        free(cow);
+        free(dst);
+        return NULL;
     }
     return dst;
+}
+
+af_landscape *ls_clone_cow(const af_landscape *src) {
+    if (!src)
+        return NULL;
+    if (!src->cow_storage || !src->chunks)
+        return af_landscape_clone(src);
+    af_landscape *dst = calloc(1, sizeof(*dst));
+    if (!dst)
+        return NULL;
+    memcpy(dst, src, sizeof(*dst));
+    ls_cow_storage *cow = (ls_cow_storage *)src->cow_storage;
+    atomic_fetch_add_explicit(&cow->refs, 1u, memory_order_relaxed);
+    return dst;
+}
+
+bool ls_make_unique(af_landscape *ls) {
+    if (!ls || !ls->cow_storage || !ls->chunks)
+        return true;
+    ls_cow_storage *old_cow = (ls_cow_storage *)ls->cow_storage;
+    if (atomic_load_explicit(&old_cow->refs, memory_order_acquire) <= 1u)
+        return true;
+    ls_cow_storage *new_cow = calloc(1, sizeof(*new_cow));
+    if (!new_cow)
+        return false;
+    atomic_init(&new_cow->refs, 1u);
+    af_terrain_chunk *new_chunks = clone_chunk_array(ls->chunks, ls->chunk_count);
+    if (!new_chunks) {
+        free(new_cow);
+        return false;
+    }
+    af_terrain_chunk *old_chunks = ls->chunks;
+    ls->chunks = new_chunks;
+    ls->cow_storage = new_cow;
+    if (atomic_fetch_sub_explicit(&old_cow->refs, 1u, memory_order_acq_rel) == 1u) {
+        free_chunk_array(old_chunks, ls->chunk_count);
+        free(old_cow);
+    }
+    return true;
 }
 
 void af_landscape_destroy(af_landscape *ls) {
     if (!ls)
         return;
-    if (ls->chunks) {
-        for (size_t c = 0; c < ls->chunk_count; ++c) {
-            for (size_t fl = 0; fl < AF_LANDSCAPE_MAX_FOLIAGE_LAYERS; ++fl) {
-                free(ls->chunks[c].foliage[fl].instances);
-            }
+    if (ls->cow_storage) {
+        ls_cow_storage *cow = (ls_cow_storage *)ls->cow_storage;
+        if (atomic_fetch_sub_explicit(&cow->refs, 1u, memory_order_acq_rel) == 1u) {
+            free_chunk_array(ls->chunks, ls->chunk_count);
+            free(cow);
         }
-        free(ls->chunks);
+    } else {
+        free_chunk_array(ls->chunks, ls->chunk_count);
     }
     free(ls);
 }

@@ -16,7 +16,7 @@
 
 typedef struct shadow_frame {
     VkImage image;
-    VkDeviceMemory memory;
+    af_vk_allocation memory;
     VkImageView array_view, layer_views[AF_SHADOW_LAYER_COUNT];
     VkFramebuffer framebuffers[AF_SHADOW_LAYER_COUNT];
     VkDescriptorSet descriptor;
@@ -24,6 +24,7 @@ typedef struct shadow_frame {
 struct af_vk_shadows {
     uint64_t allocation_bytes;
     VkDevice device;
+    af_vk_allocator *allocator;
     uint32_t resolution, layers;
     VkFormat format;
     VkRenderPass pass;
@@ -69,8 +70,7 @@ void af_vk_shadows_destroy(af_vk_shadows *s) {
             vkDestroyImageView(s->device, frame->array_view, NULL);
         if (frame->image)
             vkDestroyImage(s->device, frame->image, NULL);
-        if (frame->memory)
-            vkFreeMemory(s->device, frame->memory, NULL);
+        af_vk_free(s->allocator, &frame->memory);
     }
     if (s->pass)
         vkDestroyRenderPass(s->device, s->pass, NULL);
@@ -162,14 +162,16 @@ done:
     vkDestroyShaderModule(s->device, shader, NULL);
     return success;
 }
-af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical, VkDevice device, uint32_t resolution, uint32_t layers,
-                                    VkDescriptorSetLayout frame_layout, VkDescriptorSetLayout texture_layout) {
-    if (!resolution || !layers || layers > AF_SHADOW_LAYER_COUNT)
+af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
+                                    uint32_t resolution, uint32_t layers, VkDescriptorSetLayout frame_layout,
+                                    VkDescriptorSetLayout texture_layout) {
+    if (!allocator || !resolution || !layers || layers > AF_SHADOW_LAYER_COUNT)
         return NULL;
     af_vk_shadows *s = calloc(1, sizeof(*s));
     if (!s)
         return NULL;
     s->device = device;
+    s->allocator = allocator;
     s->frame_layout = frame_layout;
     s->texture_layout = texture_layout;
     s->resolution = resolution;
@@ -251,8 +253,6 @@ af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical, VkDevice device, 
                                        .pPoolSizes = &size};
     if (!ok(vkCreateDescriptorPool(device, &pool, NULL, &s->pool), "descriptor pool"))
         goto fail;
-    VkPhysicalDeviceMemoryProperties memory;
-    vkGetPhysicalDeviceMemoryProperties(physical, &memory);
     for (unsigned f = 0; f < AF_SHADOW_FRAME_COUNT; ++f) {
         shadow_frame *frame = &s->frames[f];
         VkImageCreateInfo image = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -269,21 +269,10 @@ af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical, VkDevice device, 
             goto fail;
         VkMemoryRequirements requirements;
         vkGetImageMemoryRequirements(device, frame->image, &requirements);
-        uint32_t type = UINT32_MAX;
-        for (unsigned i = 0; i < memory.memoryTypeCount; ++i)
-            if ((requirements.memoryTypeBits & (1u << i)) &&
-                (memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-                type = i;
-                break;
-            }
-        if (type == UINT32_MAX)
-            goto fail;
         s->allocation_bytes += requirements.size;
-        VkMemoryAllocateInfo allocate = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                                         .allocationSize = requirements.size,
-                                         .memoryTypeIndex = type};
-        if (!ok(vkAllocateMemory(device, &allocate, NULL, &frame->memory), "memory") ||
-            !ok(vkBindImageMemory(device, frame->image, frame->memory, 0), "bind memory"))
+        if (!af_vk_allocate(allocator, requirements, AF_VK_MEM_IMAGE, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0, false,
+                            &frame->memory) ||
+            !ok(vkBindImageMemory(device, frame->image, frame->memory.memory, frame->memory.offset), "bind memory"))
             goto fail;
         VkImageViewCreateInfo view = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                                       .image = frame->image,

@@ -5,19 +5,12 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 layout(location = 1) out vec4 out_motion;
 layout(location = 2) out vec4 out_gi;
-struct LocalLight {
-    vec4 position_range;
-    vec4 color_intensity;
-    vec4 direction_inner;
-    vec4 params;
-};
 layout(set = 0, binding = 0) uniform Frame {
     mat4 view_projection;
     vec4 direction_intensity;
     vec4 color_ambient;
     mat4 shadow_matrices[4];
     vec4 cascade_splits, camera_position, camera_forward, shadow_params, cascade_params, render_params;
-    LocalLight lights[16];
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;
@@ -27,6 +20,7 @@ layout(set = 0, binding = 0) uniform Frame {
     mat4 unjittered_view_projection, previous_view_projection;
     vec4 ray_params;
     vec4 rtgi_flags;
+    vec4 light_tile_params;
 }
 frame;
 layout(set = 0, binding = 5) uniform sampler2D sky_map;

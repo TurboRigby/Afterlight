@@ -39,7 +39,6 @@ layout(set = 0, binding = 0) uniform Frame {
     vec4 shadow_params;
     vec4 cascade_params;
     vec4 render_params;
-    LocalLight lights[16];
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;
@@ -49,8 +48,17 @@ layout(set = 0, binding = 0) uniform Frame {
     mat4 unjittered_view_projection, previous_view_projection;
     vec4 ray_params;
     vec4 rtgi_flags;
+    vec4 light_tile_params;
 }
 frame;
+layout(std430, set = 0, binding = 12) readonly buffer LocalLights {
+    LocalLight items[];
+}
+local_lights;
+layout(std430, set = 0, binding = 13) readonly buffer LightTiles {
+    uvec4 masks[];
+}
+light_tiles;
 layout(set = 0, binding = 1) uniform sampler2DArray local_shadow_map;
 layout(set = 0, binding = 2) uniform sampler2D environment_map;
 layout(set = 0, binding = 3) uniform sampler2D irradiance_map;
@@ -425,32 +433,48 @@ void main() {
             draw.tint.rgb * (vec3(1) - water_transmission(n, v)) * frame.color_ambient.w +
             water_scatter(n, v, -frame.direction_intensity.xyz, frame.color_ambient.rgb * frame.direction_intensity.w) *
                 (bulk_water ? 1.0 : sun_visibility);
-    if (((uint(draw.params.x) & 1u) == 0u))
-        for (int i = 0; i < int(frame.light_count.x); ++i) {
-            LocalLight light = frame.lights[i];
-            vec3 offset = light.position_range.xyz - world_position;
-            float distance_squared = dot(offset, offset), distance_to_light = sqrt(distance_squared);
-            if (distance_to_light >= light.position_range.w || distance_to_light < 0.00001)
-                continue;
-            vec3 l = offset / distance_to_light;
-            float falloff = clamp(1.0 - pow(distance_to_light / light.position_range.w, 4.0), 0.0, 1.0);
-            float attenuation = falloff * falloff / max(distance_squared, 0.01);
-            if (light.params.y > 0.5) {
-                float cone = dot(-l, light.direction_inner.xyz);
-                float blend =
-                    clamp((cone - light.params.x) / max(light.direction_inner.w - light.params.x, 0.00001), 0.0, 1.0);
-                attenuation *= blend * blend * (3.0 - 2.0 * blend);
-            }
-            float visibility = local_visibility(light, n, l, distance_to_light);
-            if (water)
+    if (((uint(draw.params.x) & 1u) == 0u) && frame.light_count.x > 0.5) {
+        uint tile_cols = max(uint(frame.light_tile_params.x), 1u);
+        uint tile_rows = max(uint(frame.light_tile_params.y), 1u);
+        uint tile_size = max(uint(frame.light_tile_params.z), 1u);
+        uint tx = min(uint(max(gl_FragCoord.x, 0.0)) / tile_size, tile_cols - 1u);
+        uint ty = min(uint(max(gl_FragCoord.y, 0.0)) / tile_size, tile_rows - 1u);
+        uvec4 tile_mask = light_tiles.masks[ty * tile_cols + tx];
+        int total_lights = int(frame.light_count.x);
+        for (int word = 0; word < 4; ++word) {
+            uint bits = tile_mask[word];
+            while (bits != 0u) {
+                int bit = findLSB(bits);
+                bits &= bits - 1u;
+                int i = word * 32 + bit;
+                if (i >= total_lights)
+                    continue;
+                LocalLight light = local_lights.items[i];
+                vec3 offset = light.position_range.xyz - world_position;
+                float distance_squared = dot(offset, offset), distance_to_light = sqrt(distance_squared);
+                if (distance_to_light >= light.position_range.w || distance_to_light < 0.00001)
+                    continue;
+                vec3 l = offset / distance_to_light;
+                float falloff = clamp(1.0 - pow(distance_to_light / light.position_range.w, 4.0), 0.0, 1.0);
+                float attenuation = falloff * falloff / max(distance_squared, 0.01);
+                if (light.params.y > 0.5) {
+                    float cone = dot(-l, light.direction_inner.xyz);
+                    float blend = clamp(
+                        (cone - light.params.x) / max(light.direction_inner.w - light.params.x, 0.00001), 0.0, 1.0);
+                    attenuation *= blend * blend * (3.0 - 2.0 * blend);
+                }
+                float visibility = local_visibility(light, n, l, distance_to_light);
+                if (water)
+                    output_rgb +=
+                        water_scatter(n, v, l, light.color_intensity.rgb * light.color_intensity.w * attenuation) *
+                        (bulk_water ? 1.0 : visibility);
                 output_rgb +=
-                    water_scatter(n, v, l, light.color_intensity.rgb * light.color_intensity.w * attenuation) *
-                    (bulk_water ? 1.0 : visibility);
-            output_rgb +=
-                direct_light(base.rgb, n, v, l, light.color_intensity.rgb * light.color_intensity.w * attenuation,
-                             roughness, metal) *
-                visibility;
+                    direct_light(base.rgb, n, v, l, light.color_intensity.rgb * light.color_intensity.w * attenuation,
+                                 roughness, metal) *
+                    visibility;
+            }
         }
+    }
     if (((uint(draw.params.x) & 1u) == 0u)) {
         vec3 gi = vec3(0);
         bool has_gi = false;

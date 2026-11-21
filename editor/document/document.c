@@ -27,24 +27,47 @@ static void clear_history(ed_snapshot *history, size_t *count) {
         af_scene_destroy(history[i].scene);
     *count = 0;
 }
-static size_t snapshot_bytes(ed_snapshot snapshot) {
+static size_t snapshot_base_bytes(ed_snapshot snapshot) {
     size_t bytes = af_scene_object_count(snapshot.scene) * sizeof(af_scene_object) +
                    af_scene_asset_count(snapshot.scene) * sizeof(af_scene_asset) + sizeof(snapshot);
     const af_landscape *ls = af_scene_get_landscape(snapshot.scene);
-    if (ls) {
-        bytes += sizeof(af_landscape) + ls->chunk_count * sizeof(af_terrain_chunk);
-        for (size_t i = 0; i < ls->foliage_layer_count; ++i) {
-            bytes += ls->foliage_layers[i].total_instances * sizeof(af_foliage_instance);
+    if (ls)
+        bytes += sizeof(af_landscape);
+    return bytes;
+}
+static size_t landscape_storage_bytes(const af_landscape *ls) {
+    if (!ls)
+        return 0;
+    size_t bytes = ls->chunk_count * sizeof(af_terrain_chunk);
+    for (size_t i = 0; i < ls->foliage_layer_count; ++i)
+        bytes += ls->foliage_layers[i].total_instances * sizeof(af_foliage_instance);
+    return bytes;
+}
+static size_t history_total_bytes(const ed_snapshot *history, size_t count, const ed_snapshot *extra) {
+    size_t bytes = 0;
+    const af_terrain_chunk *seen[ED_HISTORY_LIMIT + 1];
+    size_t seen_count = 0;
+    for (size_t i = 0; i < count + (extra ? 1u : 0u); ++i) {
+        ed_snapshot snap = i < count ? history[i] : *extra;
+        bytes += snapshot_base_bytes(snap);
+        const af_landscape *ls = af_scene_get_landscape(snap.scene);
+        if (ls && ls->chunks) {
+            bool counted = false;
+            for (size_t j = 0; j < seen_count; ++j)
+                if (seen[j] == ls->chunks) {
+                    counted = true;
+                    break;
+                }
+            if (!counted) {
+                seen[seen_count++] = ls->chunks;
+                bytes += landscape_storage_bytes(ls);
+            }
         }
     }
     return bytes;
 }
 static void push_history(ed_snapshot *history, size_t *count, ed_snapshot snapshot) {
-    size_t bytes = snapshot_bytes(snapshot);
-    for (size_t i = 0; i < *count; ++i)
-        bytes += snapshot_bytes(history[i]);
-    while (*count && (*count == ED_HISTORY_LIMIT || bytes > ED_HISTORY_BYTES)) {
-        bytes -= snapshot_bytes(history[0]);
+    while (*count && (*count == ED_HISTORY_LIMIT || history_total_bytes(history, *count, &snapshot) > ED_HISTORY_BYTES)) {
         af_scene_destroy(history[0].scene);
         memmove(history, history + 1, (--*count) * sizeof(*history));
     }
@@ -438,6 +461,7 @@ bool ed_document_material(ed_document *d, af_material material) {
         same_vector(a->emission, material.emission) && a->emission_strength == material.emission_strength &&
         a->normal_strength == material.normal_strength &&
         !strcmp(a->metallic_roughness_map, material.metallic_roughness_map) &&
+        !strcmp(a->shader, material.shader) &&
         !strcmp(a->normal_map, material.normal_map) && !strcmp(a->texture, material.texture))
         return true;
     af_scene *next = af_scene_clone(d->scene);

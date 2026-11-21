@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "animation_runtime.h"
+#include "core/jobs.h"
 #include "scene/scene_internal.h"
 #include <math.h>
 #include <stdio.h>
@@ -476,6 +477,43 @@ bool af_animation_runtime_world(const af_animation_runtime *r, af_object_id obje
     *out = r->world[at];
     return true;
 }
+typedef struct anim_sample_context {
+    af_animation_runtime *runtime;
+    double delta;
+    bool animate;
+    bool failed[RUNTIME_INSTANCES];
+} anim_sample_context;
+
+static void sample_instance_range(size_t start, size_t end, void *user_data) {
+    anim_sample_context *ctx = user_data;
+    af_animation_runtime *r = ctx->runtime;
+    for (size_t j = start; j < end; ++j) {
+        animation_instance *i = &r->instances[j];
+        animation_asset *a = asset(r, i->configuration.asset);
+        if (!a || i->generation != a->generation || i->node_count != a->file.node_count)
+            continue;
+        memset(i->nodes, 0, i->node_count * sizeof(*i->nodes));
+        if (i->preview) {
+            memcpy(i->poses, i->preview, i->node_count * sizeof(*i->poses));
+            continue;
+        }
+        if (ctx->animate && !i->driven && i->player.playing && i->player.clip < a->file.clip_count) {
+            af_animation_events events;
+            if (af_animation_collect_events(&a->file.clips[i->player.clip], i->player.time,
+                                            ctx->delta * i->player.speed, i->player.loop, &events))
+                queue_events(i, &events);
+        }
+        if (!ctx->animate || !a->file.clip_count)
+            memcpy(i->poses, a->file.bind_pose, i->node_count * sizeof(*i->poses));
+        else if (i->driven) {
+            if (!af_locomotion_player_sample(&i->locomotion, &a->file, i->poses, i->node_count))
+                ctx->failed[j] = true;
+        } else if (!af_animation_player_update(&i->player, &a->file, ctx->delta) ||
+                   !af_animation_player_sample(&i->player, &a->file, i->poses, i->node_count))
+            memcpy(i->poses, a->file.bind_pose, i->node_count * sizeof(*i->poses));
+    }
+}
+
 bool af_animation_runtime_update(af_animation_runtime *r, const af_scene *previous, float alpha, double delta,
                                  bool animate) {
     if (!r)
@@ -524,30 +562,11 @@ bool af_animation_runtime_update(af_animation_runtime *r, const af_scene *previo
         r->capacity = count;
     }
     memset(r->ready, 0, count);
+    anim_sample_context sample_ctx = {.runtime = r, .delta = delta, .animate = animate};
+    af_jobs_parallel_for(af_jobs_global(), r->instance_count, 8u, sample_instance_range, &sample_ctx);
     for (size_t j = 0; j < r->instance_count; ++j) {
-        animation_instance *i = &r->instances[j];
-        animation_asset *a = asset(r, i->configuration.asset);
-        if (!a || i->generation != a->generation || i->node_count != a->file.node_count)
-            continue;
-        memset(i->nodes, 0, i->node_count * sizeof(*i->nodes));
-        if (i->preview) {
-            memcpy(i->poses, i->preview, i->node_count * sizeof(*i->poses));
-            continue;
-        }
-        if (animate && !i->driven && i->player.playing && i->player.clip < a->file.clip_count) {
-            af_animation_events events;
-            if (af_animation_collect_events(&a->file.clips[i->player.clip], i->player.time, delta * i->player.speed,
-                                            i->player.loop, &events))
-                queue_events(i, &events);
-        }
-        if (!animate || !a->file.clip_count)
-            memcpy(i->poses, a->file.bind_pose, i->node_count * sizeof(*i->poses));
-        else if (i->driven) {
-            if (!af_locomotion_player_sample(&i->locomotion, &a->file, i->poses, i->node_count))
-                return false;
-        } else if (!af_animation_player_update(&i->player, &a->file, delta) ||
-                   !af_animation_player_sample(&i->player, &a->file, i->poses, i->node_count))
-            memcpy(i->poses, a->file.bind_pose, i->node_count * sizeof(*i->poses));
+        if (sample_ctx.failed[j])
+            return false;
     }
     for (size_t j = 0; j < count; ++j) {
         const af_scene_object *o = &r->scene->objects[j], *old = af_scene_get_object(previous, o->id);

@@ -917,6 +917,12 @@ bool af_engine_upload_texture(af_engine *engine, const char *name, const unsigne
                               uint32_t height) {
     return engine && af_renderer_upload_texture(engine->renderer, name, rgba, width, height);
 }
+bool af_engine_upload_material_shader(af_engine *engine, const char *name, const uint32_t *spirv, size_t word_count) {
+    return engine && af_renderer_upload_material_shader(engine->renderer, name, spirv, word_count);
+}
+bool af_engine_remove_material_shader(af_engine *engine, const char *name) {
+    return engine && af_renderer_remove_material_shader(engine->renderer, name);
+}
 bool af_engine_load_texture(af_engine *engine, const char *name, const char *path, af_asset_error *error) {
     af_image_file image;
     if (!af_image_file_load(path, &image, error))
@@ -1041,6 +1047,33 @@ bool af_engine_load_sound(af_engine *engine, const char *name, const char *path,
 }
 bool af_engine_play_sound(af_engine *engine, const char *name, float gain) {
     return engine && af_audio_play(engine->audio, name, gain);
+}
+bool af_engine_set_audio_bus_gain(af_engine *engine, af_audio_bus bus, float gain) {
+    if (!engine)
+        return false;
+    if (!engine->audio)
+        engine->audio = af_audio_create();
+    return af_audio_set_bus_gain(engine->audio, bus, gain);
+}
+float af_engine_get_audio_bus_gain(const af_engine *engine, af_audio_bus bus) {
+    return engine && engine->audio ? af_audio_get_bus_gain(engine->audio, bus) : 1.0f;
+}
+af_sound_stream af_engine_start_audio_stream(af_engine *engine, const char *path, af_audio_bus bus, float gain,
+                                             bool loop, float fade_seconds, af_asset_error *error) {
+    if (!engine)
+        return 0;
+    if (!engine->audio)
+        engine->audio = af_audio_create();
+    return af_audio_stream_start(engine->audio, path, bus, gain, loop, fade_seconds, error);
+}
+bool af_engine_pause_audio_stream(af_engine *engine, af_sound_stream handle, bool paused) {
+    return engine && af_audio_stream_pause(engine->audio, handle, paused);
+}
+bool af_engine_fade_audio_stream(af_engine *engine, af_sound_stream handle, float gain, float fade_seconds) {
+    return engine && af_audio_stream_fade(engine->audio, handle, gain, fade_seconds);
+}
+bool af_engine_stop_audio_stream(af_engine *engine, af_sound_stream handle, float fade_seconds) {
+    return engine && af_audio_stream_stop(engine->audio, handle, fade_seconds);
 }
 af_sound_loop af_engine_start_sound_loop(af_engine *engine, const char *clip, af_sound_emitter emitter,
                                          float fade_seconds) {

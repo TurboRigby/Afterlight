@@ -18,10 +18,8 @@
 
 typedef struct ui_buffer {
     VkBuffer buffer;
-    VkDeviceMemory memory;
-    void *mapped;
+    af_vk_allocation alloc;
     VkDeviceSize capacity;
-    bool coherent;
 } ui_buffer;
 typedef struct ui_frame {
     ui_buffer vertices, indices;
@@ -31,6 +29,7 @@ typedef struct ui_frame {
 struct af_vk_ui {
     VkPhysicalDevice physical;
     VkDevice device;
+    af_vk_allocator *allocator;
     af_vk_texture *texture;
     struct {
         uint32_t id;
@@ -51,28 +50,8 @@ static bool ok(VkResult result, const char *operation) {
     af_log("error", "UI %s failed (VkResult %d).", operation, (int)result);
     return false;
 }
-static uint32_t memory_type(af_vk_ui *ui, uint32_t bits, VkMemoryPropertyFlags required,
-                            VkMemoryPropertyFlags preferred) {
-    VkPhysicalDeviceMemoryProperties properties;
-    vkGetPhysicalDeviceMemoryProperties(ui->physical, &properties);
-    uint32_t fallback = UINT32_MAX;
-    for (uint32_t i = 0; i < properties.memoryTypeCount; ++i) {
-        VkMemoryPropertyFlags flags = properties.memoryTypes[i].propertyFlags;
-        if (!(bits & (1u << i)) || (flags & required) != required)
-            continue;
-        fallback = i;
-        if ((flags & preferred) == preferred)
-            return i;
-    }
-    return fallback;
-}
 static void free_buffer(af_vk_ui *ui, ui_buffer *buffer) {
-    if (buffer->mapped)
-        vkUnmapMemory(ui->device, buffer->memory);
-    if (buffer->buffer)
-        vkDestroyBuffer(ui->device, buffer->buffer, NULL);
-    if (buffer->memory)
-        vkFreeMemory(ui->device, buffer->memory, NULL);
+    af_vk_destroy_buffer(ui->allocator, &buffer->buffer, &buffer->alloc);
     *buffer = (ui_buffer){0};
 }
 static bool reserve_buffer(af_vk_ui *ui, ui_buffer *buffer, VkDeviceSize size, VkBufferUsageFlags usage) {
@@ -80,36 +59,14 @@ static bool reserve_buffer(af_vk_ui *ui, ui_buffer *buffer, VkDeviceSize size, V
         return true;
     free_buffer(ui, buffer); /* Owner frame fence is already complete. */
     VkDeviceSize capacity = size < 65536 ? 65536 : size * 2;
-    VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                               .size = capacity,
-                               .usage = usage,
-                               .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-    if (!ok(vkCreateBuffer(ui->device, &info, NULL, &buffer->buffer), "vkCreateBuffer"))
+    if (!af_vk_create_buffer(ui->allocator, capacity, usage, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false, &buffer->buffer, &buffer->alloc))
         return false;
-    VkMemoryRequirements requirements;
-    vkGetBufferMemoryRequirements(ui->device, buffer->buffer, &requirements);
-    uint32_t index = memory_type(ui, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    if (index == UINT32_MAX)
-        return false;
-    VkMemoryAllocateInfo allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = requirements.size, .memoryTypeIndex = index};
-    if (!ok(vkAllocateMemory(ui->device, &allocation, NULL, &buffer->memory), "vkAllocateMemory") ||
-        !ok(vkBindBufferMemory(ui->device, buffer->buffer, buffer->memory, 0), "vkBindBufferMemory") ||
-        !ok(vkMapMemory(ui->device, buffer->memory, 0, VK_WHOLE_SIZE, 0, &buffer->mapped), "vkMapMemory"))
-        return false;
-    VkPhysicalDeviceMemoryProperties properties;
-    vkGetPhysicalDeviceMemoryProperties(ui->physical, &properties);
-    buffer->coherent = (properties.memoryTypes[index].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
     buffer->capacity = capacity;
     return true;
 }
 static bool flush_buffer(af_vk_ui *ui, ui_buffer *buffer) {
-    if (buffer->coherent)
-        return true;
-    VkMappedMemoryRange range = {
-        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = buffer->memory, .size = VK_WHOLE_SIZE};
-    return ok(vkFlushMappedMemoryRanges(ui->device, 1, &range), "vkFlushMappedMemoryRanges");
+    return af_vk_flush(ui->allocator, &buffer->alloc, 0, VK_WHOLE_SIZE);
 }
 
 void af_vk_ui_release_pipeline(af_vk_ui *ui) {
@@ -138,14 +95,17 @@ void af_vk_ui_destroy(af_vk_ui *ui) {
     free(ui);
 }
 
-af_vk_ui *af_vk_ui_create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+af_vk_ui *af_vk_ui_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                           const unsigned char *rgba, uint32_t width, uint32_t height) {
+    if (!allocator)
+        return NULL;
     af_vk_ui *ui = calloc(1, sizeof(*ui));
     if (!ui)
         return NULL;
     ui->device = device;
     ui->physical = physical;
-    ui->texture = af_vk_texture_create(physical, device, queue, family, rgba, width, height, false, false, 1);
+    ui->allocator = allocator;
+    ui->texture = af_vk_texture_create(physical, device, allocator, rgba, width, height, false, false, 1);
     if (!ui->texture)
         goto fail;
     VkDescriptorSetLayout descriptor_layout = af_vk_texture_layout(ui->texture);
@@ -254,8 +214,8 @@ bool af_vk_ui_prepare(af_vk_ui *ui, uint32_t frame_index, const af_overlay_frame
     if (!reserve_buffer(ui, &buffers->vertices, vertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) ||
         !reserve_buffer(ui, &buffers->indices, indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
         return false;
-    memcpy(buffers->vertices.mapped, frame->vertices, (size_t)vertices);
-    memcpy(buffers->indices.mapped, frame->indices, (size_t)indices);
+    memcpy(buffers->vertices.alloc.mapped, frame->vertices, (size_t)vertices);
+    memcpy(buffers->indices.alloc.mapped, frame->indices, (size_t)indices);
     return flush_buffer(ui, &buffers->vertices) && flush_buffer(ui, &buffers->indices);
 }
 void af_vk_ui_draw(af_vk_ui *ui, VkCommandBuffer command, uint32_t frame_index, const af_overlay_frame *frame,
@@ -360,7 +320,8 @@ void af_vk_ui_record_uploads(af_vk_ui *ui, VkCommandBuffer command, uint32_t fra
         }
         if (!uploaded && ui->images[i].pending) {
             af_vk_texture *texture = af_vk_texture_create_recorded(
-                ui->physical, ui->device, command, ui->images[i].pending, ui->images[i].width, ui->images[i].height);
+                ui->physical, ui->device, ui->allocator, command, ui->images[i].pending, ui->images[i].width,
+                ui->images[i].height);
             if (texture) {
                 if (ui->images[i].texture)
                     frame->retired[frame->retired_count++] = ui->images[i].texture;

@@ -5,8 +5,9 @@
 #include <afterlight/material.h>
 #include <afterlight/overlay.h>
 #include <afterlight/extension_vulkan.h>
+#include "vk_memory.h"
 typedef struct af_vk_post af_vk_post;
-af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                               VkExtent2D extent, VkExtent2D render_extent, uint32_t count, const VkImageView *outputs,
                               VkFormat output_format, VkRenderPass scene_pass, const VkImageView *depths,
                               af_render_settings settings, bool motion, bool gi, bool upscale);

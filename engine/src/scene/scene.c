@@ -5,6 +5,7 @@
  */
 
 #include "scene_internal.h"
+#include "landscape_internal.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -259,7 +260,13 @@ af_scene *af_scene_clone(const af_scene *source) {
     copy->shadows = source->shadows;
     copy->render_settings = source->render_settings;
     copy->local_light_count = source->local_light_count;
-    copy->landscape = af_landscape_clone(source->landscape);
+    if (source->landscape) {
+        copy->landscape = ls_clone_cow(source->landscape);
+        if (!copy->landscape) {
+            af_scene_destroy(copy);
+            return NULL;
+        }
+    }
     copy->story_flags = source->story_flags;
     if (source->blueprint_count) {
         copy->blueprints = calloc(source->blueprint_count, sizeof(*copy->blueprints));
@@ -366,7 +373,8 @@ bool af_scene_set_object_material(af_scene *scene, af_object_id id, af_material 
     af_scene_object *object = find_object(scene, id);
     if (!object || !memchr(material.texture, 0, sizeof(material.texture)) ||
         !memchr(material.normal_map, 0, sizeof(material.normal_map)) ||
-        !memchr(material.metallic_roughness_map, 0, sizeof(material.metallic_roughness_map)))
+        !memchr(material.metallic_roughness_map, 0, sizeof(material.metallic_roughness_map)) ||
+        !memchr(material.shader, 0, sizeof(material.shader)))
         return false;
     if (material.alpha_mode < AF_ALPHA_OPAQUE || material.alpha_mode > AF_ALPHA_BLEND ||
         !isfinite(material.alpha_cutoff) || material.alpha_cutoff < 0 || material.alpha_cutoff > 1)
@@ -770,7 +778,11 @@ const af_landscape *af_scene_get_landscape(const af_scene *scene) {
     return scene ? scene->landscape : NULL;
 }
 af_landscape *af_scene_get_landscape_mut(af_scene *scene) {
-    return scene ? scene->landscape : NULL;
+    if (!scene || !scene->landscape)
+        return NULL;
+    if (!ls_make_unique(scene->landscape))
+        return NULL;
+    return scene->landscape;
 }
 bool af_scene_set_landscape(af_scene *scene, af_landscape *landscape) {
     if (!scene)

@@ -23,7 +23,7 @@ static float radius(const ph_body *b, af_vec3 n) {
     return r;
 }
 bool ph_emit(af_physics *p, size_t a, size_t b, af_vec3 point, af_vec3 n, float penetration) {
-    if (p->contact_count == AF_PHYSICS_MAX_CONTACTS)
+    if (!ph_reserve_contacts(p, p->contact_count + 1))
         return false;
     ph_body *one = &p->bodies[a], *two = &p->bodies[b];
     ph_contact c = {.a = a,
@@ -249,7 +249,8 @@ static bool shapes(af_physics *p, size_t ai, size_t bi) {
 }
 bool ph_detect(af_physics *p) {
     p->cache_count = p->contact_count;
-    memcpy(p->cache, p->contacts, p->cache_count * sizeof(ph_contact));
+    if (p->cache_count)
+        memcpy(p->cache, p->contacts, p->cache_count * sizeof(ph_contact));
     p->contact_count = 0;
     double start = ph_clock(p), narrow = 0;
     ph_bounds(p, p->bounds, 0, false);

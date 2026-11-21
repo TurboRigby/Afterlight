@@ -8,11 +8,13 @@
 #define AF_SHADOW_VULKAN_H
 #include <vulkan/vulkan.h>
 #include <afterlight/shadow.h>
+#include "vk_memory.h"
 #define AF_SHADOW_FRAME_COUNT 2
 #define AF_SHADOW_LAYER_COUNT 24
 typedef struct af_vk_shadows af_vk_shadows;
-af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical, VkDevice device, uint32_t resolution, uint32_t layers,
-                                    VkDescriptorSetLayout frame_layout, VkDescriptorSetLayout texture_layout);
+af_vk_shadows *af_vk_shadows_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
+                                    uint32_t resolution, uint32_t layers, VkDescriptorSetLayout frame_layout,
+                                    VkDescriptorSetLayout texture_layout);
 uint64_t af_vk_shadows_allocation_bytes(const af_vk_shadows *);
 void af_vk_shadows_destroy(af_vk_shadows *shadows);
 VkDescriptorSetLayout af_vk_shadows_layout(const af_vk_shadows *shadows);

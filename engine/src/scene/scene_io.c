@@ -548,18 +548,21 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
                                                  "metallic_roughness_map",
                                                  "alpha_mode",
                                                  "alpha_cutoff",
-                                                 "ior"};
+                                                 "ior",
+                                                 "shader"};
             const cJSON *m = cJSON_GetObjectItemCaseSensitive(item, "material"),
                         *color = cJSON_GetObjectItemCaseSensitive(m, "base_color"),
                         *texture = cJSON_GetObjectItemCaseSensitive(m, "texture"),
                         *unlit = cJSON_GetObjectItemCaseSensitive(m, "unlit");
             af_material material = af_material_default();
+            bool has_shader = version->valuedouble >= 30 && cJSON_GetObjectItemCaseSensitive(m, "shader") != NULL;
             if (!exact_fields(m, fields,
-                              version->valuedouble >= 26 ? 16
+                              has_shader                   ? 17
+                              : version->valuedouble >= 26 ? 16
                               : version->valuedouble >= 12 ? 15
-                              : version->valuedouble >= 7 ? 13
-                              : version->valuedouble >= 4 ? 12
-                                                          : (version->valuedouble >= 3 ? 5 : 3)) ||
+                              : version->valuedouble >= 7  ? 13
+                              : version->valuedouble >= 4  ? 12
+                                                           : (version->valuedouble >= 3 ? 5 : 3)) ||
                 !cJSON_IsArray(color) || cJSON_GetArraySize(color) != 4 || !cJSON_IsString(texture) ||
                 strlen(texture->valuestring) >= sizeof(material.texture) || !cJSON_IsBool(unlit)) {
                 set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid object material.");
@@ -632,6 +635,14 @@ static af_scene *decode_scene(const cJSON *root, const char *scene_path, af_scen
             if (version->valuedouble >= 26 && !read_float_field(m, "ior", &material.ior)) {
                 set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid material index of refraction.");
                 goto fail;
+            }
+            if (has_shader) {
+                const cJSON *sh = cJSON_GetObjectItemCaseSensitive(m, "shader");
+                if (!cJSON_IsString(sh) || strlen(sh->valuestring) >= sizeof(material.shader)) {
+                    set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid custom shader name.");
+                    goto fail;
+                }
+                snprintf(material.shader, sizeof(material.shader), "%s", sh->valuestring);
             }
             if (!af_scene_set_object_material(scene, object->id, material)) {
                 set_error(error, AF_SCENE_ERROR_FORMAT, "Invalid material.");
@@ -1840,7 +1851,8 @@ static char *encode_scene(const af_scene *scene, const char *scene_path) {
             !cJSON_AddStringToObject(material, "normal_map", source->material.normal_map) ||
             !cJSON_AddNumberToObject(material, "normal_strength", source->material.normal_strength) ||
             !cJSON_AddStringToObject(material, "metallic_roughness_map", source->material.metallic_roughness_map) ||
-            !cJSON_AddNumberToObject(material, "ior", source->material.ior))
+            !cJSON_AddNumberToObject(material, "ior", source->material.ior) ||
+            (source->material.shader[0] && !cJSON_AddStringToObject(material, "shader", source->material.shader)))
             goto fail;
         const af_collider *value = &source->collider;
         static const char *const types[] = {"none", "box", "sphere", "capsule", "mesh", "compound"};
@@ -1904,7 +1916,8 @@ bool af_scene_save(const af_scene *scene, const char *path, af_scene_error *erro
             !valid_utf8((const unsigned char *)object->material.texture, strlen(object->material.texture)) ||
             !valid_utf8((const unsigned char *)object->material.normal_map, strlen(object->material.normal_map)) ||
             !valid_utf8((const unsigned char *)object->material.metallic_roughness_map,
-                        strlen(object->material.metallic_roughness_map))) {
+                        strlen(object->material.metallic_roughness_map)) ||
+            !valid_utf8((const unsigned char *)object->material.shader, strlen(object->material.shader))) {
             set_error(error, AF_SCENE_ERROR_FORMAT, "Object names and mesh references must be UTF-8.");
             return false;
         }

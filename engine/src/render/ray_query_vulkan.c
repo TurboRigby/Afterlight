@@ -10,10 +10,9 @@
 #define MAX_ALLOCATION (UINT64_C(256) * 1024 * 1024)
 typedef struct ray_buffer {
     VkBuffer buffer;
-    VkDeviceMemory memory;
+    af_vk_allocation alloc;
     VkDeviceSize bytes, capacity;
     VkDeviceAddress address;
-    bool coherent;
 } ray_buffer;
 typedef struct ray_acceleration {
     VkAccelerationStructureKHR handle;
@@ -50,7 +49,7 @@ typedef struct ray_frame {
 } ray_frame;
 struct af_vk_ray_query {
     VkDevice device;
-    VkPhysicalDeviceMemoryProperties memory;
+    af_vk_allocator *allocator;
     VkPhysicalDeviceAccelerationStructurePropertiesKHR limits;
     PFN_vkCreateAccelerationStructureKHR create;
     PFN_vkDestroyAccelerationStructureKHR destroy;
@@ -74,10 +73,7 @@ static bool result(VkResult code) {
     return false;
 }
 static void buffer_free(af_vk_ray_query *r, ray_buffer *b) {
-    if (b->buffer)
-        vkDestroyBuffer(r->device, b->buffer, NULL);
-    if (b->memory)
-        vkFreeMemory(r->device, b->memory, NULL);
+    af_vk_destroy_buffer(r->allocator, &b->buffer, &b->alloc);
     r->stats.bytes -= b->bytes;
     *b = (ray_buffer){0};
 }
@@ -87,41 +83,17 @@ static bool buffer_create(af_vk_ray_query *r, ray_buffer *b, VkDeviceSize size, 
     const char *fault = getenv("AFTERLIGHT_TEST_RAY_FAIL_ALLOC");
     if (fault && strtoul(fault, NULL, 10) == ++r->allocations)
         return false;
-    VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                               .size = size,
-                               .usage = usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                               .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-    if (!result(vkCreateBuffer(r->device, &info, NULL, &b->buffer)))
+    VkMemoryPropertyFlags required = host ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT : 0;
+    VkMemoryPropertyFlags preferred =
+        host ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    if (!af_vk_create_buffer(r->allocator, size, usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, required, preferred,
+                             true, &b->buffer, &b->alloc))
         return false;
-    VkMemoryRequirements need;
-    vkGetBufferMemoryRequirements(r->device, b->buffer, &need);
-    uint32_t type = UINT32_MAX;
-    for (uint32_t i = 0; i < r->memory.memoryTypeCount; ++i) {
-        VkMemoryPropertyFlags flags = r->memory.memoryTypes[i].propertyFlags;
-        if (!(need.memoryTypeBits & (1u << i)) || (host && !(flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)))
-            continue;
-        type = i;
-        if (flags & (host ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-            break;
-    }
-    if (type == UINT32_MAX)
-        return false;
-    VkMemoryAllocateFlagsInfo flags = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-                                       .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT};
-    VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                                       .pNext = &flags,
-                                       .allocationSize = need.size,
-                                       .memoryTypeIndex = type};
-    if (!result(vkAllocateMemory(r->device, &allocation, NULL, &b->memory)))
-        return false;
-    b->bytes = need.size;
-    r->stats.bytes += need.size;
+    b->bytes = b->alloc.requested_size;
+    r->stats.bytes += b->bytes;
     b->capacity = size;
-    if (!result(vkBindBufferMemory(r->device, b->buffer, b->memory, 0)))
-        return false;
     VkBufferDeviceAddressInfo address = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = b->buffer};
     b->address = r->buffer_address(r->device, &address);
-    b->coherent = (r->memory.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
     return b->address != 0;
 }
 static void acceleration_free(af_vk_ray_query *r, ray_acceleration *a) {
@@ -162,12 +134,15 @@ static bool acceleration_create(af_vk_ray_query *r, ray_acceleration *a, VkAccel
     a->dirty = true;
     return a->address != 0;
 }
-af_vk_ray_query *af_vk_ray_query_create(VkPhysicalDevice physical, VkDevice device, unsigned frames, uint32_t bits,
-                                        float period) {
+af_vk_ray_query *af_vk_ray_query_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
+                                        unsigned frames, uint32_t bits, float period) {
+    if (!allocator)
+        return NULL;
     af_vk_ray_query *r = calloc(1, sizeof(*r));
     if (!r)
         return NULL;
     r->device = device;
+    r->allocator = allocator;
     r->frame_count = frames;
     r->timestamp_bits = bits;
     r->timestamp_period = period;
@@ -182,7 +157,6 @@ af_vk_ray_query *af_vk_ray_query_create(VkPhysicalDevice physical, VkDevice devi
     LOAD(address, vkGetAccelerationStructureDeviceAddressKHR);
     LOAD(buffer_address, vkGetBufferDeviceAddress);
 #undef LOAD
-    vkGetPhysicalDeviceMemoryProperties(physical, &r->memory);
     r->limits.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
     VkPhysicalDeviceProperties2 properties = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
                                               .pNext = &r->limits};
@@ -328,8 +302,8 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_in
             return false;
         }
     }
-    ray_surface *surfaces = NULL;
-    if (!result(vkMapMemory(r->device, f->surfaces.memory, 0, VK_WHOLE_SIZE, 0, (void **)&surfaces))) {
+    ray_surface *surfaces = (ray_surface *)f->surfaces.alloc.mapped;
+    if (!surfaces) {
         free(instances);
         return false;
     }
@@ -361,12 +335,8 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_in
         /* Rebuilding after retirement is necessary even if an address is reused. */
         hash = hash_bytes(hash, &m->serial, sizeof(m->serial));
     }
-    if (ok && !f->surfaces.coherent) {
-        VkMappedMemoryRange range = {
-            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = f->surfaces.memory, .size = VK_WHOLE_SIZE};
-        ok = result(vkFlushMappedMemoryRanges(r->device, 1, &range));
-    }
-    vkUnmapMemory(r->device, f->surfaces.memory);
+    if (ok)
+        ok = af_vk_flush(r->allocator, &f->surfaces.alloc, 0, surface_bytes);
     if (!ok) {
         free(instances);
         return false;
@@ -398,17 +368,11 @@ bool af_vk_ray_query_prepare(af_vk_ray_query *r, unsigned frame, const af_ray_in
     f->as.primitives = (uint32_t)count;
     f->as.dirty = f->hash != hash || f->as.dirty;
     if (f->as.dirty) {
-        void *mapped = NULL;
-        ok = result(vkMapMemory(r->device, f->instances.memory, 0, VK_WHOLE_SIZE, 0, &mapped));
+        void *mapped = f->instances.alloc.mapped;
+        ok = mapped != NULL;
         if (ok) {
             memcpy(mapped, instances, capacity * sizeof(*instances));
-            if (!f->instances.coherent) {
-                VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-                                             .memory = f->instances.memory,
-                                             .size = VK_WHOLE_SIZE};
-                ok = result(vkFlushMappedMemoryRanges(r->device, 1, &range));
-            }
-            vkUnmapMemory(r->device, f->instances.memory);
+            ok = af_vk_flush(r->allocator, &f->instances.alloc, 0, capacity * sizeof(*instances));
         }
     }
     free(instances);

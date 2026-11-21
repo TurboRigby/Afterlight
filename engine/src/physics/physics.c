@@ -5,6 +5,260 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+static void ph_free_pools(af_physics *p) {
+    free(p->bodies);
+    free(p->scratch);
+    free(p->id_slots);
+    free(p->contacts);
+    free(p->cache);
+    free(p->cache_next);
+    free(p->cache_heads);
+    free(p->parts);
+    free(p->part_scratch);
+    free(p->bounds);
+    free(p->ccd_bounds);
+    free(p->joints);
+    free(p->joint_scratch);
+    free(p->parents);
+    free(p->island_sizes);
+    free(p->island_wake);
+    free(p->island_anchor);
+    free(p->island_quiet);
+    free(p->island_time);
+    free(p->island_ids);
+    free(p->island_contact_offset);
+    free(p->island_contact_count);
+    free(p->island_joint_offset);
+    free(p->island_joint_count);
+    free(p->island_probes);
+    free(p->island_contacts);
+    free(p->island_joints);
+}
+
+static size_t next_capacity(size_t current, size_t needed, size_t initial, size_t limit) {
+    if (needed > limit)
+        return 0;
+    size_t cap = current ? current : initial;
+    while (cap < needed) {
+        if (cap > limit / 2) {
+            cap = limit;
+            break;
+        }
+        cap *= 2;
+    }
+    return cap;
+}
+
+bool ph_reserve_bodies(af_physics *p, size_t needed) {
+    if (needed <= p->body_capacity)
+        return true;
+    size_t cap = next_capacity(p->body_capacity, needed, 64, AF_PHYSICS_MAX_BODIES);
+    if (!cap)
+        return false;
+    ph_body *bodies = realloc(p->bodies, cap * sizeof(*bodies));
+    if (!bodies)
+        return false;
+    p->bodies = bodies;
+    ph_body *scratch = realloc(p->scratch, cap * sizeof(*scratch));
+    if (!scratch)
+        return false;
+    p->scratch = scratch;
+    ph_bound *bounds = realloc(p->bounds, cap * sizeof(*bounds));
+    if (!bounds)
+        return false;
+    p->bounds = bounds;
+    ph_bound *ccd_bounds = realloc(p->ccd_bounds, cap * sizeof(*ccd_bounds));
+    if (!ccd_bounds)
+        return false;
+    p->ccd_bounds = ccd_bounds;
+    size_t *parents = realloc(p->parents, cap * sizeof(*parents));
+    if (!parents)
+        return false;
+    p->parents = parents;
+    size_t *island_sizes = realloc(p->island_sizes, cap * sizeof(*island_sizes));
+    if (!island_sizes)
+        return false;
+    p->island_sizes = island_sizes;
+    bool *island_wake = realloc(p->island_wake, cap * sizeof(*island_wake));
+    if (!island_wake)
+        return false;
+    p->island_wake = island_wake;
+    bool *island_anchor = realloc(p->island_anchor, cap * sizeof(*island_anchor));
+    if (!island_anchor)
+        return false;
+    p->island_anchor = island_anchor;
+    bool *island_quiet = realloc(p->island_quiet, cap * sizeof(*island_quiet));
+    if (!island_quiet)
+        return false;
+    p->island_quiet = island_quiet;
+    float *island_time = realloc(p->island_time, cap * sizeof(*island_time));
+    if (!island_time)
+        return false;
+    p->island_time = island_time;
+    size_t *island_ids = realloc(p->island_ids, cap * sizeof(*island_ids));
+    if (!island_ids)
+        return false;
+    p->island_ids = island_ids;
+    size_t *island_contact_offset = realloc(p->island_contact_offset, cap * sizeof(*island_contact_offset));
+    if (!island_contact_offset)
+        return false;
+    p->island_contact_offset = island_contact_offset;
+    size_t *island_contact_count = realloc(p->island_contact_count, cap * sizeof(*island_contact_count));
+    if (!island_contact_count)
+        return false;
+    p->island_contact_count = island_contact_count;
+    size_t *island_joint_offset = realloc(p->island_joint_offset, cap * sizeof(*island_joint_offset));
+    if (!island_joint_offset)
+        return false;
+    p->island_joint_offset = island_joint_offset;
+    size_t *island_joint_count = realloc(p->island_joint_count, cap * sizeof(*island_joint_count));
+    if (!island_joint_count)
+        return false;
+    p->island_joint_count = island_joint_count;
+    size_t *island_probes = realloc(p->island_probes, cap * sizeof(*island_probes));
+    if (!island_probes)
+        return false;
+    p->island_probes = island_probes;
+    p->body_capacity = cap;
+    return true;
+}
+
+bool ph_reserve_contacts(af_physics *p, size_t needed) {
+    if (needed <= p->contact_capacity)
+        return true;
+    size_t cap = next_capacity(p->contact_capacity, needed, 256, AF_PHYSICS_MAX_CONTACTS);
+    if (!cap)
+        return false;
+    ph_contact *contacts = realloc(p->contacts, cap * sizeof(*contacts));
+    if (!contacts)
+        return false;
+    p->contacts = contacts;
+    ph_contact *cache = realloc(p->cache, cap * sizeof(*cache));
+    if (!cache)
+        return false;
+    p->cache = cache;
+    uint32_t *cache_next = realloc(p->cache_next, cap * sizeof(*cache_next));
+    if (!cache_next)
+        return false;
+    p->cache_next = cache_next;
+    size_t *island_contacts = realloc(p->island_contacts, cap * sizeof(*island_contacts));
+    if (!island_contacts)
+        return false;
+    p->island_contacts = island_contacts;
+    p->contact_capacity = cap;
+    return true;
+}
+
+bool ph_reserve_parts(af_physics *p, size_t needed) {
+    if (needed <= p->part_capacity)
+        return true;
+    size_t cap = next_capacity(p->part_capacity, needed, 64, AF_SCENE_MAX_COLLIDER_PARTS);
+    if (!cap)
+        return false;
+    af_world_collider *parts = realloc(p->parts, cap * sizeof(*parts));
+    if (!parts)
+        return false;
+    p->parts = parts;
+    af_world_collider *part_scratch = realloc(p->part_scratch, cap * sizeof(*part_scratch));
+    if (!part_scratch)
+        return false;
+    p->part_scratch = part_scratch;
+    p->part_capacity = cap;
+    return true;
+}
+
+bool ph_reserve_joints(af_physics *p, size_t needed) {
+    if (needed <= p->joint_capacity)
+        return true;
+    size_t cap = next_capacity(p->joint_capacity, needed, 32, AF_SCENE_MAX_JOINTS);
+    if (!cap)
+        return false;
+    ph_joint *joints = realloc(p->joints, cap * sizeof(*joints));
+    if (!joints)
+        return false;
+    p->joints = joints;
+    ph_joint *joint_scratch = realloc(p->joint_scratch, cap * sizeof(*joint_scratch));
+    if (!joint_scratch)
+        return false;
+    p->joint_scratch = joint_scratch;
+    size_t *island_joints = realloc(p->island_joints, cap * sizeof(*island_joints));
+    if (!island_joints)
+        return false;
+    p->island_joints = island_joints;
+    p->joint_capacity = cap;
+    return true;
+}
+
+bool ph_reserve_cache_heads(af_physics *p, size_t needed) {
+    size_t target = 256;
+    while (target < needed * 2 && target < 262144u)
+        target *= 2;
+    if (target <= p->cache_head_capacity)
+        return true;
+    uint32_t *heads = realloc(p->cache_heads, target * sizeof(*heads));
+    if (!heads)
+        return false;
+    p->cache_heads = heads;
+    p->cache_head_capacity = target;
+    return true;
+}
+
+static size_t body_id_hash(af_object_id id) {
+    id ^= id >> 30;
+    id *= UINT64_C(0xbf58476d1ce4e5b9);
+    id ^= id >> 27;
+    id *= UINT64_C(0x94d049bb133111eb);
+    return (size_t)(id ^ (id >> 31));
+}
+
+static bool ph_rebuild_id_index(af_physics *p) {
+    if (p->count == 0) {
+        if (p->id_slot_capacity)
+            memset(p->id_slots, 0, p->id_slot_capacity * sizeof(*p->id_slots));
+        return true;
+    }
+    size_t target = 64;
+    while (target < p->count * 2)
+        target *= 2;
+    if (target > p->id_slot_capacity) {
+        size_t *slots = malloc(target * sizeof(*slots));
+        if (!slots)
+            return false;
+        free(p->id_slots);
+        p->id_slots = slots;
+        p->id_slot_capacity = target;
+    }
+    memset(p->id_slots, 0, p->id_slot_capacity * sizeof(*p->id_slots));
+    size_t mask = p->id_slot_capacity - 1;
+    for (size_t i = 0; i < p->count; ++i) {
+        size_t at = body_id_hash(p->bodies[i].id) & mask;
+        while (p->id_slots[at])
+            at = (at + 1) & mask;
+        p->id_slots[at] = i + 1;
+    }
+    return true;
+}
+
+size_t ph_find_body_index(const af_physics *p, af_object_id id) {
+    if (!p || !id || !p->count)
+        return SIZE_MAX;
+    if (p->id_slot_capacity) {
+        size_t mask = p->id_slot_capacity - 1;
+        size_t at = body_id_hash(id) & mask;
+        while (p->id_slots[at]) {
+            size_t idx = p->id_slots[at] - 1;
+            if (p->bodies[idx].id == id)
+                return idx;
+            at = (at + 1) & mask;
+        }
+        return SIZE_MAX;
+    }
+    for (size_t i = 0; i < p->count; ++i)
+        if (p->bodies[i].id == id)
+            return i;
+    return SIZE_MAX;
+}
+
 af_physics *af_physics_create(void) {
     return calloc(1, sizeof(af_physics));
 }
@@ -15,6 +269,7 @@ void af_physics_destroy(af_physics *p) {
     if (p) {
         wa_destroy(p->water);
         free(p->water);
+        ph_free_pools(p);
     }
     free(p);
 }
@@ -27,6 +282,7 @@ void af_physics_reset(af_physics *p) {
         bool profiling = p->profiling;
         wa_destroy(p->water);
         free(p->water);
+        ph_free_pools(p);
         memset(p, 0, sizeof(*p));
         p->profiling = profiling;
     }
@@ -50,10 +306,8 @@ static bool fail(af_physics *p, const char *text) {
     return false;
 }
 static ph_body *find(af_physics *p, af_object_id id) {
-    for (size_t i = 0; i < p->count; ++i)
-        if (p->bodies[i].id == id)
-            return &p->bodies[i];
-    return NULL;
+    size_t idx = ph_find_body_index(p, id);
+    return idx != SIZE_MAX ? &p->bodies[idx] : NULL;
 }
 af_vec3 ph_vector(const ph_body *b, af_vec3 v) {
     return af_vec3_add(af_vec3_scale(b->axes[0], v.x),
@@ -133,8 +387,10 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
                                               : (shape.half_extents.x < .009999f || shape.half_extents.y < .009999f ||
                                                  shape.half_extents.z < .009999f)))
             return fail(p, "Physics shape dimensions must be at least .01 world units.");
-        if (count == AF_PHYSICS_MAX_BODIES || !ph_finite(shape.center) || af_vec3_length(shape.center) > 1000000)
-            return fail(p, "Physics exceeds 1024 shapes or the 1,000,000 unit world bound.");
+        if (count >= AF_PHYSICS_MAX_BODIES || !ph_finite(shape.center) || af_vec3_length(shape.center) > 1000000)
+            return fail(p, "Physics exceeds shape capacity or the 1,000,000 unit world bound.");
+        if (!ph_reserve_bodies(p, count + 1))
+            return fail(p, "Physics failed to allocate body pool.");
         ph_body *old = p->scene == s ? find(p, o->id) : NULL;
         ph_body b = old ? *old
                         : (ph_body){.id = o->id,
@@ -224,7 +480,7 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
             b.com_offset = mass.center;
             b.part_start = part_count;
             size_t n = af_scene_collider_shape_count(s, o->id);
-            if (part_count + n > AF_SCENE_MAX_COLLIDER_PARTS)
+            if (part_count + n > AF_SCENE_MAX_COLLIDER_PARTS || !ph_reserve_parts(p, part_count + n))
                 return fail(p, "Physics compound-part budget exceeded.");
             for (size_t k = 0; k < n; ++k) {
                 af_world_collider part;
@@ -278,13 +534,17 @@ bool ph_sync(af_physics *p, af_scene *s, float dt) {
         p->joint_count = 0;
         p->stats = (af_physics_stats){0};
     }
-    memcpy(p->bodies, p->scratch, count * sizeof(ph_body));
-    memcpy(p->parts, p->part_scratch, part_count * sizeof(*p->parts));
+    if (count)
+        memcpy(p->bodies, p->scratch, count * sizeof(ph_body));
+    if (part_count)
+        memcpy(p->parts, p->part_scratch, part_count * sizeof(*p->parts));
     for (size_t i = 0; i < count; ++i)
         if (p->bodies[i].part_count)
             p->bodies[i].parts = &p->parts[p->bodies[i].part_start];
     p->count = count;
     p->scene = s;
+    if (!ph_rebuild_id_index(p))
+        return fail(p, "Physics failed to allocate body lookup index.");
     if (!ph_joints_sync(p))
         return fail(p, "Joint endpoint has no supported active physics shape.");
     ph_islands_build(p);
@@ -336,19 +596,18 @@ bool af_physics_wake(af_physics *p, af_object_id id) {
     return true;
 }
 af_physics_state af_physics_get_state(const af_physics *p, af_object_id id) {
-    if (p)
-        for (size_t i = 0; i < p->count; ++i) {
-            const ph_body *b = &p->bodies[i];
-            if (b->id == id)
-                return (af_physics_state){.available = true,
-                                          .sleeping = b->sleeping,
-                                          .type = b->config.type,
-                                          .position = b->p,
-                                          .velocity = b->v,
-                                          .angular_velocity = b->w,
-                                          .orientation = b->q,
-                                          .mass = b->config.mass};
-        }
+    size_t idx = ph_find_body_index(p, id);
+    if (idx != SIZE_MAX) {
+        const ph_body *b = &p->bodies[idx];
+        return (af_physics_state){.available = true,
+                                  .sleeping = b->sleeping,
+                                  .type = b->config.type,
+                                  .position = b->p,
+                                  .velocity = b->v,
+                                  .angular_velocity = b->w,
+                                  .orientation = b->q,
+                                  .mass = b->config.mass};
+    }
     return (af_physics_state){0};
 }
 af_physics_stats af_physics_get_stats(const af_physics *p) {
@@ -402,7 +661,7 @@ bool af_physics_step(af_physics *p, af_scene *s, float dt) {
         ph_advance(p, h);
         p->stats.ccd_ms += ph_clock(p) - stamp;
         if (!ph_detect(p))
-            return fail(p, "Physics exceeds 8192 contact points.");
+            return fail(p, "Physics exceeded contact capacity.");
         stamp = ph_clock(p);
         ph_solve(p, h);
         p->simulation_time += h;

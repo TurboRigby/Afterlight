@@ -46,7 +46,7 @@ vec3 shade_reflection_hit(rayQueryEXT query, vec3 hit_pos, vec3 direction) {
 
     vec3 local_light = vec3(0.0);
     for (int i = 0; i < int(frame.light_count.x); ++i) {
-        LocalLight light = frame.lights[i];
+        LocalLight light = local_lights.items[i];
         vec3 offset = light.position_range.xyz - hit_pos;
         float dist_sq = dot(offset, offset);
         float range = max(light.position_range.w, 0.001);

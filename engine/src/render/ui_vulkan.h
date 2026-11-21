@@ -9,11 +9,12 @@
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
 #include <afterlight/overlay.h>
+#include "vk_memory.h"
 
 #define AF_UI_FRAMES_IN_FLIGHT 2
 
 typedef struct af_vk_ui af_vk_ui;
-af_vk_ui *af_vk_ui_create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+af_vk_ui *af_vk_ui_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                           const unsigned char *rgba, uint32_t width, uint32_t height);
 bool af_vk_ui_upload_texture(af_vk_ui *ui, VkQueue queue, uint32_t family, uint32_t id, const unsigned char *rgba,
                              uint32_t width, uint32_t height);

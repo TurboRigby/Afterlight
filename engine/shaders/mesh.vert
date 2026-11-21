@@ -30,12 +30,6 @@ layout(set = 0, binding = 9, std430) readonly buffer MotionRecords {
     MotionRecord objects[];
 }
 motion;
-struct LocalLight {
-    vec4 position_range;
-    vec4 color_intensity;
-    vec4 direction_inner;
-    vec4 params;
-};
 layout(set = 0, binding = 0) uniform Frame {
     mat4 view_projection;
     vec4 direction_intensity;
@@ -47,7 +41,6 @@ layout(set = 0, binding = 0) uniform Frame {
     vec4 shadow_params;
     vec4 cascade_params;
     vec4 render_params;
-    LocalLight lights[16];
     vec4 light_count;
     mat4 local_shadow_matrices[24];
     mat4 inverse_view_projection;
@@ -57,6 +50,7 @@ layout(set = 0, binding = 0) uniform Frame {
     mat4 unjittered_view_projection, previous_view_projection;
     vec4 ray_params;
     vec4 rtgi_flags;
+    vec4 light_tile_params;
 }
 frame;
 layout(push_constant) uniform Draw {

@@ -25,10 +25,7 @@ static void join(af_physics *p, size_t a, size_t b) {
 static size_t contact_index(af_physics *p, size_t index, af_object_id id) {
     if (index < p->count && p->bodies[index].id == id)
         return index;
-    for (size_t i = 0; i < p->count; ++i)
-        if (p->bodies[i].id == id)
-            return i;
-    return SIZE_MAX;
+    return ph_find_body_index(p, id);
 }
 void ph_wake_island(af_physics *p, size_t i) {
     if (i >= p->count)

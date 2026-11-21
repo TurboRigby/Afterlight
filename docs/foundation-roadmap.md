@@ -1,11 +1,14 @@
 # Foundations before ray tracing
 
-Afterlight already has raster PBR, image-based lighting, shadow maps, animation,
-physics, water, profiling and playable exports. The [0.21 baseline](development-021.md)
+Afterlight already has raster PBR, image-based lighting, shadow maps, tiled 128-light
+forward shading, custom SPIR-V material pipelines, a pooled Vulkan memory suballocator
+with `DEVICE_LOCAL` staging, animation, dynamic-pool multi-island physics, COW landscape
+cloning, deterministic `af_jobs` multithreading, compressed/streaming audio with mix buses,
+water, profiling and playable exports. The [0.21 baseline](development-021.md)
 exercises these together in the water expedition, adds persistence/diagnostics and records native Linux evidence. The
 order below remains the direction for continued hardening. [Prop instancing](rendering.md#instanced-props)
 now batches compatible opaque draws. [0.23.0](development-023.md) adds clustered
-LOD and asynchronous geometry streaming; broader workload evidence is still
+LOD and asynchronous geometry streaming (now up to 256 streamed assets); broader workload evidence is still
 needed. Windows verification is
 deferred. The [0.22 experiment](development-022.md) now
 adds optional ray-query sun shadows with a raster fallback; the scalability and

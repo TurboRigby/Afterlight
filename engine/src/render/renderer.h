@@ -41,6 +41,9 @@ void af_renderer_set_object_worlds(af_renderer *renderer, const af_scene *scene,
 bool af_renderer_remove_texture(af_renderer *renderer, const char *name);
 bool af_renderer_upload_texture(af_renderer *renderer, const char *name, const unsigned char *rgba, uint32_t width,
                                 uint32_t height);
+bool af_renderer_upload_material_shader(af_renderer *renderer, const char *name, const uint32_t *spirv,
+                                        size_t word_count);
+bool af_renderer_remove_material_shader(af_renderer *renderer, const char *name);
 bool af_renderer_remove_mesh(af_renderer *renderer, const char *name);
 bool af_renderer_upload_overlay_atlas(af_renderer *renderer, const unsigned char *rgba, uint32_t width,
                                       uint32_t height);

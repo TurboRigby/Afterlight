@@ -89,6 +89,7 @@ typedef struct af_engine_stats {
     bool simulation_paused;
     uint32_t validation_errors;
     bool validation_enabled;
+    uint64_t vk_allocations, vk_staged_uploads;
 } af_engine_stats;
 
 size_t af_engine_push_character(af_engine *, af_object_id, const af_character *, af_character_config, af_vec3, float,
@@ -204,6 +205,9 @@ bool af_engine_animated_world_matrix(const af_engine *engine, af_object_id objec
 bool af_engine_upload_texture(af_engine *engine, const char *name, const unsigned char *rgba, uint32_t width,
                               uint32_t height);
 bool af_engine_remove_texture(af_engine *engine, const char *name);
+/* Register or remove a named custom SPIR-V fragment shader for materials. */
+bool af_engine_upload_material_shader(af_engine *engine, const char *name, const uint32_t *spirv, size_t word_count);
+bool af_engine_remove_material_shader(af_engine *engine, const char *name);
 bool af_engine_load_environment(af_engine *engine, const char *name, const char *path, af_asset_error *error);
 typedef enum af_environment_job_state {
     AF_ENV_IDLE,
@@ -319,6 +323,13 @@ bool af_engine_move_sound_loop(af_engine *, af_sound_loop, af_vec3 position);
 bool af_engine_fade_sound_loop(af_engine *, af_sound_loop, float gain, float seconds);
 bool af_engine_stop_sound_loop(af_engine *, af_sound_loop, float fade_seconds);
 bool af_engine_play_sound(af_engine *engine, const char *name, float gain);
+bool af_engine_set_audio_bus_gain(af_engine *engine, af_audio_bus bus, float gain);
+float af_engine_get_audio_bus_gain(const af_engine *engine, af_audio_bus bus);
+af_sound_stream af_engine_start_audio_stream(af_engine *engine, const char *path, af_audio_bus bus, float gain,
+                                             bool loop, float fade_seconds, af_asset_error *error);
+bool af_engine_pause_audio_stream(af_engine *engine, af_sound_stream handle, bool paused);
+bool af_engine_fade_audio_stream(af_engine *engine, af_sound_stream handle, float gain, float fade_seconds);
+bool af_engine_stop_audio_stream(af_engine *engine, af_sound_stream handle, float fade_seconds);
 void af_engine_stop_sounds(af_engine *engine);
 af_audio_stats af_engine_audio_stats(const af_engine *engine);
 af_gameplay_status af_engine_gameplay_status(const af_engine *engine);

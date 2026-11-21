@@ -13,5 +13,7 @@
 
 bool ls_decode(af_scene *scene, const cJSON *root);
 bool ls_encode(const af_scene *scene, cJSON *root);
+af_landscape *ls_clone_cow(const af_landscape *src);
+bool ls_make_unique(af_landscape *ls);
 
 #endif /* AFTERLIGHT_LANDSCAPE_INTERNAL_H */

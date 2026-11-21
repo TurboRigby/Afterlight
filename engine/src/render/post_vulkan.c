@@ -12,7 +12,7 @@
 
 typedef struct post_image {
     VkImage image;
-    VkDeviceMemory memory;
+    af_vk_allocation memory;
     VkImageView view;
     VkFramebuffer framebuffer;
 } post_image;
@@ -27,6 +27,7 @@ typedef struct post_frame {
 struct af_vk_post {
     VkPhysicalDevice physical;
     VkDevice device;
+    af_vk_allocator *allocator;
     VkExtent2D extent, half, render_extent;
     uint32_t count;
     uint64_t allocation_bytes;
@@ -82,22 +83,10 @@ static bool allocate_image(af_vk_post *p, post_image *out, VkExtent2D extent, Vk
         return false;
     VkMemoryRequirements requirements;
     vkGetImageMemoryRequirements(p->device, out->image, &requirements);
-    VkPhysicalDeviceMemoryProperties properties;
-    vkGetPhysicalDeviceMemoryProperties(p->physical, &properties);
-    uint32_t type = UINT32_MAX;
-    for (uint32_t i = 0; i < properties.memoryTypeCount; ++i)
-        if ((requirements.memoryTypeBits & (1u << i)) &&
-            (properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-            type = i;
-            break;
-        }
-    if (type == UINT32_MAX)
-        return false;
     p->allocation_bytes += requirements.size;
-    VkMemoryAllocateInfo allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = requirements.size, .memoryTypeIndex = type};
-    if (!ok(vkAllocateMemory(p->device, &allocation, NULL, &out->memory)) ||
-        !ok(vkBindImageMemory(p->device, out->image, out->memory, 0)))
+    if (!af_vk_allocate(p->allocator, requirements, AF_VK_MEM_IMAGE, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0, false,
+                        &out->memory) ||
+        !ok(vkBindImageMemory(p->device, out->image, out->memory.memory, out->memory.offset)))
         return false;
     VkImageViewCreateInfo view = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                                   .image = out->image,
@@ -353,8 +342,7 @@ void af_vk_post_destroy(af_vk_post *p) {
                 vkDestroyImageView(p->device, im->view, NULL);
             if (im->image)
                 vkDestroyImage(p->device, im->image, NULL);
-            if (im->memory)
-                vkFreeMemory(p->device, im->memory, NULL);
+            af_vk_free(p->allocator, &im->memory);
         }
     }
     post_image *shared[] = {&p->display, &p->history[0], &p->history[1], &p->gi_history[0], &p->gi_history[1]};
@@ -366,8 +354,7 @@ void af_vk_post_destroy(af_vk_post *p) {
             vkDestroyImageView(p->device, im->view, NULL);
         if (im->image)
             vkDestroyImage(p->device, im->image, NULL);
-        if (im->memory)
-            vkFreeMemory(p->device, im->memory, NULL);
+        af_vk_free(p->allocator, &im->memory);
     }
     af_vk_texture_destroy(p->area_lut);
     af_vk_texture_destroy(p->search_lut);
@@ -398,10 +385,12 @@ void af_vk_post_destroy(af_vk_post *p) {
     free(p->frames);
     free(p);
 }
-af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, uint32_t family,
+af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                               VkExtent2D extent, VkExtent2D render_extent, uint32_t count, const VkImageView *outputs,
                               VkFormat format, VkRenderPass scene_pass, const VkImageView *depths,
                               af_render_settings settings, bool motion, bool gi, bool upscale) {
+    if (!allocator)
+        return NULL;
     /* The denoiser reprojects with motion vectors, so they are mandatory. */
     motion = motion || gi;
     VkFormatProperties properties;
@@ -419,6 +408,7 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device, VkQueu
         return NULL;
     p->physical = physical;
     p->device = device;
+    p->allocator = allocator;
     p->extent = extent;
     p->half = (VkExtent2D){(extent.width + 1) / 2, (extent.height + 1) / 2};
     p->render_extent = render_extent;
@@ -499,7 +489,7 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device, VkQueu
             lut[4 * i + 3] = 255;
         }
         p->area_lut =
-            af_vk_texture_create(physical, device, queue, family, lut, AREATEX_WIDTH, AREATEX_HEIGHT, false, false, 1);
+            af_vk_texture_create(physical, device, allocator, lut, AREATEX_WIDTH, AREATEX_HEIGHT, false, false, 1);
         free(lut);
         if (!p->area_lut)
             goto fail;
@@ -511,7 +501,7 @@ af_vk_post *af_vk_post_create(VkPhysicalDevice physical, VkDevice device, VkQueu
             lut[4 * i + 1] = lut[4 * i + 2] = 0;
             lut[4 * i + 3] = 255;
         }
-        p->search_lut = af_vk_texture_create(physical, device, queue, family, lut, SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT,
+        p->search_lut = af_vk_texture_create(physical, device, allocator, lut, SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT,
                                              false, false, 1);
         free(lut);
         if (!p->search_lut)
