@@ -12,7 +12,7 @@ from pathlib import Path
 import zipfile
 
 SOURCE_DIRS = ('engine', 'editor', 'game', 'games', 'player', 'playground', 'sandbox',
-               'scripts', 'tests', 'docs', 'cmake', 'third_party', '.github')
+               'scripts', 'tools', 'tests', 'docs', 'cmake', 'third_party', '.github')
 ROOT_FILES = ('CMakeLists.txt', 'CMakePresets.json', 'README.md', 'LICENSE',
               'NOTICE', 'THIRD_PARTY_NOTICES.md', 'CONTRIBUTING.md', 'DCO', '.gitignore', '.gitattributes')
 SUFFIXES = {'.c', '.cpp', '.m', '.h', '.vert', '.frag', '.comp', '.glsl', '.hlsl', '.metal', '.py', '.cmake', '.md',

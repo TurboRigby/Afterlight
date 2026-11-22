@@ -28,7 +28,7 @@ with zipfile.ZipFile(args.archive) as archive:
         assert not any(part in {'.git', 'build', '__pycache__', '.cache'} for part in pathlib.PurePosixPath(name).parts), name
         assert 'CMakeUserPresets' not in name and not name.endswith(('.source.zip', '.pyc')), name
         assert archive.read(name) == (root / name).read_bytes(), f'Stale source: {name}'
-    for folder in ('engine', 'editor', 'game', 'player', 'playground', 'sandbox', 'tests', 'scripts', 'cmake'):
+    for folder in ('engine', 'editor', 'game', 'player', 'playground', 'sandbox', 'tests', 'scripts', 'tools', 'cmake'):
         for path in (root / folder).rglob('*'):
             if path.suffix in {'.c', '.m', '.h', '.vert', '.frag', '.glsl', '.metal', '.py', '.cmake'}:
                 assert b'SPDX-License-Identifier: MPL-2.0' in path.read_bytes()[:2048], path

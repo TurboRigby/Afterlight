@@ -45,6 +45,7 @@ The [documentation index](docs/README.md) links to all guides. Start with:
 
 - [Full guide](docs/guide.md): setup, demos, verification and repository layout.
 - [Editor workflow](docs/editor.md) and [C gameplay](docs/game-code.md).
+- [MCP server for AI agents](docs/mcp.md): build, run, and visually iterate on games via MCP.
 - [Architecture](docs/architecture.md) and [scene format](docs/scene-format.md).
 - [Testing](docs/testing.md), [projects](docs/projects.md) and [exporting](docs/shipping.md).
 

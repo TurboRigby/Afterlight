@@ -8,7 +8,7 @@ file(GLOB_RECURSE afterlight_source_candidates CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/engine/*" "${PROJECT_SOURCE_DIR}/editor/*"
     "${PROJECT_SOURCE_DIR}/game/*" "${PROJECT_SOURCE_DIR}/games/*" "${PROJECT_SOURCE_DIR}/player/*"
     "${PROJECT_SOURCE_DIR}/playground/*" "${PROJECT_SOURCE_DIR}/sandbox/*"
-    "${PROJECT_SOURCE_DIR}/scripts/*" "${PROJECT_SOURCE_DIR}/tests/*"
+    "${PROJECT_SOURCE_DIR}/scripts/*" "${PROJECT_SOURCE_DIR}/tools/*" "${PROJECT_SOURCE_DIR}/tests/*"
     "${PROJECT_SOURCE_DIR}/docs/*" "${PROJECT_SOURCE_DIR}/cmake/*"
     "${PROJECT_SOURCE_DIR}/third_party/*" "${PROJECT_SOURCE_DIR}/.github/*")
 # Filter paths inside the checkout, regardless of where the checkout lives.

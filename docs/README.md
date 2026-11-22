@@ -11,6 +11,7 @@ repository layout and C gameplay workflow.
 - [Gameplay components and obstacle course](gameplay.md)
 - [Projects and build workflow](projects.md)
 - [Assets and materials](assets.md)
+- [MCP server for AI agents](mcp.md)
 - [Exporting and shipping](shipping.md)
 
 ## Engine reference

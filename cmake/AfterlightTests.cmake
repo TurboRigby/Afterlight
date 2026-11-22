@@ -662,6 +662,9 @@ if(BUILD_TESTING)
     add_test(NAME afterlight.project_tools COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/tooling/project_tools.py"
         --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --model-test "$<TARGET_FILE:afterlight_model_test>" --fixtures "${PROJECT_SOURCE_DIR}/tests/assets" ${package_test_flags})
     set_tests_properties(afterlight.project_tools PROPERTIES TIMEOUT 120 LABELS "graphics;packaging" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
+    add_test(NAME afterlight.mcp_server COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/tooling/mcp_server.py"
+        --root "${PROJECT_SOURCE_DIR}" --agent "$<TARGET_FILE:afterlight_agent>" --player "$<TARGET_FILE:afterlight_player>")
+    set_tests_properties(afterlight.mcp_server PROPERTIES TIMEOUT 120 LABELS "graphics" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
 endif()
 
 # Preserve ASan global checking while replacing its broken Mach-O unload hook.

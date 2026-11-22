@@ -59,6 +59,15 @@ target_include_directories(afterlight_player PRIVATE sandbox)
 target_link_libraries(afterlight_player PRIVATE afterlight_editor_document afterlight_editor_ui afterlight_player_preferences)
 afterlight_warnings(afterlight_player)
 
+add_executable(afterlight_agent
+    tools/mcp/agent_main.c
+    tools/mcp/agent_scene.c
+    tools/mcp/agent_capture.c
+)
+target_include_directories(afterlight_agent PRIVATE engine/src sandbox third_party/cjson)
+target_link_libraries(afterlight_agent PRIVATE afterlight_editor_document)
+afterlight_warnings(afterlight_agent)
+
 if(APPLE)
     set_target_properties(afterlight_editor PROPERTIES
         MACOSX_BUNDLE TRUE

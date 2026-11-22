@@ -355,6 +355,19 @@ bool af_scene_set_asset(af_scene *scene, const char *name, af_asset_kind kind, c
     return true;
 }
 
+bool af_scene_remove_asset(af_scene *scene, const char *name) {
+    if (!scene || !name || !name[0])
+        return false;
+    for (size_t i = 0; i < scene->asset_count; ++i) {
+        if (!strcmp(scene->assets[i].name, name)) {
+            memmove(&scene->assets[i], &scene->assets[i + 1], (scene->asset_count - i - 1) * sizeof(*scene->assets));
+            --scene->asset_count;
+            return true;
+        }
+    }
+    return false;
+}
+
 af_material af_material_default(void) {
     return (af_material){.alpha_cutoff = .5f,
                          .base_color = {1, 1, 1, 1},

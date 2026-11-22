@@ -320,7 +320,7 @@ bool af_vk_r_remove_texture(af_vk_renderer *renderer, const char *name) {
 
 bool af_vk_r_test_capture_region(af_vk_renderer *renderer, af_vec2 position, uint32_t width, uint32_t height) {
     if (!renderer || !renderer->capture_supported || renderer->capture_pending || !isfinite(position.x) ||
-        !isfinite(position.y) || !width || !height || width > 1024 || height > 1024)
+        !isfinite(position.y) || !width || !height || width > 4096 || height > 4096)
         return false;
     size_t bytes = (size_t)width * height * 4;
     if (renderer->capture_buffer.capacity < bytes) {
