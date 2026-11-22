@@ -7,7 +7,7 @@
 #include "renderer_internal.h"
 #include "core/jobs.h"
 
-void af_r_destroy_buffer(af_renderer *renderer, af_gpu_buffer *buffer) {
+void af_r_destroy_buffer(af_vk_renderer *renderer, af_gpu_buffer *buffer) {
     if (renderer->allocator)
         af_vk_destroy_buffer(renderer->allocator, &buffer->handle, &buffer->alloc);
     else if (buffer->handle)
@@ -15,7 +15,7 @@ void af_r_destroy_buffer(af_renderer *renderer, af_gpu_buffer *buffer) {
     *buffer = (af_gpu_buffer){0};
 }
 
-void af_r_destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh) {
+void af_r_destroy_mesh(af_vk_renderer *renderer, af_gpu_mesh *mesh) {
     if (mesh->residency) {
         af_cluster_residency *r = mesh->residency;
         af_cluster_close_stream(r->stream);
@@ -42,7 +42,7 @@ void af_r_destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh) {
     mesh->index_count = 0;
 }
 
-static bool ray_buffer_usage(const af_renderer *renderer, VkBufferUsageFlags usage) {
+static bool ray_buffer_usage(const af_vk_renderer *renderer, VkBufferUsageFlags usage) {
     return renderer->ray_supported && (usage & (VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
 }
 
@@ -50,7 +50,7 @@ static bool static_geometry_usage(VkBufferUsageFlags usage) {
     return (usage & (VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT)) != 0;
 }
 
-bool af_r_create_upload_buffer(af_renderer *renderer, VkDeviceSize size, VkBufferUsageFlags usage,
+bool af_r_create_upload_buffer(af_vk_renderer *renderer, VkDeviceSize size, VkBufferUsageFlags usage,
                                  af_gpu_buffer *buffer, VkMemoryRequirements *requirements) {
     if (static_geometry_usage(usage))
         usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -67,7 +67,7 @@ bool af_r_create_upload_buffer(af_renderer *renderer, VkDeviceSize size, VkBuffe
     return true;
 }
 
-bool af_r_fill_upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
+bool af_r_fill_upload_buffer(af_vk_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
                                af_gpu_buffer *buffer, VkMemoryRequirements requirements) {
     bool bda = ray_buffer_usage(renderer, usage);
     if (static_geometry_usage(usage) && data) {
@@ -145,14 +145,14 @@ bool af_r_fill_upload_buffer(af_renderer *renderer, const void *data, VkDeviceSi
     return af_vk_flush(renderer->allocator, &buffer->alloc, 0, size);
 }
 
-bool af_r_upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
+bool af_r_upload_buffer(af_vk_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
                           af_gpu_buffer *buffer) {
     VkMemoryRequirements requirements;
     return af_r_create_upload_buffer(renderer, size, usage, buffer, &requirements) &&
            af_r_fill_upload_buffer(renderer, data, size, usage, buffer, requirements);
 }
 
-size_t af_r_find_mesh_index(const af_renderer *renderer, const char *name) {
+size_t af_r_find_mesh_index(const af_vk_renderer *renderer, const char *name) {
     for (size_t i = 0; i < renderer->mesh_count; ++i)
         if (!renderer->meshes[i].retired && strcmp(renderer->meshes[i].name, name) == 0)
             return i;
@@ -160,7 +160,7 @@ size_t af_r_find_mesh_index(const af_renderer *renderer, const char *name) {
 }
 
 
-void af_r_stream_destroy(af_renderer *r, af_mesh_asset *a) {
+void af_r_stream_destroy(af_vk_renderer *r, af_mesh_asset *a) {
     af_r_destroy_mesh(r, &a->gpu);
     for (unsigned f = 0; f < AF_FRAMES_IN_FLIGHT; ++f)
         af_r_destroy_mesh(r, &a->streams[f].gpu);
@@ -168,7 +168,7 @@ void af_r_stream_destroy(af_renderer *r, af_mesh_asset *a) {
     free(a->cpu_indices);
     *a = (af_mesh_asset){0};
 }
-bool af_r_stream_buffer(af_renderer *r, af_gpu_buffer *b, const void *data, VkDeviceSize bytes,
+bool af_r_stream_buffer(af_vk_renderer *r, af_gpu_buffer *b, const void *data, VkDeviceSize bytes,
                           VkBufferUsageFlags usage) {
     if (b->capacity < bytes) {
         af_r_destroy_buffer(r, b);
@@ -184,7 +184,7 @@ bool af_r_stream_buffer(af_renderer *r, af_gpu_buffer *b, const void *data, VkDe
     memcpy(b->alloc.mapped, data, (size_t)bytes);
     return af_vk_flush(r->allocator, &b->alloc, 0, bytes);
 }
-static bool stream_set(af_renderer *r, const char *name, const af_mesh_data *m) {
+static bool stream_set(af_vk_renderer *r, const char *name, const af_mesh_data *m) {
     if (!m || !m->vertex_count || !m->index_count)
         return false;
     size_t i = af_r_find_mesh_index(r, name);
@@ -241,7 +241,7 @@ static bool stream_set(af_renderer *r, const char *name, const af_mesh_data *m) 
     }
     return true;
 }
-bool af_r_stream_prepare(af_renderer *r) {
+bool af_r_stream_prepare(af_vk_renderer *r) {
     Uint64 start = SDL_GetPerformanceCounter();
     for (size_t i = 0; i < r->mesh_count; ++i) {
         af_mesh_asset *a = &r->meshes[i];
@@ -282,7 +282,7 @@ static size_t morph_bytes(const af_mesh_morph *morph, uint32_t expanded_vertices
                  : 0;
 }
 
-static bool upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh, af_mesh_morph *morph,
+static bool upload_mesh(af_vk_renderer *renderer, const char *name, const af_mesh_data *mesh, af_mesh_morph *morph,
                         af_mesh_sidedness sidedness) {
     if (!name || !name[0] || strlen(name) >= AF_MESH_NAME_CAPACITY || !mesh || !mesh->vertices || !mesh->indices ||
         mesh->vertex_count == 0 || mesh->index_count == 0 || mesh->index_count % 3 != 0 ||
@@ -361,7 +361,7 @@ static bool upload_mesh(af_renderer *renderer, const char *name, const af_mesh_d
         renderer->mesh_capacity = capacity;
     }
     ++renderer->mesh_idle_waits;
-    if (!af_renderer_wait_idle(renderer))
+    if (!af_vk_r_wait_idle(renderer))
         goto fail;
     if (index < renderer->mesh_count)
         af_r_stream_destroy(renderer, &renderer->meshes[index]);
@@ -376,10 +376,10 @@ fail:
     af_r_destroy_mesh(renderer, &uploaded);
     return false;
 }
-bool af_renderer_upload_mesh(af_renderer *renderer, const char *name, const af_mesh_data *mesh) {
+bool af_vk_r_upload_mesh(af_vk_renderer *renderer, const char *name, const af_mesh_data *mesh) {
     return upload_mesh(renderer, name, mesh, NULL, AF_MESH_SIDES_DEFAULT);
 }
-bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_mesh_file *mesh,
+bool af_vk_r_upload_mesh_file(af_vk_renderer *renderer, const char *name, af_mesh_file *mesh,
                                   af_mesh_sidedness sidedness) {
     if (!upload_mesh(renderer, name, &mesh->data, mesh->morph, sidedness))
         return false;
@@ -387,8 +387,8 @@ bool af_renderer_upload_mesh_file(af_renderer *renderer, const char *name, af_me
     return true;
 }
 
-bool af_renderer_upload_clusters(af_renderer *r, const char *name, af_cluster_mesh *mesh) {
-    if (!af_renderer_upload_mesh(r, name, &mesh->mesh))
+bool af_vk_r_upload_clusters(af_vk_renderer *r, const char *name, af_cluster_mesh *mesh) {
+    if (!af_vk_r_upload_mesh(r, name, &mesh->mesh))
         return false;
     af_gpu_mesh *gpu = &r->meshes[af_r_find_mesh_index(r, name)].gpu;
     gpu->clusters = mesh->clusters;
@@ -403,7 +403,7 @@ bool af_renderer_upload_clusters(af_renderer *r, const char *name, af_cluster_me
     return true;
 }
 
-bool af_renderer_upload_cluster_stream(af_renderer *r, const char *name, af_cluster_mesh *mesh,
+bool af_vk_r_upload_cluster_stream(af_vk_renderer *r, const char *name, af_cluster_mesh *mesh,
                                        af_cluster_stream *stream) {
     if (!name)
         return false;
@@ -417,7 +417,7 @@ bool af_renderer_upload_cluster_stream(af_renderer *r, const char *name, af_clus
         return false;
     uint32_t count = af_cluster_stream_region_count(stream);
     cache->page_requirements = calloc(count, sizeof(*cache->page_requirements));
-    if (!cache->page_requirements || !af_renderer_upload_clusters(r, name, mesh)) {
+    if (!cache->page_requirements || !af_vk_r_upload_clusters(r, name, mesh)) {
         free(cache->page_requirements);
         free(cache);
         return false;
@@ -435,7 +435,7 @@ bool af_renderer_upload_cluster_stream(af_renderer *r, const char *name, af_clus
 }
 
 
-bool af_renderer_remove_mesh(af_renderer *renderer, const char *name) {
+bool af_vk_r_remove_mesh(af_vk_renderer *renderer, const char *name) {
     if (!name)
         return false;
     size_t index = af_r_find_mesh_index(renderer, name);
@@ -450,7 +450,7 @@ bool af_renderer_remove_mesh(af_renderer *renderer, const char *name) {
         return true;
     }
     ++renderer->mesh_idle_waits;
-    if (!af_renderer_wait_idle(renderer))
+    if (!af_vk_r_wait_idle(renderer))
         return false;
     af_r_destroy_mesh(renderer, &renderer->meshes[index].gpu);
     memmove(&renderer->meshes[index], &renderer->meshes[index + 1],
@@ -461,7 +461,7 @@ bool af_renderer_remove_mesh(af_renderer *renderer, const char *name) {
 }
 
 
-bool af_renderer_update_water(af_renderer *r, const af_physics *physics, const af_scene *s, float alpha) {
+bool af_vk_r_update_water(af_vk_renderer *r, const af_physics *physics, const af_scene *s, float alpha) {
     r->water_physics = physics;
     const af_water_runtime *runtime = ph_water_runtime(physics);
     for (size_t i = r->mesh_count; i > 0; --i) {
@@ -475,7 +475,7 @@ bool af_renderer_update_water(af_renderer *r, const af_physics *physics, const a
             if (!strcmp(name, expected))
                 keep = true;
         }
-        if (!r->meshes[i - 1].retired && !keep && !af_renderer_remove_mesh(r, name))
+        if (!r->meshes[i - 1].retired && !keep && !af_vk_r_remove_mesh(r, name))
             return false;
     }
     for (size_t i = 0; i < af_scene_water_count(s); ++i) {
@@ -537,7 +537,7 @@ static void build_terrain_chunk_range(size_t start, size_t end, void *user_data)
     }
 }
 
-bool af_renderer_update_landscape(af_renderer *r, const af_scene *s) {
+bool af_vk_r_update_landscape(af_vk_renderer *r, const af_scene *s) {
     if (!r)
         return false;
     const af_landscape *ls = s ? af_scene_get_landscape(s) : NULL;
@@ -554,7 +554,7 @@ bool af_renderer_update_landscape(af_renderer *r, const af_scene *s) {
                 }
             }
         }
-        if (!r->meshes[i - 1].retired && !keep && !af_renderer_remove_mesh(r, name))
+        if (!r->meshes[i - 1].retired && !keep && !af_vk_r_remove_mesh(r, name))
             return false;
     }
 
@@ -643,7 +643,7 @@ bool af_renderer_update_landscape(af_renderer *r, const af_scene *s) {
     return success;
 }
 
-bool af_r_object_world(af_renderer *renderer, const af_scene *scene, size_t index, af_mat4 *out) {
+bool af_r_object_world(af_vk_renderer *renderer, const af_scene *scene, size_t index, af_mat4 *out) {
     if (scene && renderer->posed_scene == scene && renderer->posed_count == af_scene_object_count(scene) &&
         index < renderer->posed_count) {
         *out = renderer->posed_worlds[index];
@@ -653,12 +653,12 @@ bool af_r_object_world(af_renderer *renderer, const af_scene *scene, size_t inde
     return o && af_scene_interpolated_world_matrix(scene, renderer->previous_scene, o->id,
                                                    renderer->interpolation_alpha, out);
 }
-const af_morph_draw *af_r_morph_draw_for(const af_renderer *r, const af_scene *scene, size_t index) {
+const af_morph_draw *af_r_morph_draw_for(const af_vk_renderer *r, const af_scene *scene, size_t index) {
     return r->morph_scene == scene && index < r->morph_draw_count && r->morph_draws[index].signature
                ? &r->morph_draws[index]
                : NULL;
 }
-af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scene, const af_camera *camera,
+af_object_id af_vk_r_pick_object(af_vk_renderer *renderer, const af_scene *scene, const af_camera *camera,
                                      af_rect viewport, af_vec2 point) {
     viewport = af_r_resolve_viewport(renderer, viewport);
     if (!isfinite(point.x) || !isfinite(point.y) || point.x < viewport.x || point.y < viewport.y ||
@@ -734,7 +734,7 @@ af_object_id af_renderer_pick_object(af_renderer *renderer, const af_scene *scen
     return selected;
 }
 
-uint32_t af_r_skin_base(const af_renderer *renderer, af_object_id object, const af_gpu_mesh *mesh) {
+uint32_t af_r_skin_base(const af_vk_renderer *renderer, af_object_id object, const af_gpu_mesh *mesh) {
     if (!mesh->skinned)
         return 0;
     for (size_t i = 0; i < renderer->skin_count; ++i)
@@ -742,7 +742,7 @@ uint32_t af_r_skin_base(const af_renderer *renderer, af_object_id object, const 
             return 1u + (uint32_t)i * AF_ANIMATION_MAX_JOINTS;
     return 0;
 }
-af_shadow_bounds af_r_object_bounds(af_renderer *renderer, af_object_id object, af_mat4 world,
+af_shadow_bounds af_r_object_bounds(af_vk_renderer *renderer, af_object_id object, af_mat4 world,
                                       const af_gpu_mesh *mesh, const af_morph_draw *morph) {
     af_vec3 minimum = morph ? morph->minimum : mesh->minimum, maximum = morph ? morph->maximum : mesh->maximum;
     uint32_t base = af_r_skin_base(renderer, object, mesh);
@@ -789,7 +789,7 @@ static void morph_normals_range(size_t start, size_t end, void *user_data) {
     }
 }
 
-bool af_r_prepare_morphs(af_renderer *r, const af_scene *scene) {
+bool af_r_prepare_morphs(af_vk_renderer *r, const af_scene *scene) {
     r->morph_scene = scene;
     r->morph_draw_count = r->morph_vertex_count = 0;
     if (scene != r->posed_scene || !r->posed_morphs)
@@ -887,7 +887,7 @@ void af_r_bind_object_mesh(af_frame *frame, const af_gpu_mesh *mesh, const af_mo
     vkCmdBindIndexBuffer(frame->command, mesh->indices.handle, 0, VK_INDEX_TYPE_UINT32);
 }
 
-bool af_renderer_set_skin_palette(af_renderer *r, af_object_id object, const af_mat4 *matrices, size_t count) {
+bool af_vk_r_set_skin_palette(af_vk_renderer *r, af_object_id object, const af_mat4 *matrices, size_t count) {
     if (!r || !object || count > AF_ANIMATION_MAX_JOINTS || (count && !matrices))
         return false;
     size_t index = 0;
@@ -917,14 +917,14 @@ bool af_renderer_set_skin_palette(af_renderer *r, af_object_id object, const af_
     ++r->skin_revision;
     return true;
 }
-void af_renderer_clear_skin_palettes(af_renderer *r) {
+void af_vk_r_clear_skin_palettes(af_vk_renderer *r) {
     if (r && r->skin_count) {
         r->skin_count = 0;
         ++r->skin_revision;
     }
 }
 
-void af_renderer_set_object_worlds(af_renderer *r, const af_scene *scene, const af_mat4 *world,
+void af_vk_r_set_object_worlds(af_vk_renderer *r, const af_scene *scene, const af_mat4 *world,
                                    const af_animation_pose *const *morph_poses, size_t count) {
     if (r) {
         r->posed_scene = scene;

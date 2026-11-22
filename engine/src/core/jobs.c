@@ -199,6 +199,7 @@ void af_jobs_parallel_for(af_jobs *jobs, size_t count, size_t grain, af_job_rang
 
 static SDL_InitState g_jobs_init = {0};
 static af_jobs *g_jobs_pool = NULL;
+static bool g_jobs_atexit_registered = false;
 
 void af_jobs_global_shutdown(void) {
     if (g_jobs_pool) {
@@ -212,8 +213,10 @@ void af_jobs_global_shutdown(void) {
 af_jobs *af_jobs_global(void) {
     if (SDL_ShouldInit(&g_jobs_init)) {
         g_jobs_pool = af_jobs_create(0);
-        if (g_jobs_pool)
+        if (g_jobs_pool && !g_jobs_atexit_registered) {
+            g_jobs_atexit_registered = true;
             atexit(af_jobs_global_shutdown);
+        }
         SDL_SetInitialized(&g_jobs_init, true);
     }
     return g_jobs_pool;

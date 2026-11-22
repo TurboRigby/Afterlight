@@ -245,16 +245,19 @@ def export_project(project_path, destination, player_path, icd=None):
                         if notice.is_file():
                             folder=resources/'licenses'/path.stem;folder.mkdir(parents=True,exist_ok=True);shutil.copy2(notice,folder/license_name)
                 return target
-            candidates=[pathlib.Path(icd)] if icd else [pathlib.Path('/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json'),pathlib.Path('/usr/local/share/vulkan/icd.d/MoltenVK_icd.json')]
-            manifest=next((p for p in candidates if p.is_file()),None)
-            if manifest is None:raise ValueError('MoltenVK ICD not found; pass --icd /path/to/MoltenVK_icd.json.')
-            driver=read_json(manifest);driver_path=(manifest.parent/driver['ICD']['library_path']).resolve();packed_driver=package_library(driver_path)
-            driver['ICD']['library_path']='../../Frameworks/'+packed_driver.name;(resources/'vulkan').mkdir(exist_ok=True);write_json(resources/'vulkan/icd.json',driver)
+            exe_deps=subprocess.check_output(['otool','-L',str(executable)],text=True)
+            if icd or 'libvulkan' in exe_deps:
+                candidates=[pathlib.Path(icd)] if icd else [pathlib.Path('/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json'),pathlib.Path('/usr/local/share/vulkan/icd.d/MoltenVK_icd.json')]
+                manifest=next((p for p in candidates if p.is_file()),None)
+                if manifest is None:raise ValueError('MoltenVK ICD not found; pass --icd /path/to/MoltenVK_icd.json.')
+                driver=read_json(manifest);driver_path=(manifest.parent/driver['ICD']['library_path']).resolve();packed_driver=package_library(driver_path)
+                driver['ICD']['library_path']='../../Frameworks/'+packed_driver.name;(resources/'vulkan').mkdir(exist_ok=True);write_json(resources/'vulkan/icd.json',driver)
             position=0
             while position<len(pending):
                 binary=pending[position];position+=1
                 dependencies=subprocess.check_output(['otool','-L',str(binary)],text=True).splitlines()[1:]
                 for line in dependencies:
+                    if not line.startswith('\t'):continue
                     old=line.strip().split(' (',1)[0]
                     if old.startswith(('/usr/lib/','/System/Library/')):continue
                     if old.startswith('@executable_path/'):
@@ -262,11 +265,14 @@ def export_project(project_path, destination, player_path, icd=None):
                         continue
                     if old.startswith('@loader_path/'):source=binary.parent/old[len('@loader_path/'):]
                     elif old.startswith('@rpath/'):
-                        # Resolve rpaths from the unmodified source when possible.
+                        # Resolve rpaths from the unmodified source and main executable (matching dyld).
                         origin=module if binary==game_module else player_path/'Contents/MacOS/afterlight_player' if binary==executable else next((s for s,t in mapping.items() if t==binary),binary)
-                        load=subprocess.check_output(['otool','-l',str(origin)],text=True);paths=[];lines=load.splitlines()
-                        for at,text in enumerate(lines):
-                            if 'cmd LC_RPATH' in text and at+2<len(lines):paths.append(lines[at+2].strip().split('path ',1)[-1].split(' (',1)[0])
+                        paths=[str(origin.parent)]
+                        for rpath_owner in dict.fromkeys([origin, player_path/'Contents/MacOS/afterlight_player']):
+                            if not rpath_owner.is_file():continue
+                            lines=subprocess.check_output(['otool','-l',str(rpath_owner)],text=True).splitlines()
+                            for at,text in enumerate(lines):
+                                if 'cmd LC_RPATH' in text and at+2<len(lines):paths.append(lines[at+2].strip().split('path ',1)[-1].split(' (',1)[0])
                         source=next((pathlib.Path(p.replace('@loader_path',str(origin.parent)).replace('@executable_path',str((player_path/'Contents/MacOS').resolve())))/old[7:] for p in paths if (pathlib.Path(p.replace('@loader_path',str(origin.parent)).replace('@executable_path',str((player_path/'Contents/MacOS').resolve())))/old[7:]).exists()),None)
                         if source is None:raise ValueError(f'Cannot resolve runtime dependency {old}')
                     else:source=pathlib.Path(old)

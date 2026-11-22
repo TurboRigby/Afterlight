@@ -10,6 +10,7 @@
 #include "render/renderer.h"
 #include "render/environment_job.h"
 #include "extension_runtime.h"
+#include "jobs.h"
 #include "animation/animation_runtime.h"
 #include "render/render_test.h"
 #include "platform_sdl.h"
@@ -177,21 +178,24 @@ af_engine *af_engine_create_with_extensions(const af_engine_config *config, cons
         return NULL;
     }
     engine->show_fps = config->show_fps;
-    engine->window =
-        SDL_CreateWindow(config->title, config->width, config->height,
-                         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
-    if (!engine->window) {
-        af_log("error", "Window creation: %s", SDL_GetError());
-        af_engine_destroy(engine);
-        return NULL;
-    }
     for (size_t i = 0; i < count; ++i) {
         if (!af_extensions_load(&engine->extensions, paths[i])) {
             af_engine_destroy(engine);
             return NULL;
         }
     }
-    engine->renderer = af_renderer_create(engine->window, config->enable_validation, &engine->extensions);
+    af_render_backend backend = af_renderer_select_backend(config->backend, &engine->extensions);
+    SDL_WindowFlags backend_flag =
+        backend == AF_RENDER_BACKEND_METAL ? SDL_WINDOW_METAL : SDL_WINDOW_VULKAN;
+    engine->window =
+        SDL_CreateWindow(config->title, config->width, config->height,
+                         backend_flag | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+    if (!engine->window) {
+        af_log("error", "Window creation: %s", SDL_GetError());
+        af_engine_destroy(engine);
+        return NULL;
+    }
+    engine->renderer = af_renderer_create_backend(engine->window, backend, config->enable_validation, &engine->extensions);
     if (!engine->renderer) {
         af_engine_destroy(engine);
         return NULL;
@@ -615,6 +619,7 @@ void af_engine_destroy(af_engine *engine) {
     SDL_DestroyWindow(engine->window);
     SDL_free(engine->base_title);
     SDL_free(engine->clipboard);
+    af_jobs_global_shutdown();
     SDL_Quit();
     free(engine);
     engine_active = false;

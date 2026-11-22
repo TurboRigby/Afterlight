@@ -16,7 +16,11 @@
 typedef struct af_renderer af_renderer;
 struct af_extensions;
 struct af_vulkan_upscaler_api;
+af_render_backend af_renderer_select_backend(af_render_backend requested, const struct af_extensions *extensions);
+af_renderer *af_renderer_create_backend(SDL_Window *window, af_render_backend backend, bool enable_validation,
+                                        struct af_extensions *extensions);
 af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation, struct af_extensions *);
+af_render_backend af_renderer_backend(const af_renderer *renderer);
 void af_renderer_destroy(af_renderer *renderer);
 void af_renderer_set_upscaler(af_renderer *, const struct af_vulkan_upscaler_api *, void *state);
 bool af_renderer_set_upscaler_enabled(af_renderer *, bool enabled);

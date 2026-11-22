@@ -30,12 +30,19 @@
 /* All engine/window operations run on the main thread. One engine at a time. */
 typedef struct af_engine af_engine;
 
+typedef enum af_render_backend {
+    AF_RENDER_BACKEND_AUTO = 0,
+    AF_RENDER_BACKEND_VULKAN = 1,
+    AF_RENDER_BACKEND_METAL = 2
+} af_render_backend;
+
 typedef struct af_engine_config {
     const char *title;
     int width;
     int height;
     bool enable_validation;
     bool show_fps; /* Append FPS and average frame time to the window title. */
+    af_render_backend backend;
 } af_engine_config;
 
 typedef enum af_mouse_button { AF_MOUSE_LEFT, AF_MOUSE_RIGHT, AF_MOUSE_MIDDLE, AF_MOUSE_BUTTON_COUNT } af_mouse_button;
@@ -90,6 +97,7 @@ typedef struct af_engine_stats {
     uint32_t validation_errors;
     bool validation_enabled;
     uint64_t vk_allocations, vk_staged_uploads;
+    af_render_backend active_backend;
 } af_engine_stats;
 
 size_t af_engine_push_character(af_engine *, af_object_id, const af_character *, af_character_config, af_vec3, float,

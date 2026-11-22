@@ -102,38 +102,49 @@ if(BUILD_TESTING)
         TIMEOUT 45 LABELS graphics ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1")
 
     # Vulkan extensions & ray tracing
-    add_library(afterlight_upscaler_fixture MODULE tests/render/vulkan/vulkan_upscaler_module.c)
-    target_include_directories(afterlight_upscaler_fixture PRIVATE engine/include)
-    target_compile_definitions(afterlight_upscaler_fixture PRIVATE AF_EXTENSION_BUILD)
-    target_link_libraries(afterlight_upscaler_fixture PRIVATE Vulkan::Vulkan)
-    set_target_properties(afterlight_upscaler_fixture PROPERTIES C_VISIBILITY_PRESET hidden)
-    afterlight_warnings(afterlight_upscaler_fixture)
-
-    afterlight_add_test(afterlight_vulkan_upscaler_test afterlight.vulkan_upscaler
-        SOURCES tests/render/vulkan/vulkan_upscaler.c INCLUDES engine/src
-        LIBS Afterlight::Engine Vulkan::Vulkan DEPENDS afterlight_upscaler_fixture
-        ARGS $<TARGET_FILE:afterlight_upscaler_fixture> GRAPHICS CHECK_VALIDATION TIMEOUT 45)
-    set_tests_properties(afterlight.vulkan_upscaler PROPERTIES SKIP_RETURN_CODE 77)
-
     set(test_custom_material_header "${PROJECT_BINARY_DIR}/generated/test_custom_material_frag.h")
     add_custom_command(
         OUTPUT "${test_custom_material_header}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/generated"
-        COMMAND Vulkan::glslangValidator --target-env vulkan1.1 --spirv-val
+        COMMAND ${AFTERLIGHT_GLSLANG} --target-env vulkan1.1 --spirv-val
             --vn af_test_custom_material_frag -o "${test_custom_material_header}"
             "${PROJECT_SOURCE_DIR}/tests/render/vulkan/custom_material.frag"
-        DEPENDS "${PROJECT_SOURCE_DIR}/tests/render/vulkan/custom_material.frag" Vulkan::glslangValidator
+        DEPENDS "${PROJECT_SOURCE_DIR}/tests/render/vulkan/custom_material.frag"
         COMMENT "Compiling custom material test shader"
         VERBATIM
     )
-    afterlight_add_test(afterlight_vk_memory_and_materials_test afterlight.vk_memory_and_materials
-        SOURCES tests/render/vulkan/vk_memory_and_materials.c "${test_custom_material_header}"
-        INCLUDES "${PROJECT_BINARY_DIR}/generated" engine/src tests
-        GRAPHICS CHECK_VALIDATION TIMEOUT 45)
-    add_test(NAME afterlight.vk_memory_staged COMMAND afterlight_vk_memory_and_materials_test)
-    set_tests_properties(afterlight.vk_memory_staged PROPERTIES
-        TIMEOUT 45 LABELS graphics FAIL_REGULAR_EXPRESSION "\\[validation error\\]"
-        ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;AFTERLIGHT_FORCE_STAGING_UPLOAD=1")
+
+    if(AFTERLIGHT_ENABLE_VULKAN)
+        add_library(afterlight_upscaler_fixture MODULE tests/render/vulkan/vulkan_upscaler_module.c)
+        target_include_directories(afterlight_upscaler_fixture PRIVATE engine/include)
+        target_compile_definitions(afterlight_upscaler_fixture PRIVATE AF_EXTENSION_BUILD)
+        target_link_libraries(afterlight_upscaler_fixture PRIVATE Vulkan::Vulkan)
+        set_target_properties(afterlight_upscaler_fixture PROPERTIES C_VISIBILITY_PRESET hidden)
+        afterlight_warnings(afterlight_upscaler_fixture)
+
+        afterlight_add_test(afterlight_vulkan_upscaler_test afterlight.vulkan_upscaler
+            SOURCES tests/render/vulkan/vulkan_upscaler.c INCLUDES engine/src
+            LIBS Afterlight::Engine Vulkan::Vulkan DEPENDS afterlight_upscaler_fixture
+            ARGS $<TARGET_FILE:afterlight_upscaler_fixture>
+            ENV "AFTERLIGHT_BACKEND=vulkan" GRAPHICS CHECK_VALIDATION TIMEOUT 45)
+        set_tests_properties(afterlight.vulkan_upscaler PROPERTIES SKIP_RETURN_CODE 77)
+
+        afterlight_add_test(afterlight_vk_memory_and_materials_test afterlight.vk_memory_and_materials
+            SOURCES tests/render/vulkan/vk_memory_and_materials.c "${test_custom_material_header}"
+            INCLUDES "${PROJECT_BINARY_DIR}/generated" engine/src tests
+            ENV "AFTERLIGHT_BACKEND=vulkan" GRAPHICS CHECK_VALIDATION TIMEOUT 45)
+        add_test(NAME afterlight.vk_memory_staged COMMAND afterlight_vk_memory_and_materials_test)
+        set_tests_properties(afterlight.vk_memory_staged PROPERTIES
+            TIMEOUT 45 LABELS graphics FAIL_REGULAR_EXPRESSION "\\[validation error\\]"
+            ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;AFTERLIGHT_BACKEND=vulkan;AFTERLIGHT_FORCE_STAGING_UPLOAD=1")
+    endif()
+
+    if(AFTERLIGHT_ENABLE_METAL)
+        afterlight_add_test(afterlight_metal_backend_test afterlight.metal_backend
+            SOURCES tests/render/metal/metal_backend.c "${test_custom_material_header}"
+            INCLUDES "${PROJECT_BINARY_DIR}/generated" engine/src tests
+            ENV "AFTERLIGHT_BACKEND=metal" GRAPHICS CHECK_VALIDATION TIMEOUT 60)
+    endif()
 
     afterlight_add_test(afterlight_ray_shadows_test afterlight.ray_shadows
         SOURCES tests/render/lighting/ray_shadows.c INCLUDES engine/src sandbox NO_CTEST)
@@ -222,8 +233,10 @@ if(BUILD_TESTING)
         SOURCES tests/render/lighting/lighting_math.c INCLUDES engine/src TIMEOUT 30)
     afterlight_add_test(afterlight_lighting_test afterlight.lighting
         SOURCES tests/render/lighting/lighting.c INCLUDES engine/src sandbox GRAPHICS CHECK_VALIDATION TIMEOUT 60)
-    afterlight_add_test(afterlight_vulkan_policy_test afterlight.vulkan_policy
-        SOURCES tests/render/vulkan/vulkan_policy.c INCLUDES engine/src LIBS Vulkan::Vulkan)
+    if(AFTERLIGHT_ENABLE_VULKAN)
+        afterlight_add_test(afterlight_vulkan_policy_test afterlight.vulkan_policy
+            SOURCES tests/render/vulkan/vulkan_policy.c INCLUDES engine/src LIBS Vulkan::Vulkan)
+    endif()
 
     # Water tests
     afterlight_add_test(afterlight_water_render_test afterlight.water_render
@@ -624,8 +637,10 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME afterlight.ray_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/tooling/ray_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_ray_shadow_game>" ${package_test_flags})
     set_tests_properties(afterlight.ray_export PROPERTIES TIMEOUT 180 LABELS "graphics;packaging" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
-    add_test(NAME afterlight.bundle_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/tooling/bundle_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_playground_game>" --extension "$<TARGET_FILE:afterlight_upscaler_fixture>" ${package_test_flags})
-    set_tests_properties(afterlight.bundle_export PROPERTIES TIMEOUT 180 LABELS "graphics;packaging" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
+    if(AFTERLIGHT_ENABLE_VULKAN)
+        add_test(NAME afterlight.bundle_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/tooling/bundle_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_playground_game>" --extension "$<TARGET_FILE:afterlight_upscaler_fixture>" ${package_test_flags})
+        set_tests_properties(afterlight.bundle_export PROPERTIES TIMEOUT 180 LABELS "graphics;packaging" ENVIRONMENT "VK_LAYER_VALIDATE_SYNC=1;SDL_AUDIO_DRIVER=dummy")
+    endif()
     add_test(NAME afterlight.water_course_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/tooling/water_export.py" --courses --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_water_course_game>" --play-test "$<TARGET_FILE:afterlight_water_course_test>" ${package_test_flags})
     set_tests_properties(afterlight.water_course_export PROPERTIES TIMEOUT 300 LABELS "graphics;packaging")
     add_test(NAME afterlight.water_export COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/tooling/water_export.py" --root "${PROJECT_SOURCE_DIR}" --player "${afterlight_player_package}" --module "$<TARGET_FILE:afterlight_water_game>" --play-test "$<TARGET_FILE:afterlight_water_demo_test>" ${package_test_flags})

@@ -7,20 +7,20 @@
 #include "renderer_internal.h"
 #include "cluster_comp.h"
 
-void af_renderer_set_cluster_rendering(af_renderer *r, bool enabled, bool debug_colors) {
+void af_vk_r_set_cluster_rendering(af_vk_renderer *r, bool enabled, bool debug_colors) {
     r->clusters_disabled = !enabled;
     r->cluster_colors = debug_colors;
 }
 
-void af_renderer_set_cluster_lod(af_renderer *r, bool enabled) {
+void af_vk_r_set_cluster_lod(af_vk_renderer *r, bool enabled) {
     r->cluster_lod_disabled = !enabled;
 }
 
-void af_renderer_set_cluster_gpu_culling(af_renderer *r, bool enabled) {
+void af_vk_r_set_cluster_gpu_culling(af_vk_renderer *r, bool enabled) {
     r->cluster_gpu_disabled = !enabled;
 }
 
-af_cluster_stats af_renderer_cluster_stats(const af_renderer *r) {
+af_cluster_stats af_vk_r_cluster_stats(const af_vk_renderer *r) {
     af_cluster_stats stats = r->cluster_stats;
     stats.gpu_supported = r->cluster_gpu_supported;
     stats.page_uploads = r->page_uploads;
@@ -83,7 +83,7 @@ static af_cached_cluster_page *oldest_cluster_page(af_cluster_residency *cache, 
     return oldest;
 }
 
-static af_cached_cluster_page *oldest_cluster_page_global(af_renderer *r) {
+static af_cached_cluster_page *oldest_cluster_page_global(af_vk_renderer *r) {
     af_cached_cluster_page *oldest = NULL;
     for (size_t i = 0; i < r->mesh_count; ++i) {
         af_cluster_residency *cache = r->meshes[i].gpu.residency;
@@ -93,7 +93,7 @@ static af_cached_cluster_page *oldest_cluster_page_global(af_renderer *r) {
     return oldest;
 }
 
-static uint64_t evict_cluster_page(af_renderer *r, af_cached_cluster_page *page) {
+static uint64_t evict_cluster_page(af_vk_renderer *r, af_cached_cluster_page *page) {
     uint64_t bytes = cluster_page_bytes(page);
     af_r_destroy_mesh(r, &page->gpu);
     *page = (af_cached_cluster_page){0};
@@ -101,19 +101,19 @@ static uint64_t evict_cluster_page(af_renderer *r, af_cached_cluster_page *page)
     return bytes;
 }
 
-static void release_pending_cluster_page(af_renderer *r, af_pending_cluster_page *pending) {
+static void release_pending_cluster_page(af_vk_renderer *r, af_pending_cluster_page *pending) {
     af_cluster_free(&pending->mesh);
     af_r_destroy_mesh(r, &pending->gpu);
     *pending = (af_pending_cluster_page){0};
 }
 
-static void fail_cluster_page(af_renderer *r, af_cluster_residency *cache) {
+static void fail_cluster_page(af_vk_renderer *r, af_cluster_residency *cache) {
     cache->page_requirements[cache->pending.region] = UINT64_MAX;
     ++r->page_failures;
     release_pending_cluster_page(r, &cache->pending);
 }
 
-static bool stage_cluster_page(af_renderer *r, af_cluster_residency *cache) {
+static bool stage_cluster_page(af_vk_renderer *r, af_cluster_residency *cache) {
     af_pending_cluster_page *p = &cache->pending;
     if (p->mesh.count && r->rendered_frames - p->last_wanted > 2)
         release_pending_cluster_page(r, p);
@@ -134,7 +134,7 @@ static bool stage_cluster_page(af_renderer *r, af_cluster_residency *cache) {
     return true;
 }
 
-void af_r_update_cluster_pages(af_renderer *r) {
+void af_r_update_cluster_pages(af_vk_renderer *r) {
     uint32_t frame = 1u << r->frame_index;
     uint64_t resident = 0, reclaimable = 0;
     for (size_t i = 0; i < r->mesh_count; ++i) {
@@ -207,11 +207,11 @@ void af_r_update_cluster_pages(af_renderer *r) {
     }
 }
 
-bool af_renderer_set_cluster_cache_budget(af_renderer *r, uint64_t bytes) {
+bool af_vk_r_set_cluster_cache_budget(af_vk_renderer *r, uint64_t bytes) {
     if (bytes < r->page_budget) {
-        uint64_t resident = af_renderer_cluster_stats(r).page_bytes;
+        uint64_t resident = af_vk_r_cluster_stats(r).page_bytes;
         if (resident > bytes) {
-            if (!af_renderer_wait_idle(r))
+            if (!af_vk_r_wait_idle(r))
                 return false;
             for (size_t i = 0; i < r->mesh_count; ++i) {
                 af_cluster_residency *cache = r->meshes[i].gpu.residency;
@@ -227,24 +227,24 @@ bool af_renderer_set_cluster_cache_budget(af_renderer *r, uint64_t bytes) {
     return true;
 }
 
-void af_r_use_cluster_page(af_renderer *r, af_cached_cluster_page *page) {
+void af_r_use_cluster_page(af_vk_renderer *r, af_cached_cluster_page *page) {
     page->frame_mask |= 1u << r->frame_index;
     page->last_used = r->rendered_frames;
 }
 
-static bool cluster_region_visible(const af_renderer *r, const af_cluster_stream_region *region, af_mat4 model,
+static bool cluster_region_visible(const af_vk_renderer *r, const af_cluster_stream_region *region, af_mat4 model,
                                    af_mat4 projection) {
     af_shadow_bounds bounds = af_shadow_transform_bounds(model, region->minimum, region->maximum);
     return r->culling_disabled || af_shadow_intersects(projection, &bounds);
 }
 
-static bool cluster_region_wants_page(const af_renderer *r, const af_cluster_stream_region *region, af_mat4 clip,
+static bool cluster_region_wants_page(const af_vk_renderer *r, const af_cluster_stream_region *region, af_mat4 clip,
                                       float error_scale) {
     return region->page_clusters && !cluster_wants_coarse(clip, region->minimum, region->maximum,
                                                           region->error * error_scale, !r->cluster_lod_disabled);
 }
 
-static const af_gpu_mesh *select_cluster_page(af_renderer *r, const af_gpu_mesh *base, uint32_t region_index,
+static const af_gpu_mesh *select_cluster_page(af_vk_renderer *r, const af_gpu_mesh *base, uint32_t region_index,
                                               af_mat4 model, af_mat4 projection, af_mat4 clip, float error_scale,
                                               af_cluster_span *span) {
     af_cluster_residency *cache = base->residency;
@@ -295,7 +295,7 @@ static int compare_cluster_page_regions(const void *a, const void *b) {
 
 /* Secondary passes replace coarse regions with the same visible fine pages
    as the opaque pass. They keep coarse geometry outside the camera frustum. */
-size_t af_r_cluster_index_ranges(const af_renderer *r, const af_gpu_mesh *base, af_mat4 model, af_cluster_view view,
+size_t af_r_cluster_index_ranges(const af_vk_renderer *r, const af_gpu_mesh *base, af_mat4 model, af_cluster_view view,
                                    af_cluster_index_range *ranges) {
     af_cluster_residency *cache = base->residency;
     if (r->clusters_disabled || !cache)
@@ -350,7 +350,7 @@ static af_cluster_span cluster_range(const af_gpu_mesh *mesh, uint32_t region, a
 
 #define AF_CLUSTER_GPU_LIMIT 65536u
 
-void af_r_destroy_cluster_compute(af_renderer *r) {
+void af_r_destroy_cluster_compute(af_vk_renderer *r) {
     if (r->cluster_pipeline)
         vkDestroyPipeline(r->device, r->cluster_pipeline, NULL);
     if (r->cluster_pipeline_layout)
@@ -370,7 +370,7 @@ void af_r_destroy_cluster_compute(af_renderer *r) {
     free(r->cluster_stream_batches);
 }
 
-static bool create_cluster_compute(af_renderer *r) {
+static bool create_cluster_compute(af_vk_renderer *r) {
     VkDescriptorSetLayoutBinding bindings[3] = {0};
     for (unsigned i = 0; i < 3; ++i)
         bindings[i] =
@@ -419,7 +419,7 @@ static bool create_cluster_compute(af_renderer *r) {
     return true;
 }
 
-static bool cluster_buffers(af_renderer *r, af_frame *frame, uint32_t count, size_t objects) {
+static bool cluster_buffers(af_vk_renderer *r, af_frame *frame, uint32_t count, size_t objects) {
     VkDeviceSize bytes = (VkDeviceSize)(count + 1) * sizeof(VkDrawIndexedIndirectCommand);
     if (frame->cluster_output.capacity < bytes) {
         af_r_destroy_buffer(r, &frame->cluster_output);
@@ -450,7 +450,7 @@ static bool cluster_buffers(af_renderer *r, af_frame *frame, uint32_t count, siz
     return true;
 }
 
-static void cluster_read_stats(af_renderer *r, af_frame *frame) {
+static void cluster_read_stats(af_vk_renderer *r, af_frame *frame) {
     if (!frame->cluster_submitted)
         return;
     void *mapped = frame->cluster_output.alloc.mapped;
@@ -464,7 +464,7 @@ static void cluster_read_stats(af_renderer *r, af_frame *frame) {
     frame->cluster_submitted = 0;
 }
 
-static void record_cluster_compute(af_renderer *r, af_frame *frame, uint32_t count) {
+static void record_cluster_compute(af_vk_renderer *r, af_frame *frame, uint32_t count) {
     VkDeviceSize counter = (VkDeviceSize)count * sizeof(VkDrawIndexedIndirectCommand);
     vkCmdFillBuffer(frame->command, frame->cluster_output.handle, counter, sizeof(VkDrawIndexedIndirectCommand), 0);
     VkMemoryBarrier init = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
@@ -487,7 +487,7 @@ static void record_cluster_compute(af_renderer *r, af_frame *frame, uint32_t cou
     frame->cluster_submitted = count;
 }
 
-static bool reserve_cluster_commands(af_renderer *r, size_t objects) {
+static bool reserve_cluster_commands(af_vk_renderer *r, size_t objects) {
     if (!r->cluster_candidates) {
         r->cluster_candidates = malloc(AF_CLUSTER_GPU_LIMIT * sizeof(*r->cluster_candidates));
         if (!r->cluster_candidates)
@@ -507,7 +507,7 @@ static bool reserve_cluster_commands(af_renderer *r, size_t objects) {
     return true;
 }
 
-bool af_r_prepare_cluster_commands(af_renderer *r, af_frame *frame, const af_scene *scene, af_mat4 projection,
+bool af_r_prepare_cluster_commands(af_vk_renderer *r, af_frame *frame, const af_scene *scene, af_mat4 projection,
                                      float pixel_scale, size_t objects) {
     cluster_read_stats(r, frame);
     if (!r->cluster_gpu_supported || r->cluster_gpu_disabled || r->clusters_disabled || r->cluster_colors || !objects ||
@@ -601,7 +601,7 @@ bool af_r_prepare_cluster_commands(af_renderer *r, af_frame *frame, const af_sce
     return true;
 }
 
-static size_t draw_cluster_commands(af_renderer *r, af_frame *frame, af_cluster_span span) {
+static size_t draw_cluster_commands(af_vk_renderer *r, af_frame *frame, af_cluster_span span) {
     size_t calls = 0;
     while (span.count) {
         uint32_t count = span.count < r->cluster_draw_limit ? span.count : r->cluster_draw_limit;
@@ -615,7 +615,7 @@ static size_t draw_cluster_commands(af_renderer *r, af_frame *frame, af_cluster_
     return calls;
 }
 
-static size_t draw_cluster_span(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
+static size_t draw_cluster_span(af_vk_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
                                 af_mat4 visibility, af_cluster_span span, uint32_t object, uint32_t color_offset) {
     size_t draws = 0;
     r->cluster_stats.candidates += span.count;
@@ -642,7 +642,7 @@ static size_t draw_cluster_span(af_renderer *r, af_frame *frame, const af_gpu_me
     return draws;
 }
 
-size_t af_r_draw_clusters(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
+size_t af_r_draw_clusters(af_vk_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
                             af_mat4 visibility, float pixel_scale, uint32_t object) {
     size_t draws = 0;
     af_mat4 clip = af_mat4_mul(visibility, draw.model);
@@ -676,7 +676,7 @@ size_t af_r_draw_clusters(af_renderer *r, af_frame *frame, const af_gpu_mesh *me
     return draws;
 }
 
-size_t af_r_draw_indirect_clusters(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_cluster_span span) {
+size_t af_r_draw_indirect_clusters(af_vk_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_cluster_span span) {
     if (!mesh->residency)
         return draw_cluster_commands(r, frame, span);
     size_t calls = 0;

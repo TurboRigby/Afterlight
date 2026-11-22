@@ -25,12 +25,12 @@ static uint32_t shadow_material_flags(af_alpha_mode alpha_mode, af_mesh_sidednes
     return (uint32_t)alpha_mode | (mesh_face_flags(sidedness, model) << 8);
 }
 
-static bool prepare_shadows(af_renderer *renderer, const af_scene *scene, const af_camera *camera, af_rect area,
+static bool prepare_shadows(af_vk_renderer *renderer, const af_scene *scene, const af_camera *camera, af_rect area,
                             af_frame_uniform *uniform, af_shadow_view *view) {
     af_shadow_settings settings = af_scene_get_shadows(scene);
     uint32_t layers = settings.mode == AF_SHADOW_CASCADED ? 4u : 1u;
     if (settings.resolution != renderer->shadow_resolution || layers != renderer->shadow_layers) {
-        if (!af_renderer_wait_idle(renderer))
+        if (!af_vk_r_wait_idle(renderer))
             return false;
         af_vk_shadows *replacement =
             af_vk_shadows_create(renderer->physical_device, renderer->device, renderer->allocator, settings.resolution,
@@ -255,7 +255,7 @@ static bool prepare_shadows(af_renderer *renderer, const af_scene *scene, const 
     uint32_t wanted_layers = local_layers ? local_layers : 1;
     if (wanted_layers != renderer->local_shadow_layers ||
         render_settings.local_shadow_resolution != renderer->local_shadow_resolution) {
-        if (!af_renderer_wait_idle(renderer))
+        if (!af_vk_r_wait_idle(renderer))
             return false;
         af_vk_shadows *replacement =
             af_vk_shadows_create(renderer->physical_device, renderer->device, renderer->allocator,
@@ -277,7 +277,7 @@ static bool prepare_shadows(af_renderer *renderer, const af_scene *scene, const 
     return true;
 }
 
-static size_t add_streamed_ray_instances(af_renderer *r, const af_gpu_mesh *mesh, af_ray_instance base,
+static size_t add_streamed_ray_instances(af_vk_renderer *r, const af_gpu_mesh *mesh, af_ray_instance base,
                                          af_cluster_view view, size_t extra, af_ray_instance *inputs) {
     af_cluster_index_range ranges[AF_CLUSTER_INDEX_RANGES];
     size_t count = af_r_cluster_index_ranges(r, mesh, base.world, view, ranges);
@@ -305,10 +305,10 @@ static size_t add_streamed_ray_instances(af_renderer *r, const af_gpu_mesh *mesh
     return count;
 }
 
-static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *scene, bool shadows, bool reflections,
+static bool prepare_ray_scene(af_vk_renderer *r, af_frame *frame, const af_scene *scene, bool shadows, bool reflections,
                               bool gi, bool material_effects, af_cluster_view view, uint64_t *emitter_signature) {
     if (r->rays && r->ray_revision != r->mesh_revision) {
-        if (!af_renderer_wait_idle(r))
+        if (!af_vk_r_wait_idle(r))
             return false;
         af_vk_ray_query_destroy(r->rays);
         r->rays = NULL;
@@ -401,14 +401,14 @@ static bool prepare_ray_scene(af_renderer *r, af_frame *frame, const af_scene *s
     return af_vk_ray_query_prepare(r->rays, r->frame_index, r->ray_inputs, count,
                                    reflections || gi || material_effects, frame->descriptor);
 }
-static size_t shadow_cluster_ranges(const af_renderer *r, const af_shadow_draw *draw, af_cluster_view view,
+static size_t shadow_cluster_ranges(const af_vk_renderer *r, const af_shadow_draw *draw, af_cluster_view view,
                                     af_cluster_index_range *ranges) {
     if (draw->object_index == SIZE_MAX || (draw->material_flags & 3u) != AF_ALPHA_OPAQUE)
         return 0;
     return af_r_cluster_index_ranges(r, &r->meshes[draw->mesh].gpu, draw->model, view, ranges);
 }
 
-static void draw_shadow_casters(af_renderer *r, af_frame *frame, const af_scene *scene, af_vk_shadows *maps,
+static void draw_shadow_casters(af_vk_renderer *r, af_frame *frame, const af_scene *scene, af_vk_shadows *maps,
                                 af_mat4 matrix, af_cluster_view view, uint64_t *fine_draws) {
     for (size_t i = 0; i < r->shadow_count; ++i) {
         const af_shadow_draw *draw = &r->shadow_draws[i];
@@ -440,7 +440,7 @@ static void draw_shadow_casters(af_renderer *r, af_frame *frame, const af_scene 
     }
 }
 
-static uint64_t shadow_signature(af_renderer *r, af_mat4 matrix, af_shadow_settings settings, bool enabled,
+static uint64_t shadow_signature(af_vk_renderer *r, af_mat4 matrix, af_shadow_settings settings, bool enabled,
                                  af_cluster_view view) {
     uint64_t h = af_r_hash(UINT64_C(14695981039346656037), &matrix, sizeof(matrix));
     h = af_r_hash(h, &settings.constant_bias, sizeof(float));
@@ -554,7 +554,7 @@ static uint64_t temporal_light_hash(uint64_t h, af_local_light value) {
     h = af_r_hash(h, &value.outer_angle, sizeof(value.outer_angle));
     return h;
 }
-static bool prepare_temporal(af_renderer *r, const af_scene *scene, const af_camera *camera, af_rect area,
+static bool prepare_temporal(af_vk_renderer *r, const af_scene *scene, const af_camera *camera, af_rect area,
                              af_color clear, af_render_settings settings, bool temporal, bool jitter,
                              af_frame_uniform *uniform, uint64_t *local_light_signature) {
     uniform->unjittered_view_projection = uniform->view_projection;
@@ -667,7 +667,7 @@ static bool prepare_temporal(af_renderer *r, const af_scene *scene, const af_cam
 
 /* The frame's storage buffer holds previous poses by scene index, followed by
    compact current poses for instanced draws. The frame fence owns both ranges. */
-static bool reserve_draw_records(af_renderer *r, af_frame *frame, size_t count) {
+static bool reserve_draw_records(af_vk_renderer *r, af_frame *frame, size_t count) {
     if (!count)
         return true;
     size_t capacity = 16;
@@ -702,7 +702,7 @@ static bool reserve_draw_records(af_renderer *r, af_frame *frame, size_t count) 
     return true;
 }
 
-static bool upload_draw_records(af_renderer *r, af_frame *frame, size_t count) {
+static bool upload_draw_records(af_vk_renderer *r, af_frame *frame, size_t count) {
     if (!count)
         return true;
     void *mapped = frame->motion_buffer.alloc.mapped;
@@ -714,7 +714,7 @@ static bool upload_draw_records(af_renderer *r, af_frame *frame, size_t count) {
 }
 
 
-static void bind_scene_material(af_renderer *r, af_frame *frame, const af_material *material, size_t object_count) {
+static void bind_scene_material(af_vk_renderer *r, af_frame *frame, const af_material *material, size_t object_count) {
     const char *names[] = {material->texture, material->normal_map, material->metallic_roughness_map};
     af_vk_texture *textures[] = {r->white, r->flat_normal, r->white};
     const uint32_t sets[] = {1, 3, 4};
@@ -744,7 +744,7 @@ static bool prop_batch_matches(const af_prop_batch *batch, const af_gpu_mesh *me
            !strcmp(batch->material->shader, material->shader);
 }
 
-static void draw_prop_batch(af_renderer *r, af_frame *frame, af_prop_batch *batch, size_t *draws) {
+static void draw_prop_batch(af_vk_renderer *r, af_frame *frame, af_prop_batch *batch, size_t *draws) {
     if (!batch->count)
         return;
     uint32_t first_instance = batch->first_object;
@@ -763,7 +763,7 @@ static void draw_prop_batch(af_renderer *r, af_frame *frame, af_prop_batch *batc
     *batch = (af_prop_batch){0};
 }
 
-static bool bin_and_upload_local_lights(af_renderer *renderer, af_frame *frame, const af_camera *camera,
+static bool bin_and_upload_local_lights(af_vk_renderer *renderer, af_frame *frame, const af_camera *camera,
                                         af_frame_uniform *uniform) {
     uint32_t cols = (renderer->swapchain.render_extent.width + AF_LIGHT_TILE_SIZE - 1u) / AF_LIGHT_TILE_SIZE;
     uint32_t rows = (renderer->swapchain.render_extent.height + AF_LIGHT_TILE_SIZE - 1u) / AF_LIGHT_TILE_SIZE;
@@ -906,7 +906,7 @@ static bool bin_and_upload_local_lights(af_renderer *renderer, af_frame *frame, 
 }
 
 
-bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera,
+bool af_vk_r_draw(af_vk_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera,
                       af_rect viewport_rect, af_object_id highlighted, const af_overlay_frame *overlay,
                       float frame_time_ms, bool *rendered) {
     *rendered = false;
@@ -984,7 +984,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
             return true;
     }
     if (!(resource_config & AF_RESOURCE_RAY_QUERY) && renderer->rays) {
-        if (!af_renderer_wait_idle(renderer))
+        if (!af_vk_r_wait_idle(renderer))
             return false;
         af_vk_ray_query_destroy(renderer->rays);
         renderer->rays = NULL;
@@ -1002,7 +1002,7 @@ bool af_renderer_draw(af_renderer *renderer, af_color color, const af_scene *sce
     if (!environment_found && (environment_settings.environment_enabled || environment_settings.skybox))
         ++renderer->missing_textures;
     if (strcmp(renderer->active_environment, environment_settings.environment_asset)) {
-        if (!af_renderer_wait_idle(renderer))
+        if (!af_vk_r_wait_idle(renderer))
             return false;
         snprintf(renderer->active_environment, sizeof(renderer->active_environment), "%s",
                  environment_settings.environment_asset);

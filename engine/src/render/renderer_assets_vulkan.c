@@ -6,7 +6,7 @@
 
 #include "renderer_internal.h"
 
-void af_r_update_environment_descriptors(af_renderer *renderer) {
+void af_r_update_environment_descriptors(af_vk_renderer *renderer) {
     af_vk_texture *specular = renderer->environment, *diffuse = renderer->irradiance, *sky = renderer->environment;
     for (size_t i = 0; i < renderer->environment_count; ++i)
         if (!strcmp(renderer->active_environment, renderer->environments[i].name)) {
@@ -36,7 +36,7 @@ void af_r_update_environment_descriptors(af_renderer *renderer) {
         vkUpdateDescriptorSets(renderer->device, 5, writes, 0, NULL);
     }
 }
-bool af_r_create_environment(af_renderer *renderer, uint32_t profile) {
+bool af_r_create_environment(af_vk_renderer *renderer, uint32_t profile) {
     af_ibl_images images;
     if (!af_ibl_bake(profile, &images))
         return false;
@@ -56,7 +56,7 @@ bool af_r_create_environment(af_renderer *renderer, uint32_t profile) {
         af_vk_texture_destroy(brdf);
         return false;
     }
-    if (!af_renderer_wait_idle(renderer)) {
+    if (!af_vk_r_wait_idle(renderer)) {
         af_vk_texture_destroy(environment);
         af_vk_texture_destroy(irradiance);
         af_vk_texture_destroy(brdf);
@@ -74,10 +74,10 @@ bool af_r_create_environment(af_renderer *renderer, uint32_t profile) {
     return true;
 }
 
-bool af_renderer_upload_overlay_atlas(af_renderer *renderer, const unsigned char *rgba, uint32_t width,
+bool af_vk_r_upload_overlay_atlas(af_vk_renderer *renderer, const unsigned char *rgba, uint32_t width,
                                       uint32_t height) {
     if (!rgba || !width || !height || width > 8192 || height > 8192 || (uint64_t)width * height * 4 > SIZE_MAX ||
-        !af_renderer_wait_idle(renderer))
+        !af_vk_r_wait_idle(renderer))
         return false;
     af_vk_ui *ui = af_vk_ui_create(renderer->physical_device, renderer->device, renderer->allocator, rgba, width, height);
     if (!ui)
@@ -92,18 +92,18 @@ bool af_renderer_upload_overlay_atlas(af_renderer *renderer, const unsigned char
 }
 
 
-af_temporal_test_stats af_renderer_test_temporal(const af_renderer *r) {
+af_temporal_test_stats af_vk_r_test_temporal(const af_vk_renderer *r) {
     return r ? (af_temporal_test_stats){r->temporal_frame,          r->temporal_resets,  r->swapchain.extent.width,
                                         r->swapchain.extent.height, r->temporal_objects, r->temporal_skins,
                                         r->temporal_supported,      r->temporal_valid,   r->temporal_jitter}
              : (af_temporal_test_stats){0};
 }
-void af_renderer_reset_temporal(af_renderer *r) {
+void af_vk_r_reset_temporal(af_vk_renderer *r) {
     if (r)
         r->temporal_valid = false;
 }
 
-bool af_renderer_set_debug_view(af_renderer *r, af_debug_view view) {
+bool af_vk_r_set_debug_view(af_vk_renderer *r, af_debug_view view) {
     if (!r || view < AF_DEBUG_SHADED || view >= AF_DEBUG_COUNT || (view != AF_DEBUG_SHADED && !r->temporal_supported))
         return false;
     if (r->debug_view == view)
@@ -112,22 +112,22 @@ bool af_renderer_set_debug_view(af_renderer *r, af_debug_view view) {
     r->temporal_valid = false;
     return true;
 }
-void af_renderer_set_visibility_culling(af_renderer *r, bool enabled) {
+void af_vk_r_set_visibility_culling(af_vk_renderer *r, bool enabled) {
     if (r)
         r->culling_disabled = !enabled;
 }
-void af_renderer_set_prop_instancing(af_renderer *r, bool enabled) {
+void af_vk_r_set_prop_instancing(af_vk_renderer *r, bool enabled) {
     if (r)
         r->prop_instancing_disabled = !enabled;
 }
-bool af_renderer_set_render_budget(af_renderer *r, double ms, uint64_t bytes) {
+bool af_vk_r_set_render_budget(af_vk_renderer *r, double ms, uint64_t bytes) {
     if (!r || !isfinite(ms) || ms <= 0 || ms > 1000 || bytes < 1024u * 1024u)
         return false;
     r->gpu_budget_ms = ms;
     r->gpu_budget_bytes = bytes;
     return true;
 }
-af_engine_stats af_renderer_stats(const af_renderer *renderer) {
+af_engine_stats af_vk_r_stats(const af_vk_renderer *renderer) {
     size_t active_meshes = 0;
     for (size_t i = 0; i < renderer->mesh_count; ++i)
         active_meshes += renderer->meshes[i].name[0] && !renderer->meshes[i].retired;
@@ -177,6 +177,7 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer) {
              refraction = af_vk_refraction_allocation_bytes(renderer->swapchain.refraction),
              tracked = post + shadows + refraction + mesh_bytes + texture_bytes + other;
     return (af_engine_stats){
+        .active_backend = AF_RENDER_BACKEND_VULKAN,
         .vk_allocations = alloc_stats.vk_allocations,
         .vk_staged_uploads = alloc_stats.staged_uploads,
         .ray_query_supported = renderer->ray_supported,
@@ -247,7 +248,7 @@ af_engine_stats af_renderer_stats(const af_renderer *renderer) {
         .validation_enabled = renderer->validation_enabled};
 }
 
-static bool upload_texture(af_renderer *renderer, const char *name, const unsigned char *rgba, uint32_t width,
+static bool upload_texture(af_vk_renderer *renderer, const char *name, const unsigned char *rgba, uint32_t width,
                            uint32_t height, bool normal) {
     if (renderer)
         ++renderer->texture_revision;
@@ -259,7 +260,7 @@ static bool upload_texture(af_renderer *renderer, const char *name, const unsign
         ++index;
     if (index == renderer->texture_count && renderer->texture_count >= AF_SCENE_MAX_ASSETS)
         return false;
-    if (!af_renderer_wait_idle(renderer))
+    if (!af_vk_r_wait_idle(renderer))
         return false;
     af_vk_texture *texture =
         af_vk_texture_create(renderer->physical_device, renderer->device, renderer->allocator, rgba, width, height,
@@ -287,12 +288,12 @@ static bool upload_texture(af_renderer *renderer, const char *name, const unsign
     return true;
 }
 
-bool af_renderer_remove_texture(af_renderer *renderer, const char *name) {
+bool af_vk_r_remove_texture(af_vk_renderer *renderer, const char *name) {
     if (renderer)
         ++renderer->texture_revision;
     for (size_t i = 0; i < renderer->environment_count; ++i)
         if (!strcmp(renderer->environments[i].name, name)) {
-            if (!af_renderer_wait_idle(renderer))
+            if (!af_vk_r_wait_idle(renderer))
                 return false;
             af_environment_asset *asset = &renderer->environments[i];
             af_vk_texture_destroy(asset->specular);
@@ -308,7 +309,7 @@ bool af_renderer_remove_texture(af_renderer *renderer, const char *name) {
     size_t i = 0;
     while (i < renderer->texture_count && strcmp(renderer->textures[i].name, name))
         ++i;
-    if (i == renderer->texture_count || !af_renderer_wait_idle(renderer))
+    if (i == renderer->texture_count || !af_vk_r_wait_idle(renderer))
         return false;
     af_vk_texture_destroy(renderer->textures[i].texture);
     memmove(&renderer->textures[i], &renderer->textures[i + 1],
@@ -317,13 +318,13 @@ bool af_renderer_remove_texture(af_renderer *renderer, const char *name) {
     return true;
 }
 
-bool af_renderer_test_capture_region(af_renderer *renderer, af_vec2 position, uint32_t width, uint32_t height) {
+bool af_vk_r_test_capture_region(af_vk_renderer *renderer, af_vec2 position, uint32_t width, uint32_t height) {
     if (!renderer || !renderer->capture_supported || renderer->capture_pending || !isfinite(position.x) ||
         !isfinite(position.y) || !width || !height || width > 1024 || height > 1024)
         return false;
     size_t bytes = (size_t)width * height * 4;
     if (renderer->capture_buffer.capacity < bytes) {
-        if (!af_renderer_wait_idle(renderer))
+        if (!af_vk_r_wait_idle(renderer))
             return false;
         af_r_destroy_buffer(renderer, &renderer->capture_buffer);
         unsigned char *zero = calloc(bytes, 1);
@@ -343,8 +344,8 @@ bool af_renderer_test_capture_region(af_renderer *renderer, af_vec2 position, ui
     renderer->capture_ready = false;
     return true;
 }
-bool af_renderer_test_capture_motion(af_renderer *r, af_vec2 p) {
-    if (!af_renderer_test_capture_region(r, p, 2, 1))
+bool af_vk_r_test_capture_motion(af_vk_renderer *r, af_vec2 p) {
+    if (!af_vk_r_test_capture_region(r, p, 2, 1))
         return false;
     r->capture_extent.width = 1;
     r->capture_motion = true;
@@ -357,9 +358,9 @@ static float decode_half(uint16_t bits) {
                                    : ldexpf(1 + (float)mantissa / 1024, (int)exponent - 15);
     return (bits & 32768u) ? -value : value;
 }
-bool af_renderer_test_read_motion(af_renderer *r, af_vec4 *out) {
+bool af_vk_r_test_read_motion(af_vk_renderer *r, af_vec4 *out) {
     if (!r || !out || !r->capture_ready || r->capture_format != VK_FORMAT_R16G16B16A16_SFLOAT ||
-        !af_renderer_wait_idle(r))
+        !af_vk_r_wait_idle(r))
         return false;
     void *data = r->capture_buffer.alloc.mapped;
     if (!data)
@@ -374,14 +375,14 @@ bool af_renderer_test_read_motion(af_renderer *r, af_vec4 *out) {
     r->capture_ready = false;
     return success;
 }
-bool af_renderer_test_capture_pixel(af_renderer *renderer, af_vec2 position) {
-    return af_renderer_test_capture_region(renderer, position, 1, 1);
+bool af_vk_r_test_capture_pixel(af_vk_renderer *renderer, af_vec2 position) {
+    return af_vk_r_test_capture_region(renderer, position, 1, 1);
 }
-bool af_renderer_test_read_pixels(af_renderer *renderer, unsigned char *rgba, size_t capacity, uint32_t *width,
+bool af_vk_r_test_read_pixels(af_vk_renderer *renderer, unsigned char *rgba, size_t capacity, uint32_t *width,
                                   uint32_t *height) {
     if (!renderer || !rgba || !renderer->capture_ready || renderer->capture_format == VK_FORMAT_R16G16B16A16_SFLOAT ||
         capacity < (size_t)renderer->capture_extent.width * renderer->capture_extent.height * 4 ||
-        !af_renderer_wait_idle(renderer))
+        !af_vk_r_wait_idle(renderer))
         return false;
     void *data = renderer->capture_buffer.alloc.mapped;
     if (!data)
@@ -409,11 +410,11 @@ bool af_renderer_test_read_pixels(af_renderer *renderer, unsigned char *rgba, si
     renderer->capture_ready = false;
     return success;
 }
-bool af_renderer_test_read_pixel(af_renderer *renderer, unsigned char rgba[4]) {
-    return af_renderer_test_read_pixels(renderer, rgba, 4, NULL, NULL);
+bool af_vk_r_test_read_pixel(af_vk_renderer *renderer, unsigned char rgba[4]) {
+    return af_vk_r_test_read_pixels(renderer, rgba, 4, NULL, NULL);
 }
 
-bool af_renderer_texture_info(const af_renderer *renderer, const char *name, af_texture_info *out) {
+bool af_vk_r_texture_info(const af_vk_renderer *renderer, const char *name, af_texture_info *out) {
     if (!name || !out)
         return false;
     for (size_t i = 0; i < renderer->texture_count; ++i)
@@ -424,26 +425,26 @@ bool af_renderer_texture_info(const af_renderer *renderer, const char *name, af_
     return false;
 }
 
-bool af_renderer_upload_texture(af_renderer *r, const char *name, const unsigned char *rgba, uint32_t w, uint32_t h) {
+bool af_vk_r_upload_texture(af_vk_renderer *r, const char *name, const unsigned char *rgba, uint32_t w, uint32_t h) {
     return upload_texture(r, name, rgba, w, h, false);
 }
-bool af_renderer_upload_normal_map(af_renderer *r, const char *name, const unsigned char *rgba, uint32_t w,
+bool af_vk_r_upload_normal_map(af_vk_renderer *r, const char *name, const unsigned char *rgba, uint32_t w,
                                    uint32_t h) {
     return upload_texture(r, name, rgba, w, h, true);
 }
 
-void af_renderer_set_interpolation(af_renderer *renderer, const af_scene *previous, float alpha) {
+void af_vk_r_set_interpolation(af_vk_renderer *renderer, const af_scene *previous, float alpha) {
     renderer->previous_scene = previous;
     renderer->interpolation_alpha = alpha;
 }
 
-bool af_renderer_commit_asset(af_renderer *renderer, const char *staged, const char *target, bool mesh) {
+bool af_vk_r_commit_asset(af_vk_renderer *renderer, const char *staged, const char *target, bool mesh) {
     if (!renderer || !staged || !target || !target[0] || strlen(target) >= AF_MESH_NAME_CAPACITY)
         return false;
     if (!mesh)
         for (size_t from = 0; from < renderer->environment_count; ++from)
             if (!strcmp(renderer->environments[from].name, staged)) {
-                if (!af_renderer_wait_idle(renderer))
+                if (!af_vk_r_wait_idle(renderer))
                     return false;
                 size_t to = 0;
                 while (to < renderer->environment_count && strcmp(renderer->environments[to].name, target))
@@ -491,17 +492,17 @@ bool af_renderer_commit_asset(af_renderer *renderer, const char *staged, const c
     return true;
 }
 
-bool af_renderer_upload_overlay_texture(af_renderer *renderer, uint32_t id, const unsigned char *rgba, uint32_t width,
+bool af_vk_r_upload_overlay_texture(af_vk_renderer *renderer, uint32_t id, const unsigned char *rgba, uint32_t width,
                                         uint32_t height) {
     return renderer && id >= 2 && rgba && width && height && width <= 8192 && height <= 8192 &&
            af_vk_ui_upload_texture(renderer->ui, renderer->graphics_queue, renderer->graphics_family, id, rgba, width,
                                    height);
 }
-bool af_renderer_remove_overlay_texture(af_renderer *renderer, uint32_t id) {
+bool af_vk_r_remove_overlay_texture(af_vk_renderer *renderer, uint32_t id) {
     return renderer && af_vk_ui_remove_texture(renderer->ui, id);
 }
 
-bool af_renderer_upload_environment(af_renderer *renderer, const char *name, const float *rgba, uint32_t width,
+bool af_vk_r_upload_environment(af_vk_renderer *renderer, const char *name, const float *rgba, uint32_t width,
                                     uint32_t height) {
     if (!renderer || !name || !name[0] || strlen(name) >= AF_MESH_NAME_CAPACITY)
         return false;
@@ -514,11 +515,11 @@ bool af_renderer_upload_environment(af_renderer *renderer, const char *name, con
     if (!af_ibl_bake_hdr(rgba, width, height, &images))
         return false;
     bool result =
-        af_renderer_upload_environment_baked(renderer, name, &(af_hdr_file){(float *)rgba, width, height}, &images);
+        af_vk_r_upload_environment_baked(renderer, name, &(af_hdr_file){(float *)rgba, width, height}, &images);
     af_ibl_free(&images);
     return result;
 }
-bool af_renderer_upload_environment_baked(af_renderer *renderer, const char *name, const af_hdr_file *source,
+bool af_vk_r_upload_environment_baked(af_vk_renderer *renderer, const char *name, const af_hdr_file *source,
                                           const af_ibl_images *baked) {
     size_t index = 0;
     while (index < renderer->environment_count && strcmp(renderer->environments[index].name, name))
@@ -536,7 +537,7 @@ bool af_renderer_upload_environment_baked(af_renderer *renderer, const char *nam
                                              images.diffuse, AF_IBL_DIFFUSE_WIDTH, AF_IBL_DIFFUSE_HEIGHT, 1, true);
     asset.sky = af_vk_texture_create_hdr(renderer->physical_device, renderer->device, renderer->allocator, rgba, width,
                                          height, 1, true);
-    if (!asset.specular || !asset.diffuse || !asset.sky || !af_renderer_wait_idle(renderer)) {
+    if (!asset.specular || !asset.diffuse || !asset.sky || !af_vk_r_wait_idle(renderer)) {
         af_vk_texture_destroy(asset.specular);
         af_vk_texture_destroy(asset.diffuse);
         af_vk_texture_destroy(asset.sky);
@@ -553,7 +554,7 @@ bool af_renderer_upload_environment_baked(af_renderer *renderer, const char *nam
     return true;
 }
 
-VkPipeline af_r_material_pipeline(const af_renderer *renderer, const char *shader_name, bool blend) {
+VkPipeline af_r_material_pipeline(const af_vk_renderer *renderer, const char *shader_name, bool blend) {
     if (renderer && shader_name && shader_name[0]) {
         for (size_t i = 0; i < renderer->custom_shader_count; ++i) {
             if (!strcmp(renderer->custom_shaders[i].name, shader_name)) {
@@ -568,7 +569,7 @@ VkPipeline af_r_material_pipeline(const af_renderer *renderer, const char *shade
     return blend ? renderer->swapchain.blend_pipeline : renderer->swapchain.pipeline;
 }
 
-bool af_renderer_upload_material_shader(af_renderer *renderer, const char *name, const uint32_t *spirv,
+bool af_vk_r_upload_material_shader(af_vk_renderer *renderer, const char *name, const uint32_t *spirv,
                                         size_t word_count) {
     if (!renderer || !name || !name[0] || strlen(name) >= AF_MESH_NAME_CAPACITY || !spirv || word_count < 5 ||
         word_count > (4u * 1024u * 1024u) || spirv[0] != 0x07230203u)
@@ -578,7 +579,7 @@ bool af_renderer_upload_material_shader(af_renderer *renderer, const char *name,
         ++index;
     if (index == renderer->custom_shader_count && renderer->custom_shader_count >= AF_SCENE_MAX_ASSETS)
         return false;
-    if (!af_renderer_wait_idle(renderer))
+    if (!af_vk_r_wait_idle(renderer))
         return false;
     uint32_t *copy = malloc(word_count * sizeof(uint32_t));
     if (!copy)
@@ -625,13 +626,13 @@ bool af_renderer_upload_material_shader(af_renderer *renderer, const char *name,
     return true;
 }
 
-bool af_renderer_remove_material_shader(af_renderer *renderer, const char *name) {
+bool af_vk_r_remove_material_shader(af_vk_renderer *renderer, const char *name) {
     if (!renderer || !name || !name[0])
         return false;
     size_t i = 0;
     while (i < renderer->custom_shader_count && strcmp(renderer->custom_shaders[i].name, name))
         ++i;
-    if (i == renderer->custom_shader_count || !af_renderer_wait_idle(renderer))
+    if (i == renderer->custom_shader_count || !af_vk_r_wait_idle(renderer))
         return false;
     if (renderer->custom_shaders[i].opaque_pipeline)
         vkDestroyPipeline(renderer->device, renderer->custom_shaders[i].opaque_pipeline, NULL);

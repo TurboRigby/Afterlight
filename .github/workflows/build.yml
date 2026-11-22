@@ -46,7 +46,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install build dependencies
-        run: brew install cmake ninja sdl3 vulkan-headers vulkan-loader molten-vk glslang vulkan-validationlayers
+        run: brew install cmake ninja sdl3 vulkan-headers vulkan-loader molten-vk glslang spirv-cross vulkan-validationlayers
       - name: Configure
         shell: bash
         run: |

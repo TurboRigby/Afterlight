@@ -25,7 +25,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverity
                                                      const VkDebugUtilsMessengerCallbackDataEXT *data,
                                                      void *user_data) {
     (void)type;
-    af_renderer *renderer = user_data;
+    af_vk_renderer *renderer = user_data;
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
         atomic_fetch_add(&renderer->validation_errors, 1);
     af_log((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) ? "validation error" : "validation", "%s",
@@ -67,7 +67,7 @@ static bool validation_layer_available(void) {
     return found;
 }
 
-static void negotiate_startup(af_renderer *, af_extensions *, const char **, uint32_t *,
+static void negotiate_startup(af_vk_renderer *, af_extensions *, const char **, uint32_t *,
                               const af_vulkan_requirements *supported, af_vulkan_requirements *enabled);
 
 static void reject_startup(af_extensions *extensions) {
@@ -76,7 +76,7 @@ static void reject_startup(af_extensions *extensions) {
             extensions->modules[i].startup_status = AF_EXTENSION_STARTUP_UNAVAILABLE;
 }
 
-static bool create_instance(af_renderer *renderer, bool enable_validation, af_extensions *startup) {
+static bool create_instance(af_vk_renderer *renderer, bool enable_validation, af_extensions *startup) {
     Uint32 sdl_count = 0;
     const char *const *sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_count);
     if (!sdl_extensions) {
@@ -173,7 +173,7 @@ static bool device_extension_available(VkPhysicalDevice device, const char *name
     return found;
 }
 
-static void negotiate_startup(af_renderer *renderer, af_extensions *startup, const char **names, uint32_t *count,
+static void negotiate_startup(af_vk_renderer *renderer, af_extensions *startup, const char **names, uint32_t *count,
                               const af_vulkan_requirements *supported, af_vulkan_requirements *enabled) {
     bool device_stage = supported != NULL;
     for (size_t i = 0; i < startup->count; ++i) {
@@ -229,7 +229,7 @@ static void negotiate_startup(af_renderer *renderer, af_extensions *startup, con
     }
 }
 
-static bool find_queue_families(af_renderer *renderer, VkPhysicalDevice device, uint32_t *graphics, uint32_t *present) {
+static bool find_queue_families(af_vk_renderer *renderer, VkPhysicalDevice device, uint32_t *graphics, uint32_t *present) {
     uint32_t count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &count, NULL);
     VkQueueFamilyProperties *families = calloc(count, sizeof(*families));
@@ -258,7 +258,7 @@ static bool find_queue_families(af_renderer *renderer, VkPhysicalDevice device, 
     return *graphics != UINT32_MAX && *present != UINT32_MAX;
 }
 
-static bool create_device(af_renderer *renderer, af_extensions *startup) {
+static bool create_device(af_vk_renderer *renderer, af_extensions *startup) {
     uint32_t count = 0;
     if (!af_r_vk_ok(vkEnumeratePhysicalDevices(renderer->instance, &count, NULL), "vkEnumeratePhysicalDevices"))
         return false;
@@ -438,7 +438,7 @@ static bool create_device(af_renderer *renderer, af_extensions *startup) {
     return true;
 }
 
-bool af_r_build_mesh_pipelines(af_renderer *renderer, const uint32_t *frag_spirv, size_t frag_bytes,
+bool af_r_build_mesh_pipelines(af_vk_renderer *renderer, const uint32_t *frag_spirv, size_t frag_bytes,
                                VkPipeline *out_opaque, VkPipeline *out_blend) {
     af_swapchain *swapchain = &renderer->swapchain;
     if (!frag_spirv || !frag_bytes || !out_opaque || !out_blend || !swapchain->pipeline_layout || !swapchain->render_pass)
@@ -554,7 +554,7 @@ cleanup:
     return success;
 }
 
-static bool create_pipeline(af_renderer *renderer) {
+static bool create_pipeline(af_vk_renderer *renderer) {
     af_swapchain *swapchain = &renderer->swapchain;
     if ((swapchain->resource_config & AF_RESOURCE_RAY_QUERY) && getenv("AFTERLIGHT_TEST_RAY_PIPELINE_FAIL"))
         return false;
@@ -699,7 +699,7 @@ cleanup:
     return success;
 }
 
-static bool create_sky_pipeline(af_renderer *r) {
+static bool create_sky_pipeline(af_vk_renderer *r) {
     VkShaderModule vertex = VK_NULL_HANDLE, fragment = VK_NULL_HANDLE;
     bool success = false;
     VkShaderModuleCreateInfo code = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -766,7 +766,7 @@ done:
     return success;
 }
 
-static VkFormat select_depth_format(af_renderer *renderer) {
+static VkFormat select_depth_format(af_vk_renderer *renderer) {
     const VkFormat formats[] = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D16_UNORM, VK_FORMAT_D24_UNORM_S8_UINT,
                                 VK_FORMAT_D32_SFLOAT_S8_UINT};
     for (size_t i = 0; i < sizeof(formats) / sizeof(formats[0]); ++i) {
@@ -782,7 +782,7 @@ static VkFormat select_depth_format(af_renderer *renderer) {
     return VK_FORMAT_UNDEFINED;
 }
 
-static bool create_depth_attachment(af_renderer *renderer, af_depth_attachment *depth) {
+static bool create_depth_attachment(af_vk_renderer *renderer, af_depth_attachment *depth) {
     af_swapchain *swapchain = &renderer->swapchain;
     VkImageCreateInfo info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                               .imageType = VK_IMAGE_TYPE_2D,
@@ -816,7 +816,7 @@ static bool create_depth_attachment(af_renderer *renderer, af_depth_attachment *
     return af_r_vk_ok(vkCreateImageView(renderer->device, &view_info, NULL, &depth->view), "vkCreateImageView (depth)");
 }
 
-static void destroy_upscaler_context(af_renderer *renderer) {
+static void destroy_upscaler_context(af_vk_renderer *renderer) {
     af_swapchain *swapchain = &renderer->swapchain;
     if (swapchain->upscaler_created) {
         renderer->upscaler->destroy(swapchain->upscaler_context);
@@ -834,7 +834,7 @@ static uint32_t upscaler_quality_count(const af_vulkan_upscaler_api *api) {
     return upscaler_has_qualities(api) ? api->quality_count : 0;
 }
 
-static float upscaler_render_scale(const af_renderer *renderer) {
+static float upscaler_render_scale(const af_vk_renderer *renderer) {
     const af_vulkan_upscaler_api *api = renderer->upscaler;
     if (!api)
         return 1.f;
@@ -843,12 +843,12 @@ static float upscaler_render_scale(const af_renderer *renderer) {
     return api->render_scale;
 }
 
-void af_renderer_set_upscaler(af_renderer *renderer, const af_vulkan_upscaler_api *api, void *state) {
+void af_vk_r_set_upscaler(af_vk_renderer *renderer, const af_vulkan_upscaler_api *api, void *state) {
     if (renderer->upscaler == api && renderer->upscaler_state == state) {
-        (void)af_renderer_set_upscaler_enabled(renderer, true);
+        (void)af_vk_r_set_upscaler_enabled(renderer, true);
         return;
     }
-    af_renderer_release_upscaler(renderer);
+    af_vk_r_release_upscaler(renderer);
     if (renderer->swapchain.resource_config & AF_RESOURCE_UPSCALER)
         renderer->swapchain_invalid = renderer->resize_pending = true;
     renderer->upscaler = api;
@@ -858,7 +858,7 @@ void af_renderer_set_upscaler(af_renderer *renderer, const af_vulkan_upscaler_ap
     renderer->upscaler_quality = 0;
 }
 
-bool af_renderer_set_upscaler_enabled(af_renderer *renderer, bool enabled) {
+bool af_vk_r_set_upscaler_enabled(af_vk_renderer *renderer, bool enabled) {
     if (!renderer || !renderer->upscaler)
         return false;
     if (renderer->upscaler_enabled != enabled) {
@@ -868,25 +868,25 @@ bool af_renderer_set_upscaler_enabled(af_renderer *renderer, bool enabled) {
     return true;
 }
 
-bool af_renderer_upscaler_active(const af_renderer *renderer) {
+bool af_vk_r_upscaler_active(const af_vk_renderer *renderer) {
     return renderer && renderer->upscaler_enabled && !renderer->upscaler_failed && renderer->swapchain.upscaler_created;
 }
 
-uint32_t af_renderer_upscaler_quality_count(const af_renderer *renderer) {
+uint32_t af_vk_r_upscaler_quality_count(const af_vk_renderer *renderer) {
     return renderer ? upscaler_quality_count(renderer->upscaler) : 0;
 }
 
-const char *af_renderer_upscaler_quality_name(const af_renderer *renderer, uint32_t index) {
+const char *af_vk_r_upscaler_quality_name(const af_vk_renderer *renderer, uint32_t index) {
     if (!renderer || !upscaler_has_qualities(renderer->upscaler) || index >= renderer->upscaler->quality_count)
         return NULL;
     return renderer->upscaler->quality_names[index];
 }
 
-uint32_t af_renderer_upscaler_quality(const af_renderer *renderer) {
+uint32_t af_vk_r_upscaler_quality(const af_vk_renderer *renderer) {
     return renderer ? renderer->upscaler_quality : 0;
 }
 
-bool af_renderer_set_upscaler_quality(af_renderer *renderer, uint32_t index) {
+bool af_vk_r_set_upscaler_quality(af_vk_renderer *renderer, uint32_t index) {
     if (!renderer || !renderer->upscaler || index >= upscaler_quality_count(renderer->upscaler))
         return false;
     if (renderer->upscaler_quality != index) {
@@ -897,14 +897,14 @@ bool af_renderer_set_upscaler_quality(af_renderer *renderer, uint32_t index) {
     return true;
 }
 
-void af_renderer_release_upscaler(af_renderer *renderer) {
+void af_vk_r_release_upscaler(af_vk_renderer *renderer) {
     if (!renderer || !renderer->swapchain.upscaler_created)
         return;
-    (void)af_renderer_wait_idle(renderer);
+    (void)af_vk_r_wait_idle(renderer);
     destroy_upscaler_context(renderer);
 }
 
-void af_r_destroy_swapchain(af_renderer *renderer) {
+void af_r_destroy_swapchain(af_vk_renderer *renderer) {
     af_swapchain *swapchain = &renderer->swapchain;
     destroy_upscaler_context(renderer);
     af_vk_ui_release_pipeline(renderer->ui);
@@ -964,7 +964,7 @@ static uint32_t clamp_extent(uint32_t value, uint32_t minimum, uint32_t maximum)
     return value < minimum ? minimum : (value > maximum ? maximum : value);
 }
 
-bool af_r_create_swapchain(af_renderer *renderer, af_render_settings settings, uint32_t config) {
+bool af_r_create_swapchain(af_vk_renderer *renderer, af_render_settings settings, uint32_t config) {
     int width = 0, height = 0;
     if (!SDL_GetWindowSizeInPixels(renderer->window, &width, &height)) {
         af_log("error", "Framebuffer size: %s", SDL_GetError());
@@ -1231,7 +1231,7 @@ bool af_r_create_swapchain(af_renderer *renderer, af_render_settings settings, u
     return true;
 }
 
-static bool create_frames(af_renderer *renderer) {
+static bool create_frames(af_vk_renderer *renderer) {
     VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                          .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
                                          .queueFamilyIndex = renderer->graphics_family};
@@ -1266,7 +1266,7 @@ static bool create_frames(af_renderer *renderer) {
 }
 
 
-static bool create_frame_layout(af_renderer *renderer) {
+static bool create_frame_layout(af_vk_renderer *renderer) {
     VkDescriptorSetLayoutBinding bindings[14];
     uint32_t count = 0;
     bindings[count++] = (VkDescriptorSetLayoutBinding){
@@ -1300,7 +1300,7 @@ static bool create_frame_layout(af_renderer *renderer) {
                                               .pBindings = bindings};
     return af_r_vk_ok(vkCreateDescriptorSetLayout(renderer->device, &layout, NULL, &renderer->frame_layout), "frame layout");
 }
-static bool create_uniforms(af_renderer *renderer) {
+static bool create_uniforms(af_vk_renderer *renderer) {
     VkDescriptorPoolSize sizes[] = {
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, AF_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7 * AF_FRAMES_IN_FLIGHT},
@@ -1382,10 +1382,13 @@ static bool create_uniforms(af_renderer *renderer) {
     af_r_update_environment_descriptors(renderer);
     return true;
 }
-af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation, af_extensions *startup) {
-    af_renderer *renderer = calloc(1, sizeof(*renderer));
+static const af_renderer_ops vk_renderer_ops;
+
+af_renderer *af_vk_renderer_create(SDL_Window *window, bool enable_validation, af_extensions *startup) {
+    af_vk_renderer *renderer = calloc(1, sizeof(*renderer));
     if (!renderer)
         return NULL;
+    renderer->base.ops = &vk_renderer_ops;
     atomic_init(&renderer->validation_errors, 0);
     renderer->window = window;
     renderer->gpu_budget_ms = 1000.0 / 60;
@@ -1425,14 +1428,14 @@ af_renderer *af_renderer_create(SDL_Window *window, bool enable_validation, af_e
         !af_r_create_environment(renderer, 0) || !create_uniforms(renderer) ||
         !af_r_create_swapchain(renderer, af_render_settings_default(), 0))
         goto fail;
-    return renderer;
+    return &renderer->base;
 fail:
-    af_renderer_destroy(renderer);
+    af_vk_r_destroy(renderer);
     return NULL;
 }
 
 
-void af_renderer_destroy(af_renderer *renderer) {
+void af_vk_r_destroy(af_vk_renderer *renderer) {
     if (!renderer)
         return;
     if (renderer->device) {
@@ -1510,15 +1513,15 @@ void af_renderer_destroy(af_renderer *renderer) {
     free(renderer);
 }
 
-void af_renderer_resize(af_renderer *renderer) {
+void af_vk_r_resize(af_vk_renderer *renderer) {
     renderer->resize_pending = true;
 }
 
-bool af_renderer_wait_idle(af_renderer *renderer) {
+bool af_vk_r_wait_idle(af_vk_renderer *renderer) {
     return af_r_vk_ok(vkDeviceWaitIdle(renderer->device), "vkDeviceWaitIdle");
 }
 
-af_rect af_r_resolve_viewport(af_renderer *renderer, af_rect rect) {
+af_rect af_r_resolve_viewport(af_vk_renderer *renderer, af_rect rect) {
     int width = 0, height = 0;
     SDL_GetWindowSize(renderer->window, &width, &height);
     float w = (float)(width > 0 ? width : 1), h = (float)(height > 0 ? height : 1);
@@ -1549,7 +1552,7 @@ static VkImageMemoryBarrier upscaler_barrier(VkImage image, VkImageAspectFlags a
     };
 }
 
-bool af_r_record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t image, af_rect area, float exposure,
+bool af_r_record_upscaler(af_vk_renderer *r, VkCommandBuffer command, uint32_t image, af_rect area, float exposure,
                             const af_camera *camera, float frame_time_ms, bool reset_history) {
     af_swapchain *swapchain = &r->swapchain;
     af_depth_attachment depth = swapchain->depths[image];
@@ -1599,4 +1602,220 @@ bool af_r_record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t imag
                          0, NULL, 1, &output);
     return true;
 }
+
+static void vk_op_destroy(af_renderer *r) { af_vk_r_destroy((af_vk_renderer *)r); }
+static void vk_op_set_upscaler(af_renderer *r, const struct af_vulkan_upscaler_api *api, void *state) {
+    af_vk_r_set_upscaler((af_vk_renderer *)r, api, state);
+}
+static bool vk_op_set_upscaler_enabled(af_renderer *r, bool enabled) {
+    return af_vk_r_set_upscaler_enabled((af_vk_renderer *)r, enabled);
+}
+static bool vk_op_upscaler_active(const af_renderer *r) { return af_vk_r_upscaler_active((const af_vk_renderer *)r); }
+static uint32_t vk_op_upscaler_quality_count(const af_renderer *r) {
+    return af_vk_r_upscaler_quality_count((const af_vk_renderer *)r);
+}
+static const char *vk_op_upscaler_quality_name(const af_renderer *r, uint32_t index) {
+    return af_vk_r_upscaler_quality_name((const af_vk_renderer *)r, index);
+}
+static uint32_t vk_op_upscaler_quality(const af_renderer *r) {
+    return af_vk_r_upscaler_quality((const af_vk_renderer *)r);
+}
+static bool vk_op_set_upscaler_quality(af_renderer *r, uint32_t index) {
+    return af_vk_r_set_upscaler_quality((af_vk_renderer *)r, index);
+}
+static void vk_op_release_upscaler(af_renderer *r) { af_vk_r_release_upscaler((af_vk_renderer *)r); }
+static bool vk_op_wait_idle(af_renderer *r) { return af_vk_r_wait_idle((af_vk_renderer *)r); }
+static af_temporal_test_stats vk_op_test_temporal(const af_renderer *r) {
+    return af_vk_r_test_temporal((const af_vk_renderer *)r);
+}
+static void vk_op_reset_temporal(af_renderer *r) { af_vk_r_reset_temporal((af_vk_renderer *)r); }
+static void vk_op_resize(af_renderer *r) { af_vk_r_resize((af_vk_renderer *)r); }
+static bool vk_op_upload_mesh(af_renderer *r, const char *name, const af_mesh_data *mesh) {
+    return af_vk_r_upload_mesh((af_vk_renderer *)r, name, mesh);
+}
+static bool vk_op_upload_mesh_file(af_renderer *r, const char *name, af_mesh_file *mesh, af_mesh_sidedness sidedness) {
+    return af_vk_r_upload_mesh_file((af_vk_renderer *)r, name, mesh, sidedness);
+}
+static bool vk_op_set_skin_palette(af_renderer *r, af_object_id object, const af_mat4 *matrices, size_t count) {
+    return af_vk_r_set_skin_palette((af_vk_renderer *)r, object, matrices, count);
+}
+static void vk_op_clear_skin_palettes(af_renderer *r) { af_vk_r_clear_skin_palettes((af_vk_renderer *)r); }
+static void vk_op_set_object_worlds(af_renderer *r, const af_scene *scene, const af_mat4 *world,
+                                    const af_animation_pose *const *morph_poses, size_t count) {
+    af_vk_r_set_object_worlds((af_vk_renderer *)r, scene, world, morph_poses, count);
+}
+static bool vk_op_remove_texture(af_renderer *r, const char *name) {
+    return af_vk_r_remove_texture((af_vk_renderer *)r, name);
+}
+static bool vk_op_upload_texture(af_renderer *r, const char *name, const unsigned char *rgba, uint32_t width,
+                                 uint32_t height) {
+    return af_vk_r_upload_texture((af_vk_renderer *)r, name, rgba, width, height);
+}
+static bool vk_op_upload_material_shader(af_renderer *r, const char *name, const uint32_t *spirv, size_t word_count) {
+    return af_vk_r_upload_material_shader((af_vk_renderer *)r, name, spirv, word_count);
+}
+static bool vk_op_remove_material_shader(af_renderer *r, const char *name) {
+    return af_vk_r_remove_material_shader((af_vk_renderer *)r, name);
+}
+static bool vk_op_remove_mesh(af_renderer *r, const char *name) {
+    return af_vk_r_remove_mesh((af_vk_renderer *)r, name);
+}
+static bool vk_op_upload_overlay_atlas(af_renderer *r, const unsigned char *rgba, uint32_t width, uint32_t height) {
+    return af_vk_r_upload_overlay_atlas((af_vk_renderer *)r, rgba, width, height);
+}
+static af_object_id vk_op_pick_object(af_renderer *r, const af_scene *scene, const af_camera *camera, af_rect viewport,
+                                      af_vec2 point) {
+    return af_vk_r_pick_object((af_vk_renderer *)r, scene, camera, viewport, point);
+}
+static bool vk_op_update_water(af_renderer *r, const af_physics *physics, const af_scene *scene, float alpha) {
+    return af_vk_r_update_water((af_vk_renderer *)r, physics, scene, alpha);
+}
+static bool vk_op_update_landscape(af_renderer *r, const af_scene *scene) {
+    return af_vk_r_update_landscape((af_vk_renderer *)r, scene);
+}
+static bool vk_op_draw(af_renderer *r, af_color color, const af_scene *scene, const af_camera *camera, af_rect viewport,
+                       af_object_id highlighted, const af_overlay_frame *overlay, float frame_time_ms, bool *rendered) {
+    return af_vk_r_draw((af_vk_renderer *)r, color, scene, camera, viewport, highlighted, overlay, frame_time_ms,
+                        rendered);
+}
+static bool vk_op_upload_overlay_texture(af_renderer *r, uint32_t id, const unsigned char *rgba, uint32_t width,
+                                         uint32_t height) {
+    return af_vk_r_upload_overlay_texture((af_vk_renderer *)r, id, rgba, width, height);
+}
+static bool vk_op_remove_overlay_texture(af_renderer *r, uint32_t id) {
+    return af_vk_r_remove_overlay_texture((af_vk_renderer *)r, id);
+}
+static bool vk_op_test_capture_motion(af_renderer *r, af_vec2 position) {
+    return af_vk_r_test_capture_motion((af_vk_renderer *)r, position);
+}
+static bool vk_op_test_read_motion(af_renderer *r, af_vec4 *out) {
+    return af_vk_r_test_read_motion((af_vk_renderer *)r, out);
+}
+static bool vk_op_test_capture_region(af_renderer *r, af_vec2 position, uint32_t width, uint32_t height) {
+    return af_vk_r_test_capture_region((af_vk_renderer *)r, position, width, height);
+}
+static bool vk_op_test_read_pixels(af_renderer *r, unsigned char *rgba, size_t capacity, uint32_t *width,
+                                   uint32_t *height) {
+    return af_vk_r_test_read_pixels((af_vk_renderer *)r, rgba, capacity, width, height);
+}
+static bool vk_op_test_capture_pixel(af_renderer *r, af_vec2 position) {
+    return af_vk_r_test_capture_pixel((af_vk_renderer *)r, position);
+}
+static bool vk_op_test_read_pixel(af_renderer *r, unsigned char rgba[4]) {
+    return af_vk_r_test_read_pixel((af_vk_renderer *)r, rgba);
+}
+static bool vk_op_set_debug_view(af_renderer *r, af_debug_view view) {
+    return af_vk_r_set_debug_view((af_vk_renderer *)r, view);
+}
+static void vk_op_set_visibility_culling(af_renderer *r, bool enabled) {
+    af_vk_r_set_visibility_culling((af_vk_renderer *)r, enabled);
+}
+static void vk_op_set_prop_instancing(af_renderer *r, bool enabled) {
+    af_vk_r_set_prop_instancing((af_vk_renderer *)r, enabled);
+}
+static bool vk_op_upload_cluster_stream(af_renderer *r, const char *name, af_cluster_mesh *mesh,
+                                        af_cluster_stream *stream) {
+    return af_vk_r_upload_cluster_stream((af_vk_renderer *)r, name, mesh, stream);
+}
+static bool vk_op_upload_clusters(af_renderer *r, const char *name, af_cluster_mesh *mesh) {
+    return af_vk_r_upload_clusters((af_vk_renderer *)r, name, mesh);
+}
+static void vk_op_set_cluster_lod(af_renderer *r, bool enabled) {
+    af_vk_r_set_cluster_lod((af_vk_renderer *)r, enabled);
+}
+static void vk_op_set_cluster_gpu_culling(af_renderer *r, bool enabled) {
+    af_vk_r_set_cluster_gpu_culling((af_vk_renderer *)r, enabled);
+}
+static void vk_op_set_cluster_rendering(af_renderer *r, bool enabled, bool debug_colors) {
+    af_vk_r_set_cluster_rendering((af_vk_renderer *)r, enabled, debug_colors);
+}
+static bool vk_op_set_cluster_cache_budget(af_renderer *r, uint64_t bytes) {
+    return af_vk_r_set_cluster_cache_budget((af_vk_renderer *)r, bytes);
+}
+static af_cluster_stats vk_op_cluster_stats(const af_renderer *r) {
+    return af_vk_r_cluster_stats((const af_vk_renderer *)r);
+}
+static bool vk_op_set_render_budget(af_renderer *r, double gpu_ms, uint64_t bytes) {
+    return af_vk_r_set_render_budget((af_vk_renderer *)r, gpu_ms, bytes);
+}
+static af_engine_stats vk_op_stats(const af_renderer *r) { return af_vk_r_stats((const af_vk_renderer *)r); }
+static bool vk_op_texture_info(const af_renderer *r, const char *name, af_texture_info *out) {
+    return af_vk_r_texture_info((const af_vk_renderer *)r, name, out);
+}
+static bool vk_op_upload_environment(af_renderer *r, const char *name, const float *rgba, uint32_t width,
+                                     uint32_t height) {
+    return af_vk_r_upload_environment((af_vk_renderer *)r, name, rgba, width, height);
+}
+static bool vk_op_upload_normal_map(af_renderer *r, const char *name, const unsigned char *rgba, uint32_t width,
+                                    uint32_t height) {
+    return af_vk_r_upload_normal_map((af_vk_renderer *)r, name, rgba, width, height);
+}
+static bool vk_op_commit_asset(af_renderer *r, const char *staged, const char *target, bool mesh) {
+    return af_vk_r_commit_asset((af_vk_renderer *)r, staged, target, mesh);
+}
+static bool vk_op_upload_environment_baked(af_renderer *r, const char *name, const af_hdr_file *source,
+                                           const af_ibl_images *images) {
+    return af_vk_r_upload_environment_baked((af_vk_renderer *)r, name, source, images);
+}
+static void vk_op_set_interpolation(af_renderer *r, const af_scene *previous, float alpha) {
+    af_vk_r_set_interpolation((af_vk_renderer *)r, previous, alpha);
+}
+
+static const af_renderer_ops vk_renderer_ops = {
+    .backend = AF_RENDER_BACKEND_VULKAN,
+    .destroy = vk_op_destroy,
+    .set_upscaler = vk_op_set_upscaler,
+    .set_upscaler_enabled = vk_op_set_upscaler_enabled,
+    .upscaler_active = vk_op_upscaler_active,
+    .upscaler_quality_count = vk_op_upscaler_quality_count,
+    .upscaler_quality_name = vk_op_upscaler_quality_name,
+    .upscaler_quality = vk_op_upscaler_quality,
+    .set_upscaler_quality = vk_op_set_upscaler_quality,
+    .release_upscaler = vk_op_release_upscaler,
+    .wait_idle = vk_op_wait_idle,
+    .test_temporal = vk_op_test_temporal,
+    .reset_temporal = vk_op_reset_temporal,
+    .resize = vk_op_resize,
+    .upload_mesh = vk_op_upload_mesh,
+    .upload_mesh_file = vk_op_upload_mesh_file,
+    .set_skin_palette = vk_op_set_skin_palette,
+    .clear_skin_palettes = vk_op_clear_skin_palettes,
+    .set_object_worlds = vk_op_set_object_worlds,
+    .remove_texture = vk_op_remove_texture,
+    .upload_texture = vk_op_upload_texture,
+    .upload_material_shader = vk_op_upload_material_shader,
+    .remove_material_shader = vk_op_remove_material_shader,
+    .remove_mesh = vk_op_remove_mesh,
+    .upload_overlay_atlas = vk_op_upload_overlay_atlas,
+    .pick_object = vk_op_pick_object,
+    .update_water = vk_op_update_water,
+    .update_landscape = vk_op_update_landscape,
+    .draw = vk_op_draw,
+    .upload_overlay_texture = vk_op_upload_overlay_texture,
+    .remove_overlay_texture = vk_op_remove_overlay_texture,
+    .test_capture_motion = vk_op_test_capture_motion,
+    .test_read_motion = vk_op_test_read_motion,
+    .test_capture_region = vk_op_test_capture_region,
+    .test_read_pixels = vk_op_test_read_pixels,
+    .test_capture_pixel = vk_op_test_capture_pixel,
+    .test_read_pixel = vk_op_test_read_pixel,
+    .set_debug_view = vk_op_set_debug_view,
+    .set_visibility_culling = vk_op_set_visibility_culling,
+    .set_prop_instancing = vk_op_set_prop_instancing,
+    .upload_cluster_stream = vk_op_upload_cluster_stream,
+    .upload_clusters = vk_op_upload_clusters,
+    .set_cluster_lod = vk_op_set_cluster_lod,
+    .set_cluster_gpu_culling = vk_op_set_cluster_gpu_culling,
+    .set_cluster_rendering = vk_op_set_cluster_rendering,
+    .set_cluster_cache_budget = vk_op_set_cluster_cache_budget,
+    .cluster_stats = vk_op_cluster_stats,
+    .set_render_budget = vk_op_set_render_budget,
+    .stats = vk_op_stats,
+    .texture_info = vk_op_texture_info,
+    .upload_environment = vk_op_upload_environment,
+    .upload_normal_map = vk_op_upload_normal_map,
+    .commit_asset = vk_op_commit_asset,
+    .upload_environment_baked = vk_op_upload_environment_baked,
+    .set_interpolation = vk_op_set_interpolation,
+};
 

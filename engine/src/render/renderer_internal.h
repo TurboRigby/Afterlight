@@ -7,7 +7,8 @@
 #ifndef AF_RENDERER_INTERNAL_H
 #define AF_RENDERER_INTERNAL_H
 
-#include "renderer.h"
+#include "renderer_backend.h"
+#include "renderer_common.h"
 #include <afterlight/version.h>
 #include "animation/morph.h"
 #include "core/extension_runtime.h"
@@ -35,78 +36,20 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
-#define AF_FRAMES_IN_FLIGHT AF_UI_FRAMES_IN_FLIGHT
+_Static_assert(AF_FRAMES_IN_FLIGHT == AF_UI_FRAMES_IN_FLIGHT, "Frames in flight match UI");
 _Static_assert(AF_FRAMES_IN_FLIGHT == AF_SHADOW_FRAME_COUNT, "Independent shadow maps for each frame");
-
-enum {
-    AF_RESOURCE_AA_MASK = 3u,
-    AF_RESOURCE_BLOOM = 4u,
-    AF_RESOURCE_MOTION = 8u,
-    AF_RESOURCE_REFRACTION = 16u,
-    AF_RESOURCE_RAY_SHADOWS = 32u,
-    AF_RESOURCE_RAY_REFLECTIONS = 64u,
-    AF_RESOURCE_UPSCALER = 128u,
-    AF_RESOURCE_RAY_GI = 256u,
-    AF_RESOURCE_RAY_MATERIALS = 512u,
-    AF_RESOURCE_RAY_QUERY = AF_RESOURCE_RAY_SHADOWS | AF_RESOURCE_RAY_REFLECTIONS | AF_RESOURCE_RAY_GI |
-                            AF_RESOURCE_RAY_MATERIALS
-};
+_Static_assert(sizeof(VkDrawIndexedIndirectCommand) == 20, "std430 indexed indirect command");
 
 #define AF_PORTABILITY_SUBSET "VK_KHR_portability_subset"
 #define AF_STARTUP_EXTENSION_CAPACITY (AF_EXTENSION_LIMIT * AF_VULKAN_STARTUP_MAX_EXTENSIONS)
-#define AF_SKIN_INSTANCES 128u
-#define AF_SKIN_MATRICES (AF_SKIN_INSTANCES * AF_ANIMATION_MAX_JOINTS + 1u)
-#define AF_CLUSTER_INDEX_RANGES (2 * AF_CLUSTER_RESIDENT_PAGES + 1)
-#define AF_LIGHT_TILE_SIZE 32u
 
-typedef struct af_light_tile_mask {
-    uint32_t words[4];
-} af_light_tile_mask;
-_Static_assert(sizeof(af_light_tile_mask) == 16, "std430 uvec4 tile mask");
-_Static_assert(AF_SCENE_MAX_LOCAL_LIGHTS == 128, "Tile bitmask covers 128 local lights");
-
-/* Mesh Draw.params.y flags. Shadow draws put the face flags above their alpha mode. */
-enum {
-    AF_DRAW_RECEIVE_SHADOWS = 1u << 0,
-    AF_DRAW_CULL_BACK = 1u << 1,
-    AF_DRAW_FLIP_BACK_NORMAL = 1u << 2,
-    AF_DRAW_MIRRORED = 1u << 3,
-    AF_DRAW_BLEND_OPAQUE = 1u << 4,
-    AF_DRAW_BLEND_PARTIAL = 1u << 5,
-    AF_DRAW_INSTANCED = 1u << 6,
-    AF_DRAW_CLUSTER_DEBUG = 1u << 7
-};
+typedef struct af_vk_renderer af_vk_renderer;
 
 typedef struct af_gpu_buffer {
     VkBuffer handle;
     af_vk_allocation alloc;
     VkDeviceSize allocation_bytes, capacity;
 } af_gpu_buffer;
-
-typedef struct af_gpu_light {
-    af_vec4 position_range, color_intensity, direction_inner, params;
-} af_gpu_light;
-
-typedef struct af_frame_uniform {
-    af_mat4 view_projection;
-    af_vec4 direction_intensity, color_ambient;
-    af_mat4 shadow_matrices[4];
-    af_vec4 cascade_splits, camera_position, camera_forward, shadow_params, cascade_params, render_params;
-    af_vec4 light_count;
-    af_mat4 local_shadow_matrices[AF_LOCAL_SHADOW_LAYERS];
-    af_mat4 inverse_view_projection;
-    af_vec4 sky_params;
-    af_vec4 water_absorption, water_scattering, water_bounds, water_axes, water_screen, water_viewport, wind_time;
-    af_vec4 rtgi_params;
-    af_mat4 unjittered_view_projection, previous_view_projection;
-    af_vec4 ray_params, rtgi_flags, light_tile_params;
-} af_frame_uniform;
-_Static_assert(sizeof(af_frame_uniform) == 2384, "Shader frame layout");
-
-typedef struct af_blend_draw {
-    size_t index;
-    float depth;
-} af_blend_draw;
 
 typedef struct af_shadow_draw {
     af_mat4 model;
@@ -118,25 +61,6 @@ typedef struct af_shadow_draw {
     bool ray_caster;
     size_t object_index;
 } af_shadow_draw;
-
-typedef struct af_skin_instance {
-    af_object_id object;
-    af_mat4 matrices[AF_ANIMATION_MAX_JOINTS];
-    size_t count;
-} af_skin_instance;
-
-typedef struct af_motion_record {
-    af_mat4 model;
-    uint32_t info[4];
-} af_motion_record;
-_Static_assert(sizeof(af_motion_record) == 80, "std430 temporal record");
-
-typedef struct af_motion_snapshot {
-    af_object_id id;
-    af_mat4 model;
-    uint64_t signature;
-    bool visible;
-} af_motion_snapshot;
 
 typedef struct af_environment_asset {
     char name[AF_MESH_NAME_CAPACITY];
@@ -155,22 +79,6 @@ typedef struct af_material_shader_asset {
     size_t word_count;
     VkPipeline opaque_pipeline, blend_pipeline;
 } af_material_shader_asset;
-
-typedef struct af_cluster_candidate {
-    af_cluster bounds;
-    uint32_t object[4];
-} af_cluster_candidate;
-_Static_assert(sizeof(af_cluster_candidate) == 48, "std430 cluster candidate");
-_Static_assert(sizeof(VkDrawIndexedIndirectCommand) == 20, "std430 indexed indirect command");
-
-typedef struct af_cluster_span {
-    uint32_t first, count;
-} af_cluster_span;
-
-typedef struct af_cluster_view {
-    af_mat4 projection;
-    float pixel_scale;
-} af_cluster_view;
 
 typedef struct af_frame {
     VkCommandBuffer command;
@@ -287,17 +195,6 @@ typedef struct af_mesh_asset {
     af_stream_frame streams[AF_FRAMES_IN_FLIGHT];
 } af_mesh_asset;
 
-typedef struct af_draw_material {
-    af_color tint;
-    af_vec4 params, surface, emission;
-} af_draw_material;
-
-typedef struct af_mesh_draw {
-    af_mat4 model;
-    af_draw_material material;
-} af_mesh_draw;
-_Static_assert(sizeof(af_mesh_draw) == 128, "Portable draw push constant limit");
-
 typedef struct af_prop_batch {
     const af_gpu_mesh *mesh;
     const af_material *material;
@@ -305,7 +202,8 @@ typedef struct af_prop_batch {
     uint32_t first_object, first_record, count;
 } af_prop_batch;
 
-struct af_renderer {
+struct af_vk_renderer {
+    af_renderer base;
     const af_physics *water_physics;
     af_water water_configs[AF_SCENE_MAX_WATERS];
     af_transform water_transforms[AF_SCENE_MAX_WATERS];
@@ -437,68 +335,123 @@ struct af_renderer {
     uint64_t landscape_version;
 };
 
-/* Inline helpers shared across renderer translation units. */
-static inline uint64_t af_r_hash(uint64_t h, const void *data, size_t size) {
-    const unsigned char *p = data;
-    for (size_t i = 0; i < size; ++i) {
-        h ^= p[i];
-        h *= UINT64_C(1099511628211);
-    }
-    return h;
-}
-
-static inline void af_r_water_name(af_object_id id, char name[AF_MESH_NAME_CAPACITY]) {
-    snprintf(name, AF_MESH_NAME_CAPACITY, "__water_%llu", (unsigned long long)id);
-}
+/* Vulkan backend ops implementations. */
+void af_vk_r_destroy(af_vk_renderer *renderer);
+void af_vk_r_set_upscaler(af_vk_renderer *renderer, const struct af_vulkan_upscaler_api *api, void *state);
+bool af_vk_r_set_upscaler_enabled(af_vk_renderer *renderer, bool enabled);
+bool af_vk_r_upscaler_active(const af_vk_renderer *renderer);
+uint32_t af_vk_r_upscaler_quality_count(const af_vk_renderer *renderer);
+const char *af_vk_r_upscaler_quality_name(const af_vk_renderer *renderer, uint32_t index);
+uint32_t af_vk_r_upscaler_quality(const af_vk_renderer *renderer);
+bool af_vk_r_set_upscaler_quality(af_vk_renderer *renderer, uint32_t index);
+void af_vk_r_release_upscaler(af_vk_renderer *renderer);
+bool af_vk_r_wait_idle(af_vk_renderer *renderer);
+af_temporal_test_stats af_vk_r_test_temporal(const af_vk_renderer *renderer);
+void af_vk_r_reset_temporal(af_vk_renderer *renderer);
+void af_vk_r_resize(af_vk_renderer *renderer);
+bool af_vk_r_upload_mesh(af_vk_renderer *renderer, const char *name, const af_mesh_data *mesh);
+bool af_vk_r_upload_mesh_file(af_vk_renderer *renderer, const char *name, af_mesh_file *mesh,
+                              af_mesh_sidedness sidedness);
+bool af_vk_r_set_skin_palette(af_vk_renderer *renderer, af_object_id object, const af_mat4 *matrices, size_t count);
+void af_vk_r_clear_skin_palettes(af_vk_renderer *renderer);
+void af_vk_r_set_object_worlds(af_vk_renderer *renderer, const af_scene *scene, const af_mat4 *world,
+                               const af_animation_pose *const *morph_poses, size_t count);
+bool af_vk_r_remove_texture(af_vk_renderer *renderer, const char *name);
+bool af_vk_r_upload_texture(af_vk_renderer *renderer, const char *name, const unsigned char *rgba, uint32_t width,
+                            uint32_t height);
+bool af_vk_r_upload_material_shader(af_vk_renderer *renderer, const char *name, const uint32_t *spirv,
+                                    size_t word_count);
+bool af_vk_r_remove_material_shader(af_vk_renderer *renderer, const char *name);
+bool af_vk_r_remove_mesh(af_vk_renderer *renderer, const char *name);
+bool af_vk_r_upload_overlay_atlas(af_vk_renderer *renderer, const unsigned char *rgba, uint32_t width, uint32_t height);
+af_object_id af_vk_r_pick_object(af_vk_renderer *renderer, const af_scene *scene, const af_camera *camera,
+                                 af_rect viewport, af_vec2 point);
+bool af_vk_r_update_water(af_vk_renderer *renderer, const af_physics *physics, const af_scene *scene, float alpha);
+bool af_vk_r_update_landscape(af_vk_renderer *renderer, const af_scene *scene);
+bool af_vk_r_draw(af_vk_renderer *renderer, af_color color, const af_scene *scene, const af_camera *camera,
+                  af_rect viewport, af_object_id highlighted, const af_overlay_frame *overlay, float frame_time_ms,
+                  bool *rendered);
+bool af_vk_r_upload_overlay_texture(af_vk_renderer *renderer, uint32_t id, const unsigned char *rgba, uint32_t width,
+                                    uint32_t height);
+bool af_vk_r_remove_overlay_texture(af_vk_renderer *renderer, uint32_t id);
+bool af_vk_r_test_capture_motion(af_vk_renderer *renderer, af_vec2 position);
+bool af_vk_r_test_read_motion(af_vk_renderer *renderer, af_vec4 *out);
+bool af_vk_r_test_capture_region(af_vk_renderer *renderer, af_vec2 position, uint32_t width, uint32_t height);
+bool af_vk_r_test_read_pixels(af_vk_renderer *renderer, unsigned char *rgba, size_t capacity, uint32_t *width,
+                              uint32_t *height);
+bool af_vk_r_test_capture_pixel(af_vk_renderer *renderer, af_vec2 position);
+bool af_vk_r_test_read_pixel(af_vk_renderer *renderer, unsigned char rgba[4]);
+bool af_vk_r_set_debug_view(af_vk_renderer *renderer, af_debug_view view);
+void af_vk_r_set_visibility_culling(af_vk_renderer *renderer, bool enabled);
+void af_vk_r_set_prop_instancing(af_vk_renderer *renderer, bool enabled);
+bool af_vk_r_upload_cluster_stream(af_vk_renderer *renderer, const char *name, af_cluster_mesh *mesh,
+                                   af_cluster_stream *stream);
+bool af_vk_r_upload_clusters(af_vk_renderer *renderer, const char *name, af_cluster_mesh *mesh);
+void af_vk_r_set_cluster_lod(af_vk_renderer *renderer, bool enabled);
+void af_vk_r_set_cluster_gpu_culling(af_vk_renderer *renderer, bool enabled);
+void af_vk_r_set_cluster_rendering(af_vk_renderer *renderer, bool enabled, bool debug_colors);
+bool af_vk_r_set_cluster_cache_budget(af_vk_renderer *renderer, uint64_t bytes);
+af_cluster_stats af_vk_r_cluster_stats(const af_vk_renderer *renderer);
+bool af_vk_r_set_render_budget(af_vk_renderer *renderer, double gpu_ms, uint64_t bytes);
+af_engine_stats af_vk_r_stats(const af_vk_renderer *renderer);
+bool af_vk_r_texture_info(const af_vk_renderer *renderer, const char *name, af_texture_info *out);
+bool af_vk_r_upload_environment(af_vk_renderer *renderer, const char *name, const float *rgba, uint32_t width,
+                                uint32_t height);
+bool af_vk_r_upload_normal_map(af_vk_renderer *renderer, const char *name, const unsigned char *rgba, uint32_t width,
+                               uint32_t height);
+bool af_vk_r_commit_asset(af_vk_renderer *renderer, const char *staged, const char *target, bool mesh);
+bool af_vk_r_upload_environment_baked(af_vk_renderer *renderer, const char *name, const af_hdr_file *source,
+                                      const af_ibl_images *images);
+void af_vk_r_set_interpolation(af_vk_renderer *renderer, const af_scene *previous, float alpha);
 
 /* Device, swapchain, pipeline & upscaler internals (renderer_device_vulkan.c). */
 bool af_r_vk_ok(VkResult result, const char *operation);
-bool af_r_build_mesh_pipelines(af_renderer *renderer, const uint32_t *frag_spirv, size_t frag_bytes,
+bool af_r_build_mesh_pipelines(af_vk_renderer *renderer, const uint32_t *frag_spirv, size_t frag_bytes,
                                VkPipeline *out_opaque, VkPipeline *out_blend);
-void af_r_destroy_swapchain(af_renderer *renderer);
-bool af_r_create_swapchain(af_renderer *renderer, af_render_settings settings, uint32_t config);
-af_rect af_r_resolve_viewport(af_renderer *renderer, af_rect rect);
-bool af_r_record_upscaler(af_renderer *r, VkCommandBuffer command, uint32_t image, af_rect area, float exposure,
+void af_r_destroy_swapchain(af_vk_renderer *renderer);
+bool af_r_create_swapchain(af_vk_renderer *renderer, af_render_settings settings, uint32_t config);
+af_rect af_r_resolve_viewport(af_vk_renderer *renderer, af_rect rect);
+bool af_r_record_upscaler(af_vk_renderer *r, VkCommandBuffer command, uint32_t image, af_rect area, float exposure,
                           const af_camera *camera, float frame_time_ms, bool reset_history);
 
 /* Buffer, mesh, streaming, skinning & morph internals (renderer_mesh_vulkan.c). */
-void af_r_destroy_buffer(af_renderer *renderer, af_gpu_buffer *buffer);
-void af_r_destroy_mesh(af_renderer *renderer, af_gpu_mesh *mesh);
-bool af_r_create_upload_buffer(af_renderer *renderer, VkDeviceSize size, VkBufferUsageFlags usage,
+void af_r_destroy_buffer(af_vk_renderer *renderer, af_gpu_buffer *buffer);
+void af_r_destroy_mesh(af_vk_renderer *renderer, af_gpu_mesh *mesh);
+bool af_r_create_upload_buffer(af_vk_renderer *renderer, VkDeviceSize size, VkBufferUsageFlags usage,
                                af_gpu_buffer *buffer, VkMemoryRequirements *requirements);
-bool af_r_fill_upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
+bool af_r_fill_upload_buffer(af_vk_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
                              af_gpu_buffer *buffer, VkMemoryRequirements requirements);
-bool af_r_upload_buffer(af_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
+bool af_r_upload_buffer(af_vk_renderer *renderer, const void *data, VkDeviceSize size, VkBufferUsageFlags usage,
                         af_gpu_buffer *buffer);
-size_t af_r_find_mesh_index(const af_renderer *renderer, const char *name);
-void af_r_stream_destroy(af_renderer *r, af_mesh_asset *a);
-bool af_r_stream_buffer(af_renderer *r, af_gpu_buffer *b, const void *data, VkDeviceSize bytes,
+size_t af_r_find_mesh_index(const af_vk_renderer *renderer, const char *name);
+void af_r_stream_destroy(af_vk_renderer *r, af_mesh_asset *a);
+bool af_r_stream_buffer(af_vk_renderer *r, af_gpu_buffer *b, const void *data, VkDeviceSize bytes,
                         VkBufferUsageFlags usage);
-bool af_r_stream_prepare(af_renderer *r);
+bool af_r_stream_prepare(af_vk_renderer *r);
 void af_r_bind_object_mesh(af_frame *frame, const af_gpu_mesh *mesh, const af_morph_draw *morph);
-bool af_r_object_world(af_renderer *renderer, const af_scene *scene, size_t index, af_mat4 *out);
-const af_morph_draw *af_r_morph_draw_for(const af_renderer *r, const af_scene *scene, size_t index);
-uint32_t af_r_skin_base(const af_renderer *renderer, af_object_id object, const af_gpu_mesh *mesh);
-af_shadow_bounds af_r_object_bounds(af_renderer *renderer, af_object_id object, af_mat4 world, const af_gpu_mesh *mesh,
-                                    const af_morph_draw *morph);
-bool af_r_prepare_morphs(af_renderer *r, const af_scene *scene);
+bool af_r_object_world(af_vk_renderer *renderer, const af_scene *scene, size_t index, af_mat4 *out);
+const af_morph_draw *af_r_morph_draw_for(const af_vk_renderer *r, const af_scene *scene, size_t index);
+uint32_t af_r_skin_base(const af_vk_renderer *renderer, af_object_id object, const af_gpu_mesh *mesh);
+af_shadow_bounds af_r_object_bounds(af_vk_renderer *renderer, af_object_id object, af_mat4 world,
+                                    const af_gpu_mesh *mesh, const af_morph_draw *morph);
+bool af_r_prepare_morphs(af_vk_renderer *r, const af_scene *scene);
 
 /* Cluster LOD, streaming residency & compute culling internals (renderer_cluster_vulkan.c). */
-void af_r_destroy_cluster_compute(af_renderer *r);
-void af_r_update_cluster_pages(af_renderer *r);
-void af_r_use_cluster_page(af_renderer *r, af_cached_cluster_page *page);
+void af_r_destroy_cluster_compute(af_vk_renderer *r);
+void af_r_update_cluster_pages(af_vk_renderer *r);
+void af_r_use_cluster_page(af_vk_renderer *r, af_cached_cluster_page *page);
 af_cluster_view af_r_cluster_view(const af_frame_uniform *uniform, const af_camera *camera);
-size_t af_r_cluster_index_ranges(const af_renderer *r, const af_gpu_mesh *base, af_mat4 model, af_cluster_view view,
+size_t af_r_cluster_index_ranges(const af_vk_renderer *r, const af_gpu_mesh *base, af_mat4 model, af_cluster_view view,
                                  af_cluster_index_range *ranges);
-bool af_r_prepare_cluster_commands(af_renderer *r, af_frame *frame, const af_scene *scene, af_mat4 projection,
+bool af_r_prepare_cluster_commands(af_vk_renderer *r, af_frame *frame, const af_scene *scene, af_mat4 projection,
                                    float pixel_scale, size_t objects);
-size_t af_r_draw_clusters(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
+size_t af_r_draw_clusters(af_vk_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_mesh_draw draw,
                           af_mat4 visibility, float pixel_scale, uint32_t object);
-size_t af_r_draw_indirect_clusters(af_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_cluster_span span);
+size_t af_r_draw_indirect_clusters(af_vk_renderer *r, af_frame *frame, const af_gpu_mesh *mesh, af_cluster_span span);
 
 /* Environment & asset internals (renderer_assets_vulkan.c). */
-void af_r_update_environment_descriptors(af_renderer *renderer);
-bool af_r_create_environment(af_renderer *renderer, uint32_t profile);
-VkPipeline af_r_material_pipeline(const af_renderer *renderer, const char *shader_name, bool blend);
+void af_r_update_environment_descriptors(af_vk_renderer *renderer);
+bool af_r_create_environment(af_vk_renderer *renderer, uint32_t profile);
+VkPipeline af_r_material_pipeline(const af_vk_renderer *renderer, const char *shader_name, bool blend);
 
 #endif

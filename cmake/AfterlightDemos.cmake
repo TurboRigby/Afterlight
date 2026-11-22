@@ -355,7 +355,6 @@ add_custom_target(run_player
     DEPENDS afterlight_player afterlight_playground_game USES_TERMINAL)
 
 # Packaging, source archival, and export targets.
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
 include(cmake/AfterlightLicensing.cmake)
 if(APPLE)
     set(afterlight_player_package "$<TARGET_BUNDLE_DIR:afterlight_player>")

@@ -3,9 +3,9 @@
 #define AF_RAY_QUERY_VULKAN_H
 #include <afterlight/mesh.h>
 #include <vulkan/vulkan.h>
+#include "renderer_common.h"
 #include "vk_memory.h"
 typedef struct af_vk_ray_query af_vk_ray_query;
-enum { AF_RAY_SHADOW_MASK = 1, AF_RAY_REFLECTION_MASK = 2, AF_RAY_GI_MASK = 4 };
 typedef struct af_ray_instance {
     uint64_t mesh_key, page_generation;
     VkBuffer vertices, indices;
@@ -16,11 +16,6 @@ typedef struct af_ray_instance {
     af_color color;
     af_vec4 emission_unlit;
 } af_ray_instance;
-typedef struct af_ray_stats {
-    uint64_t bytes, blas_builds, tlas_builds;
-    size_t instances, meshes;
-    double gpu_build_ms;
-} af_ray_stats;
 af_vk_ray_query *af_vk_ray_query_create(VkPhysicalDevice physical, VkDevice device, af_vk_allocator *allocator,
                                         unsigned frames, uint32_t timestamp_bits, float timestamp_period);
 /* The caller must retire GPU work before destruction. */
