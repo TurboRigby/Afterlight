@@ -3,7 +3,7 @@
 Afterlight and its game modules build as C17. An engine extension is a separate
 native library that can use C, C++ or a vendor SDK and expose the C ABI in
 [`extension.h`](../engine/include/afterlight/extension.h). Extensions and game
-modules have independent ABI versions. The engine release is **0.24.0**, reported
+modules have independent ABI versions. The engine release is **0.25.0**, reported
 by `AF_VERSION_STRING` in `afterlight/version.h`; the extension ABI remains **1**.
 
 ## Enable extensions in the editor

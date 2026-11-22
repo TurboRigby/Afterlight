@@ -1,12 +1,12 @@
 # Materials, lighting and profiling
 
-For the current **0.24.0** release, see [scalability, Vulkan suballocation and custom shaders](development-024.md) (and [0.23.0 streamed geometry](development-023.md)).
+For the current **0.25.0** release, see [native Metal 3 backend, Apple Silicon ray tracing and MetalFX](development-025.md) (and [0.24.0 scalability and custom shaders](development-024.md), [0.23.0 streamed geometry](development-023.md)).
 
 Afterlight **0.9** adds [imported HDR environments and skyboxes](assets-09.md).
 Afterlight **0.8** added floating-point HDR rendering, environment lighting, local
 shadows and bloom. Start with [the Lighting Lab and current controls](lighting-08.md).
 
-Engine and game code remain C17; shaders are GLSL compiled to embedded SPIR-V.
+Core engine and game code remain C17 (with an Objective-C Metal 3 backend on macOS); shaders are authored in GLSL and compiled to embedded SPIR-V (Vulkan) and precompiled `.metallib` archives (Metal).
 
 ## Texture quality
 

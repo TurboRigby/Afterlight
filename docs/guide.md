@@ -13,7 +13,14 @@ see the [documentation index](README.md). Run commands from the repository root.
 
 ## Features and demos
 
-Afterlight **0.24.0** introduces a pooled Vulkan memory suballocator with staged
+Afterlight **0.25.0** adds a full native Metal 3 rendering backend on macOS with
+Apple Silicon hardware ray tracing (shadows, water reflections, glossy/transmission
+effects, RTAO, and multi-bounce RTGI), GPU compute cluster culling, runtime custom
+SPIR-V material shaders via SPIRV-Cross, native MetalFX upscaling, dual-backend
+selection (`AFTERLIGHT_BACKEND`), and Metal-only build/export support. See the
+[0.25.0 guide](development-025.md) for details and verification.
+
+Afterlight 0.24.0 introduces a pooled Vulkan memory suballocator with staged
 `DEVICE_LOCAL` uploads, modular renderer/CMake structure, 128-light tiled
 forward shading, custom SPIR-V material shaders, dynamic-pool physics with COW
 landscape cloning, deterministic `af_jobs` multithreading, and QOA/IMA-ADPCM
@@ -157,7 +164,7 @@ Install Xcode command line tools and the dependencies:
 
 ```sh
 xcode-select --install # Skip if Xcode or command line tools are installed.
-brew install cmake ninja sdl3 vulkan-headers vulkan-loader molten-vk glslang vulkan-validationlayers
+brew install cmake ninja sdl3 vulkan-headers vulkan-loader molten-vk glslang spirv-cross vulkan-validationlayers
 ```
 
 From the repository root:

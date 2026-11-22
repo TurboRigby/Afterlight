@@ -27,6 +27,7 @@ repository layout and C gameplay workflow.
 
 ## Development notes
 
+- [0.25.0: native Metal 3 backend, Apple Silicon ray tracing and MetalFX](development-025.md)
 - [0.24.0: scalability, Vulkan suballocation, multithreading and streaming audio](development-024.md)
 - [0.23.0: animation authoring, streamed geometry and story tools](development-023.md)
 - [0.22: ray tracing, landscape system, post-processing, and bundling](development-022.md)

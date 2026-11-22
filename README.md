@@ -1,17 +1,18 @@
 # Afterlight
 
-A game engine written in C17, with Vulkan rendering and game code in C.
+A game engine written in C17, with Vulkan and native Metal 3 rendering and game code in C.
 Built for the fun of building an engine.
 
-Afterlight **0.24.0** adds a pooled Vulkan memory suballocator with staged
-`DEVICE_LOCAL` uploads, modular renderer/CMake layout, 128-light screen-tiled
-forward shading, custom SPIR-V material pipelines, dynamic-pool physics with
-COW landscape cloning, deterministic `af_jobs` multithreading, and
-QOA/IMA-ADPCM disk-streaming audio with mix buses. It includes Low Water and
-its editor-authored Signal Annex episode, skeletal animation authoring,
-clustered geometry streaming, terrain, foliage, post-processing, native
-upscalers and optional hardware ray tracing.
-See the [0.24.0 release guide](docs/development-024.md) and [documentation index](docs/README.md).
+Afterlight **0.25.0** adds a full native Metal 3 rendering backend on macOS with
+Apple Silicon hardware ray tracing (`MTLAccelerationStructure` shadows, water
+reflections, glossy/transmission effects, RTAO, and multi-bounce RTGI), GPU
+compute cluster culling with LRU streaming, native MetalFX upscaling, runtime
+custom SPIR-V material shaders via SPIRV-Cross, dual-backend runtime selection
+(`AFTERLIGHT_BACKEND`), and Metal-only build/export support. It retains full
+Vulkan parity alongside Low Water, skeletal animation authoring, terrain,
+foliage, dynamic-pool physics, deterministic `af_jobs` multithreading, and
+disk-streaming audio.
+See the [0.25.0 release guide](docs/development-025.md) and [documentation index](docs/README.md).
 
 ## Build and run
 
